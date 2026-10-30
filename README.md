@@ -23,6 +23,7 @@ The installer copies one file. Re-run it after `git pull` to upgrade.
 By default, this installs:
 - Executable: `~/.local/bin/shortcut`
 - Bash completion: `~/.local/share/bash-completion/completions/shortcut`
+- Fish completion, if fish is installed: `~/.config/fish/completions/shortcut.fish`
 - Global store: `~/.shortcuts/`
 
 ### Environment Overrides
@@ -47,6 +48,8 @@ Every shortcut resolves according to a strict scope hierarchy that determines vi
 | **prefix** | Starts with a registered prefix (e.g. `C_`) | Global store (`$SHORTCUTS_HOME`) | Everywhere | The prefix's registered target directory |
 | **static** | Unprefixed, entry contains `"dir"` | Global store (`$SHORTCUTS_HOME`) | Everywhere | Fixed directory specified by `"dir"` |
 | **local** | Unprefixed, entry has no `"dir"` | Local project store (`.shortcuts/`) | Inside project tree | Project root (directory containing `.shortcuts/`) |
+
+Inside a project, a local shortcut wins over a global static one with the same name. That is deliberate (a project can define its own `test` or `build`), but it means a cloned repository with a `.shortcuts/` folder can run its own code when you type a familiar name. So `shortcut` prints a warning on stderr every time a local shortcut hides one of yours, `list` marks both entries, and `shortcut run --global <name>` runs yours. Treat a repository's `.shortcuts/` the way you treat its `Makefile`: read it before you run things in it.
 
 ---
 
@@ -106,22 +109,25 @@ Shortcut registries are stored in `shortcuts.json` files within either the globa
 - `icon` *(string, optional)*: Freedesktop icon name for desktop entries (defaults to `utilities-terminal`).
 - `created` *(string, optional)*: ISO date (`YYYY-MM-DD`) when created.
 - `created_by` *(string, optional)*: User or agent identifier recorded with `--by`.
-- `log` *(boolean, default true)*: When enabled, output streams to the terminal and tees to `logs/<name>.log`.
+- `log` *(boolean, default true)*: When enabled, output streams to the terminal and is also written to `logs/<name>.log` with the exit code. In a terminal the script runs on its own pseudo-terminal (like `script(1)`), so colours, progress bars and full-screen programs work as usual; when output is piped it is plain. Set `"log": false` to give the script the terminal directly, for example if you need Ctrl+Z job control, which logged runs turn off.
 
 ---
 
 ## Command Reference
 
-### `shortcut <name> [args...]` or `shortcut run <name> [args...]`
-Execute a shortcut, passing trailing arguments through verbatim:
+### `shortcut <name> [args...]` or `shortcut run [--global] <name> [args...]`
+Execute a shortcut, passing trailing arguments through verbatim. `--global` skips the project's local store:
 ```bash
 shortcut g_search "*.py"
 ```
 
 ### `shortcut new <name> [--desc D] [--static DIR | --local] [--by C] [-- CMD...]`
-Create an inline shortcut or open a templated script in nano:
+Create an inline shortcut, or a script from a template that opens in `$VISUAL` / `$EDITOR` (nano if neither is set). Without a terminal (for example when an agent runs it), the editor is skipped and the script's path is printed.
+
+Put the command in single quotes, so `$1` reaches the shortcut instead of being expanded by your shell right now:
 ```bash
-shortcut new g_hello --desc "Greet user" -- echo "Hello, $1"
+shortcut new g_hello --desc "Greet user" -- 'echo "Hello, $1"'
+shortcut g_hello world    # Hello, world
 ```
 
 ### `shortcut add <name> <file|-> --desc D [--static DIR | --local] [--by C]`
@@ -197,8 +203,8 @@ Register a directory prefix in the global store:
 shortcut prefix add C_ /home/you/code/c-app
 ```
 
-### `shortcut prefix rm <P_>`
-Remove a registered directory prefix:
+### `shortcut prefix rm <P_> [--force]`
+Remove a registered directory prefix. It refuses while shortcuts still use the prefix; remove them first, or pass `--force` to keep them (they won't run until the prefix is added back):
 ```bash
 shortcut prefix rm C_
 ```
@@ -222,10 +228,10 @@ Convert legacy flat `~/.shortcuts/*.sh` scripts to global `g_<stem>` entries:
 shortcut migrate
 ```
 
-### `shortcut completion bash`
-Output the bash completion script:
+### `shortcut completion bash|zsh|fish`
+Output a shell completion script. The installer sets up bash, and fish when it is installed. For zsh, add this to `~/.zshrc` after `compinit`:
 ```bash
-shortcut completion bash
+source <(shortcut completion zsh)
 ```
 
 ### `shortcut help` / `shortcut --version`
@@ -242,7 +248,7 @@ shortcut --version
 When creating shortcuts for users:
 1. **Register with description**: Always supply `--desc` so users understand what the shortcut accomplishes:
    ```bash
-   shortcut new test --local --desc "Run full integration test suite" -- pytest tests/
+   shortcut new test --local --desc "Run full integration test suite" -- 'pytest tests/'
    ```
 2. **Choose appropriate scope**:
    - Use `g_<name>` for general-purpose tools that should operate in the caller's working directory.
@@ -266,6 +272,7 @@ python3 -m unittest discover -s tests -v
 
 ```bash
 rm ~/.local/bin/shortcut ~/.local/share/bash-completion/completions/shortcut
+rm -f ~/.config/fish/completions/shortcut.fish
 rm ~/.local/share/applications/shortcut-*.desktop   # desktop launchers, if any
 rm -r ~/.shortcuts                                  # your shortcuts — only if you want them gone
 ```

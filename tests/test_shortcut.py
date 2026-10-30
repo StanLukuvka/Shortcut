@@ -2,16 +2,20 @@
 
 import importlib.machinery
 import importlib.util
+import fcntl
 import json
 import os
 import pathlib
+import select
 import signal
+import struct
 import subprocess
 import sys
 import tempfile
+import termios
 import time
 import unittest
-from typing import Optional
+from typing import Any, Optional
 
 SHORTCUT = pathlib.Path(__file__).resolve().parent.parent / "shortcut"
 
@@ -46,7 +50,7 @@ class TestShortcutT1(unittest.TestCase):
             self.orig_env[key] = os.environ.get(key)
             os.environ[key] = self.env[key]
 
-        # Guard per §3.4: SHORTCUTS_HOME must be under temp dir
+        # Never touch the real ~/.shortcuts
         assert str(self.shortcuts_home).startswith(str(self.tmp_path)), "SHORTCUTS_HOME not in temp dir"
 
     def tearDown(self):
@@ -85,6 +89,59 @@ class TestShortcutT1(unittest.TestCase):
                 text=True,
                 capture_output=True,
             )
+
+    def run_in_terminal(
+        self,
+        args: list[str],
+        cwd: Optional[str] = None,
+        env: Optional[dict[str, str]] = None,
+        keys: Optional[list[tuple[bytes, Any]]] = None,
+        timeout: float = 15,
+    ) -> tuple[int, str]:
+        """Run the CLI on a fresh 30x100 pseudo-terminal, as if typed into a real one.
+        keys: (wait until this appears in the output, then type these bytes, or send this signal) pairs.
+        Afterwards self.terminal_lflag holds the terminal's local modes, to check they were restored."""
+        master, slave = os.openpty()
+        fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 100, 0, 0))
+        run_env = self.env.copy()
+        run_env.update(env or {})
+        proc = subprocess.Popen(
+            [sys.executable, str(SHORTCUT), *args],
+            cwd=cwd or str(self.home_dir),
+            env=run_env,
+            stdin=slave,
+            stdout=slave,
+            stderr=slave,
+            start_new_session=True,
+            preexec_fn=lambda: fcntl.ioctl(0, termios.TIOCSCTTY, 0),
+        )
+        os.close(slave)
+        pending = list(keys or [])
+        out = b""
+        deadline = time.time() + timeout
+        try:
+            while time.time() < deadline:
+                if pending and pending[0][0] in out:
+                    action = pending.pop(0)[1]
+                    if isinstance(action, bytes):
+                        os.write(master, action)
+                    else:
+                        proc.send_signal(action)
+                ready, _, _ = select.select([master], [], [], 0.1)
+                if ready:
+                    try:
+                        chunk = os.read(master, 65536)
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    out += chunk
+                elif proc.poll() is not None:
+                    break
+            self.terminal_lflag = termios.tcgetattr(master)[3]
+        finally:
+            os.close(master)
+        return proc.wait(timeout=timeout), out.decode("utf-8", errors="replace")
 
     def test_atomic_registry_save_and_corrupt_protection(self):
         data = {
@@ -1188,29 +1245,166 @@ class TestShortcutT1(unittest.TestCase):
         proc.communicate(timeout=15)
         self.assertEqual(proc.returncode, 130)
 
-    def test_new_template_ignores_EDITOR(self):
-        fakebin = self.tmp_path / "fakebin"
-        fakebin.mkdir(parents=True, exist_ok=True)
-        fake_nano = fakebin / "nano"
-        fake_nano.write_text('#!/usr/bin/env bash\ntouch "$1.opened-by-nano"\n', encoding="utf-8")
-        fake_nano.chmod(0o755)
-
+    def test_new_without_terminal_skips_editor(self):
         env = self.env.copy()
         env.pop("SHORTCUT_EDITOR_CMD", None)
-        env["PATH"] = f"{fakebin}:{env.get('PATH', '')}"
         env["EDITOR"] = "/bin/false"
-        env["VISUAL"] = "/bin/false"
-
         res = subprocess.run(
             [sys.executable, str(SHORTCUT), "new", "g_tmpl", "--desc", "x"],
-            cwd=str(self.home_dir),
-            env=env,
-            stdin=subprocess.DEVNULL,
-            text=True,
-            capture_output=True,
+            cwd=str(self.home_dir), env=env, stdin=subprocess.DEVNULL, text=True, capture_output=True,
         )
-        self.assertEqual(res.returncode, 0)
-        self.assertTrue((self.shortcuts_home / "scripts" / "g_tmpl.sh.opened-by-nano").is_file())
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("Edit it with: shortcut edit g_tmpl", res.stdout)
+        self.assertTrue((self.shortcuts_home / "scripts" / "g_tmpl.sh").is_file())
+
+    def test_new_on_terminal_uses_EDITOR_and_nano_command_uses_nano(self):
+        fakebin = self.tmp_path / "fakebin"
+        fakebin.mkdir(parents=True, exist_ok=True)
+        for editor in ("myeditor", "nano"):
+            fake = fakebin / editor
+            fake.write_text(f'#!/usr/bin/env bash\ntouch "$1.opened-by-{editor}"\n', encoding="utf-8")
+            fake.chmod(0o755)
+        path = f"{fakebin}:{self.env.get('PATH', '')}"
+        self.env.pop("SHORTCUT_EDITOR_CMD", None)
+
+        rc, out = self.run_in_terminal(["new", "g_tmpl", "--desc", "x"], env={"PATH": path, "VISUAL": "", "EDITOR": "myeditor"})
+        self.assertEqual(rc, 0, out)
+        script = self.shortcuts_home / "scripts" / "g_tmpl.sh"
+        self.assertTrue(pathlib.Path(f"{script}.opened-by-myeditor").is_file(), out)
+
+        res = self.run_cli(["nano", "g_tmpl"], env={"PATH": path, "VISUAL": "/bin/false", "EDITOR": "/bin/false"})
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertTrue(pathlib.Path(f"{script}.opened-by-nano").is_file())
+
+    def test_new_with_missing_editor_creates_nothing(self):
+        res = self.run_cli(["new", "g_tmpl", "--desc", "x"], env={"SHORTCUT_EDITOR_CMD": "no-such-editor-xyz"})
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("editor not found: no-such-editor-xyz", res.stderr)
+        self.assertFalse((self.shortcuts_home / "shortcuts.json").exists() and "g_tmpl" in self.load_global())
+        self.assertFalse((self.shortcuts_home / "scripts" / "g_tmpl.sh").exists())
+
+    def load_global(self) -> dict:
+        return json.loads((self.shortcuts_home / "shortcuts.json").read_text())["shortcuts"]
+
+    def test_new_in_home_refuses_local_store(self):
+        res = self.run_cli(["new", "hello", "--", "echo hi"], cwd=str(self.home_dir))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("is the global store", res.stderr)
+        self.assertFalse((self.shortcuts_home / "shortcuts.json").exists() and "hello" in self.load_global())
+
+        res_init = self.run_cli(["init"], cwd=str(self.home_dir))
+        self.assertEqual(res_init.returncode, 1)
+        self.assertIn("is the global store", res_init.stderr)
+
+    def test_run_on_terminal_uses_pty_and_logs(self):
+        inline = '[ -t 1 ] && echo "stdout:tty" || echo "stdout:pipe"; stty size; echo ready; read -r line; echo "got:$line"'
+        self.assertEqual(self.run_cli(["new", "g_tty", "--", inline]).returncode, 0)
+
+        rc, out = self.run_in_terminal(["g_tty"], keys=[(b"ready", b"hello\r")])
+        self.assertEqual(rc, 0, out)
+        self.assertIn("stdout:tty", out)
+        self.assertIn("30 100", out)
+        self.assertIn("got:hello", out)
+
+        log = (self.shortcuts_home / "logs" / "g_tty.log").read_bytes()
+        self.assertIn(b"stdout:tty", log)
+        self.assertIn(b"got:hello", log)
+        self.assertNotIn(b"\r\n", log)
+        self.assertTrue(log.rstrip().endswith(b"=== exit: 0 ==="), log)
+
+        res = self.run_cli(["g_tty"], input="x\n")
+        self.assertIn("stdout:pipe", res.stdout)
+        self.assertIn("got:x", res.stdout)
+
+    def test_ctrl_c_on_terminal_returns_130(self):
+        self.assertEqual(self.run_cli(["new", "g_sleep", "--", "echo started; sleep 10"]).returncode, 0)
+        start = time.time()
+        rc, out = self.run_in_terminal(["g_sleep"], keys=[(b"started", b"\x03")])
+        self.assertEqual(rc, 130, out)
+        self.assertLess(time.time() - start, 8)
+        log = (self.shortcuts_home / "logs" / "g_sleep.log").read_text()
+        self.assertTrue(log.rstrip().endswith("=== exit: 130 ==="), log)
+
+    def test_sigterm_on_terminal_restores_terminal(self):
+        self.assertEqual(self.run_cli(["new", "g_sleep", "--", "echo started; sleep 10"]).returncode, 0)
+        rc, out = self.run_in_terminal(["g_sleep"], keys=[(b"started", signal.SIGTERM)])
+        self.assertEqual(rc, 143, out)
+        self.assertTrue(self.terminal_lflag & termios.ICANON, "terminal left in raw mode")
+        self.assertTrue(self.terminal_lflag & termios.ISIG, "terminal left in raw mode")
+        log = (self.shortcuts_home / "logs" / "g_sleep.log").read_text()
+        self.assertTrue(log.rstrip().endswith("=== exit: 143 ==="), log)
+
+    def test_local_shortcut_hiding_global_warns(self):
+        static_dir = self.tmp_path / "static"
+        static_dir.mkdir()
+        self.assertEqual(self.run_cli(["new", "penpot", "--static", str(static_dir), "--", "echo global"]).returncode, 0)
+        proj = self.tmp_path / "proj"
+        proj.mkdir()
+        self.assertEqual(self.run_cli(["new", "penpot", "--local", "--", "echo local"], cwd=str(proj)).returncode, 0)
+
+        res = self.run_cli(["penpot"], cwd=str(proj))
+        self.assertEqual(res.stdout.strip(), "local")
+        self.assertIn("your global 'penpot' is hidden here", res.stderr)
+
+        res_global = self.run_cli(["run", "--global", "penpot"], cwd=str(proj))
+        self.assertEqual(res_global.stdout.strip(), "global")
+
+        listing = self.run_cli(["list"], cwd=str(proj)).stdout
+        self.assertIn("[hides global]", listing)
+        self.assertIn("[hidden here by local]", listing)
+
+        res_elsewhere = self.run_cli(["penpot"], cwd=str(self.tmp_path))
+        self.assertEqual(res_elsewhere.stdout.strip(), "global")
+        self.assertEqual(res_elsewhere.stderr, "")
+
+    def test_concurrent_new_keeps_every_entry(self):
+        procs = [
+            subprocess.Popen(
+                [sys.executable, str(SHORTCUT), "new", f"g_n{i}", "--", f"echo {i}"],
+                cwd=str(self.home_dir), env=self.env, stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            )
+            for i in range(16)
+        ]
+        for proc in procs:
+            _, err = proc.communicate(timeout=30)
+            self.assertEqual(proc.returncode, 0, err)
+        self.assertEqual(sorted(self.load_global()), sorted(f"g_n{i}" for i in range(16)))
+
+    def test_prefix_rm_refuses_while_used(self):
+        target = self.tmp_path / "C"
+        target.mkdir()
+        self.assertEqual(self.run_cli(["prefix", "add", "C_", str(target)]).returncode, 0)
+        self.assertEqual(self.run_cli(["new", "C_build", "--", "pwd"]).returncode, 0)
+
+        res = self.run_cli(["prefix", "rm", "C_"])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("still used by: C_build", res.stderr)
+
+        res_force = self.run_cli(["prefix", "rm", "C_", "--force"])
+        self.assertEqual(res_force.returncode, 0, res_force.stderr)
+        res_run = self.run_cli(["C_build"])
+        self.assertEqual(res_run.returncode, 1)
+        self.assertIn("shortcut prefix add C_ DIR", res_run.stderr)
+
+    def test_fix_strips_terminal_codes(self):
+        inline = 'printf "\\033[31mred\\033[0m\\n50%%\\r100%%\\n"'
+        self.assertEqual(self.run_cli(["new", "g_color", "--", inline]).returncode, 0)
+        self.run_cli(["g_color"])
+        fix = self.run_cli(["fix", "g_color"]).stdout
+        log_part = fix.split("--- Last Log ---", 1)[1]
+        self.assertNotIn("\x1b", log_part)
+        self.assertIn("\nred\n", log_part)
+        self.assertIn("\n100%\n", log_part)
+        self.assertNotIn("50%", log_part)
+
+    def test_completion_zsh_and_fish(self):
+        zsh = self.run_cli(["completion", "zsh"])
+        self.assertEqual(zsh.returncode, 0)
+        self.assertIn("compdef _shortcut shortcut", zsh.stdout)
+        fish = self.run_cli(["completion", "fish"])
+        self.assertEqual(fish.returncode, 0)
+        self.assertIn("complete -c shortcut", fish.stdout)
 
     def test_editor_failure_is_clean_error(self):
         self.run_cli(["new", "g_inline_fail", "--", "echo test"])

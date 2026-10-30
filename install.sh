@@ -19,6 +19,16 @@ chmod +x "$BIN_DIR/shortcut"
 echo "Installed shortcut to $BIN_DIR/shortcut"
 echo "Installed bash completion to $COMPL_DIR/shortcut"
 
+if command -v fish >/dev/null 2>&1; then
+    FISH_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fish/completions"
+    mkdir -p "$FISH_DIR"
+    "$BIN_DIR/shortcut" completion fish > "$FISH_DIR/shortcut.fish"
+    echo "Installed fish completion to $FISH_DIR/shortcut.fish"
+fi
+if command -v zsh >/dev/null 2>&1; then
+    echo "For zsh completion, add to ~/.zshrc after compinit:  source <(shortcut completion zsh)"
+fi
+
 case ":$PATH:" in
     *":$BIN_DIR:"*) ;;
     *)
