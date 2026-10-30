@@ -1,0 +1,1457 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import argparse
+import dataclasses
+from datetime import date, datetime, timezone
+import json
+import os
+import pathlib
+import re
+import shlex
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+from typing import Any, Dict, List, NoReturn, Optional, Set, Tuple
+
+# Version and Constants
+VERSION: str = "1.0.0"
+RESERVED_PREFIXES: Set[str] = {"g_", "glob_", "global_"}
+BUILTIN_COMMANDS: Set[str] = {
+    "run", "new", "add", "link", "list", "show", "nano", "edit",
+    "location", "rm", "log", "fix", "desktop", "prefix", "init",
+    "migrate", "completion", "help", "--help", "-h", "version", "--version"
+}
+
+
+@dataclasses.dataclass(frozen=True)
+class ShortcutEntry:
+    name: str
+    description: str
+    inline: Optional[str] = None
+    script: Optional[str] = None
+    dir: Optional[str] = None
+    icon: Optional[str] = None
+    created_by: Optional[str] = None
+    created: Optional[str] = None
+    log: bool = True
+
+    @classmethod
+    def from_dict(cls, name: str, data: Dict[str, Any]) -> ShortcutEntry:
+        return cls(
+            name=name,
+            description=data.get("description", ""),
+            inline=data.get("inline"),
+            script=data.get("script"),
+            dir=data.get("dir"),
+            icon=data.get("icon"),
+            created_by=data.get("created_by"),
+            created=data.get("created"),
+            log=data.get("log", True),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {"description": self.description}
+        if self.inline is not None:
+            d["inline"] = self.inline
+        if self.script is not None:
+            d["script"] = self.script
+        if self.dir is not None:
+            d["dir"] = self.dir
+        if self.icon is not None:
+            d["icon"] = self.icon
+        if self.created_by is not None:
+            d["created_by"] = self.created_by
+        if self.created is not None:
+            d["created"] = self.created
+        if not self.log:
+            d["log"] = False
+        return d
+
+
+@dataclasses.dataclass(frozen=True)
+class ResolvedShortcut:
+    entry: ShortcutEntry
+    store_dir: str
+    scope: str            # 'global' | 'prefix' | 'static' | 'local'
+    run_cwd: str          # computed execution directory
+
+
+def die(msg: str, exit_code: int = 1) -> NoReturn:
+    print(f"error: {msg}", file=sys.stderr)
+    sys.exit(exit_code)
+
+
+def get_global_store_dir() -> str:
+    env_dir = os.environ.get("SHORTCUTS_HOME")
+    if env_dir:
+        return os.path.abspath(os.path.expanduser(env_dir))
+    return os.path.abspath(os.path.expanduser("~/.shortcuts"))
+
+
+def registry_exists(store_dir: str) -> bool:
+    return os.path.isfile(os.path.join(store_dir, "shortcuts.json"))
+
+
+def find_local_store_dir(start_dir: Optional[str] = None) -> Optional[str]:
+    curr = pathlib.Path(start_dir or os.getcwd()).resolve()
+    global_root = pathlib.Path(get_global_store_dir()).resolve()
+    for p in [curr, *curr.parents]:
+        candidate = p / ".shortcuts"
+        if candidate.resolve() == global_root:
+            continue
+        if (candidate / "shortcuts.json").is_file():
+            return str(candidate)
+    return None
+
+
+def init_store(store_dir: str, is_global: bool = False) -> None:
+    os.makedirs(store_dir, exist_ok=True)
+    reg_path = os.path.join(store_dir, "shortcuts.json")
+    if not os.path.isfile(reg_path):
+        data: Dict[str, Any] = {"version": 1, "shortcuts": {}}
+        if is_global:
+            data["prefixes"] = {}
+        save_registry_atomic(store_dir, data)
+
+
+def load_registry(store_dir: str) -> Dict[str, Any]:
+    reg_path = os.path.join(store_dir, "shortcuts.json")
+    if not os.path.isfile(reg_path):
+        raise FileNotFoundError(f"Registry not found: {reg_path}")
+    try:
+        with open(reg_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Corrupt registry in {store_dir}: {e}") from e
+    if not isinstance(data, dict):
+        raise ValueError(f"Corrupt registry in {store_dir}: root must be a JSON object")
+    return data
+
+
+def save_registry_atomic(store_dir: str, registry_data: Dict[str, Any]) -> None:
+    os.makedirs(store_dir, exist_ok=True)
+    reg_path = os.path.join(store_dir, "shortcuts.json")
+    if os.path.isfile(reg_path):
+        try:
+            with open(reg_path, "r", encoding="utf-8") as f:
+                json.load(f)
+        except Exception as e:
+            raise ValueError(f"Cannot overwrite corrupt registry in {store_dir}: {e}") from e
+
+    temp_file = tempfile.NamedTemporaryFile("w", dir=store_dir, delete=False, encoding="utf-8")
+    try:
+        json.dump(registry_data, temp_file, indent=2)
+        temp_file.write("\n")
+        temp_file.flush()
+        os.fsync(temp_file.fileno())
+        temp_file.close()
+        os.replace(temp_file.name, reg_path)
+    except Exception:
+        if os.path.exists(temp_file.name):
+            try:
+                os.unlink(temp_file.name)
+            except OSError:
+                pass
+        raise
+
+
+def validate_name(name: str) -> None:
+    if name in BUILTIN_COMMANDS:
+        raise ValueError(f"'{name}' is a built-in command name and cannot be used as a shortcut name.")
+    if not re.fullmatch(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$", name):
+        raise ValueError(
+            f"Invalid shortcut name '{name}'. Must match ^[A-Za-z0-9][A-Za-z0-9_-]{{0,63}}$ "
+            "(alphanumeric start, up to 64 characters of letters, digits, underscores, and dashes)."
+        )
+
+
+def validate_prefix(prefix: str) -> None:
+    if prefix in RESERVED_PREFIXES:
+        raise ValueError(f"Prefix '{prefix}' is reserved and cannot be registered.")
+    if not re.fullmatch(r"^[A-Za-z][A-Za-z0-9]*_$", prefix):
+        raise ValueError(
+            f"Invalid prefix '{prefix}'. Must match ^[A-Za-z][A-Za-z0-9]*_$ "
+            "(letter start, alphanumeric, ending in underscore)."
+        )
+
+
+def resolve_script_path(store_dir: str, script_field: str) -> str:
+    """
+    Resolves a script path. Absolute paths are external links.
+    Relative paths must be stored inside store_dir and cannot escape.
+    """
+    if os.path.isabs(script_field):
+        return script_field
+
+    base = pathlib.Path(store_dir).resolve()
+    target = (base / script_field).resolve()
+
+    if not target.is_relative_to(base):
+        raise ValueError(
+            f"Path traversal detected: script '{script_field}' resolves to '{target}', outside store '{base}'."
+        )
+    return str(target)
+
+
+def resolve_shortcut(name: str, caller_cwd: Optional[str] = None) -> ResolvedShortcut:
+    caller_cwd = caller_cwd or os.getcwd()
+    global_dir = get_global_store_dir()
+    global_reg = load_registry(global_dir) if registry_exists(global_dir) else {"shortcuts": {}}
+    global_shortcuts = global_reg.get("shortcuts", {})
+    global_prefixes: Dict[str, str] = global_reg.get("prefixes", {})
+
+    # 1. Global prefix: 'g_', 'glob_', or 'global_'
+    if any(name.startswith(p) for p in ("g_", "glob_", "global_")):
+        if name not in global_shortcuts:
+            raise KeyError(f"Shortcut '{name}' not found in global store.")
+        entry = ShortcutEntry.from_dict(name, global_shortcuts[name])
+        return ResolvedShortcut(entry=entry, store_dir=global_dir, scope="global", run_cwd=caller_cwd)
+
+    # 2. Registered prefix matching: longest matching prefix wins
+    matching_prefixes = [p for p in global_prefixes if name.startswith(p)]
+    if matching_prefixes:
+        matching_prefixes.sort(key=len, reverse=True)
+        prefix = matching_prefixes[0]
+        if name not in global_shortcuts:
+            raise KeyError(f"Shortcut '{name}' with prefix '{prefix}' not found in global store.")
+        entry = ShortcutEntry.from_dict(name, global_shortcuts[name])
+        prefix_target_dir = global_prefixes[prefix]
+        return ResolvedShortcut(entry=entry, store_dir=global_dir, scope="prefix", run_cwd=prefix_target_dir)
+
+    # 3. Unprefixed: Local store first
+    local_dir = find_local_store_dir(caller_cwd)
+    if local_dir:
+        local_reg = load_registry(local_dir)
+        local_shortcuts = local_reg.get("shortcuts", {})
+        if name in local_shortcuts:
+            entry = ShortcutEntry.from_dict(name, local_shortcuts[name])
+            project_root = os.path.dirname(local_dir)
+            return ResolvedShortcut(entry=entry, store_dir=local_dir, scope="local", run_cwd=project_root)
+
+    # 4. Unprefixed: Global static fallback
+    if name in global_shortcuts:
+        entry = ShortcutEntry.from_dict(name, global_shortcuts[name])
+        if entry.dir:
+            return ResolvedShortcut(entry=entry, store_dir=global_dir, scope="static", run_cwd=entry.dir)
+        raise ValueError(f"Unprefixed shortcut '{name}' in global store missing required 'dir' property.")
+
+    # 5. Not found: Check for potential hints
+    for p in ("g_", "glob_", "global_"):
+        hint_name = f"{p}{name}"
+        if hint_name in global_shortcuts:
+            raise KeyError(f"Shortcut '{name}' not found. Did you mean '{hint_name}'?")
+
+    raise KeyError(f"Shortcut '{name}' not found.")
+
+
+def run_shortcut(name: str, args: List[str], caller_cwd: Optional[str] = None) -> int:
+    caller_cwd = caller_cwd or os.getcwd()
+    resolved = resolve_shortcut(name, caller_cwd)
+    entry = resolved.entry
+
+    # Build command argv
+    if entry.inline is not None:
+        cmd = ["bash", "-c", entry.inline, name, *args]
+    elif entry.script is not None:
+        script_path = resolve_script_path(resolved.store_dir, entry.script)
+        if not os.path.exists(script_path):
+            raise FileNotFoundError(f"Script file not found: {script_path}")
+        is_exec = os.access(script_path, os.X_OK)
+        has_shebang = False
+        try:
+            with open(script_path, "rb") as f:
+                has_shebang = f.read(2) == b"#!"
+        except OSError:
+            pass
+        cmd = [script_path, *args] if (is_exec and has_shebang) else ["bash", script_path, *args]
+    else:
+        raise ValueError(f"Entry '{name}' has neither 'inline' nor 'script'.")
+
+    env = os.environ.copy()
+    env["SHORTCUT_NAME"] = name
+    env["SHORTCUT_CALLER_CWD"] = caller_cwd
+
+    if not entry.log:
+        proc = subprocess.Popen(cmd, cwd=resolved.run_cwd, env=env)
+        try:
+            rc = proc.wait()
+        except KeyboardInterrupt:
+            if proc.poll() is None:
+                try:
+                    proc.send_signal(signal.SIGINT)
+                except OSError:
+                    pass
+            try:
+                rc = proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                rc = proc.wait()
+            if rc >= 0:
+                rc = 130
+        if rc < 0:
+            rc = 128 - rc
+        return rc
+
+    log_dir = os.path.join(resolved.store_dir, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, f"{name}.log")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    header = f"=== SHORTCUT RUN: {name} | {now_iso} | cwd: {resolved.run_cwd} | args: {shlex.join(args)} ===\n"
+
+    with open(log_file, "wb") as lf:  # binary: no decode split across chunk boundaries
+        lf.write(header.encode())
+        proc = subprocess.Popen(
+            cmd,
+            cwd=resolved.run_cwd,
+            env=env,
+            stdin=None,  # inherit caller stdin for interactivity
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=0,
+        )
+        assert proc.stdout is not None
+        last = b"\n"
+        try:
+            while chunk := os.read(proc.stdout.fileno(), 4096):  # returns partial lines immediately
+                sys.stdout.buffer.write(chunk)
+                sys.stdout.buffer.flush()
+                lf.write(chunk)
+                lf.flush()
+                last = chunk[-1:]
+            rc = proc.wait()
+        except KeyboardInterrupt:
+            # Ctrl+C reaches the child too (same process group); let it finish, never leave it orphaned.
+            if proc.poll() is None:
+                try:
+                    proc.send_signal(signal.SIGINT)
+                except OSError:
+                    pass
+            try:
+                rc = proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                rc = proc.wait()
+            if rc >= 0:
+                rc = 130
+        if rc < 0:  # killed by signal N -> shell convention 128+N
+            rc = 128 - rc
+        if last != b"\n":
+            lf.write(b"\n")
+        lf.write(f"=== exit: {rc} ===\n".encode())
+
+    return rc
+
+
+def choose_target_store(name: str, static_dir: Optional[str], local: bool, cwd: str) -> Tuple[str, Optional[str]]:
+    """Return (store_dir, absolute static dir or None). Prints a notice when it creates ./.shortcuts/."""
+    validate_name(name)  # grammar + not a BUILTIN_COMMANDS member
+    global_dir = get_global_store_dir()
+    prefixes = load_registry(global_dir).get("prefixes", {}) if registry_exists(global_dir) else {}
+    is_global_named = name.startswith(("g_", "glob_", "global_"))
+    has_reg_prefix = any(name.startswith(p) for p in prefixes)
+    if is_global_named or has_reg_prefix:
+        if static_dir or local:
+            die(f"'{name}' is {'global' if is_global_named else 'prefix'}-named; --static/--local not allowed")
+        return global_dir, None
+    if static_dir and local:
+        die("--static and --local are mutually exclusive")
+    if static_dir:
+        d = os.path.abspath(os.path.expanduser(static_dir))
+        if not os.path.isdir(d):
+            die(f"--static dir does not exist: {d}")
+        return global_dir, d
+    local_dir = find_local_store_dir(cwd)
+    if local_dir is None:
+        local_dir = os.path.join(cwd, ".shortcuts")
+        init_store(local_dir)  # writes {"version":1,"shortcuts":{}}
+        print(f"created local store {local_dir} (shortcut '{name}' is only visible under {cwd})", file=sys.stderr)
+    return local_dir, None
+
+
+def get_editor_cmd(fallback: str = "nano") -> List[str]:
+    # lazy: simple env var inspection for editor; upgrade to full fallback chain with sensible GUI editors if needed
+    if env_cmd := os.environ.get("SHORTCUT_EDITOR_CMD"):
+        return shlex.split(env_cmd)
+    editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or fallback
+    return shlex.split(editor)
+
+
+def edit_inline_roundtrip(name: str, store_dir: str, editor_cmd: List[str]) -> None:
+    reg = load_registry(store_dir)
+    shortcuts = reg.get("shortcuts", {})
+    if name not in shortcuts or "inline" not in shortcuts[name]:
+        raise ValueError(f"'{name}' is not an inline shortcut.")
+
+    original_cmd = shortcuts[name]["inline"]
+    with tempfile.NamedTemporaryFile("w+", suffix=f"-{name}.sh", delete=False, encoding="utf-8") as tf:
+        temp_path = tf.name
+        tf.write(original_cmd)
+        if not original_cmd.endswith("\n"):
+            tf.write("\n")
+        tf.flush()
+
+    try:
+        res = subprocess.run([*editor_cmd, temp_path])
+        if res.returncode != 0:
+            raise RuntimeError(f"Editor exited with code {res.returncode}")
+        with open(temp_path, "r", encoding="utf-8") as tf_read:
+            updated_cmd = tf_read.read().rstrip("\r\n")
+
+        # Save only if modified
+        if updated_cmd != original_cmd.rstrip("\r\n"):
+            shortcuts[name]["inline"] = updated_cmd
+            save_registry_atomic(store_dir, reg)
+            print(f"Updated inline shortcut '{name}'.")
+        else:
+            print(f"No changes made to '{name}'.")
+    finally:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+
+def cmd_run(args: List[str]) -> int:
+    if not args:
+        print("shortcut run: missing shortcut name\nUsage: shortcut run <name> [args...]", file=sys.stderr)
+        return 2
+    return run_shortcut(args[0], args[1:])
+
+
+def cmd_new(args: List[str]) -> int:
+    parser = argparse.ArgumentParser(prog="shortcut new", description="Create a new shortcut")
+    parser.add_argument("name", help="Shortcut name")
+    parser.add_argument("--desc", default=None, help="Shortcut description")
+    parser.add_argument("--static", default=None, help="Static directory for global scope")
+    parser.add_argument("--local", action="store_true", help="Store locally in nearest project")
+    parser.add_argument("--by", default=None, help="Creator identifier")
+
+    # Split args at '--' if present
+    inline_cmd_tokens: Optional[List[str]] = None
+    if "--" in args:
+        dash_idx = args.index("--")
+        pre_args = args[:dash_idx]
+        inline_cmd_tokens = args[dash_idx + 1:]
+    else:
+        pre_args = args
+
+    parsed = parser.parse_args(pre_args)
+    cwd = os.getcwd()
+    store_dir, static_target = choose_target_store(parsed.name, parsed.static, parsed.local, cwd)
+
+    reg = load_registry(store_dir) if registry_exists(store_dir) else {"version": 1, "shortcuts": {}}
+    shortcuts = reg.setdefault("shortcuts", {})
+    if parsed.name in shortcuts:
+        die(f"Shortcut '{parsed.name}' already exists in store {store_dir}")
+
+    today = date.today().isoformat()
+
+    if inline_cmd_tokens is not None:
+        if not inline_cmd_tokens:
+            die("Command expected after '--'")
+        if len(inline_cmd_tokens) == 1:
+            inline_str = inline_cmd_tokens[0]
+        else:
+            inline_str = shlex.join(inline_cmd_tokens)
+        desc = parsed.desc if parsed.desc is not None else inline_str
+        entry = ShortcutEntry(
+            name=parsed.name,
+            description=desc,
+            inline=inline_str,
+            dir=static_target,
+            created_by=parsed.by,
+            created=today,
+        )
+        shortcuts[parsed.name] = entry.to_dict()
+        save_registry_atomic(store_dir, reg)
+        print(f"Created inline shortcut '{parsed.name}'.")
+        return 0
+    else:
+        scripts_dir = os.path.join(store_dir, "scripts")
+        os.makedirs(scripts_dir, exist_ok=True)
+        rel_script_path = f"scripts/{parsed.name}.sh"
+        abs_script_path = os.path.join(store_dir, rel_script_path)
+
+        # lazy: default shell template is bash-only; upgrade to template selection flag if multi-shell support needed
+        template_content = "#!/usr/bin/env bash\nset -euo pipefail\n\n"
+        with open(abs_script_path, "w", encoding="utf-8") as sf:
+            sf.write(template_content)
+        os.chmod(abs_script_path, 0o755)
+
+        desc = parsed.desc if parsed.desc is not None else "(no description)"
+        entry = ShortcutEntry(
+            name=parsed.name,
+            description=desc,
+            script=rel_script_path,
+            dir=static_target,
+            created_by=parsed.by,
+            created=today,
+        )
+        shortcuts[parsed.name] = entry.to_dict()
+        save_registry_atomic(store_dir, reg)
+        print(f"Created script shortcut '{parsed.name}'.")
+
+        # SHORTCUT_EDITOR_CMD wins over nano; documented test hook
+        editor_cmd = shlex.split(os.environ["SHORTCUT_EDITOR_CMD"]) if "SHORTCUT_EDITOR_CMD" in os.environ else ["nano"]
+        res = subprocess.run([*editor_cmd, abs_script_path])
+        return res.returncode
+
+
+def cmd_add(args: List[str]) -> int:
+    parser = argparse.ArgumentParser(prog="shortcut add", description="Add an existing script to shortcut store")
+    parser.add_argument("name", help="Shortcut name")
+    parser.add_argument("file", help="Path to script file, or '-' for stdin")
+    parser.add_argument("--desc", required=True, help="Shortcut description")
+    parser.add_argument("--static", default=None, help="Static directory for global scope")
+    parser.add_argument("--local", action="store_true", help="Store locally in nearest project")
+    parser.add_argument("--by", default=None, help="Creator identifier")
+
+    parsed = parser.parse_args(args)
+    cwd = os.getcwd()
+    store_dir, static_target = choose_target_store(parsed.name, parsed.static, parsed.local, cwd)
+
+    reg = load_registry(store_dir) if registry_exists(store_dir) else {"version": 1, "shortcuts": {}}
+    shortcuts = reg.setdefault("shortcuts", {})
+    if parsed.name in shortcuts:
+        die(f"Shortcut '{parsed.name}' already exists in store {store_dir}")
+
+    scripts_dir = os.path.join(store_dir, "scripts")
+    os.makedirs(scripts_dir, exist_ok=True)
+
+    if parsed.file == "-":
+        ext = ".sh"
+        rel_script_path = f"scripts/{parsed.name}{ext}"
+        abs_script_path = os.path.join(store_dir, rel_script_path)
+        content = sys.stdin.read()
+        with open(abs_script_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.chmod(abs_script_path, 0o755)
+    else:
+        src_path = os.path.abspath(os.path.expanduser(parsed.file))
+        if not os.path.isfile(src_path):
+            die(f"Source file not found: {src_path}")
+        ext = pathlib.Path(src_path).suffix or ".sh"
+        rel_script_path = f"scripts/{parsed.name}{ext}"
+        abs_script_path = os.path.join(store_dir, rel_script_path)
+        shutil.copy2(src_path, abs_script_path)
+        os.chmod(abs_script_path, os.stat(abs_script_path).st_mode | 0o111)
+
+    today = date.today().isoformat()
+    entry = ShortcutEntry(
+        name=parsed.name,
+        description=parsed.desc,
+        script=rel_script_path,
+        dir=static_target,
+        created_by=parsed.by,
+        created=today,
+    )
+    shortcuts[parsed.name] = entry.to_dict()
+    save_registry_atomic(store_dir, reg)
+    print(f"Added shortcut '{parsed.name}'.")
+    return 0
+
+
+def cmd_link(args: List[str]) -> int:
+    parser = argparse.ArgumentParser(prog="shortcut link", description="Link an external script to shortcut store")
+    parser.add_argument("name", help="Shortcut name")
+    parser.add_argument("path", help="Path to existing script")
+    parser.add_argument("--desc", required=True, help="Shortcut description")
+    parser.add_argument("--static", default=None, help="Static directory for global scope")
+    parser.add_argument("--local", action="store_true", help="Store locally in nearest project")
+    parser.add_argument("--by", default=None, help="Creator identifier")
+
+    parsed = parser.parse_args(args)
+    cwd = os.getcwd()
+    store_dir, static_target = choose_target_store(parsed.name, parsed.static, parsed.local, cwd)
+
+    reg = load_registry(store_dir) if registry_exists(store_dir) else {"version": 1, "shortcuts": {}}
+    shortcuts = reg.setdefault("shortcuts", {})
+    if parsed.name in shortcuts:
+        die(f"Shortcut '{parsed.name}' already exists in store {store_dir}")
+
+    abs_path = os.path.abspath(os.path.expanduser(parsed.path))
+    if not os.path.isfile(abs_path):
+        die(f"Target script does not exist: {abs_path}")
+
+    today = date.today().isoformat()
+    entry = ShortcutEntry(
+        name=parsed.name,
+        description=parsed.desc,
+        script=abs_path,
+        dir=static_target,
+        created_by=parsed.by,
+        created=today,
+    )
+    shortcuts[parsed.name] = entry.to_dict()
+    save_registry_atomic(store_dir, reg)
+    print(f"Linked shortcut '{parsed.name}'.")
+    return 0
+
+
+def cmd_list(args: List[str]) -> int:
+    parser = argparse.ArgumentParser(prog="shortcut list", description="List available shortcuts")
+    parser.add_argument("--names", action="store_true", help="Print bare visible names only")
+    parsed = parser.parse_args(args)
+
+    cwd = os.getcwd()
+    local_dir = find_local_store_dir(cwd)
+    local_items: List[Tuple[str, str, str]] = []  # (name, scope, desc)
+    project_root = os.path.dirname(local_dir) if local_dir else None
+
+    if local_dir and registry_exists(local_dir):
+        local_reg = load_registry(local_dir)
+        for name, data in sorted(local_reg.get("shortcuts", {}).items()):
+            desc = data.get("description", "")
+            local_items.append((name, "local", desc))
+
+    global_dir = get_global_store_dir()
+    global_items: List[Tuple[str, str, str]] = []
+    global_prefixes: Dict[str, str] = {}
+    if registry_exists(global_dir):
+        global_reg = load_registry(global_dir)
+        global_prefixes = global_reg.get("prefixes", {})
+        for name, data in sorted(global_reg.get("shortcuts", {}).items()):
+            if any(name.startswith(p) for p in RESERVED_PREFIXES):
+                scope = "global"
+            elif any(name.startswith(p) for p in global_prefixes):
+                scope = "prefix"
+            elif data.get("dir"):
+                scope = "static"
+            else:
+                scope = "global"
+            desc = data.get("description", "")
+            global_items.append((name, scope, desc))
+
+    if parsed.names:
+        seen: Set[str] = set()
+        for name, _, _ in local_items:
+            if name not in seen:
+                seen.add(name)
+                print(name)
+        for name, _, _ in global_items:
+            if name not in seen:
+                seen.add(name)
+                print(name)
+        return 0
+
+    # lazy: simple column formatting with fixed widths; upgrade to tabulate if richer formatting is needed
+    if local_items:
+        print(f"Local shortcuts ({project_root}):")
+        for name, scope, desc in local_items:
+            print(f"  {name:<20} {scope:<10} {desc}")
+        if global_items or global_prefixes:
+            print()
+
+    if global_items:
+        print("Global shortcuts:")
+        for name, scope, desc in global_items:
+            print(f"  {name:<20} {scope:<10} {desc}")
+        if global_prefixes:
+            print()
+
+    if global_prefixes:
+        print("Prefixes:")
+        for p, d in sorted(global_prefixes.items()):
+            print(f"  {p:<20} -> {d}")
+
+    return 0
+
+
+def cmd_show(args: List[str]) -> int:
+    parser = argparse.ArgumentParser(prog="shortcut show", description="Show shortcut details and content")
+    parser.add_argument("name", help="Shortcut name")
+    parsed = parser.parse_args(args)
+
+    resolved = resolve_shortcut(parsed.name)
+    entry = resolved.entry
+
+    # lazy: basic key-value dump; upgrade to formatted panels if rich CLI styling needed
+    print(f"Name:        {entry.name}")
+    print(f"Scope:       {resolved.scope}")
+    print(f"Store:       {resolved.store_dir}")
+    print(f"Run CWD:     {resolved.run_cwd}")
+    print(f"Description: {entry.description}")
+    if entry.dir:
+        print(f"Dir:         {entry.dir}")
+    if entry.created:
+        print(f"Created:     {entry.created}")
+    if entry.created_by:
+        print(f"Created by:  {entry.created_by}")
+    if entry.icon:
+        print(f"Icon:        {entry.icon}")
+    if not entry.log:
+        print(f"Log:         False")
+
+    if entry.inline is not None:
+        print(f"\nInline command:\n  {entry.inline}")
+    elif entry.script is not None:
+        script_path = resolve_script_path(resolved.store_dir, entry.script)
+        print(f"\nScript ({script_path}):")
+        if os.path.isfile(script_path):
+            with open(script_path, "r", encoding="utf-8", errors="replace") as sf:
+                print(sf.read().rstrip())
+        else:
+            print(f"  [file missing: {script_path}]")
+    return 0
+
+
+def cmd_location(args: List[str]) -> int:
+    parser = argparse.ArgumentParser(prog="shortcut location", description="Show script location")
+    parser.add_argument("name", help="Shortcut name")
+    parsed = parser.parse_args(args)
+
+    resolved = resolve_shortcut(parsed.name)
+    entry = resolved.entry
+    if entry.inline is not None:
+        reg_path = os.path.abspath(os.path.join(resolved.store_dir, "shortcuts.json"))
+        print(f"{reg_path} (inline)")
+    elif entry.script is not None:
+        script_path = resolve_script_path(resolved.store_dir, entry.script)
+        print(os.path.abspath(script_path))
+    else:
+        die(f"Shortcut '{entry.name}' has neither inline nor script.")
+    return 0
+
+
+def cmd_rm(args: List[str]) -> int:
+    parser = argparse.ArgumentParser(prog="shortcut rm", description="Remove a shortcut")
+    parser.add_argument("name", help="Shortcut name")
+    parser.add_argument("-y", "--yes", action="store_true", help="Do not prompt for confirmation")
+    parsed = parser.parse_args(args)
+
+    resolved = resolve_shortcut(parsed.name)
+    entry = resolved.entry
+
+    if not parsed.yes:
+        if not sys.stdin.isatty():
+            die(f"Cannot remove shortcut '{parsed.name}' without -y in non-interactive environment")
+        ans = input(f"Remove shortcut '{parsed.name}'? [y/N]: ")
+        if ans.strip().lower() not in ("y", "yes"):
+            print("Aborted.")
+            return 0
+
+    # 1. Remove from registry
+    reg = load_registry(resolved.store_dir)
+    shortcuts = reg.get("shortcuts", {})
+    if parsed.name in shortcuts:
+        del shortcuts[parsed.name]
+        save_registry_atomic(resolved.store_dir, reg)
+
+    # 2. Remove stored script (never linked script)
+    if entry.script and not os.path.isabs(entry.script):
+        stored_path = resolve_script_path(resolved.store_dir, entry.script)
+        if os.path.isfile(stored_path):
+            try:
+                os.unlink(stored_path)
+            except OSError:
+                pass
+
+    # 3. Remove log file
+    log_path = os.path.join(resolved.store_dir, "logs", f"{parsed.name}.log")
+    if os.path.isfile(log_path):
+        try:
+            os.unlink(log_path)
+        except OSError:
+            pass
+
+    # 4. Remove desktop file if present
+    xdg_data = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    desktop_file = os.path.join(xdg_data, "applications", f"shortcut-{parsed.name}.desktop")
+    if os.path.isfile(desktop_file):
+        try:
+            os.unlink(desktop_file)
+        except OSError:
+            pass
+
+    print(f"Removed shortcut '{parsed.name}'.")
+    return 0
+
+
+def cmd_nano(args: List[str]) -> int:
+    parser = argparse.ArgumentParser(prog="shortcut nano", description="Edit shortcut script in nano")
+    parser.add_argument("name", help="Shortcut name")
+    parsed = parser.parse_args(args)
+
+    resolved = resolve_shortcut(parsed.name)
+    entry = resolved.entry
+    # SHORTCUT_EDITOR_CMD wins over nano; documented test hook
+    editor_cmd = shlex.split(os.environ["SHORTCUT_EDITOR_CMD"]) if "SHORTCUT_EDITOR_CMD" in os.environ else ["nano"]
+
+    if entry.inline is not None:
+        edit_inline_roundtrip(entry.name, resolved.store_dir, editor_cmd)
+        return 0
+    elif entry.script is not None:
+        target_path = resolve_script_path(resolved.store_dir, entry.script)
+        if not os.path.isfile(target_path):
+            die(f"Script file not found: {target_path}")
+        res = subprocess.run([*editor_cmd, target_path])
+        return res.returncode
+    else:
+        die(f"Entry '{parsed.name}' has neither inline nor script.")
+
+
+def cmd_edit(args: List[str]) -> int:
+    parser = argparse.ArgumentParser(prog="shortcut edit", description="Edit shortcut script in editor")
+    parser.add_argument("name", help="Shortcut name")
+    parsed = parser.parse_args(args)
+
+    resolved = resolve_shortcut(parsed.name)
+    entry = resolved.entry
+    editor_cmd = get_editor_cmd("nano")
+
+    if entry.inline is not None:
+        edit_inline_roundtrip(entry.name, resolved.store_dir, editor_cmd)
+        return 0
+    elif entry.script is not None:
+        target_path = resolve_script_path(resolved.store_dir, entry.script)
+        if not os.path.isfile(target_path):
+            die(f"Script file not found: {target_path}")
+        res = subprocess.run([*editor_cmd, target_path])
+        return res.returncode
+    else:
+        die(f"Entry '{parsed.name}' has neither inline nor script.")
+
+
+def cmd_log(args: List[str]) -> int:
+    parser = argparse.ArgumentParser(prog="shortcut log", description="Show last log for shortcut")
+    parser.add_argument("name", help="Shortcut name")
+    parsed = parser.parse_args(args)
+
+    resolved = resolve_shortcut(parsed.name)
+    log_path = os.path.join(resolved.store_dir, "logs", f"{parsed.name}.log")
+    if not os.path.isfile(log_path):
+        die(f"No log file found for shortcut '{parsed.name}' at {log_path}")
+
+    with open(log_path, "rb") as f:
+        sys.stdout.buffer.write(f.read())
+        sys.stdout.buffer.flush()
+    return 0
+
+
+def cmd_fix(args: List[str]) -> int:
+    parser = argparse.ArgumentParser(prog="shortcut fix", description="Print diagnostic block for an agent")
+    parser.add_argument("name", help="Shortcut name")
+    parsed = parser.parse_args(args)
+
+    resolved = resolve_shortcut(parsed.name)
+    entry_dict = resolved.entry.to_dict()
+    entry_json = json.dumps(entry_dict, indent=2)
+
+    if resolved.entry.inline is not None:
+        content = resolved.entry.inline
+    elif resolved.entry.script is not None:
+        script_path = resolve_script_path(resolved.store_dir, resolved.entry.script)
+        if os.path.isfile(script_path):
+            with open(script_path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+        else:
+            content = f"(script file missing: {script_path})"
+    else:
+        content = "(no inline command or script)"
+
+    log_path = os.path.join(resolved.store_dir, "logs", f"{parsed.name}.log")
+    last_exit = "none"
+    if os.path.isfile(log_path):
+        try:
+            with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                log_text = f.read()
+            m = re.findall(r"=== exit: (-?\d+) ===", log_text)
+            if m:
+                last_exit = m[-1]
+        except OSError:
+            log_text = "no log yet"
+    else:
+        log_text = "no log yet"
+
+    lines = [
+        f"=== SHORTCUT FIX: {parsed.name} ===",
+        "--- Entry JSON ---",
+        entry_json,
+        "--- Script / Inline Command ---",
+        content.rstrip("\r\n"),
+        "--- Last Log ---",
+        log_text.rstrip("\r\n"),
+        f"Last exit code: {last_exit}",
+    ]
+    print("\n".join(lines))
+    return 0
+
+
+def format_desktop_file(name: str, description: str, icon: Optional[str]) -> str:
+    """
+    Freedesktop Desktop Entry Specification escaping:
+    Inside double-quoted Exec args, backslash, double quote, backtick, and dollar sign
+    must be escaped with a backslash; then every literal '%' must be written '%%'
+    (field codes). Name is already validated to [A-Za-z0-9_-].
+    The tool is invoked by ABSOLUTE path: desktop sessions often lack ~/.local/bin in PATH.
+    """
+    tool = os.path.realpath(__file__)          # the installed `shortcut` file itself
+    icon_val = icon if icon else "utilities-terminal"
+    inner_script = (
+        f'{shlex.quote(tool)} run {name}; rc=$?; '
+        f'if [ $rc -eq 0 ]; then notify-send "shortcut: {name}" "Finished"; '
+        f'else notify-send -u critical "shortcut: {name}" "Failed (exit $rc)"; fi; '
+        f'echo; read -r -p "Press Enter to close..."'
+    )
+    escaped_inner = "".join(f"\\{c}" if c in ('"', '\\', '`', '$') else c for c in inner_script)
+    exec_line = f'bash -c "{escaped_inner}"'.replace("%", "%%")
+    description = description.replace("\n", " ")       # Name= is single-line
+
+    lines = [
+        "[Desktop Entry]",
+        "Version=1.0",
+        "Type=Application",
+        f"Name={description}",
+        f"Exec={exec_line}",
+        f"Icon={icon_val}",
+        "Terminal=true",
+        "Categories=Utility;",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def cmd_desktop(args: List[str]) -> int:
+    parser = argparse.ArgumentParser(prog="shortcut desktop", description="Create a desktop launcher entry")
+    parser.add_argument("name", help="Shortcut name")
+    parsed = parser.parse_args(args)
+
+    resolved = resolve_shortcut(parsed.name)
+    if resolved.scope == "local":
+        die(f"Cannot create desktop entry for local shortcut '{parsed.name}': local shortcuts require a project directory context.")
+
+    content = format_desktop_file(resolved.entry.name, resolved.entry.description or resolved.entry.name, resolved.entry.icon)
+    xdg_data = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    apps_dir = os.path.join(xdg_data, "applications")
+    os.makedirs(apps_dir, exist_ok=True)
+    desktop_file = os.path.join(apps_dir, f"shortcut-{resolved.entry.name}.desktop")
+    with open(desktop_file, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    print(f"Created desktop entry: {desktop_file}")
+    return 0
+
+
+def cmd_prefix(args: List[str]) -> int:
+    if not args or args[0] in ("-h", "--help", "help"):
+        print("Usage:\n  shortcut prefix add <P_> <dir>\n  shortcut prefix rm <P_>\n  shortcut prefix list")
+        return 0 if args and args[0] in ("-h", "--help", "help") else 2
+
+    subcmd = args[0]
+    global_dir = get_global_store_dir()
+
+    if subcmd == "add":
+        if len(args) != 3:
+            die("Usage: shortcut prefix add <P_> <dir>")
+        prefix = args[1]
+        target_dir = args[2]
+
+        validate_prefix(prefix)
+        abs_target_dir = os.path.abspath(os.path.expanduser(target_dir))
+        if not os.path.isdir(abs_target_dir):
+            die(f"Directory does not exist: {abs_target_dir}")
+
+        init_store(global_dir, is_global=True)
+        reg = load_registry(global_dir)
+        prefixes = reg.setdefault("prefixes", {})
+        prefixes[prefix] = abs_target_dir
+        save_registry_atomic(global_dir, reg)
+        print(f"Registered prefix '{prefix}' -> {abs_target_dir}")
+        return 0
+
+    elif subcmd == "rm":
+        if len(args) != 2:
+            die("Usage: shortcut prefix rm <P_>")
+        prefix = args[1]
+        if not registry_exists(global_dir):
+            die(f"Prefix '{prefix}' not found.")
+        reg = load_registry(global_dir)
+        prefixes = reg.get("prefixes", {})
+        if prefix not in prefixes:
+            die(f"Prefix '{prefix}' not found.")
+        del prefixes[prefix]
+        save_registry_atomic(global_dir, reg)
+        print(f"Removed prefix '{prefix}'.")
+        return 0
+
+    elif subcmd == "list":
+        # lazy: prefix list uses simple fixed column formatting; upgrade to tabulate if richer formatting is needed
+        if registry_exists(global_dir):
+            reg = load_registry(global_dir)
+            prefixes = reg.get("prefixes", {})
+            for p, d in sorted(prefixes.items()):
+                print(f"  {p:<20} -> {d}")
+        return 0
+
+    else:
+        die(f"Unknown prefix subcommand '{subcmd}'. Usage: shortcut prefix [add|rm|list]")
+
+
+def is_git_source(source: str) -> bool:
+    # lazy: simple heuristic detection of git URLs; upgrade to full RFC3986/git URL parsing if needed
+    return (
+        source.startswith(("http://", "https://", "git://", "git@", "ssh://", "file://"))
+        or source.endswith(".git")
+    )
+
+
+def merge_init_entries(
+    source_store_dir: str,
+    dest_store_dir: str,
+    is_global_init: bool,
+    dest_registry: Dict[str, Any],
+    source_registry: Dict[str, Any],
+    global_prefixes: Set[str],
+) -> Tuple[List[str], List[str], List[str]]:
+    """Returns (imported, skipped, notes). `re` and `shutil` are module-level imports."""
+    imported: List[str] = []
+    skipped: List[str] = []
+    notes: List[str] = []
+    dest_shortcuts = dest_registry.setdefault("shortcuts", {})
+    source_shortcuts = source_registry.get("shortcuts", {})
+    if not isinstance(source_shortcuts, dict):
+        return imported, skipped, notes
+
+    for name, entry_data in source_shortcuts.items():
+        # Validate entry structure
+        if not isinstance(entry_data, dict):
+            skipped.append(f"{name} (invalid entry)")
+            continue
+
+        has_inline = "inline" in entry_data
+        has_script = "script" in entry_data
+        if (has_inline and has_script) or (not has_inline and not has_script):
+            skipped.append(f"{name} (invalid entry)")
+            continue
+
+        if has_inline and not isinstance(entry_data["inline"], str):
+            skipped.append(f"{name} (invalid entry)")
+            continue
+
+        if has_script and not isinstance(entry_data["script"], str):
+            skipped.append(f"{name} (invalid entry)")
+            continue
+
+        # 1. Collision check
+        if name in dest_shortcuts:
+            skipped.append(f"{name} (already exists)")
+            continue
+
+        # 2. Skip absolute-linked entries
+        script_field = entry_data.get("script")
+        if script_field and os.path.isabs(script_field):
+            skipped.append(f"{name} (linked external script)")
+            continue
+
+        # 0. Name grammar (untrusted source)
+        try:
+            validate_name(name)
+        except ValueError as e:
+            skipped.append(f"{name!r} (invalid name: {e})")
+            continue
+
+        is_global_named = name.startswith(("g_", "glob_", "global_"))
+        has_reg_prefix = any(name.startswith(p) for p in global_prefixes)
+        new_entry = dict(entry_data)
+
+        # 3. Scope restrictions
+        if not is_global_init:
+            if is_global_named:
+                skipped.append(f"{name} (global-prefixed name in local init)")
+                continue
+            if has_reg_prefix:
+                skipped.append(f"{name} (registered prefix name in local init)")
+                continue
+            if "dir" in new_entry:  # local entries never carry dir; run at project root
+                del new_entry["dir"]
+                notes.append(f"{name} (dir dropped: local shortcuts run at the project root)")
+        else:
+            # Prefix MAPPINGS are never imported (decision, round-1 review #7): a prefixed name
+            # is imported only if that prefix is already registered in the global store.
+            looks_prefixed = re.match(r"^[A-Za-z][A-Za-z0-9]*_", name) and not is_global_named
+            if looks_prefixed and not has_reg_prefix and "dir" not in new_entry:
+                skipped.append(f"{name} (prefix not registered here; run `shortcut prefix add` first)")
+                continue
+
+        # 4. Global init: an unprefixed entry is static and needs an existing dir, else skip (never strip it)
+        if is_global_init and not is_global_named and not has_reg_prefix:
+            d = new_entry.get("dir")
+            if not d or not os.path.isabs(d) or not os.path.isdir(d):
+                skipped.append(f"{name} (static dir missing or not found here: {d})")
+                continue
+
+        # 5. Stored script copying
+        if script_field:
+            curr = pathlib.Path(source_store_dir)
+            symlink_found = False
+            for part in pathlib.Path(script_field).parts:
+                if part in ("", "."):
+                    continue
+                curr = curr / part
+                if os.path.islink(curr):
+                    symlink_found = True
+                    break
+            if symlink_found:
+                skipped.append(f"{name} (symlink in source)")
+                continue
+
+            try:
+                src_path = resolve_script_path(source_store_dir, script_field)
+            except ValueError:
+                skipped.append(f"{name} (script path escapes the source: {script_field})")
+                continue
+            if not os.path.isfile(src_path):
+                skipped.append(f"{name} (missing source script: {script_field})")
+                continue
+            ext = pathlib.Path(script_field).suffix or ".sh"
+            dest_scripts_dir = os.path.join(dest_store_dir, "scripts")
+            os.makedirs(dest_scripts_dir, exist_ok=True)
+            dest_rel_script = f"scripts/{name}{ext}"
+            dest_abs_script = os.path.join(dest_store_dir, dest_rel_script)
+            shutil.copyfile(src_path, dest_abs_script, follow_symlinks=False)
+            os.chmod(dest_abs_script, os.stat(dest_abs_script, follow_symlinks=False).st_mode | 0o111)
+            new_entry["script"] = dest_rel_script
+
+        dest_shortcuts[name] = new_entry
+        imported.append(name)
+
+    return imported, skipped, notes
+
+
+def cmd_init(args: List[str]) -> int:
+    parser = argparse.ArgumentParser(prog="shortcut init", description="Initialize a store or import from SOURCE")
+    parser.add_argument("source", nargs="?", default=None, help="Local path or git URL to import from")
+    parser.add_argument("--global", "-g", dest="is_global", action="store_true", help="Import into global store")
+    parsed = parser.parse_args(args)
+
+    if parsed.is_global:
+        dest_store_dir = get_global_store_dir()
+        init_store(dest_store_dir, is_global=True)
+    else:
+        dest_store_dir = os.path.join(os.getcwd(), ".shortcuts")
+        init_store(dest_store_dir, is_global=False)
+
+    if not parsed.source:
+        store_type = "global" if parsed.is_global else "local"
+        print(f"Initialized empty {store_type} store at {dest_store_dir}")
+        return 0
+
+    source_str = parsed.source
+    temp_dir_obj: Optional[tempfile.TemporaryDirectory] = None
+
+    try:
+        if is_git_source(source_str):
+            temp_dir_obj = tempfile.TemporaryDirectory()
+            clone_dir = temp_dir_obj.name
+            try:
+                subprocess.run(
+                    ["git", "clone", "--depth", "1", source_str, clone_dir],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                err_detail = e.stderr.strip() if hasattr(e, "stderr") and e.stderr else str(e)
+                die(f"Failed to clone git repository from {source_str}: {err_detail}")
+            source_root = clone_dir
+        else:
+            source_root = os.path.abspath(os.path.expanduser(source_str))
+            if not os.path.isdir(source_root):
+                die(f"Source directory does not exist: {source_root}")
+
+        root_json = os.path.join(source_root, "shortcuts.json")
+        dot_json = os.path.join(source_root, ".shortcuts", "shortcuts.json")
+        if os.path.isfile(root_json):
+            source_store_dir = source_root
+        elif os.path.isfile(dot_json):
+            source_store_dir = os.path.join(source_root, ".shortcuts")
+        else:
+            die(f"No shortcuts.json found in {source_root} (checked root and .shortcuts/)")
+
+        source_registry = load_registry(source_store_dir)
+        dest_registry = load_registry(dest_store_dir)
+
+        global_dir = get_global_store_dir()
+        global_prefixes: Set[str] = set()
+        if registry_exists(global_dir):
+            global_prefixes = set(load_registry(global_dir).get("prefixes", {}).keys())
+
+        imported, skipped, notes = merge_init_entries(
+            source_store_dir=source_store_dir,
+            dest_store_dir=dest_store_dir,
+            is_global_init=parsed.is_global,
+            dest_registry=dest_registry,
+            source_registry=source_registry,
+            global_prefixes=global_prefixes,
+        )
+
+        save_registry_atomic(dest_store_dir, dest_registry)
+
+        if imported:
+            print(f"Imported ({len(imported)}):")
+            for name in imported:
+                print(f"  {name}")
+        if skipped:
+            print(f"Skipped ({len(skipped)}):")
+            for s in skipped:
+                print(f"  {s}")
+        if notes:
+            print(f"Notes ({len(notes)}):")
+            for n in notes:
+                print(f"  {n}")
+        if imported:
+            print("review with: shortcut show <name>")
+
+        return 0
+
+    finally:
+        if temp_dir_obj is not None:
+            temp_dir_obj.cleanup()
+
+
+def cmd_migrate(args: List[str]) -> int:
+    global_dir = get_global_store_dir()
+    init_store(global_dir, is_global=True)
+    reg = load_registry(global_dir)
+    shortcuts = reg.setdefault("shortcuts", {})
+
+    if not os.path.isdir(global_dir):
+        print("Nothing to migrate.")
+        return 0
+
+    scripts_dir = os.path.join(global_dir, "scripts")
+    os.makedirs(scripts_dir, exist_ok=True)
+
+    # Legacy flat files: <store>/*.sh (only files directly in global_dir)
+    # lazy: migrate assumes POSIX shell scripts (.sh); upgrade if other legacy script extensions are found
+    flat_files = [
+        f for f in sorted(os.listdir(global_dir))
+        if f.endswith(".sh") and os.path.isfile(os.path.join(global_dir, f))
+    ]
+
+    if not flat_files:
+        print("Nothing to migrate.")
+        return 0
+
+    migrated: List[str] = []
+    today = date.today().isoformat()
+
+    for filename in flat_files:
+        src_path = os.path.join(global_dir, filename)
+        stem = pathlib.Path(filename).stem
+        name = stem if stem.startswith("g_") else f"g_{stem}"
+
+        dest_rel_script = f"scripts/{name}.sh"
+        dest_abs_script = os.path.join(global_dir, dest_rel_script)
+
+        if os.path.exists(dest_abs_script) or name in shortcuts:
+            print(f"skipped {filename} ({name} already exists)")
+            continue
+
+        # Extract description from the first non-shebang # comment
+        desc = "(migrated)"
+        try:
+            with open(src_path, "r", encoding="utf-8", errors="replace") as f:
+                for idx, line in enumerate(f):
+                    stripped = line.strip()
+                    if idx == 0 and stripped.startswith("#!"):
+                        continue
+                    if stripped.startswith("#"):
+                        comment_text = stripped.lstrip("#").strip()
+                        if comment_text:
+                            desc = comment_text
+                            break
+        except OSError:
+            pass
+
+        # Move the file into scripts/
+        shutil.move(src_path, dest_abs_script)
+        # Ensure executable
+        os.chmod(dest_abs_script, os.stat(dest_abs_script).st_mode | 0o111)
+
+        entry = ShortcutEntry(
+            name=name,
+            description=desc,
+            script=dest_rel_script,
+            created=today,
+        )
+        shortcuts[name] = entry.to_dict()
+        migrated.append(f"{filename} -> {name} ({desc})")
+
+    if migrated:
+        save_registry_atomic(global_dir, reg)
+        print(f"Migrated ({len(migrated)}):")
+        for item in migrated:
+            print(f"  {item}")
+
+    return 0
+
+
+BASH_COMPLETION_SCRIPT: str = """# bash completion for shortcut
+
+_shortcut() {
+    local cur prev words cword
+    if type _init_completion &>/dev/null; then
+        _init_completion || return
+    else
+        COMPREPLY=()
+        cur="${COMP_WORDS[COMP_CWORD]}"
+        prev="${COMP_WORDS[COMP_CWORD-1]}"
+    fi
+
+    local subcommands="run new add link list show nano edit location rm log fix desktop prefix init migrate completion help"
+    local name_commands="run show nano edit location rm log fix desktop"
+
+    if [ "${COMP_CWORD:-1}" -eq 1 ]; then
+        local names
+        names=$(shortcut list --names 2>/dev/null)
+        COMPREPLY=( $(compgen -W "${subcommands} ${names}" -- "$cur") )
+        return 0
+    fi
+
+    case " ${name_commands} " in
+        *" ${prev} "*)
+            local names
+            names=$(shortcut list --names 2>/dev/null)
+            COMPREPLY=( $(compgen -W "${names}" -- "$cur") )
+            return 0
+            ;;
+    esac
+
+    case "$prev" in
+        prefix)
+            COMPREPLY=( $(compgen -W "add rm list" -- "$cur") )
+            return 0
+            ;;
+        init)
+            COMPREPLY=( $(compgen -W "--global" -- "$cur") )
+            return 0
+            ;;
+        completion)
+            COMPREPLY=( $(compgen -W "bash" -- "$cur") )
+            return 0
+            ;;
+    esac
+}
+
+complete -F _shortcut shortcut
+"""
+
+
+def cmd_completion(args: List[str]) -> int:
+    parser = argparse.ArgumentParser(prog="shortcut completion", description="Generate shell completion script")
+    parser.add_argument("shell", choices=["bash"], nargs="?", default="bash", help="Shell type (bash)")
+    parsed = parser.parse_args(args)
+    if parsed.shell == "bash":
+        sys.stdout.write(BASH_COMPLETION_SCRIPT)
+        return 0
+    die(f"Unsupported shell: {parsed.shell}")
+
+
+def cmd_help(args: List[str]) -> int:
+    print_usage()
+    return 0
+
+
+def print_usage() -> None:
+    usage_text = """shortcut - run and manage quick scripts and commands
+
+Usage:
+  shortcut <name> [args...]                 Run shortcut <name> with optional arguments
+  shortcut run <name> [args...]             Run shortcut <name>
+  shortcut new <name> [--desc D] [--static DIR | --local] [--by C] [-- CMD...]
+                                            Create an inline or template script shortcut
+  shortcut add <name> <file|-> --desc D [--static DIR | --local] [--by C]
+                                            Add a script copy to store
+  shortcut link <name> <path> --desc D [--static DIR | --local] [--by C]
+                                            Link an external script by path
+  shortcut list [--names]                   List visible shortcuts and prefixes
+  shortcut show <name>                      Show shortcut metadata and script contents
+  shortcut nano <name>                      Edit shortcut script or inline command in nano
+  shortcut edit <name>                      Edit in $VISUAL, $EDITOR, or nano
+  shortcut location <name>                  Print path of script or registry (inline)
+  shortcut rm <name> [-y]                   Remove shortcut and associated files
+  shortcut log <name>                       Print the most recent execution log
+  shortcut fix <name>                       Print agent diagnostic block
+  shortcut desktop <name>                   Create Freedesktop .desktop launcher in applications
+  shortcut prefix add <P_> <dir>            Register a directory prefix in global store
+  shortcut prefix rm <P_>                   Remove a directory prefix
+  shortcut prefix list                      List registered prefixes
+  shortcut init [SOURCE] [--global]         Initialize store or import shortcuts from SOURCE
+  shortcut migrate                          Migrate legacy flat ~/.shortcuts/*.sh to global store
+  shortcut completion bash                  Print bash completion script
+  shortcut help, -h, --help                 Show this help message
+  shortcut --version                        Show version
+"""
+    print(usage_text, end="")
+
+
+def main(argv: Optional[List[str]] = None) -> NoReturn:
+    args = sys.argv[1:] if argv is None else argv
+
+    if not args:
+        print_usage()
+        sys.exit(0)
+
+    first = args[0]
+
+    if first in ("--help", "-h", "help"):
+        print_usage()
+        sys.exit(0)
+
+    if first in ("--version", "version"):
+        print(f"shortcut {VERSION}")
+        sys.exit(0)
+
+    if first == "run":
+        try:
+            rc = cmd_run(args[1:])
+            sys.exit(rc)
+        except (KeyError, ValueError, OSError, RuntimeError) as e:
+            err_msg = e.args[0] if (isinstance(e, KeyError) and e.args) else str(e)
+            die(err_msg)
+
+    handlers = {
+        "new": cmd_new,
+        "add": cmd_add,
+        "link": cmd_link,
+        "list": cmd_list,
+        "show": cmd_show,
+        "nano": cmd_nano,
+        "edit": cmd_edit,
+        "location": cmd_location,
+        "rm": cmd_rm,
+        "log": cmd_log,
+        "fix": cmd_fix,
+        "desktop": cmd_desktop,
+        "prefix": cmd_prefix,
+        "init": cmd_init,
+        "migrate": cmd_migrate,
+        "completion": cmd_completion,
+    }
+
+    if first in handlers:
+        try:
+            rc = handlers[first](args[1:])
+            sys.exit(rc)
+        except (KeyError, ValueError, OSError, RuntimeError) as e:
+            err_msg = e.args[0] if (isinstance(e, KeyError) and e.args) else str(e)
+            die(err_msg)
+
+    if first.startswith("-"):
+        print(f"shortcut: unrecognized option '{first}'\nTry 'shortcut --help' for more information.", file=sys.stderr)
+        sys.exit(2)
+
+    # Direct shortcut execution: shortcut <name> [args...]
+    try:
+        rc = run_shortcut(first, args[1:])
+        sys.exit(rc)
+    except (KeyError, ValueError, OSError, RuntimeError) as e:
+        err_msg = e.args[0] if (isinstance(e, KeyError) and e.args) else str(e)
+        die(err_msg)
+
+
+if __name__ == "__main__":
+    main()

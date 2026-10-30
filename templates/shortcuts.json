@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "shortcuts": {
+    "g_search": {
+      "description": "Search files under caller cwd matching pattern",
+      "script": "scripts/g_search.sh"
+    },
+    "g_serve": {
+      "description": "Serve current directory over HTTP",
+      "script": "scripts/g_serve.sh"
+    },
+    "g_ports": {
+      "description": "List open listening TCP and UDP ports",
+      "script": "scripts/g_ports.sh"
+    }
+  }
+}
