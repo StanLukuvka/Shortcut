@@ -30,3 +30,8 @@ jobs:
           "$HOME/.local/bin/shortcut" --version
           "$HOME/.local/bin/shortcut" new g_hi -- 'echo hi "$1"'
           test "$("$HOME/.local/bin/shortcut" g_hi there)" = "hi there"
+      - name: Smoke-test the package
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install .
+          "$RUNNER_TEMP/venv/bin/shortcut" --version

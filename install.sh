@@ -9,7 +9,7 @@ COMPL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions"
 mkdir -p "$BIN_DIR"
 mkdir -p "$COMPL_DIR"
 
-cp "$SCRIPT_DIR/shortcut" "$BIN_DIR/shortcut"
+cp "$SCRIPT_DIR/shortcut.py" "$BIN_DIR/shortcut"
 chmod +x "$BIN_DIR/shortcut"
 
 "$BIN_DIR/shortcut" completion bash > "$COMPL_DIR/shortcut"

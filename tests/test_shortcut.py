@@ -17,7 +17,7 @@ import time
 import unittest
 from typing import Any, Optional
 
-SHORTCUT = pathlib.Path(__file__).resolve().parent.parent / "shortcut"
+SHORTCUT = pathlib.Path(__file__).resolve().parent.parent / "shortcut.py"
 
 loader = importlib.machinery.SourceFileLoader("shortcut_mod", str(SHORTCUT))
 spec = importlib.util.spec_from_loader("shortcut_mod", loader)
@@ -143,6 +143,10 @@ class TestShortcutT1(unittest.TestCase):
             os.close(master)
         return proc.wait(timeout=timeout), out.decode("utf-8", errors="replace")
 
+    def allow(self, store_dir: pathlib.Path) -> None:
+        """Record consent for a project store, as `shortcut allow -y` would."""
+        shortcut_mod.set_allowed(str(store_dir), shortcut_mod.snapshot_project(str(store_dir)).fingerprint)
+
     def test_atomic_registry_save_and_corrupt_protection(self):
         data = {
             "version": 1,
@@ -230,9 +234,14 @@ class TestShortcutT1(unittest.TestCase):
             },
         )
 
-        # Inside project: local precedence
+        # Not allowed yet: the project's store is ignored
+        res_ignored = shortcut_mod.resolve_shortcut("build", caller_cwd=str(proj_dir))
+        self.assertEqual(res_ignored.scope, "static")
+        self.allow(proj_shortcuts)
+
+        # Inside an allowed project: project precedence
         res_local = shortcut_mod.resolve_shortcut("build", caller_cwd=str(proj_dir))
-        self.assertEqual(res_local.scope, "local")
+        self.assertEqual(res_local.scope, "project")
         self.assertEqual(res_local.store_dir, str(proj_shortcuts.resolve()))
         self.assertEqual(res_local.run_cwd, str(proj_dir.resolve()))
         self.assertEqual(res_local.entry.description, "Local project build")
@@ -400,11 +409,11 @@ class TestShortcutT1(unittest.TestCase):
         # 1. Global-named rejects --static and --local
         res1 = self.run_cli(["new", "g_foo", "--static", str(self.tmp_path), "--", "echo 1"])
         self.assertNotEqual(res1.returncode, 0)
-        self.assertIn("is global-named; --static/--local not allowed", res1.stderr)
+        self.assertIn("runs in your current directory (g_ name); --static/--local don't apply", res1.stderr)
 
         res2 = self.run_cli(["new", "g_foo", "--local", "--", "echo 1"])
         self.assertNotEqual(res2.returncode, 0)
-        self.assertIn("is global-named; --static/--local not allowed", res2.stderr)
+        self.assertIn("runs in your current directory (g_ name); --static/--local don't apply", res2.stderr)
 
         # 2. Registered prefix rejects --static and --local
         shortcut_mod.save_registry_atomic(
@@ -417,11 +426,11 @@ class TestShortcutT1(unittest.TestCase):
         )
         res3 = self.run_cli(["new", "P_foo", "--static", str(self.tmp_path), "--", "echo 1"])
         self.assertNotEqual(res3.returncode, 0)
-        self.assertIn("is prefix-named; --static/--local not allowed", res3.stderr)
+        self.assertIn("(P_ name); --static/--local don't apply", res3.stderr)
 
         res4 = self.run_cli(["new", "P_foo", "--local", "--", "echo 1"])
         self.assertNotEqual(res4.returncode, 0)
-        self.assertIn("is prefix-named; --static/--local not allowed", res4.stderr)
+        self.assertIn("(P_ name); --static/--local don't apply", res4.stderr)
 
         # 3. --static and --local are mutually exclusive
         res5 = self.run_cli(["new", "unpref1", "--static", str(self.tmp_path), "--local", "--", "echo 1"])
@@ -443,9 +452,10 @@ class TestShortcutT1(unittest.TestCase):
         proj_dir.mkdir()
         res8 = self.run_cli(["new", "local_cmd", "--", "echo local"], cwd=str(proj_dir))
         self.assertEqual(res8.returncode, 0)
-        self.assertIn("created local store", res8.stderr)
-        self.assertIn("local_cmd", res8.stderr)
+        self.assertIn("created project store", res8.stderr)
         self.assertTrue((proj_dir / ".shortcuts" / "shortcuts.json").is_file())
+        # A store the user created is allowed: it runs straight away
+        self.assertEqual(self.run_cli(["local_cmd"], cwd=str(proj_dir)).stdout, "local\n")
 
         # 6. Duplicate name error
         res9 = self.run_cli(["new", "local_cmd", "--", "echo duplicate"], cwd=str(proj_dir))
@@ -534,11 +544,11 @@ class TestShortcutT1(unittest.TestCase):
         # list without --names inside project
         res_list = self.run_cli(["list"], cwd=str(proj_dir))
         self.assertEqual(res_list.returncode, 0)
-        self.assertIn("Local shortcuts", res_list.stdout)
-        self.assertIn("local_cmd", res_list.stdout)
+        self.assertIn("Project shortcuts", res_list.stdout)
+        self.assertRegex(res_list.stdout, rf"local_cmd +{proj_dir} +echo local")
         self.assertIn("Global shortcuts", res_list.stdout)
-        self.assertIn("g_glob", res_list.stdout)
-        self.assertIn("penpot", res_list.stdout)
+        self.assertRegex(res_list.stdout, r"g_glob +\(current dir\) +Global desc")
+        self.assertRegex(res_list.stdout, rf"penpot +{self.tmp_path} +Static desc")
         self.assertIn("Prefixes", res_list.stdout)
         self.assertIn("C_", res_list.stdout)
 
@@ -583,7 +593,7 @@ class TestShortcutT1(unittest.TestCase):
             self.assertIn("Invalid prefix", res.stderr)
 
         # 2. Reserved prefix rejection
-        for reserved_p in ("g_", "glob_", "global_"):
+        for reserved_p in ("g_",):
             res = self.run_cli(["prefix", "add", reserved_p, str(self.tmp_path)])
             self.assertNotEqual(res.returncode, 0, f"Expected {reserved_p} to be rejected as reserved")
             self.assertIn("reserved", res.stderr)
@@ -651,74 +661,63 @@ class TestShortcutT1(unittest.TestCase):
 
         res = self.run_cli(["init"], cwd=str(proj_dir))
         self.assertEqual(res.returncode, 0)
-        self.assertIn("Initialized empty local store", res.stdout)
+        self.assertIn("Initialized empty project store", res.stdout)
 
         store_json = proj_dir / ".shortcuts" / "shortcuts.json"
         self.assertTrue(store_json.is_file())
         data = shortcut_mod.load_registry(str(proj_dir / ".shortcuts"))
         self.assertEqual(data, {"version": 1, "shortcuts": {}})
+        # The user made it, so it is allowed; logs and the lock stay out of git
+        self.assertIsNotNone(shortcut_mod.allowed_registry(str(proj_dir / ".shortcuts")))
+        self.assertEqual((proj_dir / ".shortcuts" / ".gitignore").read_text(), "logs/\n.lock\n")
 
-    def test_init_source_local_merge_skips(self):
-        proj_dir = self.tmp_path / "local_merge_proj"
+    def test_init_source_without_global_is_refused(self):
+        src_repo = self.tmp_path / "source_repo"
+        shortcut_mod.save_registry_atomic(
+            str(src_repo), {"version": 1, "shortcuts": {"x": {"description": "x", "inline": "echo x"}}}
+        )
+        proj_dir = self.tmp_path / "proj"
         proj_dir.mkdir()
+        res = self.run_cli(["init", str(src_repo)], cwd=str(proj_dir))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("used in place, never copied", res.stderr)
+        self.assertFalse((proj_dir / ".shortcuts").exists())
 
-        # Existing shortcut in destination
-        self.run_cli(["new", "collide_me", "--", "echo existing"], cwd=str(proj_dir))
-
-        # Register P_ in global store
+    def test_init_global_merge_skips(self):
+        self.run_cli(["new", "g_collide", "--", "echo existing"])
         pref_dir = self.tmp_path / "pref_target"
         pref_dir.mkdir()
         self.run_cli(["prefix", "add", "P_", str(pref_dir)])
 
-        # External script to link
         ext_script = self.tmp_path / "external_source.sh"
         ext_script.write_text("#!/usr/bin/env bash\necho ext\n", encoding="utf-8")
-        ext_script.chmod(0o755)
-
-        # Build source store
         src_repo = self.tmp_path / "source_repo"
-        src_scripts = src_repo / "scripts"
-        src_scripts.mkdir(parents=True)
-
-        valid_script = src_scripts / "valid_item.sh"
-        valid_script.write_text("#!/usr/bin/env bash\necho valid\n", encoding="utf-8")
-        valid_script.chmod(0o755)
-
-        source_data = {
+        (src_repo / "scripts").mkdir(parents=True)
+        (src_repo / "scripts" / "valid.sh").write_text("#!/usr/bin/env bash\necho valid\n", encoding="utf-8")
+        shortcut_mod.save_registry_atomic(str(src_repo), {
             "version": 1,
             "shortcuts": {
-                "collide_me": {"description": "collision", "inline": "echo collide"},
-                "ext_linked": {"description": "linked", "script": str(ext_script.resolve())},
-                "g_glob": {"description": "global prefixed", "inline": "echo glob"},
+                "g_collide": {"description": "collision", "inline": "echo collide"},
+                "g_linked": {"description": "linked", "script": str(ext_script)},
+                "g_with_dir": {"description": "lies", "inline": "pwd", "dir": str(self.tmp_path)},
+                "P_with_dir": {"description": "lies", "inline": "pwd", "dir": str(self.tmp_path)},
                 "P_pref": {"description": "prefix registered", "inline": "echo pref"},
-                "valid_item": {"description": "Valid local item", "script": "scripts/valid_item.sh"},
+                "g_valid": {"description": "valid", "script": "scripts/valid.sh"},
             },
-        }
-        shortcut_mod.save_registry_atomic(str(src_repo), source_data)
+        })
 
-        # Run local init from source_repo
-        res_init = self.run_cli(["init", str(src_repo)], cwd=str(proj_dir))
-        self.assertEqual(res_init.returncode, 0)
-
-        # Verify stdout reports skipped entries
-        self.assertIn("collide_me (already exists)", res_init.stdout)
-        self.assertIn("ext_linked (linked external script)", res_init.stdout)
-        self.assertIn("g_glob (global-prefixed name in local init)", res_init.stdout)
-        self.assertIn("P_pref (registered prefix name in local init)", res_init.stdout)
-
-        # Verify stdout reports imported entry
-        self.assertIn("valid_item", res_init.stdout)
-        self.assertIn("review with: shortcut show <name>", res_init.stdout)
-
-        # Verify imported script was copied and is executable
-        dest_script = proj_dir / ".shortcuts" / "scripts" / "valid_item.sh"
-        self.assertTrue(dest_script.is_file())
-        self.assertTrue(os.access(dest_script, os.X_OK))
-
-        # Verify destination registry
-        dest_reg = shortcut_mod.load_registry(str(proj_dir / ".shortcuts"))
-        self.assertIn("valid_item", dest_reg["shortcuts"])
-        self.assertNotIn("g_glob", dest_reg["shortcuts"])
+        res = self.run_cli(["init", "--global", str(src_repo)])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("g_collide (already exists)", res.stdout)
+        self.assertIn("g_linked (linked external script)", res.stdout)
+        self.assertIn("g_with_dir (has a 'dir', but its name says it runs in your current directory)", res.stdout)
+        self.assertIn("P_with_dir (has a 'dir', but its name says it runs in its prefix directory)", res.stdout)
+        reg = self.load_global()
+        self.assertIn("P_pref", reg)
+        self.assertEqual(reg["g_valid"]["script"], "scripts/g_valid.sh")
+        self.assertTrue(os.access(self.shortcuts_home / "scripts" / "g_valid.sh", os.X_OK))
+        for skipped in ("g_linked", "g_with_dir", "P_with_dir"):
+            self.assertNotIn(skipped, reg)
 
     def test_init_source_global_dir_retention(self):
         # Register prefix C_
@@ -785,34 +784,6 @@ class TestShortcutT1(unittest.TestCase):
         self.assertIn("C_registered", global_reg["shortcuts"])
         self.assertNotIn("U_unregistered", global_reg["shortcuts"])
         self.assertNotIn("g_traversal", global_reg["shortcuts"])
-
-        # 2. Local init drops dir with note
-        proj_dir = self.tmp_path / "local_drop_dir_proj"
-        proj_dir.mkdir()
-
-        # Isolate source with just local_with_dir
-        src_local = self.tmp_path / "src_local"
-        shortcut_mod.save_registry_atomic(
-            str(src_local),
-            {
-                "version": 1,
-                "shortcuts": {
-                    "local_with_dir": {
-                        "description": "Local with dir",
-                        "inline": "echo local",
-                        "dir": str(existing_static_dir.resolve()),
-                    }
-                },
-            },
-        )
-
-        res_local = self.run_cli(["init", str(src_local)], cwd=str(proj_dir))
-        self.assertEqual(res_local.returncode, 0)
-        self.assertIn("local_with_dir (dir dropped: local shortcuts run at the project root)", res_local.stdout)
-
-        local_reg = shortcut_mod.load_registry(str(proj_dir / ".shortcuts"))
-        self.assertIn("local_with_dir", local_reg["shortcuts"])
-        self.assertNotIn("dir", local_reg["shortcuts"]["local_with_dir"])
 
     def test_migrate_legacy_flat_store(self):
         # Create flat legacy scripts directly in ~/.shortcuts
@@ -896,20 +867,17 @@ class TestShortcutT1(unittest.TestCase):
         (scripts_dir / "git_cmd.sh").chmod(0o755)
 
         (git_dir / "shortcuts.json").write_text(
-            '{"version": 1, "shortcuts": {"git_cmd": {"description": "From git", "script": "scripts/git_cmd.sh"}}}',
+            '{"version": 1, "shortcuts": {"g_git_cmd": {"description": "From git", "script": "scripts/git_cmd.sh"}}}',
             encoding="utf-8",
         )
 
         subprocess.run(["git", "-C", str(git_dir), "add", "."], check=True)
-        subprocess.run(["git", "-C", str(git_dir), "commit", "-m", "initial commit"], check=True)
+        subprocess.run(["git", "-C", str(git_dir), "commit", "-m", "initial commit"], check=True, capture_output=True)
 
-        proj_dir = self.tmp_path / "git_import_proj"
-        proj_dir.mkdir()
-
-        res = self.run_cli(["init", f"file://{git_dir.resolve()}"], cwd=str(proj_dir))
-        self.assertEqual(res.returncode, 0)
-        self.assertIn("git_cmd", res.stdout)
-        self.assertTrue((proj_dir / ".shortcuts" / "scripts" / "git_cmd.sh").is_file())
+        res = self.run_cli(["init", "--global", f"file://{git_dir.resolve()}"])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("g_git_cmd", res.stdout)
+        self.assertEqual(self.run_cli(["g_git_cmd"]).stdout, "from_git\n")
 
     def test_bundled_templates(self):
         templates_dir = pathlib.Path(__file__).resolve().parent.parent / "templates"
@@ -1098,25 +1066,22 @@ class TestShortcutT1(unittest.TestCase):
                 "both_cmd": {"description": "both", "inline": "echo 1", "script": "scripts/valid.sh"},
                 "inline_not_str": {"inline": 123},
                 "script_not_str": {"script": ["scripts/valid.sh"]},
-                "valid_entry": {"description": "ok", "inline": "echo ok"},
+                "g_valid_entry": {"description": "ok", "inline": "echo ok"},
             },
         }
         (src_repo / "shortcuts.json").write_text(json.dumps(source_data), encoding="utf-8")
 
-        proj_dir = self.tmp_path / "init_invalid_proj"
-        proj_dir.mkdir()
-
-        res = self.run_cli(["init", str(src_repo)], cwd=str(proj_dir))
+        res = self.run_cli(["init", "--global", str(src_repo)])
         self.assertEqual(res.returncode, 0)
         self.assertIn("not_a_dict (invalid entry)", res.stdout)
         self.assertIn("neither_cmd (invalid entry)", res.stdout)
         self.assertIn("both_cmd (invalid entry)", res.stdout)
         self.assertIn("inline_not_str (invalid entry)", res.stdout)
         self.assertIn("script_not_str (invalid entry)", res.stdout)
-        self.assertIn("valid_entry", res.stdout)
+        self.assertIn("g_valid_entry", res.stdout)
 
-        reg = shortcut_mod.load_registry(str(proj_dir / ".shortcuts"))
-        self.assertIn("valid_entry", reg["shortcuts"])
+        reg = shortcut_mod.load_registry(str(self.shortcuts_home))
+        self.assertIn("g_valid_entry", reg["shortcuts"])
         self.assertNotIn("not_a_dict", reg["shortcuts"])
         self.assertNotIn("neither_cmd", reg["shortcuts"])
         self.assertNotIn("both_cmd", reg["shortcuts"])
@@ -1139,25 +1104,22 @@ class TestShortcutT1(unittest.TestCase):
         source_data = {
             "version": 1,
             "shortcuts": {
-                "sym_script": {"description": "symlink script", "script": "scripts/sym_target.sh"},
-                "real_script": {"description": "real script", "script": "scripts/real.sh"},
+                "g_sym_script": {"description": "symlink script", "script": "scripts/sym_target.sh"},
+                "g_real_script": {"description": "real script", "script": "scripts/real.sh"},
             },
         }
         (src_repo / "shortcuts.json").write_text(json.dumps(source_data), encoding="utf-8")
 
-        proj_dir = self.tmp_path / "init_symlink_proj"
-        proj_dir.mkdir()
-
-        res = self.run_cli(["init", str(src_repo)], cwd=str(proj_dir))
+        res = self.run_cli(["init", "--global", str(src_repo)])
         self.assertEqual(res.returncode, 0)
-        self.assertIn("sym_script (symlink in source)", res.stdout)
-        self.assertIn("real_script", res.stdout)
+        self.assertIn("g_sym_script (symlink in source)", res.stdout)
+        self.assertIn("g_real_script", res.stdout)
 
-        reg = shortcut_mod.load_registry(str(proj_dir / ".shortcuts"))
-        self.assertIn("real_script", reg["shortcuts"])
-        self.assertNotIn("sym_script", reg["shortcuts"])
+        reg = shortcut_mod.load_registry(str(self.shortcuts_home))
+        self.assertIn("g_real_script", reg["shortcuts"])
+        self.assertNotIn("g_sym_script", reg["shortcuts"])
 
-        copied_script = proj_dir / ".shortcuts" / "scripts" / "real_script.sh"
+        copied_script = self.shortcuts_home / "scripts" / "g_real_script.sh"
         self.assertTrue(copied_script.is_file())
         self.assertFalse(copied_script.is_symlink())
 
@@ -1262,7 +1224,7 @@ class TestShortcutT1(unittest.TestCase):
         fakebin.mkdir(parents=True, exist_ok=True)
         for editor in ("myeditor", "nano"):
             fake = fakebin / editor
-            fake.write_text(f'#!/usr/bin/env bash\ntouch "$1.opened-by-{editor}"\n', encoding="utf-8")
+            fake.write_text(f'#!/usr/bin/env bash\necho "# edited by {editor}" >> "$1"\n', encoding="utf-8")
             fake.chmod(0o755)
         path = f"{fakebin}:{self.env.get('PATH', '')}"
         self.env.pop("SHORTCUT_EDITOR_CMD", None)
@@ -1270,11 +1232,11 @@ class TestShortcutT1(unittest.TestCase):
         rc, out = self.run_in_terminal(["new", "g_tmpl", "--desc", "x"], env={"PATH": path, "VISUAL": "", "EDITOR": "myeditor"})
         self.assertEqual(rc, 0, out)
         script = self.shortcuts_home / "scripts" / "g_tmpl.sh"
-        self.assertTrue(pathlib.Path(f"{script}.opened-by-myeditor").is_file(), out)
+        self.assertIn("# edited by myeditor", script.read_text(), out)
 
         res = self.run_cli(["nano", "g_tmpl"], env={"PATH": path, "VISUAL": "/bin/false", "EDITOR": "/bin/false"})
         self.assertEqual(res.returncode, 0, res.stderr)
-        self.assertTrue(pathlib.Path(f"{script}.opened-by-nano").is_file())
+        self.assertIn("# edited by nano", script.read_text())
 
     def test_new_with_missing_editor_creates_nothing(self):
         res = self.run_cli(["new", "g_tmpl", "--desc", "x"], env={"SHORTCUT_EDITOR_CMD": "no-such-editor-xyz"})
@@ -1344,18 +1306,158 @@ class TestShortcutT1(unittest.TestCase):
 
         res = self.run_cli(["penpot"], cwd=str(proj))
         self.assertEqual(res.stdout.strip(), "local")
-        self.assertIn("your global 'penpot' is hidden here", res.stderr)
+        self.assertIn(f"\u2192 {proj}  (project shortcut; your global 'penpot' is hidden here", res.stderr)
 
         res_global = self.run_cli(["run", "--global", "penpot"], cwd=str(proj))
         self.assertEqual(res_global.stdout.strip(), "global")
 
         listing = self.run_cli(["list"], cwd=str(proj)).stdout
         self.assertIn("[hides global]", listing)
-        self.assertIn("[hidden here by local]", listing)
+        self.assertIn("[hidden here by project]", listing)
 
         res_elsewhere = self.run_cli(["penpot"], cwd=str(self.tmp_path))
         self.assertEqual(res_elsewhere.stdout.strip(), "global")
-        self.assertEqual(res_elsewhere.stderr, "")
+        self.assertEqual(res_elsewhere.stderr, f"\u2192 {static_dir}\n")
+
+    def test_g_prefix_means_current_directory_both_ways(self):
+        work = self.tmp_path / "work"
+        work.mkdir()
+        self.assertEqual(self.run_cli(["new", "g_pwd", "--", "pwd"]).returncode, 0)
+        self.assertEqual(self.run_cli(["g_pwd"], cwd=str(work)).stdout, f"{work}\n")
+
+        prefix_dir = self.tmp_path / "C"
+        prefix_dir.mkdir()
+        reg = json.loads((self.shortcuts_home / "shortcuts.json").read_text())
+        reg["prefixes"] = {"C_": str(prefix_dir)}
+        reg["shortcuts"].update({
+            "g_lies": {"description": "x", "inline": "pwd", "dir": str(self.tmp_path)},
+            "C_lies": {"description": "x", "inline": "pwd", "dir": str(self.tmp_path)},
+            "glob_old": {"description": "old alias", "inline": "pwd"},
+            "plain": {"description": "x", "inline": "pwd"},
+        })
+        shortcut_mod.save_registry_atomic(str(self.shortcuts_home), reg)
+
+        res = self.run_cli(["g_lies"], cwd=str(work))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("g_ names always run in your current directory", res.stderr)
+        res = self.run_cli(["C_lies"], cwd=str(work))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn(f"C_ names always run in {prefix_dir}", res.stderr)
+        # glob_/global_ are no longer markers: without a dir these can't run anywhere
+        for name in ("glob_old", "plain"):
+            res = self.run_cli([name], cwd=str(work))
+            self.assertEqual(res.returncode, 1)
+            self.assertIn("only g_ names run in your current directory", res.stderr)
+
+        # A static shortcut can't turn into a prefix name that would move it
+        static = self.tmp_path / "static"
+        static.mkdir()
+        self.assertEqual(self.run_cli(["new", "D_tool", "--static", str(static), "--", "pwd"]).returncode, 0)
+        res = self.run_cli(["prefix", "add", "D_", str(self.tmp_path)])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("D_tool run in their own 'dir'", res.stderr)
+        self.assertNotIn("D_", self.run_cli(["prefix", "list"]).stdout)
+
+    def write_project(self, proj: pathlib.Path) -> pathlib.Path:
+        """A cloned-looking project: shortcuts.json plus a script that lives in the repo itself."""
+        (proj / "tools").mkdir(parents=True)
+        (proj / "sub").mkdir()
+        (proj / "tools" / "test.sh").write_text("#!/usr/bin/env bash\necho testing in $(pwd)\n", encoding="utf-8")
+        (proj / ".shortcuts").mkdir()
+        (proj / ".shortcuts" / "shortcuts.json").write_text(json.dumps({
+            "version": 1,
+            "shortcuts": {
+                "build": {"description": "Build it", "inline": "echo built in $(pwd)", "dir": "sub"},
+                "test": {"description": "Test it", "script": "tools/test.sh"},
+                "escape": {"description": "x", "script": "../outside.sh"},
+                "updir": {"description": "x", "inline": "pwd", "dir": "../.."},
+            },
+        }), encoding="utf-8")
+        return proj / ".shortcuts"
+
+    def test_allow_is_required_and_invalidated_by_changes(self):
+        proj = self.tmp_path / "proj"
+        store = self.write_project(proj)
+
+        res = self.run_cli(["build"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("haven't allowed; review them with: shortcut allow", res.stderr)
+        self.assertIn("are not allowed yet", self.run_cli(["list"], cwd=str(proj)).stdout)
+        self.assertEqual(self.run_cli(["list", "--names"], cwd=str(proj)).stdout, "")
+
+        res = self.run_cli(["allow"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("confirm in a terminal", res.stderr)
+
+        res = self.run_cli(["allow", "-y"], cwd=str(proj))
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn(f"build\n  description: Build it\n  runs in: {proj / 'sub'}\n  command:\n    echo built in $(pwd)", res.stdout)
+        self.assertIn(f"test\n  description: Test it\n  runs in: {proj}\n  script: {proj / 'tools' / 'test.sh'}\n    #!/usr/bin/env bash", res.stdout)
+        self.assertIn("escape", res.stdout)
+        self.assertIn("script: cannot read (Path traversal detected", res.stdout)
+        self.assertIn(f"updir\n  description: x\n  runs in: {proj.parent.parent} (outside the project: won't run)", res.stdout)
+        allowed = json.loads((self.shortcuts_home / "allowed.json").read_text())
+        self.assertEqual(list(allowed), [str(proj.resolve())])
+
+        # Read in place: relative paths resolve against the project root, nothing is copied
+        self.assertEqual(self.run_cli(["build"], cwd=str(proj / "tools")).stdout, f"built in {proj / 'sub'}\n")
+        self.assertEqual(self.run_cli(["test"], cwd=str(proj / "sub")).stdout, f"testing in {proj}\n")
+        self.assertFalse((store / "scripts").exists())
+        self.assertEqual(self.run_cli(["escape"], cwd=str(proj)).returncode, 1)
+        res = self.run_cli(["updir"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("Path traversal detected: '../..'", res.stderr)
+        self.assertIn("Already allowed", self.run_cli(["allow", "-y"], cwd=str(proj)).stdout)
+
+        # Changing a script it uses, or the json itself, needs allowing again
+        with open(proj / "tools" / "test.sh", "a", encoding="utf-8") as f:
+            f.write("echo extra\n")
+        self.assertIn("haven't allowed", self.run_cli(["build"], cwd=str(proj)).stderr)
+        self.assertEqual(self.run_cli(["allow", "-y"], cwd=str(proj)).returncode, 0)
+        self.assertEqual(self.run_cli(["build"], cwd=str(proj)).returncode, 0)
+        (store / "shortcuts.json").write_text((store / "shortcuts.json").read_text() + " ", encoding="utf-8")
+        self.assertIn("haven't allowed", self.run_cli(["build"], cwd=str(proj)).stderr)
+        self.assertEqual(self.run_cli(["allow", "-y"], cwd=str(proj)).returncode, 0)
+
+        # Changes made through shortcut itself keep it allowed
+        self.assertEqual(self.run_cli(["new", "extra", "--local", "--", "echo extra"], cwd=str(proj)).returncode, 0)
+        self.assertEqual(self.run_cli(["extra"], cwd=str(proj)).stdout, "extra\n")
+        self.assertEqual(self.run_cli(["rm", "-y", "test"], cwd=str(proj)).returncode, 0)
+        self.assertTrue((proj / "tools" / "test.sh").is_file(), "rm must never delete a project's own file")
+        self.assertEqual(self.run_cli(["build"], cwd=str(proj)).returncode, 0)
+
+        self.assertEqual(self.run_cli(["allow", "--revoke"], cwd=str(proj)).returncode, 0)
+        self.assertIn("haven't allowed", self.run_cli(["build"], cwd=str(proj)).stderr)
+
+    def test_allow_prompt_in_terminal(self):
+        proj = self.tmp_path / "proj"
+        self.write_project(proj)
+        rc, out = self.run_in_terminal(["allow"], cwd=str(proj), keys=[(b"[y/N]", b"n\r")])
+        self.assertEqual(rc, 1, out)
+        self.assertIn("echo built in $(pwd)", out.split("[y/N]")[0])
+        self.assertIn("Not allowed.", out)
+        rc, out = self.run_in_terminal(["allow"], cwd=str(proj), keys=[(b"[y/N]", b"y\r")])
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.run_cli(["build"], cwd=str(proj)).returncode, 0)
+
+    def test_run_directory_line(self):
+        work = self.tmp_path / "work"
+        work.mkdir()
+        self.assertEqual(self.run_cli(["new", "g_pwd", "--", "pwd"]).returncode, 0)
+        res = self.run_cli(["g_pwd"], cwd=str(work))
+        self.assertEqual(res.stdout, f"{work}\n")
+        self.assertEqual(res.stderr, f"\u2192 {work}\n")
+        res = self.run_cli(["g_pwd"], cwd=str(work), env={"SHORTCUT_SHOW_DIR": "0"})
+        self.assertEqual(res.stderr, "")
+        rc, out = self.run_in_terminal(["g_pwd"], cwd=str(work))
+        self.assertIn(f"\x1b[2m\u2192 {work}\x1b[0m", out)
+
+    def test_new_editor_failure_creates_nothing(self):
+        res = self.run_cli(["new", "g_tmpl", "--desc", "x"], env={"SHORTCUT_EDITOR_CMD": "false"})
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("was not created", res.stderr)
+        self.assertNotIn("g_tmpl", self.load_global() if (self.shortcuts_home / "shortcuts.json").exists() else {})
+        self.assertFalse((self.shortcuts_home / "scripts" / "g_tmpl.sh").exists())
 
     def test_concurrent_new_keeps_every_entry(self):
         procs = [
