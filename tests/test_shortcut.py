@@ -941,6 +941,9 @@ class TestShortcutT1(unittest.TestCase):
         # Inner characters properly escaped
         self.assertIn('\\"', exec_line)
         self.assertIn('\\$', exec_line)
+        self.assertIn("run --global g_desk_test", exec_line)
+        self.assertIn("command -v notify-send", exec_line)
+        self.assertIn("Press Enter to close...", exec_line)
 
     def test_desktop_rejects_local_scope(self):
         proj_dir = self.tmp_path / "local_proj"
@@ -1514,6 +1517,346 @@ class TestShortcutT1(unittest.TestCase):
         self.assertEqual(res.returncode, 1)
         self.assertTrue(res.stderr.strip().startswith("error:"), f"Expected stderr to start with 'error:', got:\n{res.stderr}")
         self.assertNotIn("Traceback", res.stderr)
+
+    def test_prefix_named_project_entries_allow_and_list(self):
+        pref_dir = self.tmp_path / "pref_p"
+        pref_dir.mkdir()
+        self.assertEqual(self.run_cli(["prefix", "add", "P_", str(pref_dir)]).returncode, 0)
+
+        proj = self.tmp_path / "proj_p"
+        proj.mkdir()
+        (proj / ".shortcuts").mkdir()
+        reg = {
+            "version": 1,
+            "shortcuts": {
+                "P_sneaky": {"description": "Sneaky", "inline": "echo SNEAKY"},
+            },
+        }
+        (proj / ".shortcuts" / "shortcuts.json").write_text(json.dumps(reg), encoding="utf-8")
+
+        res_allow = self.run_cli(["allow", "-y"], cwd=str(proj))
+        self.assertEqual(res_allow.returncode, 0)
+        self.assertIn("echo SNEAKY", res_allow.stdout)
+        self.assertIn("ignored while P_ is a registered prefix", res_allow.stdout)
+
+        res_list = self.run_cli(["list"], cwd=str(proj))
+        self.assertEqual(res_list.returncode, 0)
+        self.assertNotIn("P_sneaky", res_list.stdout)
+
+    def test_concurrent_project_registration_keeps_allowed(self):
+        proj = self.tmp_path / "proj_concurrent"
+        proj.mkdir()
+        self.assertEqual(self.run_cli(["init"], cwd=str(proj)).returncode, 0)
+        self.assertEqual(self.run_cli(["allow", "-y"], cwd=str(proj)).returncode, 0)
+
+        procs = []
+        for i in range(1, 7):
+            p = subprocess.Popen(
+                [sys.executable, str(SHORTCUT), "new", f"c{i}", "--local", "--", f"echo {i}"],
+                cwd=str(proj),
+                env=self.env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            procs.append((i, p))
+
+        for i, p in procs:
+            stdout, stderr = p.communicate(timeout=15)
+            self.assertEqual(p.returncode, 0, f"c{i} failed: {stderr}")
+
+        for i in range(1, 7):
+            res = self.run_cli([f"c{i}"], cwd=str(proj))
+            self.assertEqual(res.returncode, 0, res.stderr)
+            self.assertEqual(res.stdout.strip(), str(i))
+
+    def test_edit_only_reallows_own_change(self):
+        proj = self.tmp_path / "proj_edit"
+        proj.mkdir()
+        store = proj / ".shortcuts"
+        store.mkdir()
+        scripts = proj / "scripts"
+        scripts.mkdir()
+        script_a = scripts / "a.sh"
+        script_a.write_text("#!/bin/sh\necho a\n", encoding="utf-8")
+        script_b = scripts / "b.sh"
+        script_b.write_text("#!/bin/sh\necho b\n", encoding="utf-8")
+
+        reg = {
+            "version": 1,
+            "shortcuts": {
+                "a": {"description": "A", "script": "scripts/a.sh"},
+                "b": {"description": "B", "script": "scripts/b.sh"},
+            },
+        }
+        (store / "shortcuts.json").write_text(json.dumps(reg), encoding="utf-8")
+        self.assertEqual(self.run_cli(["allow", "-y"], cwd=str(proj)).returncode, 0)
+
+        editor_sh = self.tmp_path / "sneaky_editor.sh"
+        editor_sh.write_text(
+            f'#!/usr/bin/env bash\necho "# edited a" >> "$1"\necho "# edited b" >> "{script_b.resolve()}"\n',
+            encoding="utf-8",
+        )
+        editor_sh.chmod(0o755)
+
+        res_edit = self.run_cli(["edit", "a"], cwd=str(proj), env={"SHORTCUT_EDITOR_CMD": str(editor_sh)})
+        self.assertEqual(res_edit.returncode, 0)
+
+        res_run = self.run_cli(["a"], cwd=str(proj))
+        self.assertEqual(res_run.returncode, 1)
+        self.assertIn("haven't allowed", res_run.stderr)
+
+    def test_hash_empty_vs_unreadable(self):
+        proj = self.tmp_path / "proj_a4"
+        proj.mkdir()
+        (proj / ".shortcuts").mkdir()
+        reg = {
+            "version": 1,
+            "shortcuts": {
+                "missing": {"description": "Missing", "script": "missing.sh"},
+            },
+        }
+        (proj / ".shortcuts" / "shortcuts.json").write_text(json.dumps(reg), encoding="utf-8")
+
+        self.assertEqual(self.run_cli(["allow", "-y"], cwd=str(proj)).returncode, 0)
+
+        (proj / "missing.sh").write_text("", encoding="utf-8")
+
+        res = self.run_cli(["missing"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("haven't allowed", res.stderr)
+
+    def test_malformed_entries_never_crash(self):
+        proj = self.tmp_path / "proj_a5"
+        proj.mkdir()
+        (proj / ".shortcuts").mkdir()
+        reg = {
+            "version": 1,
+            "shortcuts": {
+                "bad": "echo hi",
+            },
+        }
+        (proj / ".shortcuts" / "shortcuts.json").write_text(json.dumps(reg), encoding="utf-8")
+        self.assertEqual(self.run_cli(["allow", "-y"], cwd=str(proj)).returncode, 0)
+
+        res = self.run_cli(["bad"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertTrue(res.stderr.strip().startswith("error:"))
+        self.assertNotIn("Traceback", res.stderr)
+
+        src_dir = self.tmp_path / "src_a5"
+        src_dir.mkdir()
+        src_reg = {
+            "version": 1,
+            "shortcuts": {
+                "bad_dir": {"description": "Bad dir", "inline": "echo hi", "dir": 123},
+            },
+        }
+        (src_dir / "shortcuts.json").write_text(json.dumps(src_reg), encoding="utf-8")
+
+        res_init = self.run_cli(["init", "--global", str(src_dir)])
+        self.assertEqual(res_init.returncode, 0)
+        self.assertIn("bad_dir (invalid entry)", res_init.stdout)
+        self.assertNotIn("Traceback", res_init.stderr)
+
+    def test_broken_output_pipe_exits_141_and_logs(self):
+        self.assertEqual(self.run_cli(["new", "g_seq", "--", "seq 1 1000000"]).returncode, 0)
+        p_shortcut = subprocess.Popen(
+            [sys.executable, str(SHORTCUT), "g_seq"],
+            cwd=str(self.home_dir),
+            env=self.env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        p_head = subprocess.Popen(
+            ["head", "-n", "1"],
+            stdin=p_shortcut.stdout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        assert p_shortcut.stdout is not None
+        p_shortcut.stdout.close()
+        head_out, _ = p_head.communicate(timeout=5)
+        _, sc_err = p_shortcut.communicate(timeout=5)
+        self.assertEqual(head_out.strip(), "1")
+        self.assertEqual(p_shortcut.returncode, 141)
+        self.assertNotIn("BrokenPipeError", sc_err)
+        self.assertNotIn("Exception ignored", sc_err)
+        log_path = self.shortcuts_home / "logs" / "g_seq.log"
+        self.assertTrue(log_path.is_file())
+        log_content = log_path.read_text(encoding="utf-8")
+        self.assertIn("=== exit: 141 ===", log_content)
+
+    def test_signals_reach_child_group_in_pipe_mode(self):
+        pid_file = self.tmp_path / "child.pid"
+        inline = f"sh -c 'echo $$ > {pid_file}; exec sleep 300'; echo done"
+        self.assertEqual(self.run_cli(["new", "g_group_sig", "--", inline]).returncode, 0)
+        proc = subprocess.Popen(
+            [sys.executable, str(SHORTCUT), "run", "g_group_sig"],
+            cwd=str(self.home_dir),
+            env=self.env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=0,
+            start_new_session=True,
+        )
+        start = time.time()
+        child_pid = None
+        while time.time() - start < 5:
+            if pid_file.exists():
+                text = pid_file.read_text().strip()
+                if text.isdigit():
+                    child_pid = int(text)
+                    break
+            time.sleep(0.05)
+        self.assertIsNotNone(child_pid, "PIDFILE was not written in time")
+        assert child_pid is not None
+        def is_alive(pid: int) -> bool:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return False
+            try:
+                status_file = pathlib.Path(f"/proc/{pid}/status")
+                if status_file.exists():
+                    for line in status_file.read_text().splitlines():
+                        if line.startswith("State:"):
+                            return "Z" not in line
+            except OSError:
+                return False
+            return True
+
+        self.assertTrue(is_alive(child_pid), f"child process {child_pid} not running before SIGTERM")
+
+        proc.send_signal(signal.SIGTERM)
+        proc.communicate(timeout=5)
+
+        deadline = time.time() + 2.0
+        alive = True
+        while time.time() < deadline:
+            if not is_alive(child_pid):
+                alive = False
+                break
+            time.sleep(0.05)
+        self.assertFalse(alive, f"child pid {child_pid} still running after SIGTERM")
+
+    def test_script_shebang_without_exec_and_elf(self):
+        script = self.tmp_path / "py_script.py"
+        script.write_text("#!/usr/bin/env python3\nimport sys\nprint('py', 1 + 1)\n", encoding="utf-8")
+        script.chmod(0o644)
+        self.assertEqual(self.run_cli(["add", "g_py", str(script), "--desc", "python"]).returncode, 0)
+        res = self.run_cli(["g_py"])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("py 2", res.stdout)
+
+        sh_no_exec = self.tmp_path / "no_shebang.sh"
+        sh_no_exec.write_text("echo nonexec\n", encoding="utf-8")
+        sh_no_exec.chmod(0o644)
+        self.assertEqual(self.run_cli(["add", "g_noshebang", str(sh_no_exec), "--desc", "noshebang"]).returncode, 0)
+        res2 = self.run_cli(["g_noshebang"])
+        self.assertEqual(res2.returncode, 0, res2.stderr)
+        self.assertIn("nonexec", res2.stdout)
+
+        sh_exec = self.tmp_path / "exec.sh"
+        sh_exec.write_text("#!/usr/bin/env bash\necho exec_shebang\n", encoding="utf-8")
+        sh_exec.chmod(0o755)
+        self.assertEqual(self.run_cli(["add", "g_exec", str(sh_exec), "--desc", "exec"]).returncode, 0)
+        res3 = self.run_cli(["g_exec"])
+        self.assertEqual(res3.returncode, 0, res3.stderr)
+        self.assertIn("exec_shebang", res3.stdout)
+
+    def test_run_help(self):
+        res1 = self.run_cli(["run", "--help"])
+        self.assertEqual(res1.returncode, 0)
+        self.assertIn("shortcut run [--global] <name> [args...]", res1.stdout)
+
+        res2 = self.run_cli(["run", "-h"])
+        self.assertEqual(res2.returncode, 0)
+        self.assertIn("shortcut run [--global] <name> [args...]", res2.stdout)
+
+        self.assertEqual(self.run_cli(["new", "g_echo_args", "--", "echo \"args: $@\""]).returncode, 0)
+        res3 = self.run_cli(["run", "g_echo_args", "--help"])
+        self.assertEqual(res3.returncode, 0)
+        self.assertIn("args: --help", res3.stdout)
+
+    def test_rm_local_keeps_desktop_and_prefix_unrunnable(self):
+        # 1. Global penpot with desktop file plus project penpot
+        proj_dir = self.tmp_path / "penpot_proj"
+        proj_dir.mkdir(parents=True, exist_ok=True)
+        self.assertEqual(
+            self.run_cli(["new", "penpot", "--static", str(self.tmp_path), "--desc", "Global penpot", "--", "echo", "global"]).returncode,
+            0,
+        )
+        self.assertEqual(self.run_cli(["desktop", "penpot"]).returncode, 0)
+        desktop_file = self.xdg_data_home / "applications" / "shortcut-penpot.desktop"
+        self.assertTrue(desktop_file.is_file())
+
+        # Create project penpot and remove it
+        self.assertEqual(
+            self.run_cli(["new", "penpot", "--local", "--desc", "Project penpot", "--", "echo", "local"], cwd=str(proj_dir)).returncode,
+            0,
+        )
+        res_rm = self.run_cli(["rm", "penpot", "-y"], cwd=str(proj_dir))
+        self.assertEqual(res_rm.returncode, 0)
+        self.assertTrue(desktop_file.is_file(), "Removing local shortcut must keep global desktop file")
+        global_reg = shortcut_mod.load_registry(str(self.shortcuts_home))
+        self.assertIn("penpot", global_reg["shortcuts"])
+
+        # 2. prefix rm --force leaves unrunnable entry; rm -y must still remove it
+        c_dir = self.tmp_path / "c_dir"
+        c_dir.mkdir(parents=True, exist_ok=True)
+        self.assertEqual(self.run_cli(["prefix", "add", "C_", str(c_dir)]).returncode, 0)
+        self.assertEqual(self.run_cli(["new", "C_build", "--", "true"]).returncode, 0)
+        self.assertEqual(self.run_cli(["prefix", "rm", "C_", "--force"]).returncode, 0)
+        res_rm_c = self.run_cli(["rm", "C_build", "-y"])
+        self.assertEqual(res_rm_c.returncode, 0)
+
+    def test_migrate_args_and_validation(self):
+        # 1. migrate --help leaves old.sh in place
+        old_script = self.shortcuts_home / "old.sh"
+        old_script.write_text("#!/bin/sh\n# Old script\necho old\n", encoding="utf-8")
+        old_script.chmod(0o755)
+
+        res_help = self.run_cli(["migrate", "--help"])
+        self.assertEqual(res_help.returncode, 0)
+        self.assertIn("usage: shortcut migrate", res_help.stdout)
+        self.assertTrue(old_script.is_file(), "migrate --help must leave old.sh in place")
+        self.assertFalse((self.shortcuts_home / "shortcuts.json").exists())
+
+        # 2. my.tool.sh (invalid name) and symlink are reported as skipped and stay where they are
+        invalid_script = self.shortcuts_home / "my.tool.sh"
+        invalid_script.write_text("#!/bin/sh\n# Dot in name\necho invalid\n", encoding="utf-8")
+        invalid_script.chmod(0o755)
+
+        target_script = self.tmp_path / "symlink_target.sh"
+        target_script.write_text("#!/bin/sh\n# Target\necho target\n", encoding="utf-8")
+        symlink_script = self.shortcuts_home / "symlink.sh"
+        symlink_script.symlink_to(target_script)
+
+        res_migrate = self.run_cli(["migrate"])
+        self.assertEqual(res_migrate.returncode, 0)
+        self.assertIn("skipped my.tool.sh", res_migrate.stdout)
+        self.assertIn("skipped symlink.sh", res_migrate.stdout)
+
+        # Both skipped files stay where they are
+        self.assertTrue(invalid_script.is_file())
+        self.assertTrue(symlink_script.is_symlink())
+
+        # old.sh was valid and got migrated
+        self.assertFalse(old_script.exists())
+        self.assertTrue((self.shortcuts_home / "scripts" / "g_old.sh").is_file())
+
+    def test_rm_malformed_entry(self):
+        reg = {"shortcuts": {"bad_entry": {"description": "x", "inline": "true", "dir": 123}}}
+        (self.shortcuts_home / "shortcuts.json").write_text(json.dumps(reg), encoding="utf-8")
+        res = self.run_cli(["rm", "bad_entry", "-y"])
+        self.assertEqual(res.returncode, 0)
+        after = shortcut_mod.load_registry(str(self.shortcuts_home))
+        self.assertNotIn("bad_entry", after.get("shortcuts", {}))
 
 
 if __name__ == "__main__":

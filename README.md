@@ -135,8 +135,8 @@ The global store also holds `allowed.json` (the projects you allowed, with their
 
 - `description` *(string, required on add/link)*: Human-readable summary of the shortcut.
 - `inline` *(string)*: Direct command executed via `bash -c "<inline>" <name> "$@"`. Mutually exclusive with `script`.
-- `script` *(string)*: Path to script. Relative paths resolve inside the global store, or inside the project root for a project shortcut, and must not escape it. Absolute paths reference external files without copying. A missing script is an error.
-- `dir` *(string, optional)*: Fixed absolute directory for an unprefixed global shortcut. In a project, a directory relative to the project root. Not allowed on `g_` or prefix names.
+- `script` *(string)*: Path to script. Relative paths resolve inside the global store, or inside the project root for a project shortcut, and must not escape it. Absolute paths reference external files without copying. A script with a `#!` line runs with that interpreter even without +x, and an executable binary runs directly. A missing script is an error.
+- `dir` *(string, optional)*: Fixed absolute directory for an unprefixed global shortcut. In a project, a directory relative to the project root (an absolute `dir` is used as written; it is shown in `shortcut allow`). Not allowed on `g_` or prefix names.
 - `icon` *(string, optional)*: Freedesktop icon name for desktop entries (defaults to `utilities-terminal`).
 - `created` *(string, optional)*: ISO date (`YYYY-MM-DD`) when created.
 - `created_by` *(string, optional)*: User or agent identifier recorded with `--by`.

@@ -49,17 +49,29 @@ class ShortcutEntry:
     log: bool = True
 
     @classmethod
-    def from_dict(cls, name: str, data: Dict[str, Any]) -> ShortcutEntry:
+    def from_dict(cls, name: str, data: Any) -> ShortcutEntry:
+        if not isinstance(data, dict):
+            raise ValueError(f"'{name}' is not a valid entry: expected a dictionary")
+        desc = data.get("description", "")
+        if not isinstance(desc, str):
+            raise ValueError(f"'{name}' is not a valid entry: 'description' must be a string")
+        for field in ("inline", "script", "dir", "icon", "created_by", "created"):
+            val = data.get(field)
+            if val is not None and not isinstance(val, str):
+                raise ValueError(f"'{name}' is not a valid entry: '{field}' must be a string")
+        log = data.get("log", True)
+        if not isinstance(log, bool):
+            raise ValueError(f"'{name}' is not a valid entry: 'log' must be a boolean")
         return cls(
             name=name,
-            description=data.get("description", ""),
+            description=desc,
             inline=data.get("inline"),
             script=data.get("script"),
             dir=data.get("dir"),
             icon=data.get("icon"),
             created_by=data.get("created_by"),
             created=data.get("created"),
-            log=data.get("log", True),
+            log=log,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -186,7 +198,8 @@ def snapshot_project(store_dir: str) -> ProjectSnapshot:
                 scripts[name] = (path, f.read())
         except (ValueError, OSError) as e:
             scripts[name] = (str(e), None)
-        digest.update(b"\0" + name.encode() + b"\0" + (scripts[name][1] or b"<unreadable>"))
+        content_tag = (b"R" + scripts[name][1]) if scripts[name][1] is not None else b"U"
+        digest.update(b"\0" + name.encode() + b"\0" + content_tag)
     return ProjectSnapshot(root=root, registry=registry, scripts=scripts, fingerprint=digest.hexdigest())
 
 
@@ -223,13 +236,44 @@ def allowed_registry(store_dir: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _only_changed(before: ProjectSnapshot, after: ProjectSnapshot, name: str) -> bool:
+    if before.registry is None or after.registry is None:
+        return False
+    reg_before = dict(before.registry)
+    reg_after = dict(after.registry)
+    if isinstance(reg_before.get("shortcuts"), dict):
+        reg_before["shortcuts"] = {k: v for k, v in reg_before["shortcuts"].items() if k != name}
+    if isinstance(reg_after.get("shortcuts"), dict):
+        reg_after["shortcuts"] = {k: v for k, v in reg_after["shortcuts"].items() if k != name}
+    if reg_before != reg_after:
+        return False
+
+    scripts_before = {k: v for k, v in before.scripts.items() if k != name}
+    scripts_after = {k: v for k, v in after.scripts.items() if k != name}
+    return scripts_before == scripts_after
+
+
+class AllowKeeper:
+    def __init__(self) -> None:
+        self.success = True
+
+
 @contextlib.contextmanager
-def keep_allowed(store_dir: str) -> Iterator[None]:
+def keep_allowed(store_dir: str, name: str) -> Iterator[AllowKeeper]:
     """A change made through shortcut itself keeps an allowed project store allowed."""
-    was_allowed = not is_global_store(store_dir) and allowed_registry(store_dir) is not None
-    yield
-    if was_allowed:
-        set_allowed(store_dir, snapshot_project(store_dir).fingerprint)
+    is_project = not is_global_store(store_dir)
+    was_allowed = is_project and allowed_registry(store_dir) is not None
+    before = snapshot_project(store_dir) if was_allowed else None
+    keeper = AllowKeeper()
+    try:
+        yield keeper
+    except Exception:
+        raise
+    else:
+        if was_allowed and keeper.success and before is not None:
+            after = snapshot_project(store_dir)
+            if _only_changed(before, after, name):
+                set_allowed(store_dir, after.fingerprint)
 
 
 def new_local_store_dir(cwd: str) -> str:
@@ -421,30 +465,54 @@ def _exit_code(rc: int) -> int:
     return 128 - rc if rc < 0 else rc  # killed by signal N -> shell convention 128+N
 
 
-def _stop_child(proc: subprocess.Popen) -> int:
+def _stop_child(proc: subprocess.Popen, in_group: bool = False) -> int:
     """After Ctrl+C: pass SIGINT on, give the child 5 s to exit, never leave it orphaned."""
     if proc.poll() is None:
         try:
-            proc.send_signal(signal.SIGINT)
-        except OSError:
+            if in_group:
+                os.killpg(proc.pid, signal.SIGINT)
+            else:
+                proc.send_signal(signal.SIGINT)
+        except (ProcessLookupError, OSError):
             pass
     try:
         rc = proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
-        proc.kill()
+        try:
+            if in_group:
+                os.killpg(proc.pid, signal.SIGKILL)
+            else:
+                proc.kill()
+        except (ProcessLookupError, OSError):
+            pass
         rc = proc.wait()
     return rc if rc < 0 else 130
 
 
-def _tee(proc: subprocess.Popen, out_fd: int, lf: Any, stdin_fd: Optional[int] = None) -> Tuple[int, bytes]:
+def _tee(
+    proc: subprocess.Popen,
+    out_fd: int,
+    lf: Any,
+    stdin_fd: Optional[int] = None,
+    in_group: bool = False,
+) -> Tuple[int, bytes]:
     """Copy the child's output to the terminal and the log until it exits; with stdin_fd, forward keystrokes
     to out_fd (the pty master). Returns (exit code, last byte written)."""
     last = b"\n"
     readers = [out_fd] if stdin_fd is None else [out_fd, stdin_fd]
     # Pass SIGTERM/SIGHUP on and keep draining, so the child exits first and our cleanup
     # (log footer, restoring the terminal) still runs instead of dying mid-copy.
-    forward = lambda signum, _frame: proc.poll() is None and proc.send_signal(signum)
-    old_handlers = {sig: signal.signal(sig, forward) for sig in (signal.SIGTERM, signal.SIGHUP)}
+    def _forward(sig: int, _frame: Any) -> None:
+        if proc.poll() is None:
+            try:
+                if in_group:
+                    os.killpg(proc.pid, sig)
+                else:
+                    proc.send_signal(sig)
+            except (ProcessLookupError, OSError):
+                pass
+
+    old_handlers = {sig: signal.signal(sig, _forward) for sig in (signal.SIGTERM, signal.SIGHUP)}
     try:
         while True:
             ready, _, _ = select.select(readers, [], [], 0.05)
@@ -459,11 +527,26 @@ def _tee(proc: subprocess.Popen, out_fd: int, lf: Any, stdin_fd: Optional[int] =
                     chunk = b""
                 if not chunk:
                     break
-                sys.stdout.buffer.write(chunk)
-                sys.stdout.buffer.flush()
+                broken_pipe = False
+                try:
+                    sys.stdout.buffer.write(chunk)
+                    sys.stdout.buffer.flush()
+                except BrokenPipeError:
+                    broken_pipe = True
+                    with open(os.devnull, "wb") as devnull:
+                        os.dup2(devnull.fileno(), 1)
+                    if out_fd in readers:
+                        readers.remove(out_fd)
+                    if proc.stdout is not None and not proc.stdout.closed:
+                        proc.stdout.close()
+                    else:
+                        with contextlib.suppress(OSError):
+                            os.close(out_fd)
                 lf.write(chunk.replace(b"\r\n", b"\n"))
                 lf.flush()
                 last = chunk[-1:]
+                if broken_pipe:
+                    break
             if stdin_fd is not None and stdin_fd in ready:
                 data = os.read(stdin_fd, 65536)
                 if data:
@@ -472,9 +555,9 @@ def _tee(proc: subprocess.Popen, out_fd: int, lf: Any, stdin_fd: Optional[int] =
                     readers.remove(stdin_fd)
         rc = proc.wait()
     except KeyboardInterrupt:
-        rc = _stop_child(proc)
+        rc = _stop_child(proc, in_group=in_group)
     except OSError:  # our terminal went away (SIGHUP); still reap the child and write the footer
-        rc = _stop_child(proc)
+        rc = _stop_child(proc, in_group=in_group)
     finally:
         for sig, handler in old_handlers.items():
             signal.signal(sig, handler)
@@ -500,10 +583,20 @@ def _copy_winsize(from_fd: int, to_fd: int) -> None:
 
 
 def _run_piped(cmd: List[str], cwd: str, env: Dict[str, str], lf: Any) -> Tuple[int, bytes]:
-    proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0)
+    in_group = not sys.stdin.isatty()
+    # lazy: when stdin is a tty, keep the child in our process group so terminal reads don't get SIGTTIN; SIGTERM reaches only bash, would need job-control forwarding to signal the whole pipeline
+    proc = subprocess.Popen(
+        cmd,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=0,
+        start_new_session=in_group,
+    )
     assert proc.stdout is not None
     with proc.stdout:
-        return _tee(proc, proc.stdout.fileno(), lf)
+        return _tee(proc, proc.stdout.fileno(), lf, in_group=in_group)
 
 
 def _run_in_pty(cmd: List[str], cwd: str, env: Dict[str, str], lf: Any) -> Tuple[int, bytes]:
@@ -528,13 +621,14 @@ def _run_in_pty(cmd: List[str], cwd: str, env: Dict[str, str], lf: Any) -> Tuple
         old_winch = signal.signal(signal.SIGWINCH, lambda *_: _copy_winsize(stdout_fd, master))
         try:
             tty.setraw(stdin_fd, termios.TCSANOW)  # keystrokes, Ctrl+C included, go to the child's pty
-            return _tee(proc, master, lf, stdin_fd)
+            return _tee(proc, master, lf, stdin_fd, in_group=True)
         finally:
             with contextlib.suppress(termios.error, OSError):  # the terminal may be gone after SIGHUP
                 termios.tcsetattr(stdin_fd, termios.TCSADRAIN, saved)
             signal.signal(signal.SIGWINCH, old_winch)
     finally:
-        os.close(master)
+        with contextlib.suppress(OSError):
+            os.close(master)
 
 
 def run_shortcut(name: str, args: List[str], caller_cwd: Optional[str] = None, skip_local: bool = False) -> int:
@@ -555,13 +649,22 @@ def run_shortcut(name: str, args: List[str], caller_cwd: Optional[str] = None, s
         if not os.path.exists(script_path):
             raise FileNotFoundError(f"Script file not found: {script_path}")
         is_exec = os.access(script_path, os.X_OK)
-        has_shebang = False
+        header = b""
         try:
             with open(script_path, "rb") as f:
-                has_shebang = f.read(2) == b"#!"
+                header = f.read(1024)
         except OSError:
             pass
-        cmd = [script_path, *args] if (is_exec and has_shebang) else ["bash", script_path, *args]
+        is_elf = header.startswith(b"\x7fELF")
+        has_shebang = header.startswith(b"#!")
+        if is_exec and (has_shebang or is_elf):
+            cmd = [script_path, *args]
+        elif has_shebang:
+            first_line = header.split(b"\n", 1)[0][2:].decode(errors="replace").strip()
+            parts = first_line.split(None, 1)
+            cmd = [*parts, script_path, *args] if parts else ["bash", script_path, *args]
+        else:
+            cmd = ["bash", script_path, *args]
     else:
         raise ValueError(f"Entry '{name}' has neither 'inline' nor 'script'.")
 
@@ -638,7 +741,7 @@ def edit_file(editor_cmd: List[str], path: str) -> int:
     return subprocess.run([*editor_cmd, path]).returncode
 
 
-def edit_inline_roundtrip(name: str, store_dir: str, editor_cmd: List[str]) -> None:
+def edit_inline_roundtrip(name: str, store_dir: str, editor_cmd: List[str]) -> int:
     reg = load_registry(store_dir)
     shortcuts = reg.get("shortcuts", {})
     if name not in shortcuts or "inline" not in shortcuts[name]:
@@ -661,7 +764,7 @@ def edit_inline_roundtrip(name: str, store_dir: str, editor_cmd: List[str]) -> N
 
         # Save only if modified; re-read under the lock so changes made while editing aren't lost
         if updated_cmd != original_cmd.rstrip("\r\n"):
-            with keep_allowed(store_dir), registry_lock(store_dir):
+            with registry_lock(store_dir), keep_allowed(store_dir, name):
                 reg = load_registry(store_dir)
                 shortcuts = reg.get("shortcuts", {})
                 if name not in shortcuts:
@@ -671,12 +774,16 @@ def edit_inline_roundtrip(name: str, store_dir: str, editor_cmd: List[str]) -> N
             print(f"Updated inline shortcut '{name}'.")
         else:
             print(f"No changes made to '{name}'.")
+        return 0
     finally:
         if os.path.exists(temp_path):
             os.unlink(temp_path)
 
 
 def cmd_run(args: List[str]) -> int:
+    if args and args[0] in ("--help", "-h"):
+        print("Usage: shortcut run [--global] <name> [args...]")
+        return 0
     skip_local = bool(args) and args[0] == "--global"
     if skip_local:
         args = args[1:]
@@ -696,8 +803,9 @@ def _register(store_dir: str, entry: ShortcutEntry, write_script: Optional[Any] 
         if is_project:
             root = os.path.dirname(store_dir)
             print(f"created project store {store_dir} (its shortcuts work inside {root})", file=sys.stderr)
-    was_allowed = is_project and (created or allowed_registry(store_dir) is not None)
     with registry_lock(store_dir):
+        was_allowed = is_project and (created or allowed_registry(store_dir) is not None)
+        before = snapshot_project(store_dir) if was_allowed else None
         reg = load_registry(store_dir)
         shortcuts = reg.setdefault("shortcuts", {})
         if entry.name in shortcuts:
@@ -707,14 +815,16 @@ def _register(store_dir: str, entry: ShortcutEntry, write_script: Optional[Any] 
             write_script()
         shortcuts[entry.name] = entry.to_dict()
         save_registry_atomic(store_dir, reg)
-    if was_allowed:
-        set_allowed(store_dir, snapshot_project(store_dir).fingerprint)
-    elif is_project:
-        print(
-            f"note: {os.path.dirname(store_dir)} has project shortcuts you haven't allowed yet; "
-            "review them with: shortcut allow",
-            file=sys.stderr,
-        )
+        if was_allowed and before is not None:
+            after = snapshot_project(store_dir)
+            if _only_changed(before, after, entry.name):
+                set_allowed(store_dir, after.fingerprint)
+        elif is_project:
+            print(
+                f"note: {os.path.dirname(store_dir)} has project shortcuts you haven't allowed yet; "
+                "review them with: shortcut allow",
+                file=sys.stderr,
+            )
 
 
 def _stored_script_field(store_dir: str, filename: str) -> Tuple[str, str]:
@@ -882,15 +992,6 @@ def cmd_list(args: List[str]) -> int:
     parser.add_argument("--names", action="store_true", help="Print bare visible names only")
     parsed = parser.parse_args(args)
 
-    local_dir = find_local_store_dir(os.getcwd())
-    project_root = os.path.dirname(local_dir) if local_dir else None
-    local_reg = allowed_registry(local_dir) if local_dir else None
-    local_items: List[Tuple[str, str, str]] = []  # (name, runs in, description)
-    for name, data in sorted((local_reg or {}).get("shortcuts", {}).items()):
-        if name.startswith(CWD_PREFIX) or not isinstance(data, dict):
-            continue  # g_ names only come from the global store
-        local_items.append((name, project_dir_display(project_root, data.get("dir")), data.get("description", "")))
-
     global_dir = get_global_store_dir()
     global_items: List[Tuple[str, str, str]] = []
     global_prefixes: Dict[str, str] = {}
@@ -906,6 +1007,15 @@ def cmd_list(args: List[str]) -> int:
             else:
                 runs_in = data.get("dir") or "(no dir: won't run)"
             global_items.append((name, runs_in, data.get("description", "")))
+
+    local_dir = find_local_store_dir(os.getcwd())
+    project_root = os.path.dirname(local_dir) if local_dir else None
+    local_reg = allowed_registry(local_dir) if local_dir else None
+    local_items: List[Tuple[str, str, str]] = []  # (name, runs in, description)
+    for name, data in sorted((local_reg or {}).get("shortcuts", {}).items()):
+        if name.startswith(CWD_PREFIX) or prefix_owner(name, global_prefixes) or not isinstance(data, dict):
+            continue  # g_ and prefix names only come from the global store
+        local_items.append((name, project_dir_display(project_root, data.get("dir")), data.get("description", "")))
 
     if parsed.names:
         for name in dict.fromkeys(n for n, _, _ in local_items + global_items):
@@ -1007,8 +1117,35 @@ def cmd_rm(args: List[str]) -> int:
     parser.add_argument("-y", "--yes", action="store_true", help="Do not prompt for confirmation")
     parsed = parser.parse_args(args)
 
-    resolved = resolve_shortcut(parsed.name)
-    entry = resolved.entry
+    name = parsed.name
+    global_dir = get_global_store_dir()
+    global_reg = load_registry(global_dir) if registry_exists(global_dir) else {"shortcuts": {}}
+    global_shortcuts = global_reg.get("shortcuts", {})
+    global_prefixes: Dict[str, str] = global_reg.get("prefixes", {})
+
+    store_dir: Optional[str] = None
+    raw_entry: Any = None
+
+    local_dir = find_local_store_dir()
+    if local_dir:
+        local_reg = allowed_registry(local_dir)
+        if local_reg is not None:
+            local_shortcuts = local_reg.get("shortcuts", {})
+            if (
+                name in local_shortcuts
+                and not name.startswith(CWD_PREFIX)
+                and prefix_owner(name, global_prefixes) is None
+            ):
+                store_dir = local_dir
+                raw_entry = local_shortcuts[name]
+
+    if store_dir is None:
+        if name in global_shortcuts:
+            store_dir = global_dir
+            raw_entry = global_shortcuts[name]
+
+    if store_dir is None:
+        die(f"Shortcut '{name}' not found.")
 
     if not parsed.yes:
         if not sys.stdin.isatty():
@@ -1019,40 +1156,46 @@ def cmd_rm(args: List[str]) -> int:
             return 0
 
     # 1. Remove from registry
-    with keep_allowed(resolved.store_dir), registry_lock(resolved.store_dir):
-        reg = load_registry(resolved.store_dir)
+    with registry_lock(store_dir), keep_allowed(store_dir, parsed.name):
+        reg = load_registry(store_dir)
         shortcuts = reg.get("shortcuts", {})
         if parsed.name in shortcuts:
             del shortcuts[parsed.name]
-            save_registry_atomic(resolved.store_dir, reg)
+            save_registry_atomic(store_dir, reg)
 
     # 2. Remove the stored copy: only files shortcut keeps in <store>/scripts/, never a linked
     #    script or a project's own file
-    if entry.script:
-        stored_path = resolve_script_path(resolved.base_dir, entry.script)
-        scripts_dir = pathlib.Path(resolved.store_dir, "scripts").resolve()
-        if pathlib.Path(stored_path).resolve().is_relative_to(scripts_dir) and os.path.isfile(stored_path):
-            try:
-                os.unlink(stored_path)
-            except OSError:
-                pass
+    script = raw_entry.get("script") if isinstance(raw_entry, dict) else None
+    if isinstance(script, str) and script:
+        base_dir = script_base(store_dir)
+        try:
+            stored_path = resolve_script_path(base_dir, script)
+            scripts_dir = pathlib.Path(store_dir, "scripts").resolve()
+            if pathlib.Path(stored_path).resolve().is_relative_to(scripts_dir) and os.path.isfile(stored_path):
+                try:
+                    os.unlink(stored_path)
+                except OSError:
+                    pass
+        except ValueError:
+            pass
 
     # 3. Remove log file
-    log_path = os.path.join(resolved.store_dir, "logs", f"{parsed.name}.log")
+    log_path = os.path.join(store_dir, "logs", f"{parsed.name}.log")
     if os.path.isfile(log_path):
         try:
             os.unlink(log_path)
         except OSError:
             pass
 
-    # 4. Remove desktop file if present
-    xdg_data = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
-    desktop_file = os.path.join(xdg_data, "applications", f"shortcut-{parsed.name}.desktop")
-    if os.path.isfile(desktop_file):
-        try:
-            os.unlink(desktop_file)
-        except OSError:
-            pass
+    # 4. Remove desktop file if present (global entries only)
+    if is_global_store(store_dir):
+        xdg_data = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+        desktop_file = os.path.join(xdg_data, "applications", f"shortcut-{parsed.name}.desktop")
+        if os.path.isfile(desktop_file):
+            try:
+                os.unlink(desktop_file)
+            except OSError:
+                pass
 
     print(f"Removed shortcut '{parsed.name}'.")
     return 0
@@ -1062,11 +1205,13 @@ def _edit_shortcut(name: str, editor_cmd: List[str]) -> int:
     resolved = resolve_shortcut(name)
     entry = resolved.entry
     if entry.inline is not None:
-        edit_inline_roundtrip(entry.name, resolved.store_dir, editor_cmd)
-        return 0
+        return edit_inline_roundtrip(entry.name, resolved.store_dir, editor_cmd)
     if entry.script is not None:
-        with keep_allowed(resolved.store_dir):
-            return edit_file(editor_cmd, resolve_script_path(resolved.base_dir, entry.script))
+        with keep_allowed(resolved.store_dir, entry.name) as keeper:
+            rc = edit_file(editor_cmd, resolve_script_path(resolved.base_dir, entry.script))
+            if rc != 0:
+                keeper.success = False
+            return rc
     die(f"Entry '{name}' has neither inline nor script.")
 
 
@@ -1176,9 +1321,11 @@ def format_desktop_file(name: str, description: str, icon: Optional[str]) -> str
         tool = f"{shlex.quote(sys.executable)} {shlex.quote(os.path.realpath(__file__))}"
     icon_val = icon if icon else "utilities-terminal"
     inner_script = (
-        f'{tool} run {name}; rc=$?; '
+        f'{tool} run --global {name}; rc=$?; '
+        f'if command -v notify-send >/dev/null 2>&1; then '
         f'if [ $rc -eq 0 ]; then notify-send "shortcut: {name}" "Finished"; '
         f'else notify-send -u critical "shortcut: {name}" "Failed (exit $rc)"; fi; '
+        f'fi; '
         f'echo; read -r -p "Press Enter to close..."'
     )
     escaped_inner = "".join(f"\\{c}" if c in ('"', '\\', '`', '$') else c for c in inner_script)
@@ -1319,12 +1466,14 @@ def merge_init_entries(
 
     for name, entry_data in source_shortcuts.items():
         # Validate entry structure
-        if not isinstance(entry_data, dict):
+        try:
+            ShortcutEntry.from_dict(name, entry_data)
+        except ValueError:
             skipped.append(f"{name} (invalid entry)")
             continue
         has_inline = isinstance(entry_data.get("inline"), str)
         has_script = isinstance(entry_data.get("script"), str)
-        if has_inline == has_script or ("inline" in entry_data) != has_inline or ("script" in entry_data) != has_script:
+        if has_inline == has_script:
             skipped.append(f"{name} (invalid entry)")
             continue
 
@@ -1522,17 +1671,20 @@ def cmd_allow(args: List[str]) -> int:
     for name in sorted(shortcuts):
         data = shortcuts[name]
         print(f"\n{name}")
-        if name.startswith(CWD_PREFIX) or prefix_owner(name, prefixes):
+        owner_pref = prefix_owner(name, prefixes)
+        if name.startswith(CWD_PREFIX):
             print("  ignored: g_ and prefix names only come from your global store")
-            continue
+        elif owner_pref:
+            print(f"  ignored while {owner_pref} is a registered prefix (prefix names come from your global store)")
         if not isinstance(data, dict):
             print("  ignored: not a valid entry")
             continue
         if data.get("description"):
             print(f"  description: {data['description']}")
-        print(f"  runs in: {project_dir_display(snap.root, data.get('dir'))}")
-        if name in global_names:
-            print(f"  inside this project it hides your global '{name}'")
+        if not (name.startswith(CWD_PREFIX) or owner_pref):
+            print(f"  runs in: {project_dir_display(snap.root, data.get('dir'))}")
+            if name in global_names:
+                print(f"  inside this project it hides your global '{name}'")
         if isinstance(data.get("inline"), str):
             print("  command:")
             print(textwrap.indent(data["inline"], "    "))
@@ -1563,6 +1715,11 @@ def cmd_allow(args: List[str]) -> int:
 
 
 def cmd_migrate(args: List[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="shortcut migrate",
+        description="Convert legacy flat ~/.shortcuts/*.sh scripts to global g_<stem> entries",
+    )
+    parser.parse_args(args)
     global_dir = get_global_store_dir()
     init_store(global_dir, is_global=True)
     with registry_lock(global_dir):
@@ -1577,25 +1734,37 @@ def _migrate_locked(global_dir: str) -> int:
     # Legacy flat files: <store>/*.sh (only files directly in global_dir)
     flat_files = [
         f for f in sorted(os.listdir(global_dir))
-        if f.endswith(".sh") and os.path.isfile(os.path.join(global_dir, f))
+        if f.endswith(".sh") and (os.path.isfile(os.path.join(global_dir, f)) or os.path.islink(os.path.join(global_dir, f)))
     ]
 
     if not flat_files:
         print("Nothing to migrate.")
         return 0
 
-    migrated: List[str] = []
-    today = date.today().isoformat()
+    candidates: List[Tuple[str, str, str, str, str, str]] = []
+    planned_names: Set[str] = set()
 
+    # Pass 1: validate everything before moving anything
     for filename in flat_files:
         src_path = os.path.join(global_dir, filename)
+
+        if os.path.islink(src_path):
+            print(f"skipped {filename} (symlink)")
+            continue
+
         stem = pathlib.Path(filename).stem
         name = stem if stem.startswith("g_") else f"g_{stem}"
+
+        try:
+            validate_name(name)
+        except ValueError:
+            print(f"skipped {filename} (invalid name: {name})")
+            continue
 
         dest_rel_script = f"scripts/{name}.sh"
         dest_abs_script = os.path.join(global_dir, dest_rel_script)
 
-        if os.path.exists(dest_abs_script) or name in shortcuts:
+        if os.path.exists(dest_abs_script) or name in shortcuts or name in planned_names:
             print(f"skipped {filename} ({name} already exists)")
             continue
 
@@ -1615,9 +1784,15 @@ def _migrate_locked(global_dir: str) -> int:
         except OSError:
             pass
 
-        # Move the file into scripts/
+        planned_names.add(name)
+        candidates.append((filename, src_path, name, dest_abs_script, dest_rel_script, desc))
+
+    # Pass 2: move and register validated candidates
+    migrated: List[str] = []
+    today = date.today().isoformat()
+
+    for filename, src_path, name, dest_abs_script, dest_rel_script, desc in candidates:
         shutil.move(src_path, dest_abs_script)
-        # Ensure executable
         os.chmod(dest_abs_script, os.stat(dest_abs_script).st_mode | 0o111)
 
         entry = ShortcutEntry(
