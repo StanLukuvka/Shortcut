@@ -15,6 +15,7 @@ Running a shortcut, where it runs, and how a project is trusted all change. `sho
 - The unknown-command error reads `unknown command 'x' (to run a shortcut: shortcut run x)`.
 - Unknown fields are errors, at the top of a file, in an entry and in `args`, so a safety setting from a newer version is never silently ignored. A file from a newer format is refused, with a prompt to upgrade.
 - `shortcut update` refuses a group with an entry that couldn't run: an invalid entry, or a missing script.
+- If a project's `shortcuts.json` can't be read, `run` refuses any name the project had when last approved, so a global shortcut never stands in for it. `run --global` still reaches the global one. Any other name falls through to the global store with a warning.
 - Declining a prompt from `run`, `rm` or `update` always exits 1 and prints `Aborted.` to stderr. `rm` used to exit 0.
 - `shortcut version` and `init -g` are gone. Use `shortcut --version` and `init --global`.
 

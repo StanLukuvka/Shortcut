@@ -451,6 +451,16 @@ def load_approval(group: Group) -> Optional[Dict[str, Any]]:
     return record if isinstance(record, dict) and isinstance(record.get("snapshot"), dict) else None
 
 
+def approved_names(group: Group) -> List[str]:
+    """The shortcuts and namespaces a group's own file had when last approved, for when it can't be read now."""
+    record = load_approval(group)
+    try:
+        data = json.loads(record["snapshot"][display_path(group, group.file)]) if record else {}
+        return [name for field in ("shortcuts", "imports") for name in data.get(field, {})]
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return []
+
+
 def save_approval(group: Group, files: Dict[str, str]) -> None:
     global_dir = get_global_store_dir()
     path = approval_path(group)
@@ -500,18 +510,27 @@ def find_entry(
 ) -> Tuple[Group, str, Any, List[str], bool]:
     """Find `name` or `namespace name` without judging the entry: (group, name, raw entry, leftover
     words, hides a global one). strict (for run) makes a store's load errors stop lookups in that store; the
-    commands that repair a store leave it False."""
+    commands that repair a store leave it False. A name found past a broken store gets a warning."""
     stores = visible_stores(caller_cwd, skip_local)
     first, rest = words[0], words[1:]
     broken: List[str] = []
+
+    def warn_broken() -> None:
+        for error in broken:
+            print(f"warning: {error}; its shortcuts are skipped, so this is the global '{first}'", file=sys.stderr)
+
     for store in stores:
-        if store.main.error:
-            broken.append(store.main.error)
         problems = ([store.main.error] if store.main.error else []) + store.problems
         if strict and problems and (first in store.main.shortcuts or first in store.namespaces):
             raise ValueError("; ".join(problems))
+        if strict and store.main.error and first in approved_names(store.main):
+            raise ValueError(
+                f"{store.main.error}; '{first}' was approved as this project's, so it won't run a global one "
+                f"instead. Repair the file, or run: shortcut run --global {first}"
+            )
         if first in store.main.shortcuts and (not rest or first not in store.namespaces):
             hides = store is not stores[-1] and first in stores[-1].main.shortcuts
+            warn_broken()
             return store.main, first, store.main.shortcuts[first], rest, hides
         if first in store.namespaces:
             group = store.namespaces[first]
@@ -522,7 +541,10 @@ def find_entry(
                 raise ValueError(f"'{first}' is a namespace; run one of its shortcuts: {members}")
             if rest[0] not in group.shortcuts:
                 raise KeyError(f"'{rest[0]}' not found in namespace '{first}'. It has: {members}")
+            warn_broken()
             return group, rest[0], group.shortcuts[rest[0]], rest[1:], False
+        if store.main.error:
+            broken.append(store.main.error)
     raise KeyError(" ".join([f"shortcut '{first}' not found.", *broken]))
 
 

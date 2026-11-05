@@ -2031,19 +2031,76 @@ class TestShortcut(unittest.TestCase):
         self.assertNotIn("\x1b", res.stdout)
         self.assertIn("^[[2Jhidden", res.stdout)
 
-    def test_broken_project_never_stops_core_commands_or_global_shortcuts(self):
+    def test_broken_project_never_stops_core_commands_or_unrelated_global_shortcuts(self):
         self.run_cli(["new", "outside", "--", "echo outside"])
         proj = self.tmp_path / "proj"
         (proj / ".shortcuts").mkdir(parents=True)
         (proj / ".shortcuts" / "shortcuts.json").write_text("{not json", encoding="utf-8")
 
-        self.assertEqual(self.run_cli(["r", "outside"], cwd=str(proj)).stdout, "outside\n")
+        res = self.run_cli(["r", "outside"], cwd=str(proj))
+        self.assertEqual(res.stdout, "outside\n")
+        self.assertIn("so this is the global 'outside'", res.stderr)
         self.assertIn("outside", self.run_cli(["list", "--names"], cwd=str(proj)).stdout.split())
         self.assertIn("corrupt registry", self.run_cli(["list"], cwd=str(proj)).stderr)
         report = self.run_cli(["fix"], cwd=str(proj))
         self.assertEqual(report.returncode, 0)
         self.assertIn("BROKEN: corrupt registry", report.stdout)
         self.assertEqual(self.run_cli(["update"], cwd=str(proj)).returncode, 1)
+
+    def test_broken_project_refuses_a_name_it_had_when_approved(self):
+        self.run_cli(["new", "build", "--", "echo global"])
+        self.run_cli(["new", "other", "--", "echo other"])
+        proj = self.tmp_path / "proj"
+        self.write_store(proj / ".shortcuts", {"build": {"inline": "echo project"}})
+        self.allow(proj / ".shortcuts")
+        registry = proj / ".shortcuts" / "shortcuts.json"
+        good = registry.read_text(encoding="utf-8")
+        registry.write_text("<<<<<<< HEAD\n" + good, encoding="utf-8")
+
+        res = self.run_cli(["r", "build"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertEqual(res.stdout, "")
+        self.assertIn("corrupt registry", res.stderr)
+        self.assertIn("shortcut run --global build", res.stderr)
+        self.assertEqual(self.run_cli(["r", "--global", "build"], cwd=str(proj)).stdout, "global\n")
+
+        res = self.run_cli(["r", "other"], cwd=str(proj))
+        self.assertEqual(res.stdout, "other\n")
+        self.assertIn("so this is the global 'other'", res.stderr)
+
+        registry.write_text(good, encoding="utf-8")
+        self.assertEqual(self.run_cli(["r", "build"], cwd=str(proj)).stdout, "project\n")
+
+    def test_broken_project_refuses_a_namespace_it_imported(self):
+        self.run_cli(["new", "docker", "--", "echo global"])
+        proj = self.tmp_path / "proj"
+        self.write_import(proj / ".shortcuts", "docker", {"version": 2, "shortcuts": {"ps": {"inline": "true"}}})
+        tools = proj / "tools"
+        tools.mkdir()
+        (proj / ".shortcuts" / "imports" / "docker.shortcut").rename(tools / "docker.shortcut")
+        registry = proj / ".shortcuts" / "shortcuts.json"
+        registry.write_text(json.dumps({"version": 2, "imports": {"docker": "../tools/docker.shortcut"}, "shortcuts": {}}))
+        self.assertEqual(self.run_cli(["update", ".", "-y"], cwd=str(proj)).returncode, 0)
+        registry.write_text("{not json", encoding="utf-8")
+
+        res = self.run_cli(["r", "docker"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("shortcut run --global docker", res.stderr)
+
+    def test_broken_project_does_not_call_its_own_namespace_global(self):
+        proj = self.tmp_path / "proj"
+        self.write_import(proj / ".shortcuts", "docker", {"version": 2, "shortcuts": {"ps": {"inline": "true"}}})
+        (proj / ".shortcuts" / "shortcuts.json").write_text("{not json", encoding="utf-8")
+        res = self.run_cli(["show", "docker", "ps"], cwd=str(proj))
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertNotIn("so this is the global", res.stderr)
+
+    def test_broken_project_warns_before_rm_reaches_the_global_one(self):
+        self.run_cli(["new", "build", "--", "true"])
+        proj = self.tmp_path / "proj"
+        (proj / ".shortcuts").mkdir(parents=True)
+        (proj / ".shortcuts" / "shortcuts.json").write_text("{not json", encoding="utf-8")
+        self.assertIn("so this is the global 'build'", self.run_cli(["rm", "build", "-y"], cwd=str(proj)).stderr)
 
     def test_broken_global_store_still_reports(self):
         (self.shortcuts_home / "shortcuts.json").write_text("{not json", encoding="utf-8")
