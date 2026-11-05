@@ -507,8 +507,9 @@ def find_entry(
     for store in stores:
         if store.main.error:
             broken.append(store.main.error)
-        if strict and store.problems and (first in store.main.shortcuts or first in store.namespaces):
-            raise ValueError("; ".join(store.problems))
+        problems = ([store.main.error] if store.main.error else []) + store.problems
+        if strict and problems and (first in store.main.shortcuts or first in store.namespaces):
+            raise ValueError("; ".join(problems))
         if first in store.main.shortcuts and (not rest or first not in store.namespaces):
             hides = store is not stores[-1] and first in stores[-1].main.shortcuts
             return store.main, first, store.main.shortcuts[first], rest, hides
@@ -1103,7 +1104,7 @@ def cmd_new(args: List[str]) -> int:
         os.unlink(draft)
     print(f"Created script shortcut '{parsed.name}'.")
     if editor_cmd is None:
-        print(f"Edit it with: shortcut edit {parsed.name}  (file: {abs_script_path})")
+        print(f"Edit it with: shortcut edit {group.display(parsed.name)}  (file: {abs_script_path})")
     return 0
 
 

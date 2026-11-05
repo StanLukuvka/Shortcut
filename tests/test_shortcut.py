@@ -2208,6 +2208,21 @@ class TestShortcut(unittest.TestCase):
         self.assertEqual(self.run_cli(["rm", "both", "-y"]).returncode, 0)
         self.assertNotIn("both", self.load_global())
 
+    def test_new_in_a_namespace_names_it_in_the_edit_hint(self):
+        res = self.run_cli(["new", "ps", "--namespace", "docker", "--desc", "d"])
+        self.assertIn("Edit it with: shortcut edit docker ps  (file:", res.stdout)
+
+    def test_unknown_top_level_field_stops_a_global_shortcut(self):
+        self.run_cli(["new", "hi", "--", "echo ran"])
+        reg = json.loads((self.shortcuts_home / "shortcuts.json").read_text(encoding="utf-8"))
+        reg["future_safety"] = True
+        (self.shortcuts_home / "shortcuts.json").write_text(json.dumps(reg), encoding="utf-8")
+        res = self.run_cli(["r", "hi"])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("unknown field: future_safety", res.stderr)
+        self.assertNotIn("ran", res.stdout)
+        self.assertEqual(self.run_cli(["rm", "hi", "-y"]).returncode, 0)
+
     def test_declining_rm_exits_1(self):
         self.run_cli(["new", "keep", "--", "true"])
         rc, out = self.run_in_terminal(["rm", "keep"], keys=[(b"[y/N]", b"n\n")])
