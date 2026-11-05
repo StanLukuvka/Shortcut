@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <title>shortcut</title>
+  <defs>
+    <clipPath id="tile"><rect width="128" height="128" rx="8"/></clipPath>
+    <path id="path" fill="none" stroke-width="20" d="M-15.3 82.6 C-9.3 83.7 -3.3 84.5 2.2 83.8 C7.7 83.0 12.7 80.7 17.4 77.2 C22.2 73.6 26.5 68.7 30.7 63.4 C34.9 58.0 39.0 52.2 44.3 50.9 C49.7 49.7 56.7 54.3 64.0 60.0 C71.3 65.7 78.3 70.3 83.7 69.1 C89.0 67.8 93.1 62.0 97.3 56.6 C101.5 51.3 105.8 46.4 110.6 42.8 C115.3 39.3 120.3 37.0 125.8 36.2 C131.3 35.5 137.3 36.3 143.3 37.4"/>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect width="128" height="128" fill="#000000"/>
+    <use href="#path" stroke="#006633" transform="translate(8 13)"/>
+    <use href="#path" stroke="#ffffff"/>
+  </g>
+</svg>
