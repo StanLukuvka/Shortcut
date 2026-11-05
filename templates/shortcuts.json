@@ -1,17 +1,41 @@
 {
-  "version": 1,
+  "version": 2,
   "shortcuts": {
-    "g_search": {
+    "search": {
       "description": "Search files under caller cwd matching pattern",
-      "script": "scripts/g_search.sh"
+      "script": "scripts/search.sh",
+      "args": [
+        {"name": "pattern", "required": true, "desc": "Text to look for in file names"},
+        {"name": "path", "default": ".", "desc": "Where to look"}
+      ]
     },
-    "g_serve": {
+    "serve": {
       "description": "Serve current directory over HTTP",
-      "script": "scripts/g_serve.sh"
+      "script": "scripts/serve.sh",
+      "args": [
+        {"name": "port", "default": "8000"}
+      ]
     },
-    "g_ports": {
+    "ports": {
       "description": "List open listening TCP and UDP ports",
-      "script": "scripts/g_ports.sh"
+      "script": "scripts/ports.sh"
+    },
+    "nano": {
+      "description": "Edit a shortcut in nano",
+      "inline": "VISUAL= EDITOR=nano shortcut edit \"$@\"",
+      "log": false
+    },
+    "log": {
+      "description": "Print a shortcut's most recent run",
+      "inline": "path=\"$(shortcut location --log \"$@\")\" || exit; if [ -f \"$path\" ]; then cat -- \"$path\"; else echo \"no log yet: $path\" >&2; exit 1; fi",
+      "log": false
+    },
+    "desktop": {
+      "description": "Create a desktop launcher for a global shortcut",
+      "script": "scripts/desktop.sh",
+      "args": [
+        {"name": "shortcut", "required": true}
+      ]
     }
   }
 }

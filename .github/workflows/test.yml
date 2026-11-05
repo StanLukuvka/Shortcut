@@ -28,8 +28,8 @@ jobs:
           export HOME="$RUNNER_TEMP/home" && mkdir -p "$HOME"
           ./install.sh
           "$HOME/.local/bin/shortcut" --version
-          "$HOME/.local/bin/shortcut" new g_hi -- 'echo hi "$1"'
-          test "$("$HOME/.local/bin/shortcut" g_hi there)" = "hi there"
+          "$HOME/.local/bin/shortcut" new hi -- 'echo hi "$1"'
+          test "$("$HOME/.local/bin/shortcut" r hi there)" = "hi there"
       - name: Smoke-test the package
         run: |
           python -m venv "$RUNNER_TEMP/venv"
