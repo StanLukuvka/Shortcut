@@ -1,3 +1,5 @@
+<img src="docs/icon/shortcut.svg" width="96" alt="shortcut icon: a snaking tilde">
+
 # shortcut
 
 Run scripts fast; agents set them up for you.
