@@ -32,6 +32,7 @@ LEGACY_PREFIXES: Tuple[str, ...] = ("g_", "glob_", "global_")
 IMPORT_SUFFIX: str = ".shortcut"  # an imported namespace, in the same JSON format as shortcuts.json
 APPROVALS_DIR: str = "approvals"  # in the global store: one file per approved group, hash + snapshot
 BINARY_MARK: str = "\0binary:"  # snapshot value for non-UTF-8 content, followed by its SHA-256
+POSITIONAL = r"\$(?:[1-9@*]|\{[1-9@*])"  # $1, $@, $*, ${1}: how a shell command reads its arguments
 
 
 def validate_args(name: str, args: Any) -> None:
@@ -59,7 +60,7 @@ def validate_args(name: str, args: Any) -> None:
 @dataclasses.dataclass(frozen=True)
 class ShortcutEntry:
     name: str
-    description: str
+    description: str = ""
     inline: Optional[str] = None
     script: Optional[str] = None
     cwd: Optional[str] = None
@@ -70,57 +71,41 @@ class ShortcutEntry:
     confirm: bool = False
     args: Optional[List[Dict[str, Any]]] = None
 
+    TEXT_FIELDS = ("inline", "script", "cwd", "icon", "created_by", "created")
+
     @classmethod
     def from_dict(cls, name: str, data: Any) -> ShortcutEntry:
+        def bad(problem: str) -> ValueError:
+            return ValueError(f"'{name}' is not a valid entry: {problem}")
+
         if not isinstance(data, dict):
-            raise ValueError(f"'{name}' is not a valid entry: expected a dictionary")
+            raise bad("expected a dictionary")
         if "dir" in data:
             raise ValueError(f"'{name}' still uses the old 'dir' field; convert it with: shortcut migrate")
         # An ignored field could be a safety setting from a newer version, so never ignore one
         unknown = sorted(set(data) - ({f.name for f in dataclasses.fields(cls)} - {"name"}))
         if unknown:
-            raise ValueError(f"'{name}' is not a valid entry: unknown field: {', '.join(unknown)}")
-        desc = data.get("description", "")
-        if not isinstance(desc, str):
-            raise ValueError(f"'{name}' is not a valid entry: 'description' must be a string")
-        for field in ("inline", "script", "cwd", "icon", "created_by", "created"):
+            raise bad(f"unknown field: {', '.join(unknown)}")
+        if not isinstance(data.get("description", ""), str):
+            raise bad("'description' must be a string")
+        for field in cls.TEXT_FIELDS:
             val = data.get(field)
             if val is not None and not isinstance(val, str):
-                raise ValueError(f"'{name}' is not a valid entry: '{field}' must be a string")
+                raise bad(f"'{field}' must be a string")
         for field, default in (("log", True), ("confirm", False)):
             if not isinstance(data.get(field, default), bool):
-                raise ValueError(f"'{name}' is not a valid entry: '{field}' must be a boolean")
-        args = data.get("args")
-        if args is not None:
-            validate_args(name, args)
-        return cls(
-            name=name,
-            description=desc,
-            inline=data.get("inline"),
-            script=data.get("script"),
-            cwd=data.get("cwd"),
-            icon=data.get("icon"),
-            created_by=data.get("created_by"),
-            created=data.get("created"),
-            log=data.get("log", True),
-            confirm=data.get("confirm", False),
-            args=args,
-        )
+                raise bad(f"'{field}' must be a boolean")
+        if (data.get("inline") is None) == (data.get("script") is None):
+            raise bad("it needs exactly one of 'inline' and 'script'")
+        if data.get("args") is not None:
+            validate_args(name, data["args"])
+        return cls(name=name, **data)
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {"description": self.description}
-        if self.inline is not None:
-            d["inline"] = self.inline
-        if self.script is not None:
-            d["script"] = self.script
-        if self.cwd is not None:
-            d["cwd"] = self.cwd
-        if self.icon is not None:
-            d["icon"] = self.icon
-        if self.created_by is not None:
-            d["created_by"] = self.created_by
-        if self.created is not None:
-            d["created"] = self.created
+        for field in self.TEXT_FIELDS:
+            if getattr(self, field) is not None:
+                d[field] = getattr(self, field)
         if not self.log:
             d["log"] = False
         if self.confirm:
@@ -136,10 +121,7 @@ def die(msg: str, exit_code: int = 1) -> NoReturn:
 
 
 def get_global_store_dir() -> str:
-    env_dir = os.environ.get("SHORTCUTS_HOME")
-    if env_dir:
-        return os.path.abspath(os.path.expanduser(env_dir))
-    return os.path.abspath(os.path.expanduser("~/.shortcuts"))
+    return os.path.abspath(os.path.expanduser(os.environ.get("SHORTCUTS_HOME") or "~/.shortcuts"))
 
 
 def registry_exists(store_dir: str) -> bool:
@@ -169,10 +151,10 @@ def registry_lock(store_dir: str) -> Iterator[None]:
         yield
 
 
-def init_store(store_dir: str, is_global: bool = False) -> None:
+def init_store(store_dir: str) -> None:
     with registry_lock(store_dir):
         if not registry_exists(store_dir):
-            if not is_global:
+            if not is_global_store(store_dir):
                 with open(os.path.join(store_dir, ".gitignore"), "w", encoding="utf-8") as f:
                     f.write("logs/\n.lock\n")
             save_registry_atomic(store_dir, {"version": REGISTRY_VERSION, "shortcuts": {}})
@@ -182,29 +164,24 @@ def is_global_store(store_dir: str) -> bool:
     return pathlib.Path(store_dir).resolve() == pathlib.Path(get_global_store_dir()).resolve()
 
 
-def script_base(store_dir: str) -> str:
-    """Relative paths in a project's .shortcuts/shortcuts.json resolve against the project root."""
-    return store_dir if is_global_store(store_dir) else os.path.dirname(store_dir)
-
-
 def new_local_store_dir(cwd: str) -> str:
     """Where a new local store for cwd goes; refuses when that would be the global store (cwd is ~)."""
     store_dir = os.path.join(cwd, ".shortcuts")
-    if pathlib.Path(store_dir).resolve() == pathlib.Path(get_global_store_dir()).resolve():
+    if is_global_store(store_dir):
         die(f"{store_dir} is the global store, so it can't hold local shortcuts. Run this inside a project folder.")
     return store_dir
 
 
 def load_registry_file(path: str) -> Dict[str, Any]:
     if not os.path.isfile(path):
-        raise FileNotFoundError(f"Registry not found: {path}")
+        raise FileNotFoundError(f"registry not found: {path}")
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
-        raise ValueError(f"Corrupt registry {path}: {e}") from e
+        raise ValueError(f"corrupt registry {path}: {e}") from e
     if not isinstance(data, dict):
-        raise ValueError(f"Corrupt registry {path}: root must be a JSON object")
+        raise ValueError(f"corrupt registry {path}: root must be a JSON object")
     version = data.get("version")
     if isinstance(version, int) and version > REGISTRY_VERSION:
         raise ValueError(f"{path} is format version {version}, newer than this shortcut reads; upgrade shortcut")
@@ -221,7 +198,7 @@ def save_registry_file(path: str, registry_data: Dict[str, Any]) -> None:
             with open(path, "r", encoding="utf-8") as f:
                 json.load(f)
         except Exception as e:
-            raise ValueError(f"Cannot overwrite corrupt registry {path}: {e}") from e
+            raise ValueError(f"cannot overwrite corrupt registry {path}: {e}") from e
 
     write_json_atomic(path, registry_data)
 
@@ -252,7 +229,7 @@ def write_json_atomic(path: str, data: Any) -> None:
 def validate_name(name: str) -> None:
     if not re.fullmatch(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$", name):
         raise ValueError(
-            f"Invalid shortcut name '{name}'. Must match ^[A-Za-z0-9][A-Za-z0-9_-]{{0,63}}$ "
+            f"invalid shortcut name '{name}'. Must match ^[A-Za-z0-9][A-Za-z0-9_-]{{0,63}}$ "
             "(alphanumeric start, up to 64 characters of letters, digits, underscores, and dashes)."
         )
 
@@ -270,7 +247,7 @@ def resolve_script_path(base_dir: str, script_field: str) -> str:
 
     if not target.is_relative_to(base):
         raise ValueError(
-            f"Path traversal detected: '{script_field}' resolves to '{target}', outside '{base}'."
+            f"path traversal detected: '{script_field}' resolves to '{target}', outside '{base}'."
         )
     return str(target)
 
@@ -296,7 +273,17 @@ class Group:
 
     @property
     def script_base(self) -> str:
-        return self.folder if self.name else script_base(self.store_dir)
+        """Relative paths resolve against a namespace's folder, a project's root, or the global store."""
+        if self.name:
+            return self.folder
+        return self.store_dir if is_global_store(self.store_dir) else os.path.dirname(self.store_dir)
+
+    def display(self, name: str) -> str:
+        return f"{self.name} {name}" if self.name else name
+
+    def log_path(self, name: str) -> str:
+        stem = f"{self.name}.{name}" if self.name else name
+        return os.path.join(self.store_dir, "logs", f"{stem}.log")
 
     @property
     def needs_approval(self) -> bool:
@@ -344,9 +331,9 @@ def file_error(path: str, data: Dict[str, Any], name: str) -> Optional[str]:
         if version != REGISTRY_VERSION:
             known.add("prefixes")  # 1.x; `shortcut migrate` removes it
     if not isinstance(data.get("shortcuts", {}), dict):
-        return f"Corrupt registry {path}: 'shortcuts' must be an object"
+        return f"corrupt registry {path}: 'shortcuts' must be an object"
     if not isinstance(data.get("description", ""), str):
-        return f"Corrupt registry {path}: 'description' must be a string"
+        return f"corrupt registry {path}: 'description' must be a string"
     unknown = sorted(set(data) - known)
     return f"{path} has an unknown field: {', '.join(unknown)}" if unknown else None
 
@@ -372,8 +359,6 @@ def entry_errors(group: Group) -> List[str]:
         try:
             validate_name(name)
             entry = ShortcutEntry.from_dict(name, data)
-            if (entry.inline is None) == (entry.script is None):
-                raise ValueError(f"'{name}' is not a valid entry: it needs exactly one of 'inline' and 'script'")
             if entry.script is not None and not os.path.isfile(resolve_script_path(group.script_base, entry.script)):
                 raise ValueError(f"'{name}' is not a valid entry: script not found: {entry.script}")
         except ValueError as e:
@@ -506,22 +491,8 @@ class ResolvedShortcut:
     hides_global: bool = False  # project entry with the same name as a global one
 
     @property
-    def store_dir(self) -> str:
-        return self.group.store_dir
-
-    @property
-    def base_dir(self) -> str:
-        """Where relative script paths resolve."""
-        return self.group.script_base
-
-    @property
     def display(self) -> str:
-        return f"{self.group.name} {self.entry.name}" if self.group.name else self.entry.name
-
-    @property
-    def log_path(self) -> str:
-        stem = f"{self.group.name}.{self.entry.name}" if self.group.name else self.entry.name
-        return os.path.join(self.store_dir, "logs", f"{stem}.log")
+        return self.group.display(self.entry.name)
 
 
 def find_entry(
@@ -551,7 +522,7 @@ def find_entry(
             if rest[0] not in group.shortcuts:
                 raise KeyError(f"'{rest[0]}' not found in namespace '{first}'. It has: {members}")
             return group, rest[0], group.shortcuts[rest[0]], rest[1:], False
-    raise KeyError(" ".join([f"Shortcut '{first}' not found.", *broken]))
+    raise KeyError(" ".join([f"shortcut '{first}' not found.", *broken]))
 
 
 def resolve_run_dir(cwd: Optional[str], group: Group, caller_cwd: str) -> str:
@@ -571,9 +542,9 @@ def resolve_shortcut(
     return ResolvedShortcut(entry=entry, group=group, run_cwd=run_cwd, hides_global=hides_global), rest
 
 
-def resolve_name(words: List[str]) -> ResolvedShortcut:
+def resolve_name(words: List[str], skip_local: bool = False) -> ResolvedShortcut:
     """For commands that name a shortcut: `name` or `namespace name`, and nothing else."""
-    resolved, rest = resolve_shortcut(words)
+    resolved, rest = resolve_shortcut(words, skip_local=skip_local)
     if rest:
         die(f"too many names: {shlex.join(words)}")
     return resolved
@@ -591,7 +562,7 @@ def _stop_child(proc: subprocess.Popen, in_group: bool = False) -> int:
                 os.killpg(proc.pid, signal.SIGINT)
             else:
                 proc.send_signal(signal.SIGINT)
-        except (ProcessLookupError, OSError):
+        except OSError:
             pass
     try:
         rc = proc.wait(timeout=5)
@@ -601,7 +572,7 @@ def _stop_child(proc: subprocess.Popen, in_group: bool = False) -> int:
                 os.killpg(proc.pid, signal.SIGKILL)
             else:
                 proc.kill()
-        except (ProcessLookupError, OSError):
+        except OSError:
             pass
         rc = proc.wait()
     return rc if rc < 0 else 130
@@ -627,7 +598,7 @@ def _tee(
                     os.killpg(proc.pid, sig)
                 else:
                     proc.send_signal(sig)
-            except (ProcessLookupError, OSError):
+            except OSError:
                 pass
 
     old_handlers = {sig: signal.signal(sig, _forward) for sig in (signal.SIGTERM, signal.SIGHUP)}
@@ -653,8 +624,6 @@ def _tee(
                     broken_pipe = True
                     with open(os.devnull, "wb") as devnull:
                         os.dup2(devnull.fileno(), 1)
-                    if out_fd in readers:
-                        readers.remove(out_fd)
                     if proc.stdout is not None and not proc.stdout.closed:
                         proc.stdout.close()
                     else:
@@ -766,14 +735,14 @@ def usage_line(display: str, spec: List[Dict[str, Any]]) -> str:
     for arg in spec:
         label = arg["name"] + ("..." if arg.get("rest") else "")
         parts.append(f"<{label}>" if arg.get("required") else f"[{label}]")
-    return " ".join(["usage: shortcut r", display, *parts])
+    return " ".join(["shortcut r", display, *parts])
 
 
 def bind_args(display: str, spec: List[Dict[str, Any]], argv: List[str]) -> Tuple[List[str], Dict[str, str]]:
     """Check presence and count against declared args, fill defaults. Returns (argv, SC_ARG_* env).
     --flags are never parsed: they don't count, and stay where they are in argv."""
     def fail(msg: str) -> NoReturn:
-        print(f"error: {msg}\n{usage_line(display, spec)}", file=sys.stderr)
+        print(f"error: {msg}\nusage: {usage_line(display, spec)}", file=sys.stderr)
         sys.exit(2)
 
     positional = [t for t in argv if not is_flag(t)]
@@ -801,10 +770,8 @@ def bind_args(display: str, spec: List[Dict[str, Any]], argv: List[str]) -> Tupl
     return argv[:last + 1] + fill + argv[last + 1:], env
 
 
-def run_shortcut(
-    words: List[str], caller_cwd: Optional[str] = None, skip_local: bool = False, assume_yes: bool = False
-) -> int:
-    caller_cwd = caller_cwd or os.getcwd()
+def run_shortcut(words: List[str], skip_local: bool = False, assume_yes: bool = False) -> int:
+    caller_cwd = os.getcwd()
     resolved, args = resolve_shortcut(words, caller_cwd, skip_local=skip_local, strict=True)
     require_approved(resolved.group)
     entry, name = resolved.entry, resolved.display
@@ -812,7 +779,7 @@ def run_shortcut(
     if entry.args is not None:
         args, arg_env = bind_args(name, entry.args, args)
     if not os.path.isdir(resolved.run_cwd):
-        raise FileNotFoundError(f"Run directory does not exist: {resolved.run_cwd}")
+        raise FileNotFoundError(f"run directory does not exist: {resolved.run_cwd}")
     if entry.confirm and not assume_yes:
         if not sys.stdin.isatty():
             die(f"'{name}' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y {name})")
@@ -828,10 +795,10 @@ def run_shortcut(
     # Build command argv
     if entry.inline is not None:
         cmd = ["bash", "-c", entry.inline, name, *args]
-    elif entry.script is not None:
-        script_path = resolve_script_path(resolved.base_dir, entry.script)
+    else:
+        script_path = resolve_script_path(resolved.group.script_base, entry.script)
         if not os.path.exists(script_path):
-            raise FileNotFoundError(f"Script file not found: {script_path}")
+            raise FileNotFoundError(f"script file not found: {script_path}")
         is_exec = os.access(script_path, os.X_OK)
         header = b""
         try:
@@ -849,8 +816,6 @@ def run_shortcut(
             cmd = [*parts, script_path, *args] if parts else ["bash", script_path, *args]
         else:
             cmd = ["bash", script_path, *args]
-    else:
-        raise ValueError(f"Entry '{name}' has neither 'inline' nor 'script'.")
 
     env = os.environ.copy()
     env["SHORTCUT_NAME"] = name
@@ -865,7 +830,7 @@ def run_shortcut(
             rc = _stop_child(proc)
         return _exit_code(rc)
 
-    log_file = resolved.log_path
+    log_file = resolved.group.log_path(resolved.entry.name)
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
 
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -903,12 +868,12 @@ def target_group(parsed: argparse.Namespace, cwd: str) -> Group:
     store_dir = (find_local_store_dir(cwd) or new_local_store_dir(cwd)) if parsed.local else get_global_store_dir()
     store = load_store(store_dir)
     group = store.main
-    if parsed.group:
-        validate_name(parsed.group)
-        if parsed.group in store.main.shortcuts:
-            die(f"'{parsed.group}' is a shortcut in store {store_dir}, so it can't be a namespace")
-        new_file = os.path.join(store_dir, "imports", parsed.group + IMPORT_SUFFIX)
-        group = store.namespaces.get(parsed.group) or Group(parsed.group, new_file, store_dir, {})
+    if parsed.namespace:
+        validate_name(parsed.namespace)
+        if parsed.namespace in store.main.shortcuts:
+            die(f"'{parsed.namespace}' is a shortcut in store {store_dir}, so it can't be a namespace")
+        new_file = os.path.join(store_dir, "imports", parsed.namespace + IMPORT_SUFFIX)
+        group = store.namespaces.get(parsed.namespace) or Group(parsed.namespace, new_file, store_dir, {})
     if group.error:
         die(group.error)
     return group
@@ -927,17 +892,12 @@ def get_editor_cmd() -> List[str]:
 
 def edit_file(editor_cmd: List[str], path: str) -> int:
     if not os.path.isfile(path):
-        die(f"Script file not found: {path}")
+        die(f"script file not found: {path}")
     return subprocess.run([*editor_cmd, path]).returncode
 
 
 def edit_inline_roundtrip(name: str, group: Group, editor_cmd: List[str]) -> int:
-    reg = load_registry_file(group.file)
-    shortcuts = reg.get("shortcuts", {})
-    if name not in shortcuts or "inline" not in shortcuts[name]:
-        raise ValueError(f"'{name}' is not an inline shortcut.")
-
-    original_cmd = shortcuts[name]["inline"]
+    original_cmd = group.shortcuts[name]["inline"]
     with tempfile.NamedTemporaryFile("w+", suffix=f"-{name}.sh", delete=False, encoding="utf-8") as tf:
         temp_path = tf.name
         tf.write(original_cmd)
@@ -948,7 +908,7 @@ def edit_inline_roundtrip(name: str, group: Group, editor_cmd: List[str]) -> int
     try:
         res = subprocess.run([*editor_cmd, temp_path])
         if res.returncode != 0:
-            raise RuntimeError(f"Editor exited with code {res.returncode}")
+            raise RuntimeError(f"editor exited with code {res.returncode}")
         with open(temp_path, "r", encoding="utf-8") as tf_read:
             updated_cmd = tf_read.read().rstrip("\r\n")
 
@@ -970,7 +930,7 @@ def edit_inline_roundtrip(name: str, group: Group, editor_cmd: List[str]) -> int
             os.unlink(temp_path)
 
 
-RUN_USAGE: str = "Usage: shortcut run|r [--global] [-y] <name> [args...]\n       shortcut run|r [--global] [-y] <namespace> <name> [args...]"
+RUN_USAGE: str = "usage: shortcut run|r [--global] [-y] <name> [args...]\n       shortcut run|r [--global] [-y] <namespace> <name> [args...]"
 
 
 def cmd_run(args: List[str]) -> int:
@@ -994,7 +954,7 @@ def _register(group: Group, entry: ShortcutEntry, write_script: Optional[Any] = 
     store_dir = group.store_dir
     is_project = not is_global_store(store_dir)
     if not registry_exists(store_dir):
-        init_store(store_dir, is_global=not is_project)
+        init_store(store_dir)
         if is_project:
             print(f"created project store {store_dir}", file=sys.stderr)
     with registry_lock(store_dir):
@@ -1002,7 +962,7 @@ def _register(group: Group, entry: ShortcutEntry, write_script: Optional[Any] = 
         reg = {"version": REGISTRY_VERSION, "shortcuts": {}} if is_new_file else load_registry_file(group.file)
         shortcuts = reg.setdefault("shortcuts", {})
         if entry.name in shortcuts:
-            die(f"Shortcut '{entry.name}' already exists in {group.file}")
+            die(f"shortcut '{entry.name}' already exists in {group.file}")
         if not group.name and entry.name in load_store(store_dir).namespaces:
             die(f"'{entry.name}' is a namespace in store {store_dir}")
         if write_script is not None:
@@ -1025,10 +985,15 @@ def _stored_script_field(group: Group, filename: str) -> Tuple[str, str]:
     return os.path.relpath(abs_path, group.script_base), abs_path
 
 
+def add_global_flag(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--global", dest="skip_local", action="store_true",
+                        help="Skip this project's shortcuts, to reach a global one it hides")
+
+
 def add_entry_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--cwd", default=None, help="Where it runs: caller (default) or a directory")
     parser.add_argument("--local", action="store_true", help="Store it in this project's .shortcuts/, not globally")
-    parser.add_argument("--group", default=None, metavar="NAME",
+    parser.add_argument("--namespace", default=None, metavar="NAME",
                         help="Put it in this namespace, creating imports/NAME.shortcut if needed")
     parser.add_argument("--by", default=None, help="Creator identifier")
     parser.add_argument("--arg", action="append", default=[], metavar="NAME[=DEFAULT]",
@@ -1053,6 +1018,17 @@ def entry_fields(name: str, parsed: argparse.Namespace, group: Group) -> Dict[st
     }
 
 
+def join_command(words: List[str]) -> str:
+    """`-- cmd word word` as one inline command: each word stays one word, as typed, and only
+    the shortcut's own arguments stay live, because $1 is why someone quoted it past their shell."""
+    def quote(word: str) -> str:
+        if not re.search(POSITIONAL, word):
+            return shlex.quote(word)
+        return '"' + re.sub(rf'["\\`]|(?!{POSITIONAL})\$', lambda m: "\\" + m.group(), word) + '"'
+
+    return words[0] if len(words) == 1 else " ".join(quote(word) for word in words)
+
+
 def cmd_new(args: List[str]) -> int:
     parser = argparse.ArgumentParser(prog="shortcut new", description="Create a new shortcut")
     parser.add_argument("name", help="Shortcut name")
@@ -1070,10 +1046,11 @@ def cmd_new(args: List[str]) -> int:
 
     parsed = parser.parse_args(pre_args)
     if inline_cmd_tokens is not None and not inline_cmd_tokens:
-        die("Command expected after '--'")
+        die("command expected after '--'")
 
     # Pick the editor before creating anything, so a missing editor leaves nothing half-made.
     # Without a terminal (an agent running this), skip the editor and say how to open it later.
+    # SHORTCUT_EDITOR_CMD is the test hook from get_editor_cmd.
     editor_cmd: Optional[List[str]] = None
     if inline_cmd_tokens is None and (
         "SHORTCUT_EDITOR_CMD" in os.environ or (sys.stdin.isatty() and sys.stdout.isatty())
@@ -1084,7 +1061,7 @@ def cmd_new(args: List[str]) -> int:
     fields = entry_fields(parsed.name, parsed, group)
 
     if inline_cmd_tokens is not None:
-        inline_str = inline_cmd_tokens[0] if len(inline_cmd_tokens) == 1 else shlex.join(inline_cmd_tokens)
+        inline_str = join_command(inline_cmd_tokens)
         entry = ShortcutEntry(
             name=parsed.name,
             description=parsed.desc if parsed.desc is not None else inline_str,
@@ -1092,11 +1069,13 @@ def cmd_new(args: List[str]) -> int:
             **fields,
         )
         _register(group, entry)
+        if not re.search(POSITIONAL, inline_str) and "SC_ARG_" not in inline_str:
+            print(f"note: '{parsed.name}' won't see any arguments you give it; add \"$@\" to pass them on", file=sys.stderr)
         print(f"Created inline shortcut '{parsed.name}'.")
         return 0
 
     if parsed.name in group.shortcuts:
-        die(f"Shortcut '{parsed.name}' already exists in {group.file}")
+        die(f"shortcut '{parsed.name}' already exists in {group.file}")
     rel_script_path, abs_script_path = _stored_script_field(group, f"{parsed.name}.sh")
 
     # Edit a temporary copy; the shortcut exists only once the editor exits successfully.
@@ -1143,7 +1122,7 @@ def cmd_add(args: List[str]) -> int:
         content = None
         src_path = os.path.abspath(os.path.expanduser(parsed.file))
         if not os.path.isfile(src_path):
-            die(f"Source file not found: {src_path}")
+            die(f"script file not found: {src_path}")
         ext = pathlib.Path(src_path).suffix or ".sh"
 
     group = target_group(parsed, os.getcwd())
@@ -1175,7 +1154,7 @@ def cmd_link(args: List[str]) -> int:
     parsed = parser.parse_args(args)
     abs_path = os.path.abspath(os.path.expanduser(parsed.path))
     if not os.path.isfile(abs_path):
-        die(f"Target script does not exist: {abs_path}")
+        die(f"script file not found: {abs_path}")
 
     group = target_group(parsed, os.getcwd())
     entry = ShortcutEntry(name=parsed.name, description=parsed.desc, script=abs_path, **entry_fields(parsed.name, parsed, group))
@@ -1186,7 +1165,8 @@ def cmd_link(args: List[str]) -> int:
 
 def cmd_list(args: List[str]) -> int:
     parser = argparse.ArgumentParser(prog="shortcut list", description="List available shortcuts")
-    parser.add_argument("--names", action="store_true", help="Print bare visible names only")
+    parser.add_argument("--names", nargs="?", const="", metavar="NAMESPACE",
+                        help="Print bare visible names only, or the names in one namespace")
     parsed = parser.parse_args(args)
 
     stores = visible_stores(os.getcwd())
@@ -1197,6 +1177,15 @@ def cmd_list(args: List[str]) -> int:
             print(f"warning: {problem}", file=sys.stderr)
 
     if parsed.names:
+        for store in stores:
+            group = store.namespaces.get(parsed.names)
+            if group is not None and not group.error and approval_state(group) == "ok":
+                print("\n".join(sorted(group.shortcuts)))
+            if group is not None or parsed.names in store.main.shortcuts:
+                break
+        return 0
+
+    if parsed.names is not None:
         names: List[str] = []
         for store in stores:
             names.extend(sorted(store.main.shortcuts) if approval_state(store.main) == "ok" else [])
@@ -1228,7 +1217,7 @@ def cmd_list(args: List[str]) -> int:
                 desc += "  [hides global]"
             elif name in local_names and not group.needs_approval:
                 desc += "  [hidden here by project]"
-            rows.append((prefix + name, str(data.get("cwd") or data.get("dir") or CALLER), desc))
+            rows.append((prefix + name, str(data.get("cwd") or CALLER), desc))
         width = max((len(r[1]) for r in rows), default=0)
         for name, mode, desc in rows:
             print(f"  {name:<20} {mode:<{width}}  {desc}")
@@ -1248,9 +1237,10 @@ def cmd_list(args: List[str]) -> int:
 def cmd_show(args: List[str]) -> int:
     parser = argparse.ArgumentParser(prog="shortcut show", description="Show shortcut details and content")
     parser.add_argument("name", nargs="+", help="Shortcut name, or namespace and name")
+    add_global_flag(parser)
     parsed = parser.parse_args(args)
 
-    resolved = resolve_name(parsed.name)
+    resolved = resolve_name(parsed.name, parsed.skip_local)
     entry, group = resolved.entry, resolved.group
 
     scope = "namespace" if group.name else ("project" if group.needs_approval else "global")
@@ -1261,7 +1251,7 @@ def cmd_show(args: List[str]) -> int:
     print(f"Run CWD:     {resolved.run_cwd}")
     print(f"Description: {entry.description}")
     if entry.args is not None:
-        print(f"Usage:       {usage_line(resolved.display, entry.args)[len('usage: '):]}")
+        print(f"Usage:       {usage_line(resolved.display, entry.args)}")
     if entry.confirm:
         print("Confirm:     True")
     if entry.created:
@@ -1271,15 +1261,15 @@ def cmd_show(args: List[str]) -> int:
     if entry.icon:
         print(f"Icon:        {entry.icon}")
     if not entry.log:
-        print(f"Log:         False")
+        print("Log:         False")
     state = approval_state(group)
     if state != "ok":
         print(f"Approval:    {'not approved' if state == 'new' else 'changed'} (run: {group.update_cmd})")
 
     if entry.inline is not None:
         print(f"\nInline command:\n  {entry.inline}")
-    elif entry.script is not None:
-        script_path = resolve_script_path(resolved.base_dir, entry.script)
+    else:
+        script_path = resolve_script_path(resolved.group.script_base, entry.script)
         print(f"\nScript ({script_path}):")
         if os.path.isfile(script_path):
             with open(script_path, "r", encoding="utf-8", errors="replace") as sf:
@@ -1293,18 +1283,17 @@ def cmd_location(args: List[str]) -> int:
     parser = argparse.ArgumentParser(prog="shortcut location", description="Print the path of a shortcut's script")
     parser.add_argument("name", nargs="+", help="Shortcut name, or namespace and name")
     parser.add_argument("--log", action="store_true", help="Print the path of its log instead")
+    add_global_flag(parser)
     parsed = parser.parse_args(args)
 
-    resolved = resolve_name(parsed.name)
+    resolved = resolve_name(parsed.name, parsed.skip_local)
     entry = resolved.entry
     if parsed.log:
-        print(resolved.log_path)
-    elif entry.script is not None:
-        print(os.path.abspath(resolve_script_path(resolved.base_dir, entry.script)))
+        print(resolved.group.log_path(resolved.entry.name))
     elif entry.inline is not None:
         die(f"'{resolved.display}' is an inline shortcut, so it has no file. Change it with: shortcut edit {resolved.display}")
     else:
-        die(f"Shortcut '{resolved.display}' has neither inline nor script.")
+        print(os.path.abspath(resolve_script_path(resolved.group.script_base, entry.script)))
     return 0
 
 
@@ -1312,25 +1301,24 @@ def cmd_rm(args: List[str]) -> int:
     parser = argparse.ArgumentParser(prog="shortcut rm", description="Remove a shortcut")
     parser.add_argument("name", nargs="+", help="Shortcut name, or namespace and name")
     parser.add_argument("-y", "--yes", action="store_true", help="Do not prompt for confirmation")
+    add_global_flag(parser)
     parsed = parser.parse_args(args)
 
     # Raw lookup: an entry that can't run must still be removable
-    group, name, raw_entry, rest, _ = find_entry(parsed.name)
+    group, name, raw_entry, rest, _ = find_entry(parsed.name, skip_local=parsed.skip_local)
     if rest:
         die(f"too many names: {shlex.join(parsed.name)}")
-    display = f"{group.name} {name}" if group.name else name
-    store_dir = group.store_dir
+    display = group.display(name)
 
     if not parsed.yes:
         if not sys.stdin.isatty():
-            die(f"Cannot remove shortcut '{display}' without -y in non-interactive environment")
-        ans = input(f"Remove shortcut '{display}' from {group.file}? [y/N]: ")
-        if ans.strip().lower() not in ("y", "yes"):
-            print("Aborted.")
-            return 0
+            die(f"remove '{display}' in a terminal, or pass -y")
+        if not ask(f"remove '{display}' from {group.file}? [y/N] "):
+            print("Aborted.", file=sys.stderr)
+            return 1
 
     # 1. Remove from registry
-    with registry_lock(store_dir):
+    with registry_lock(group.store_dir):
         reg = load_registry_file(group.file)
         shortcuts = reg.get("shortcuts", {})
         if name in shortcuts:
@@ -1341,35 +1329,20 @@ def cmd_rm(args: List[str]) -> int:
     #    script or a project's own file
     script = raw_entry.get("script") if isinstance(raw_entry, dict) else None
     if isinstance(script, str) and script:
-        try:
+        with contextlib.suppress(OSError, ValueError):
             stored_path = resolve_script_path(group.script_base, script)
-            stored_scripts = pathlib.Path(scripts_dir(group)).resolve()
-            if pathlib.Path(stored_path).resolve().is_relative_to(stored_scripts) and os.path.isfile(stored_path):
-                try:
-                    os.unlink(stored_path)
-                except OSError:
-                    pass
-        except ValueError:
-            pass
+            if pathlib.Path(stored_path).resolve().is_relative_to(pathlib.Path(scripts_dir(group)).resolve()):
+                os.unlink(stored_path)
 
     # 3. Remove log file
-    log_stem = f"{group.name}.{name}" if group.name else name
-    log_path = os.path.join(store_dir, "logs", f"{log_stem}.log")
-    if os.path.isfile(log_path):
-        try:
-            os.unlink(log_path)
-        except OSError:
-            pass
+    with contextlib.suppress(OSError):
+        os.unlink(group.log_path(name))
 
     # 4. Remove desktop file if present (global entries only)
     if not group.needs_approval:
         xdg_data = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
-        desktop_file = os.path.join(xdg_data, "applications", f"shortcut-{name}.desktop")
-        if os.path.isfile(desktop_file):
-            try:
-                os.unlink(desktop_file)
-            except OSError:
-                pass
+        with contextlib.suppress(OSError):
+            os.unlink(os.path.join(xdg_data, "applications", f"shortcut-{name}.desktop"))
 
     print(f"Removed shortcut '{display}'.")
     note_if_unapproved(group)
@@ -1379,16 +1352,15 @@ def cmd_rm(args: List[str]) -> int:
 def cmd_edit(args: List[str]) -> int:
     parser = argparse.ArgumentParser(prog="shortcut edit", description="Edit shortcut script in editor")
     parser.add_argument("name", nargs="+", help="Shortcut name, or namespace and name")
+    add_global_flag(parser)
     parsed = parser.parse_args(args)
-    resolved = resolve_name(parsed.name)
+    resolved = resolve_name(parsed.name, parsed.skip_local)
     editor_cmd = get_editor_cmd()
     entry = resolved.entry
     if entry.inline is not None:
         rc = edit_inline_roundtrip(entry.name, resolved.group, editor_cmd)
-    elif entry.script is not None:
-        rc = edit_file(editor_cmd, resolve_script_path(resolved.base_dir, entry.script))
     else:
-        die(f"Entry '{resolved.display}' has neither inline nor script.")
+        rc = edit_file(editor_cmd, resolve_script_path(resolved.group.script_base, entry.script))
     note_if_unapproved(resolved.group)
     return rc
 
@@ -1459,7 +1431,7 @@ def approve_group(group: Group, assume_yes: bool, global_names: Set[str]) -> int
         if not sys.stdin.isatty():
             die(f"approve {group.label} in a terminal, or pass -y")
         if not ask("approve? [y/N] "):
-            print("Not approved.")
+            print("Aborted.", file=sys.stderr)
             return 1
     save_approval(group, files)
     print(f"Approved {group.label}. Any change needs `{group.update_cmd}` again.")
@@ -1523,22 +1495,22 @@ def store_report(stores: List[Store]) -> List[str]:
 def cmd_fix(args: List[str]) -> int:
     parser = argparse.ArgumentParser(prog="shortcut fix", description="Print diagnostic block for an agent")
     parser.add_argument("name", nargs="*", help="Shortcut name, or namespace and name (none: check the stores)")
+    add_global_flag(parser)
     parsed = parser.parse_args(args)
 
-    report = store_report(visible_stores())
+    report = store_report(visible_stores(skip_local=parsed.skip_local))
     if not parsed.name:
         print("\n".join(["=== SHORTCUT FIX ===", *report]))
         return 0
 
     display = " ".join(parsed.name)
     try:
-        group, name, raw, _, _ = find_entry(parsed.name)
+        group, name, raw, _, _ = find_entry(parsed.name, skip_local=parsed.skip_local)
     except (KeyError, ValueError) as e:
         message = e.args[0] if e.args else str(e)
         print("\n".join([f"=== SHORTCUT FIX: {display} ===", str(message), "--- Stores ---", *report]))
         return 1
-    log_stem = f"{group.name}.{name}" if group.name else name
-    log_path = os.path.join(group.store_dir, "logs", f"{log_stem}.log")
+    log_path = group.log_path(name)
     entry_json = json.dumps(raw, indent=2)
 
     if isinstance(raw, dict) and isinstance(raw.get("inline"), str):
@@ -1615,11 +1587,6 @@ def merge_init_entries(
         except ValueError as e:
             skipped.append(f"{name} (invalid entry: {e})")
             continue
-        has_inline = isinstance(entry_data.get("inline"), str)
-        has_script = isinstance(entry_data.get("script"), str)
-        if has_inline == has_script:
-            skipped.append(f"{name} (invalid entry)")
-            continue
 
         if name in dest_shortcuts:
             skipped.append(f"{name} (already exists)")
@@ -1684,7 +1651,7 @@ def cmd_init(args: List[str]) -> int:
         description="Create an empty project store here, or with --global import a collection into the global store",
     )
     parser.add_argument("source", nargs="?", default=None, help="Local path or git URL to import from (needs --global)")
-    parser.add_argument("--global", "-g", dest="is_global", action="store_true", help="Import into global store")
+    parser.add_argument("--global", dest="is_global", action="store_true", help="Import into global store")
     parsed = parser.parse_args(args)
 
     if not parsed.is_global:
@@ -1702,7 +1669,7 @@ def cmd_init(args: List[str]) -> int:
         return 0
 
     dest_store_dir = get_global_store_dir()
-    init_store(dest_store_dir, is_global=True)
+    init_store(dest_store_dir)
     if not parsed.source:
         print(f"Initialized empty global store at {dest_store_dir}")
         return 0
@@ -1723,12 +1690,12 @@ def cmd_init(args: List[str]) -> int:
                 )
             except (subprocess.CalledProcessError, FileNotFoundError) as e:
                 err_detail = e.stderr.strip() if hasattr(e, "stderr") and e.stderr else str(e)
-                die(f"Failed to clone git repository from {source_str}: {err_detail}")
+                die(f"failed to clone git repository from {source_str}: {err_detail}")
             source_root = clone_dir
         else:
             source_root = os.path.abspath(os.path.expanduser(source_str))
             if not os.path.isdir(source_root):
-                die(f"Source directory does not exist: {source_root}")
+                die(f"source directory does not exist: {source_root}")
 
         # A collection's shortcuts.json sits at its root or in .shortcuts/; either way its
         # relative script paths resolve against the source root.
@@ -1739,7 +1706,7 @@ def cmd_init(args: List[str]) -> int:
         elif os.path.isfile(dot_json):
             source_store_dir = os.path.join(source_root, ".shortcuts")
         else:
-            die(f"No shortcuts.json found in {source_root} (checked root and .shortcuts/)")
+            die(f"no shortcuts.json found in {source_root} (checked root and .shortcuts/)")
 
         source_registry = load_registry(source_store_dir)
         with registry_lock(dest_store_dir):
@@ -1784,7 +1751,7 @@ def cmd_migrate(args: List[str]) -> int:
     )
     parser.parse_args(args)
     global_dir = get_global_store_dir()
-    init_store(global_dir, is_global=True)
+    init_store(global_dir)
     with registry_lock(global_dir):
         changed = _migrate_registry(global_dir)
         changed = _migrate_flat_scripts(global_dir) or changed
@@ -1803,7 +1770,7 @@ def _migrate_registry(store_dir: str) -> bool:
     reg = load_registry(store_dir)
     shortcuts = reg.get("shortcuts", {})
     if not isinstance(shortcuts, dict):
-        raise ValueError(f"Corrupt registry {store_dir}: 'shortcuts' must be an object")
+        raise ValueError(f"corrupt registry {store_dir}: 'shortcuts' must be an object")
     is_global = is_global_store(store_dir)
     prefixes = reg.get("prefixes", {}) if isinstance(reg.get("prefixes", {}), dict) else {}
     taken = set(shortcuts) | set(load_store(store_dir).namespaces)
@@ -1973,11 +1940,27 @@ _shortcut() {
         return 0
     fi
 
+    # What's before the cursor, leaving out flags: nothing yet, or a namespace
+    local cmd="${COMP_WORDS[1]}" i
+    local -a typed=()
+    for (( i = 2; i < COMP_CWORD; i++ )); do
+        [[ "${COMP_WORDS[i]}" == -* ]] || typed+=("${COMP_WORDS[i]}")
+    done
+
     case " ${name_commands} " in
-        *" ${prev} "*)
-            local names
-            names=$(shortcut list --names 2>/dev/null)
-            COMPREPLY=( $(compgen -W "${names}" -- "$cur") )
+        *" ${cmd} "*)
+            if [ "${#typed[@]}" -eq 0 ] && [[ "$cur" == -* ]]; then
+                local flags="--global"
+                case "$cmd" in
+                    run|r|rm) flags="--global -y" ;;
+                    location) flags="--global --log" ;;
+                esac
+                COMPREPLY=( $(compgen -W "${flags}" -- "$cur") )
+            elif [ "${#typed[@]}" -le 1 ]; then
+                local names
+                names=$(shortcut list --names ${typed[0]} 2>/dev/null)
+                COMPREPLY=( $(compgen -W "${names}" -- "$cur") )
+            fi
             return 0
             ;;
     esac
@@ -2010,7 +1993,17 @@ _shortcut() {
 
     case $words[2] in
         run|r|show|edit|location|rm|fix)
-            (( CURRENT == 3 )) && compadd -- ${(f)"$(shortcut list --names 2>/dev/null)"}
+            local -a typed
+            typed=(${words[3,CURRENT-1]:#-*})
+            if (( $#typed == 0 )) && [[ $PREFIX == -* ]]; then
+                compadd -- --global
+                case $words[2] in
+                    run|r|rm) compadd -- -y ;;
+                    location) compadd -- --log ;;
+                esac
+            elif (( $#typed <= 1 )); then
+                compadd -- ${(f)"$(shortcut list --names $typed[1] 2>/dev/null)"}
+            fi
             ;;
         init)
             compadd -- --global
@@ -2028,13 +2021,19 @@ compdef _shortcut shortcut
 FISH_COMPLETION_SCRIPT: str = """# fish completion for shortcut
 
 function __shortcut_names
-    shortcut list --names 2>/dev/null
+    set -l typed (string match -v -- '-*' (commandline -opc)[3..-1])
+    if test (count $typed) -le 1
+        shortcut list --names $typed 2>/dev/null
+    end
 end
 
 complete -c shortcut -f
 complete -c shortcut -n __fish_use_subcommand -a "run r new add link list show edit location rm fix update init migrate completion help"
 complete -c shortcut -n "__fish_seen_subcommand_from run r show edit location rm fix" -a "(__shortcut_names)"
-complete -c shortcut -n "__fish_seen_subcommand_from init" -F -l global -s g
+complete -c shortcut -n "__fish_seen_subcommand_from run r show edit location rm fix" -l global
+complete -c shortcut -n "__fish_seen_subcommand_from run r rm" -s y
+complete -c shortcut -n "__fish_seen_subcommand_from location" -l log
+complete -c shortcut -n "__fish_seen_subcommand_from init" -F -l global
 complete -c shortcut -n "__fish_seen_subcommand_from completion" -a "bash zsh fish"
 """
 
@@ -2053,11 +2052,6 @@ def cmd_completion(args: List[str]) -> int:
     return 0
 
 
-def cmd_help(args: List[str]) -> int:
-    print_usage()
-    return 0
-
-
 def print_usage() -> None:
     usage_text = """shortcut - run and manage quick scripts and commands
 
@@ -2070,12 +2064,13 @@ Usage:
                                             Add a script copy to store
   shortcut link <name> <path> --desc D [FLAGS]
                                             Link an external script by path
-  shortcut list [--names]                   List visible shortcuts, with where each runs
-  shortcut show <name>                      Show shortcut metadata and script contents
-  shortcut edit <name>                      Edit a script or inline command in $VISUAL, $EDITOR, or nano
-  shortcut location <name> [--log]          Print the path of its script (fails for inline), or its log
-  shortcut rm <name> [-y]                   Remove shortcut and associated files
-  shortcut fix [name]                       Print agent diagnostic block; with no name, check the stores
+  shortcut list [--names [NAMESPACE]]       List visible shortcuts, with where each runs
+  shortcut show [--global] <name>           Show shortcut metadata and script contents
+  shortcut edit [--global] <name>           Edit a script or inline command in $VISUAL, $EDITOR, or nano
+  shortcut location [--global] <name> [--log]
+                                            Print the path of its script (fails for inline), or its log
+  shortcut rm [--global] <name> [-y]        Remove shortcut and associated files
+  shortcut fix [--global] [name]            Print agent diagnostic block; with no name, check the stores
   shortcut update [group] [-y]              Review changes to project shortcuts and namespaces, and approve them
   shortcut init                             Create an empty project store (.shortcuts/) here
   shortcut init --global [SOURCE]           Import a collection (folder or git URL) into the global store
@@ -2090,7 +2085,7 @@ FLAGS for new, add and link:
   --arg NAME[=DEFAULT]      Declare a required argument, or an optional one with a default
   --confirm                 Ask before running it
   --local                   Store it in this project's .shortcuts/ (default: the global store)
-  --group NAME              Put it in namespace NAME, creating imports/NAME.shortcut if needed
+  --namespace NAME          Put it in namespace NAME, creating imports/NAME.shortcut if needed
   --by C                    Creator identifier
 
 Project shortcuts and namespaces don't run until approved with `shortcut update`,
@@ -2113,7 +2108,7 @@ def main(argv: Optional[List[str]] = None) -> NoReturn:
         print_usage()
         sys.exit(0)
 
-    if first in ("--version", "version"):
+    if first == "--version":
         print(f"shortcut {VERSION}")
         sys.exit(0)
 

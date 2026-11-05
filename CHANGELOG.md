@@ -15,20 +15,27 @@ Running a shortcut, where it runs, and how a project is trusted all change. `sho
 - The unknown-command error reads `unknown command 'x' (to run a shortcut: shortcut run x)`.
 - Unknown fields are errors, at the top of a file, in an entry and in `args`, so a safety setting from a newer version is never silently ignored. A file from a newer format is refused, with a prompt to upgrade.
 - `shortcut update` refuses a group with an entry that couldn't run: an invalid entry, or a missing script.
+- Declining a prompt from `run`, `rm` or `update` always exits 1 and prints `Aborted.` to stderr. `rm` used to exit 0.
+- `shortcut version` and `init -g` are gone. Use `shortcut --version` and `init --global`.
 
 ### Added
 
 - Namespaces: each `.shortcuts/imports/*.shortcut` file, or an entry in `"imports"`, is a group run as `shortcut r docker delete XYZ`. One level only. A namespace and a shortcut sharing a name in one store is an error.
 - The `.shortcut` format: the same JSON as `shortcuts.json`, with a required `version` and an optional `description` shown in `list`. The filename is the namespace's name.
-- `--group NAME` on `new`, `add` and `link` adds to a namespace, creating `imports/NAME.shortcut` if needed.
+- `--namespace NAME` on `new`, `add` and `link` adds to a namespace, creating `imports/NAME.shortcut` if needed.
 - Declared arguments: an optional `args` list, checked for presence and count before running, passed as `$1`… and `SC_ARG_<NAME>`. `--flags` are never parsed and values never validated. `--arg name` and `--arg name=default` on `new`, `add` and `link`; `show` prints the usage line.
 - `"confirm": true` (`--confirm`) asks before running; `shortcut r -y <name>` skips the question, and without a terminal the run fails without it.
 - `list` has a column showing each shortcut's `cwd`.
+- `--global` on `show`, `edit`, `location`, `rm` and `fix`, to reach a global shortcut that a project one hides.
+- `new` says when an inline command won't see its arguments.
+- `list --names NAMESPACE` prints the names in a namespace. Completion now works after `run --global` and `-y`, offers those flags, and completes a namespace's shortcuts.
 - `shortcut fix` with no name checks every visible store and namespace, including entries that couldn't run.
 - `migrate` also converts `g_` names, prefixes and `dir`, in the global store and the project you're in, and reports collisions without overwriting.
 
 ### Fixed
 
+- An entry with both `inline` and `script`, or neither, is refused everywhere. With both, `run` used to run the inline and ignore the script while `fix` called the entry broken.
+- `new x -- echo '$1'` stored `$1` in single quotes, so it never expanded. `$1`, `$@`, `$*` and `${1}` in a several-word command now stay live.
 - `~/.shortcuts` could be taken for a project's store when `SHORTCUTS_HOME` pointed elsewhere, sending writes to the wrong store.
 
 ## 1.0.0 — 2026-10-30

@@ -7,6 +7,7 @@ import json
 import os
 import pathlib
 import select
+import shlex
 import signal
 import struct
 import subprocess
@@ -28,7 +29,7 @@ sys.modules["shortcut_mod"] = shortcut_mod
 loader.exec_module(shortcut_mod)
 
 
-class TestShortcutT1(unittest.TestCase):
+class TestShortcut(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.tmp_path = pathlib.Path(self.temp_dir.name).resolve()
@@ -184,11 +185,11 @@ class TestShortcutT1(unittest.TestCase):
 
         with self.assertRaises(ValueError) as ctx:
             shortcut_mod.load_registry(str(self.shortcuts_home))
-        self.assertIn("Corrupt registry", str(ctx.exception))
+        self.assertIn("corrupt registry", str(ctx.exception))
 
         with self.assertRaises(ValueError) as ctx2:
             shortcut_mod.save_registry_atomic(str(self.shortcuts_home), data)
-        self.assertIn("Cannot overwrite corrupt registry", str(ctx2.exception))
+        self.assertIn("cannot overwrite corrupt registry", str(ctx2.exception))
 
         # Verify the corrupt file was not replaced or overwritten
         self.assertEqual(reg_file.read_text(encoding="utf-8"), '{"version": 1, corrupt json!')
@@ -232,7 +233,7 @@ class TestShortcutT1(unittest.TestCase):
 
         # Inside a project: project precedence
         res_local, _ = shortcut_mod.resolve_shortcut(["build"], caller_cwd=str(proj_dir))
-        self.assertEqual(res_local.store_dir, str(proj_shortcuts.resolve()))
+        self.assertEqual(res_local.group.store_dir, str(proj_shortcuts.resolve()))
         self.assertEqual(res_local.entry.description, "Local project build")
         self.assertTrue(res_local.hides_global)
 
@@ -244,12 +245,12 @@ class TestShortcutT1(unittest.TestCase):
 
         # Outside the project: the global one
         res_global, _ = shortcut_mod.resolve_shortcut(["build"], caller_cwd=str(self.home_dir))
-        self.assertEqual(res_global.store_dir, str(self.shortcuts_home.resolve()))
+        self.assertEqual(res_global.group.store_dir, str(self.shortcuts_home.resolve()))
         self.assertEqual(res_global.entry.description, "Global build")
 
         res_cli = self.run_cli(["run", "check"], cwd=str(self.home_dir))
         self.assertNotEqual(res_cli.returncode, 0)
-        self.assertIn("Shortcut 'check' not found", res_cli.stderr)
+        self.assertIn("shortcut 'check' not found", res_cli.stderr)
 
     def test_run_inline_with_passthrough_args(self):
         res_new = self.run_cli(["new", "echo", "--", "echo name=$0 first=$1 all=$*"])
@@ -327,7 +328,7 @@ class TestShortcutT1(unittest.TestCase):
         # 4. Path containment check
         with self.assertRaises(ValueError) as ctx:
             shortcut_mod.resolve_script_path(str(self.shortcuts_home), "../../../etc/passwd")
-        self.assertIn("Path traversal detected", str(ctx.exception))
+        self.assertIn("path traversal detected", str(ctx.exception))
 
     def test_rm_interactive_and_force(self):
         script_file = self.tmp_path / "stored.sh"
@@ -349,7 +350,7 @@ class TestShortcutT1(unittest.TestCase):
         # 1. Non-tty without -y should fail
         res_no_y = self.run_cli(["rm", "stored"])
         self.assertNotEqual(res_no_y.returncode, 0)
-        self.assertIn("without -y", res_no_y.stderr)
+        self.assertIn("in a terminal, or pass -y", res_no_y.stderr)
         self.assertTrue(stored_path.is_file())
         self.assertTrue(log_path.is_file())
         reg = shortcut_mod.load_registry(str(self.shortcuts_home))
@@ -370,7 +371,7 @@ class TestShortcutT1(unittest.TestCase):
         self.assertNotIn("linked", reg["shortcuts"])
         self.assertTrue(ext_file.is_file(), "Linked external script must never be deleted!")
 
-    def test_nano_inline_modification_roundtrip(self):
+    def test_edit_inline_roundtrip(self):
         res = self.run_cli(["new", "inline1", "--", "echo original"])
         self.assertEqual(res.returncode, 0)
 
@@ -730,7 +731,7 @@ class TestShortcutT1(unittest.TestCase):
         # search must print usage and exit 1 when given no pattern
         res_no_arg = subprocess.run([str(search_script)], capture_output=True, text=True)
         self.assertEqual(res_no_arg.returncode, 1)
-        self.assertIn("Usage", res_no_arg.stderr)
+        self.assertIn("usage:", res_no_arg.stderr)
 
         # search finds pattern when given
         test_file = self.tmp_path / "target_search_me.txt"
@@ -772,7 +773,7 @@ class TestShortcutT1(unittest.TestCase):
         self.assertIn("fix output running", res_fix_post.stdout)
         self.assertTrue(res_fix_post.stdout.strip().endswith("Last exit code: 0"))
 
-    def test_completion_bash_and_list_names(self):
+    def test_completion_bash(self):
         res_comp = self.run_cli(["completion", "bash"])
         self.assertEqual(res_comp.returncode, 0)
         self.assertIn("_shortcut", res_comp.stdout)
@@ -782,15 +783,6 @@ class TestShortcutT1(unittest.TestCase):
             self.assertIn(cmd, res_comp.stdout)
         for cmd in (" log ", " desktop ", " prefix ", " allow "):
             self.assertNotIn(cmd, res_comp.stdout)
-
-        # Test shortcut list --names
-        self.run_cli(["new", "comp1", "--desc", "c1", "--", "echo", "1"])
-        self.run_cli(["new", "comp2", "--desc", "c2", "--", "echo", "2"])
-        res_names = self.run_cli(["list", "--names"])
-        self.assertEqual(res_names.returncode, 0)
-        names = [line.strip() for line in res_names.stdout.splitlines() if line.strip()]
-        self.assertIn("comp1", names)
-        self.assertIn("comp2", names)
 
     def test_rm_cleans_desktop_file(self):
         self.install_bundled()
@@ -1233,14 +1225,14 @@ class TestShortcutT1(unittest.TestCase):
         src_reg = {
             "version": 1,
             "shortcuts": {
-                "bad_dir": {"description": "Bad dir", "inline": "echo hi", "dir": 123},
+                "bad_dir": {"description": "Bad dir", "inline": "echo hi", "cwd": 123},
             },
         }
         (src_dir / "shortcuts.json").write_text(json.dumps(src_reg), encoding="utf-8")
 
         res_init = self.run_cli(["init", "--global", str(src_dir)])
         self.assertEqual(res_init.returncode, 0)
-        self.assertIn("bad_dir (invalid entry: 'bad_dir' still uses the old 'dir' field", res_init.stdout)
+        self.assertIn("bad_dir (invalid entry: 'bad_dir' is not a valid entry: 'cwd' must be a string", res_init.stdout)
         self.assertNotIn("Traceback", res_init.stderr)
 
     def test_broken_output_pipe_exits_141_and_logs(self):
@@ -1419,7 +1411,7 @@ class TestShortcutT1(unittest.TestCase):
         self.assertTrue((self.shortcuts_home / "scripts" / "old.sh").is_file())
 
     def test_rm_malformed_entry(self):
-        reg = {"shortcuts": {"bad_entry": {"description": "x", "inline": "true", "dir": 123}}}
+        reg = {"shortcuts": {"bad_entry": {"description": "x", "inline": "true", "cwd": 123}}}
         (self.shortcuts_home / "shortcuts.json").write_text(json.dumps(reg), encoding="utf-8")
         res = self.run_cli(["rm", "bad_entry", "-y"])
         self.assertEqual(res.returncode, 0)
@@ -1469,7 +1461,7 @@ class TestShortcutT1(unittest.TestCase):
             self.assertIn(f"→ {expected}\n", res.stderr)
         res = self.run_cli(["r", "gone"], cwd=str(here))
         self.assertEqual(res.returncode, 1)
-        self.assertIn("Run directory does not exist", res.stderr)
+        self.assertIn("run directory does not exist", res.stderr)
 
     def test_confirm(self):
         self.run_cli(["new", "danger", "--confirm", "--", "echo ran; pwd"])
@@ -1625,15 +1617,17 @@ class TestShortcutT1(unittest.TestCase):
             "neither": ({"a": {"description": "x"}}, "exactly one of 'inline' and 'script'"),
             "both": ({"a": {"inline": "true", "script": "a.sh"}}, "exactly one of 'inline' and 'script'"),
             "missing": ({"a": {"script": "scripts/a.sh"}}, "script not found: scripts/a.sh"),
-            "escape": ({"a": {"script": "../../outside.sh"}}, "Path traversal"),
-            "badname": ({"a!": {"inline": "true"}}, "Invalid shortcut name"),
+            "escape": ({"a": {"script": "../../outside.sh"}}, "path traversal"),
+            "badname": ({"a!": {"inline": "true"}}, "invalid shortcut name"),
         }
         for name, (shortcuts, message) in cases.items():
             self.write_import(self.shortcuts_home, name, {"version": 2, "shortcuts": shortcuts})
             res = self.run_cli(["update", name, "-y"])
             self.assertEqual(res.returncode, 1, name)
             self.assertIn(message, res.stderr)
-            self.assertIn("isn't approved yet", self.run_cli(["r", name, *shortcuts]).stderr)
+            refused = self.run_cli(["r", name, *shortcuts])
+            self.assertEqual(refused.returncode, 1, name)
+            self.assertIn(message if "exactly one" in message else "isn't approved yet", refused.stderr)
 
     def test_group_description_shows_once_approved(self):
         self.run_cli(["init", "--global"])
@@ -1644,8 +1638,8 @@ class TestShortcutT1(unittest.TestCase):
         self.assertIn("Docker housekeeping", self.run_cli(["update", "docker", "-y"]).stdout)
         self.assertIn("  Docker housekeeping\n", self.run_cli(["list"]).stdout)
 
-    def test_group_flag_creates_a_namespace(self):
-        res = self.run_cli(["new", "delete", "--group", "docker", "--desc", "Remove one", "--", 'echo "rm $1"'])
+    def test_namespace_flag_creates_a_namespace(self):
+        res = self.run_cli(["new", "delete", "--namespace", "docker", "--desc", "Remove one", "--", 'echo "rm $1"'])
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertIn("needs approving before it runs: shortcut update docker", res.stderr)
         path = self.shortcuts_home / "imports" / "docker.shortcut"
@@ -1659,33 +1653,33 @@ class TestShortcutT1(unittest.TestCase):
         self.assertEqual(self.run_cli(["r", "docker", "delete", "x"]).stdout, "rm x\n")
 
         # Adding to it is a change, so it needs approving again
-        self.run_cli(["new", "ps", "--group", "docker", "--", "echo ps"])
+        self.run_cli(["new", "ps", "--namespace", "docker", "--", "echo ps"])
         self.assertIn("changed since you approved it", self.run_cli(["r", "docker", "ps"]).stderr)
-        res = self.run_cli(["new", "ps", "--group", "docker", "--", "echo again"])
+        res = self.run_cli(["new", "ps", "--namespace", "docker", "--", "echo again"])
         self.assertEqual(res.returncode, 1)
         self.assertIn("already exists", res.stderr)
 
-    def test_group_flag_collisions(self):
+    def test_namespace_flag_collisions(self):
         self.run_cli(["new", "docker", "--", "echo plain"])
-        res = self.run_cli(["new", "ps", "--group", "docker", "--", "echo ps"])
+        res = self.run_cli(["new", "ps", "--namespace", "docker", "--", "echo ps"])
         self.assertEqual(res.returncode, 1)
         self.assertIn("'docker' is a shortcut", res.stderr)
         self.assertFalse((self.shortcuts_home / "imports").exists())
 
-        res = self.run_cli(["new", "ps", "--group", "not valid", "--", "echo ps"])
+        res = self.run_cli(["new", "ps", "--namespace", "not valid", "--", "echo ps"])
         self.assertEqual(res.returncode, 1)
-        self.assertIn("Invalid shortcut name", res.stderr)
+        self.assertIn("invalid shortcut name", res.stderr)
 
-        self.run_cli(["new", "ps", "--group", "kube", "--", "echo ps"])
+        self.run_cli(["new", "ps", "--namespace", "kube", "--", "echo ps"])
         res = self.run_cli(["new", "kube", "--", "echo plain"])
         self.assertEqual(res.returncode, 1)
         self.assertIn("'kube' is a namespace", res.stderr)
 
-    def test_group_flag_keeps_each_groups_scripts_apart(self):
+    def test_namespace_flag_keeps_each_groups_scripts_apart(self):
         source = self.tmp_path / "src.sh"
         for group, word in (("docker", "dock"), ("kube", "kub")):
             source.write_text(f"#!/usr/bin/env bash\necho {word}\n", encoding="utf-8")
-            res = self.run_cli(["add", "delete", str(source), "--group", group, "--desc", "d"])
+            res = self.run_cli(["add", "delete", str(source), "--namespace", group, "--desc", "d"])
             self.assertEqual(res.returncode, 0, res.stderr)
             self.assertEqual(self.run_cli(["update", group, "-y"]).returncode, 0)
         self.assertEqual(self.run_cli(["r", "docker", "delete"]).stdout, "dock\n")
@@ -1697,17 +1691,128 @@ class TestShortcutT1(unittest.TestCase):
         self.assertFalse(copy.exists())
         self.assertTrue((self.shortcuts_home / "imports" / "scripts" / "kube" / "delete.sh").exists())
 
-    def test_group_flag_in_a_project_uses_the_files_folder_for_cwd(self):
+    def test_namespace_flag_in_a_project_uses_the_files_folder_for_cwd(self):
         proj = self.tmp_path / "proj"
         (proj / "src").mkdir(parents=True)
         res = self.run_cli(
-            ["new", "where", "--group", "dev", "--local", "--cwd", str(proj / "src"), "--", "pwd"], cwd=str(proj)
+            ["new", "where", "--namespace", "dev", "--local", "--cwd", str(proj / "src"), "--", "pwd"], cwd=str(proj)
         )
         self.assertEqual(res.returncode, 0, res.stderr)
         path = proj / ".shortcuts" / "imports" / "dev.shortcut"
         self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["shortcuts"]["where"]["cwd"], "../../src")
         self.assertEqual(self.run_cli(["update", "dev", "-y"], cwd=str(proj)).returncode, 0)
         self.assertEqual(self.run_cli(["r", "dev", "where"], cwd=str(proj)).stdout, f"{proj / 'src'}\n")
+
+    def test_global_flag_reaches_a_hidden_shortcut(self):
+        proj = self.tmp_path / "proj"
+        proj.mkdir()
+        script = self.tmp_path / "tool.sh"
+        script.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+        self.run_cli(["new", "build", "--", "echo global"])
+        self.run_cli(["new", "build", "--local", "--", "echo project"], cwd=str(proj))
+        self.run_cli(["add", "tool", str(script), "--desc", "d"])
+        self.run_cli(["add", "tool", str(script), "--desc", "d", "--local"], cwd=str(proj))
+        self.allow(proj / ".shortcuts")
+
+        self.assertIn("echo project", self.run_cli(["show", "build"], cwd=str(proj)).stdout)
+        res = self.run_cli(["show", "--global", "build"], cwd=str(proj))
+        self.assertIn("Scope:       global\n", res.stdout)
+        self.assertIn("echo global", res.stdout)
+        self.assertIn("echo global", self.run_cli(["fix", "--global", "build"], cwd=str(proj)).stdout)
+
+        editor = "sed -i s/global/edited/"
+        res = self.run_cli(["edit", "--global", "build"], cwd=str(proj), env={"SHORTCUT_EDITOR_CMD": editor})
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertEqual(self.load_global()["build"]["inline"], "echo edited")
+
+        res = self.run_cli(["location", "--global", "tool"], cwd=str(proj))
+        self.assertEqual(res.stdout, f"{self.shortcuts_home}/scripts/tool.sh\n")
+
+        self.assertEqual(self.run_cli(["rm", "build", "--global", "-y"], cwd=str(proj)).returncode, 0)
+        self.assertNotIn("build", self.load_global())
+        self.assertEqual(self.run_cli(["r", "build"], cwd=str(proj)).stdout, "project\n")
+        res = self.run_cli(["show", "--global", "build"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("not found", res.stderr)
+
+    def test_new_says_when_a_command_ignores_arguments(self):
+        hint = "won't see any arguments"
+        self.assertIn(hint, self.run_cli(["new", "a", "--", "rg --hidden"]).stderr)
+        self.assertIn(hint, self.run_cli(["new", "b", "--", "rg", "--hidden"]).stderr)
+        for name, command in (
+            ("c", 'rg "$@"'), ("d", "echo $1"), ("e", "echo ${2}"), ("f", "echo $*"), ("g", "echo $SC_ARG_WHO"),
+        ):
+            res = self.run_cli(["new", name, "--", command])
+            self.assertEqual(res.returncode, 0, res.stderr)
+            self.assertNotIn(hint, res.stderr, command)
+
+    def test_several_word_commands_keep_positional_arguments_live(self):
+        cases = {
+            ("echo", "$1"): 'echo "$1"',
+            ("printf", "[%s]", "$@"): 'printf \'[%s]\' "$@"',
+            ("echo", "a b", "${1}"): 'echo \'a b\' "${1}"',
+            ("echo", "$HOME"): "echo '$HOME'",
+            ("echo", 'say "$1"'): 'echo "say \\"$1\\""',
+            ("echo", "$(id) `id` \\ $1"): 'echo "\\$(id) \\`id\\` \\\\ $1"',
+        }
+        for i, (words, stored) in enumerate(cases.items()):
+            name = f"cmd{i}"
+            self.assertEqual(self.run_cli(["new", name, "--", *words]).returncode, 0)
+            self.assertEqual(self.load_global()[name]["inline"], stored)
+
+        self.assertEqual(self.run_cli(["r", "cmd0", "hello world"]).stdout, "hello world\n")
+        self.assertEqual(self.run_cli(["r", "cmd1", "a b", "c"]).stdout, "[a b][c]")
+        self.assertEqual(self.run_cli(["r", "cmd3"]).stdout, "$HOME\n")
+        self.assertEqual(self.run_cli(["r", "cmd5", "x"]).stdout, "$(id) `id` \\ x\n")
+
+    def bash_complete(self, *words: str) -> list[str]:
+        """What `shortcut <words><tab>` offers; the last word is the one being completed."""
+        line = ["shortcut", *words]
+        driver = (
+            self.run_cli(["completion", "bash"]).stdout
+            + f"COMP_WORDS=({shlex.join(line)}); COMP_CWORD={len(line) - 1}; _shortcut\n"
+            + 'printf "%s\\n" "${COMPREPLY[@]}"\n'
+        )
+        res = subprocess.run(
+            ["bash", "-c", driver], cwd=str(self.home_dir), env=self.env, capture_output=True, text=True
+        )
+        self.assertEqual(res.stderr, "")
+        return [line for line in res.stdout.splitlines() if line]
+
+    def test_bash_completion_past_flags_and_into_namespaces(self):
+        self.install_bundled()
+        self.run_cli(["new", "other", "--", "true"])
+        self.run_cli(["new", "delete", "--namespace", "docker", "--", "true"])
+        self.run_cli(["new", "ps", "--namespace", "docker", "--", "true"])
+        self.assertEqual(self.run_cli(["update", "docker", "-y"]).returncode, 0)
+
+        self.assertIn("other", self.bash_complete("r", "o"))
+        self.assertEqual(self.bash_complete("r", "--global", "ot"), ["other"])
+        self.assertEqual(self.bash_complete("r", "-y", "--global", "doc"), ["docker"])
+        self.assertEqual(self.bash_complete("show", "--global", "ot"), ["other"])
+        self.assertEqual(self.bash_complete("r", "docker", ""), ["delete", "ps"])
+        self.assertEqual(self.bash_complete("rm", "--global", "docker", "d"), ["delete"])
+        self.assertEqual(self.bash_complete("r", "docker", "ps", ""), [])
+        self.assertEqual(self.bash_complete("r", "other", ""), [])
+
+        self.assertEqual(self.bash_complete("r", "-"), ["--global", "-y"])
+        self.assertEqual(self.bash_complete("show", "-"), ["--global"])
+        self.assertEqual(self.bash_complete("location", "--"), ["--global", "--log"])
+        self.assertEqual(self.bash_complete("r", "other", "--"), [])
+
+    def test_list_names_of_a_namespace(self):
+        self.run_cli(["new", "b", "--namespace", "docker", "--", "true"])
+        self.run_cli(["new", "a", "--namespace", "docker", "--", "true"])
+        self.assertEqual(self.run_cli(["list", "--names", "docker"]).stdout, "")
+        self.assertEqual(self.run_cli(["update", "docker", "-y"]).returncode, 0)
+        self.assertEqual(self.run_cli(["list", "--names", "docker"]).stdout, "a\nb\n")
+        self.assertEqual(self.run_cli(["list", "--names", "nothing"]).stdout, "")
+
+        # A project shortcut of that name is what `r docker` runs, so its arguments aren't names
+        proj = self.tmp_path / "proj"
+        self.write_store(proj / ".shortcuts", {"docker": {"inline": "true"}})
+        self.allow(proj / ".shortcuts")
+        self.assertEqual(self.run_cli(["list", "--names", "docker"], cwd=str(proj)).stdout, "")
 
     def test_declared_args(self):
         script = (
@@ -1848,7 +1953,7 @@ class TestShortcutT1(unittest.TestCase):
         self.write_store(proj / ".shortcuts", {"hi": {"inline": "echo hi"}})
         rc, out = self.run_in_terminal(["update"], cwd=str(proj), keys=[(b"approve? [y/N]", b"n\n")])
         self.assertEqual(rc, 1)
-        self.assertIn("Not approved", out)
+        self.assertIn("Aborted.", out)
         self.assertEqual(self.run_cli(["r", "hi"], cwd=str(proj)).returncode, 1)
         rc, out = self.run_in_terminal(["update"], cwd=str(proj), keys=[(b"approve? [y/N]", b"y\n")], env={"PAGER": ""})
         self.assertEqual(rc, 0)
@@ -1934,19 +2039,19 @@ class TestShortcutT1(unittest.TestCase):
 
         self.assertEqual(self.run_cli(["r", "outside"], cwd=str(proj)).stdout, "outside\n")
         self.assertIn("outside", self.run_cli(["list", "--names"], cwd=str(proj)).stdout.split())
-        self.assertIn("Corrupt registry", self.run_cli(["list"], cwd=str(proj)).stderr)
+        self.assertIn("corrupt registry", self.run_cli(["list"], cwd=str(proj)).stderr)
         report = self.run_cli(["fix"], cwd=str(proj))
         self.assertEqual(report.returncode, 0)
-        self.assertIn("BROKEN: Corrupt registry", report.stdout)
+        self.assertIn("BROKEN: corrupt registry", report.stdout)
         self.assertEqual(self.run_cli(["update"], cwd=str(proj)).returncode, 1)
 
     def test_broken_global_store_still_reports(self):
         (self.shortcuts_home / "shortcuts.json").write_text("{not json", encoding="utf-8")
         res = self.run_cli(["r", "anything"])
         self.assertEqual(res.returncode, 1)
-        self.assertIn("Corrupt registry", res.stderr)
+        self.assertIn("corrupt registry", res.stderr)
         self.assertNotIn("Traceback", res.stderr)
-        self.assertIn("BROKEN: Corrupt registry", self.run_cli(["fix", "anything"]).stdout)
+        self.assertIn("BROKEN: corrupt registry", self.run_cli(["fix", "anything"]).stdout)
 
     def test_migrate_converts_names_prefixes_and_dir(self):
         fixed = self.tmp_path / "fixed"
@@ -2080,14 +2185,41 @@ class TestShortcutT1(unittest.TestCase):
         self.run_cli(["new", "local_desk", "--local", "--", "echo 1"], cwd=str(proj))
         res = self.run_cli(["r", "desktop", "local_desk"], cwd=str(proj))
         self.assertEqual(res.returncode, 1)
-        self.assertIn("isn't a global shortcut", res.stdout)  # a logged run merges stderr into stdout
+        self.assertIn("not found", res.stdout)  # a logged run merges stderr into stdout
         self.assertFalse((self.xdg_data_home / "applications" / "shortcut-local_desk.desktop").exists())
 
     def test_removed_commands_are_gone(self):
-        for word in ("allow", "prefix", "log", "desktop", "nano", "activate"):
+        for word in ("allow", "prefix", "log", "desktop", "nano", "activate", "version"):
             res = self.run_cli([word, "x"])
             self.assertEqual(res.returncode, 2)
             self.assertEqual(res.stderr, f"unknown command '{word}' (to run a shortcut: shortcut run {word})\n")
+        self.assertEqual(self.run_cli(["init", "-g"]).returncode, 2)
+
+    def test_an_entry_with_both_inline_and_script_is_refused(self):
+        script = self.shortcuts_home / "both.sh"
+        script.write_text("#!/usr/bin/env bash\necho script\n", encoding="utf-8")
+        reg = {"version": 2, "shortcuts": {"both": {"description": "x", "inline": "echo inline", "script": "both.sh"}}}
+        (self.shortcuts_home / "shortcuts.json").write_text(json.dumps(reg), encoding="utf-8")
+        for words in (["r", "both"], ["show", "both"], ["location", "both"], ["edit", "both"]):
+            res = self.run_cli(words, env={"SHORTCUT_EDITOR_CMD": "true"})
+            self.assertEqual(res.returncode, 1, words)
+            self.assertIn("exactly one of 'inline' and 'script'", res.stderr)
+            self.assertNotIn("inline\n", res.stdout)
+        self.assertEqual(self.run_cli(["rm", "both", "-y"]).returncode, 0)
+        self.assertNotIn("both", self.load_global())
+
+    def test_declining_rm_exits_1(self):
+        self.run_cli(["new", "keep", "--", "true"])
+        rc, out = self.run_in_terminal(["rm", "keep"], keys=[(b"[y/N]", b"n\n")])
+        self.assertEqual(rc, 1)
+        self.assertIn("Aborted.", out)
+        self.assertIn("keep", self.load_global())
+
+    def test_fix_global_without_a_name_skips_the_project(self):
+        proj = self.tmp_path / "thisproject"
+        self.write_store(proj / ".shortcuts", {"hi": {"inline": "echo hi"}})
+        self.assertIn("thisproject", self.run_cli(["fix"], cwd=str(proj)).stdout)
+        self.assertNotIn("thisproject", self.run_cli(["fix", "--global"], cwd=str(proj)).stdout)
 
 
 if __name__ == "__main__":

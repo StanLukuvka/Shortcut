@@ -3,14 +3,11 @@ set -euo pipefail
 
 name="$1"
 
-info="$(shortcut show "$name")"
+# A launcher runs outside any project, so it needs a global shortcut; show fails if there is none.
+# This reads show's labels, so renaming Description or Icon there breaks it.
+info="$(shortcut show --global "$name")"
 info="${info%%$'\n\n'*}"  # the details, not the script below them
 field() { sed -n "s/^$1: *//p" <<<"$info"; }
-
-if [ "$(field Scope)" != "global" ]; then
-    echo "error: '$name' isn't a global shortcut, so a launcher can't run it from anywhere" >&2
-    exit 1
-fi
 
 # Desktop sessions often lack ~/.local/bin in PATH, so the launcher uses the absolute path.
 tool="$(printf '%q' "$(command -v shortcut)")"

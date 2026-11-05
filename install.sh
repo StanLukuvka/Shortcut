@@ -18,7 +18,7 @@ chmod +x "$BIN_DIR/shortcut"
 
 echo "Installed shortcut to $BIN_DIR/shortcut"
 echo "Installed bash completion to $COMPL_DIR/shortcut"
-echo "Bundled shortcuts (log, desktop, nano): shortcut init --global $SCRIPT_DIR/templates"
+echo "Bundled shortcuts: shortcut init --global $SCRIPT_DIR/templates"
 
 if command -v fish >/dev/null 2>&1; then
     FISH_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/fish/completions"
