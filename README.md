@@ -72,12 +72,13 @@ shortcut link build ~/src/build.sh --desc "Build binaries" # uses it where it is
 
 **Look around.** `shortcut list` shows everything you can run here, and `shortcut show <name>` prints one shortcut in full, including its script.
 
-**Add one to a project.** Run this at the project root. `--local` stores it in the project store. `--cwd .` records the current directory, and the shortcut runs there wherever you call it from. Review it with `shortcut update`, then commit it:
+**Add one to a project.** Run this at the project root. `shortcut init` creates the project store, and `--local` stores the shortcut in it. `--cwd .` records the current directory, and the shortcut runs there wherever you call it from. Review it with `shortcut update`, then commit it:
 
 ```console
 $ cd ~/code/api
+$ shortcut init
+Initialized empty project store at /home/you/code/api/.shortcuts
 $ shortcut new test --local --desc "Run the tests" --cwd . -- 'pytest -q "$@"'
-created project store /home/you/code/api/.shortcuts
 note: /home/you/code/api needs approving before it runs: shortcut update
 Created inline shortcut 'test'.
 
@@ -142,7 +143,7 @@ A store is a folder that holds shortcuts in a `shortcuts.json` file, plus any na
 | `run`, `r`, `show`, `edit`, `location`, `rm`, `fix <name>` | Global store | Project store, then global store | Global store only | Not available |
 | `fix` with no name | Reports the global store | Reports both stores | Reports the global store only | Not available |
 | `list` | Global store | Both stores | Not available | Not available |
-| `new`, `add`, `link` | Writes to the global store | Writes to the global store | Not available | Writes to the project store. Outside a project, creates one in the current directory |
+| `new`, `add`, `link` | Writes to the global store | Writes to the global store | Not available | Writes to `.shortcuts/` in the current directory. Refuses if there isn't one, including in a subfolder of a project |
 | `update` | Namespaces in the global store | The project store, and namespaces in both stores | Not available | Not available |
 | `init` | Creates a project store in the current directory | Creates a project store in the current directory, unless it has one | Different meaning, inside and outside a project: imports `SOURCE` into the global store, or with no `SOURCE` creates an empty global store if there is none | Not available |
 | `migrate` | Global store | Global store and project store | Not available | Not available |
@@ -150,7 +151,7 @@ A store is a folder that holds shortcuts in a `shortcuts.json` file, plus any na
 
 `new`, `add` and `link` write to the global store inside a project too. `edit` and `rm` change the first match, which inside a project can be the project store. `init` in a subfolder of a project creates a new project store there, and that subfolder is then the project.
 
-`init`, and `--local` outside a project, refuse a folder whose `.shortcuts` is the global store or a symlink.
+`init` and `--local` refuse a folder whose `.shortcuts` is the global store or a symlink.
 
 **Same name in both stores.** The project store wins. Inside a project, a project shortcut hides a global shortcut with the same name, and a project namespace hides a global namespace with the same name, including all its shortcuts. A project shortcut also hides a global namespace with the same name, and a project namespace hides a global shortcut. `--global` reaches the hidden one.
 
@@ -233,7 +234,7 @@ A logged run merges stdout and stderr into one stream, so `2>/dev/null` doesn't 
 
 ### Project shortcuts
 
-A project shortcut is a shortcut in a [project store](#stores). `shortcut` reads `.shortcuts/` in place and never copies it. Commit it with the project. It comes with a `.gitignore` for its lock file. `shortcut init` creates an empty one; `--local` creates one when needed.
+A project shortcut is a shortcut in a [project store](#stores). `shortcut` reads `.shortcuts/` in place and never copies it. Commit it with the project. It comes with a `.gitignore` for its lock file. `shortcut init` creates an empty one.
 
 Relative script paths resolve against the project root and can't escape it with `../`.
 
@@ -324,7 +325,7 @@ FLAGS for `new`, `add` and `link`:
 | `--cwd caller\|DIR` | [Where it runs](#where-it-runs) (default: caller) |
 | `--arg NAME[=DEFAULT]` | [Declare an argument](#arguments), repeatable |
 | `--confirm` | Ask before running it |
-| `--local` | Store it in the [project store](#stores) |
+| `--local` | Store it in `.shortcuts/` in the current directory. Refuses if there isn't one. See [Stores](#stores) |
 | `--namespace NAME` | Put it in [namespace](#namespaces-and-groups) `NAME` |
 | `--by C` | Record who created it |
 

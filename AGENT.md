@@ -2,7 +2,7 @@
 
 `shortcut` names shell commands and scripts, and runs them from any directory. The [README](README.md) is the full reference.
 
-Agents use the same commands as people. Inside a project, work from the project root: `--local` uses the nearest project store, or creates one in the current directory, and `--cwd .` records the current directory. To set up a shortcut for a user:
+Agents use the same commands as people. Inside a project, work from the project root: `--local` uses `.shortcuts/` in the current directory, and refuses if there isn't one. `shortcut init` creates it. `--cwd .` records the current directory. To set up a shortcut for a user:
 
 1. **Always pass `--desc`.** `--by <your name>` records who made it.
 
@@ -12,7 +12,7 @@ Agents use the same commands as people. Inside a project, work from the project 
 
 2. **Choose where it lives and runs.** [Stores](README.md#stores) shows which store each command uses.
    - General-purpose tool: use the defaults, the global store and `cwd: caller`.
-   - Project-specific work (builds, test runners, linters): use `--local` for the project store.
+   - Project-specific work (builds, test runners, linters): use `--local` for the project store, from the project root.
    - A process that must run in a specific directory: use `--cwd <dir>`.
 
 3. **Single-quote the command.** Read arguments with `$1` or `"$@"`. A shortcut doesn't append them. `--arg NAME` declares a required argument and `--arg NAME=DEFAULT` an optional one.

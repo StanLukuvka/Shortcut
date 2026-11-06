@@ -101,10 +101,14 @@ class TestStores(ShortcutTestCase):
         self.assertIn("anywhere", self.load_global())
         self.assertFalse((proj_dir / ".shortcuts").exists())
 
-        # 2. --local creates ./.shortcuts/ with a stderr notice, and it needs approving
+        # 2. --local needs a store in this directory, and what it adds needs approving
+        res = self.run_cli(["new", "local_cmd", "--local", "--", "echo local"], cwd=str(proj_dir))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("no project store in", res.stderr)
+        self.assertFalse((proj_dir / ".shortcuts").exists())
+        self.run_cli(["init"], cwd=str(proj_dir))
         res = self.run_cli(["new", "local_cmd", "--local", "--", "echo local"], cwd=str(proj_dir))
         self.assertEqual(res.returncode, 0, res.stderr)
-        self.assertIn("created project store", res.stderr)
         self.assertIn("needs approving before it runs: shortcut update", res.stderr)
         self.assertTrue((proj_dir / ".shortcuts" / "shortcuts.json").is_file())
         self.assertNotEqual(self.run_cli(["run", "local_cmd"], cwd=str(proj_dir)).returncode, 0)
@@ -161,15 +165,34 @@ class TestStores(ShortcutTestCase):
         real = self.tmp_path / "custom_store"
         env = {"SHORTCUTS_HOME": str(real)}
         (self.home_dir / "work").mkdir()
+        res = self.run_cli(["new", "here", "--local", "--", "echo 1"], cwd=str(self.home_dir), env=env)
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("no project store in", res.stderr)
+        self.assertEqual(self.load_global(), {})
+        self.run_cli(["init"], cwd=str(self.home_dir / "work"), env=env)
         res = self.run_cli(["new", "here", "--local", "--", "echo 1"], cwd=str(self.home_dir / "work"), env=env)
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertTrue((self.home_dir / "work" / ".shortcuts" / "shortcuts.json").is_file())
         self.assertEqual(self.load_global(), {})
 
+    def test_local_only_uses_a_store_in_this_directory(self):
+        proj = self.project({"up": {"inline": "true"}}, dirs=["sub"])
+        registry = proj / ".shortcuts" / "shortcuts.json"
+        before = registry.read_text(encoding="utf-8")
+        source = self.script("tool.sh", "#!/usr/bin/env bash\n", mode=0o644)
+
+        for cmd in (["new", "x", "--local", "--", "true"], ["add", "x", str(source), "--desc", "d", "--local"],
+                    ["link", "x", str(source), "--desc", "d", "--local"]):
+            res = self.run_cli(cmd, cwd=str(proj / "sub"))
+            self.assertEqual(res.returncode, 1, cmd)
+            self.assertIn("no project store in", res.stderr)
+        self.assertFalse((proj / "sub" / ".shortcuts").exists())
+        self.assertEqual(registry.read_text(encoding="utf-8"), before)
+
     def test_local_shortcut_hiding_global_warns(self):
         fixed = self.folder("fixed")
         self.assertEqual(self.run_cli(["new", "penpot", "--cwd", str(fixed), "--", "echo global"]).returncode, 0)
-        proj = self.project()
+        proj = self.project({})
         res = self.run_cli(["new", "penpot", "--local", "--cwd", ".", "--", "echo local"], cwd=str(proj))
         self.assertEqual(res.returncode, 0)
         update = self.run_cli(["update", "-y"], cwd=str(proj))
@@ -191,7 +214,7 @@ class TestStores(ShortcutTestCase):
         self.assertEqual(res_elsewhere.stderr, f"\u2192 {fixed}\n")
 
     def test_global_flag_reaches_a_hidden_shortcut(self):
-        proj = self.project()
+        proj = self.project({})
         script = self.write_file(self.tmp_path / "tool.sh", "#!/usr/bin/env bash\n")
         self.run_cli(["new", "build", "--", "echo global"])
         self.run_cli(["new", "build", "--local", "--", "echo project"], cwd=str(proj))
@@ -244,6 +267,7 @@ class TestStores(ShortcutTestCase):
     def test_list_and_names(self):
         proj_dir = self.home_dir / "list_proj"
         proj_dir.mkdir()
+        self.run_cli(["init"], cwd=str(proj_dir))
         self.run_cli(["new", "local_cmd", "--local", "--cwd", ".", "--", "echo local"], cwd=str(proj_dir))
         shortcut_mod.save_registry_atomic(
             str(self.shortcuts_home),
@@ -727,7 +751,7 @@ class TestNamespaces(ShortcutTestCase):
         self.assertTrue((self.shortcuts_home / "imports" / "scripts" / "kube" / "delete.sh").exists())
 
     def test_namespace_flag_in_a_project_uses_the_files_folder_for_cwd(self):
-        proj = self.project(dirs=["src"])
+        proj = self.project({}, dirs=["src"])
         res = self.run_cli(
             ["new", "where", "--namespace", "dev", "--local", "--cwd", str(proj / "src"), "--", "pwd"], cwd=str(proj)
         )

@@ -168,15 +168,17 @@ def registry_exists(store_dir: str) -> bool:
     return os.path.isfile(os.path.join(store_dir, "shortcuts.json"))
 
 
-def find_local_store_dir(start_dir: Optional[str] = None) -> Optional[str]:
-    curr = pathlib.Path(start_dir or os.getcwd()).resolve()
+def is_project_store(store_dir: pathlib.Path) -> bool:
     # ~/.shortcuts is never a project, also when SHORTCUTS_HOME points the global store elsewhere
     never = {pathlib.Path(get_global_store_dir()).resolve(), (pathlib.Path.home() / ".shortcuts").resolve()}
+    return store_dir.resolve() not in never and (store_dir / "shortcuts.json").is_file()
+
+
+def find_local_store_dir(start_dir: Optional[str] = None) -> Optional[str]:
+    curr = pathlib.Path(start_dir or os.getcwd()).resolve()
     for p in [curr, *curr.parents]:
         candidate = p / ".shortcuts"
-        if candidate.resolve() in never:
-            continue
-        if (candidate / "shortcuts.json").is_file():
+        if is_project_store(candidate):
             return str(candidate)
     return None
 
@@ -216,6 +218,14 @@ def new_local_store_dir(cwd: str) -> str:
         die(f"{store_dir} is the global store, so it can't hold local shortcuts. Run this inside a project folder.")
     if os.path.islink(store_dir):
         die(f"{store_dir} is a symlink, so a store there would be written somewhere else.")
+    return store_dir
+
+
+def existing_local_store_dir(cwd: str) -> str:
+    """The store --local writes to: the one in cwd. It never looks in a parent folder or creates one."""
+    store_dir = new_local_store_dir(cwd)
+    if not is_project_store(pathlib.Path(store_dir)):
+        die(f"no project store in {cwd}. Run this from the project root, or create one with: shortcut init")
     return store_dir
 
 
@@ -974,7 +984,7 @@ def stored_cwd(value: Optional[str], group: Group) -> Optional[str]:
 def target_group(parsed: argparse.Namespace, cwd: str) -> Group:
     """The file a new shortcut goes in. Creates nothing; _register does."""
     validate_name(parsed.name)
-    store_dir = (find_local_store_dir(cwd) or new_local_store_dir(cwd)) if parsed.local else get_global_store_dir()
+    store_dir = existing_local_store_dir(cwd) if parsed.local else get_global_store_dir()
     store = load_store(store_dir)
     group = store.main
     if parsed.namespace:
@@ -1061,11 +1071,8 @@ def _register(group: Group, entry: ShortcutEntry, write_script: Optional[Any] = 
     """Add entry to group's file under the registry lock; write_script() runs first, once the name is known free.
     Creates a missing store or namespace file."""
     store_dir = group.store_dir
-    is_project = not is_global_store(store_dir)
     if not registry_exists(store_dir):
         init_store(store_dir)
-        if is_project:
-            print(f"created project store {store_dir}", file=sys.stderr)
     with registry_lock(store_dir):
         is_new_file = bool(group.name) and not os.path.exists(group.file)
         reg = {"version": REGISTRY_VERSION, "shortcuts": {}} if is_new_file else load_registry_file(group.file)
@@ -1112,7 +1119,7 @@ def add_global_flag(parser: argparse.ArgumentParser) -> None:
 
 def add_entry_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--cwd", default=None, help="Where it runs: caller (default) or a directory")
-    parser.add_argument("--local", action="store_true", help="Store it in this project's .shortcuts/, not globally")
+    parser.add_argument("--local", action="store_true", help="Store it in .shortcuts/ in this directory, not globally")
     parser.add_argument("--namespace", default=None, metavar="NAME",
                         help="Put it in this namespace, creating imports/NAME.shortcut if needed")
     parser.add_argument("--by", default=None, help="Creator identifier")
@@ -2272,7 +2279,7 @@ FLAGS for new, add and link:
   --cwd caller|DIR          Where it runs (default: caller, your current directory)
   --arg NAME[=DEFAULT]      Declare a required argument, or an optional one with a default
   --confirm                 Ask before running it
-  --local                   Store it in this project's .shortcuts/ (default: the global store)
+  --local                   Store it in .shortcuts/ in this directory (default: the global store)
   --namespace NAME          Put it in namespace NAME, creating imports/NAME.shortcut if needed
   --by C                    Creator identifier
 

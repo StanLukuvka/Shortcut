@@ -107,7 +107,7 @@ class TestBundled(ShortcutTestCase):
 
     def test_rm_local_keeps_global_desktop_file(self):
         self.install_bundled()
-        proj_dir = self.project(name="penpot_proj")
+        proj_dir = self.project({}, name="penpot_proj")
         self.assertEqual(self.run_cli(["new", "penpot", "--desc", "Global penpot", "--", "echo", "global"]).returncode, 0)
         self.assertEqual(self.run_cli(["r", "desktop", "penpot"]).returncode, 0)
         desktop_file = self.xdg_data_home / "applications" / "shortcut-penpot.desktop"
