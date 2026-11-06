@@ -144,7 +144,7 @@ A store is a folder that holds shortcuts in a `shortcuts.json` file, plus any na
 | `list` | Global store | Both stores | Not available | Not available |
 | `new`, `add`, `link` | Writes to the global store | Writes to the global store | Not available | Writes to the project store. Outside a project, creates one in the current directory |
 | `update` | Namespaces in the global store | The project store, and namespaces in both stores | Not available | Not available |
-| `init` | Creates a project store in the current directory | Creates a project store in the current directory, unless it has one | Different meaning, inside and outside a project: imports `SOURCE` into the global store, or with no `SOURCE` creates an empty global store | Not available |
+| `init` | Creates a project store in the current directory | Creates a project store in the current directory, unless it has one | Different meaning, inside and outside a project: imports `SOURCE` into the global store, or with no `SOURCE` creates an empty global store if there is none | Not available |
 | `migrate` | Global store | Global store and project store | Not available | Not available |
 | `completion`, `help`, `--version` | No store | No store | Not available | Not available |
 
@@ -158,7 +158,7 @@ The run line and `show` say so when a project shortcut hides a global one, and `
 
 An unapproved project shortcut is refused, never replaced by the global one.
 
-**Unreadable `shortcuts.json`.** If a project's `shortcuts.json` can't be read, `shortcut r <name>` refuses any name the project had when you last approved it, and any name in the project's namespaces. `shortcut run --global <name>` reaches the global one. Any other name falls through to the global store with a warning on stderr. `show`, `edit`, `location`, `rm` and `fix <name>` can't see the project's shortcuts. A name only in the project gives `not found`. A name that is also in the global store lands on the global shortcut with the same warning, and `rm` then removes the global one. `list` and `fix` report the error. `update`, `new --local` and `migrate` stop with it. For a file that can be read but has an unknown field, see [Entry fields](#entry-fields).
+**Unreadable `shortcuts.json`.** If a project's `shortcuts.json` can't be read, `shortcut r <name>` refuses any name the project had when you last approved it, and any name in the project's namespaces. `shortcut run --global <name>` reaches the global one. Any other name falls through to the global store with a warning on stderr. `show`, `edit`, `location`, `rm` and `fix <name>` can't see the project's shortcuts, so a name only in the project gives `not found`. For a name in the global store, `show`, `location` and `fix <name>` use the global shortcut with the same warning, and `edit` and `rm` refuse unless you pass `--global`. `list` and `fix` report the error. `update`, `new --local` and `migrate` stop with it. For a file that can be read but has an unknown field, see [Entry fields](#entry-fields).
 
 **Namespaces.** A namespace belongs to the store that holds its file in `imports/` or lists it under `"imports"`. `--namespace NAME` writes to namespace `NAME` in the global store, or in the project store with `--local`. Looking up a name covers namespaces too: project store, then global store, and `--global` skips the project store's namespaces. If both stores have a namespace with the same name, `shortcut update <namespace>` approves the project store's. `shortcut update` with no group approves both.
 
@@ -352,7 +352,7 @@ FLAGS for `new`, `add` and `link`:
 
 `shortcut init` creates an empty project store (`.shortcuts/`) in the current directory. To use a project that already has one, clone it and run `shortcut update` there.
 
-`shortcut init --global [SOURCE] [-y]` shows what a collection would add to your global store, asks `import? [y/N]`, and copies what it showed. A collection is a folder or git URL with a `shortcuts.json` at its root or in `.shortcuts/`. Without a terminal it needs `-y`. It runs nothing, and [nothing asks for approval later](#security-model). Only the file's own shortcuts are copied, not its namespaces. Names that already exist, symlinks, linked scripts, paths that escape the source, and `cwd` values that are relative or don't exist here are skipped and reported.
+`shortcut init --global [SOURCE] [-y]` shows what a collection would add to your global store, asks `import? [y/N]`, and copies what it showed. A collection is a folder or git URL with a `shortcuts.json` at its root or in `.shortcuts/`. Without a terminal it needs `-y`. It runs nothing, and [nothing asks for approval later](#security-model). Only the file's own shortcuts are copied, not its namespaces. Names that already exist as a shortcut or namespace, symlinks, linked scripts, paths that escape the source, and `cwd` values that are relative or don't exist here are skipped and reported.
 
 ```bash
 shortcut init --global https://github.com/example/dev-shortcuts.git

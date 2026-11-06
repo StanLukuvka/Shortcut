@@ -309,6 +309,24 @@ class TestStores(ShortcutTestCase):
 
 
 class TestEntries(ShortcutTestCase):
+    def test_args_need_a_name_that_is_a_string(self):
+        for arg in ({"required": True}, {"name": None}, {"name": True}):
+            entry = {"inline": "echo hi", "args": [arg]}
+            self.write_import(self.shortcuts_home, "ns", {"version": 2, "shortcuts": {"go": entry}})
+            res = self.run_cli(["update", "ns", "-y"])
+            self.assertEqual(res.returncode, 1, arg)
+            self.assertIn("needs a 'name'", res.stderr)
+
+    def test_commands_that_take_a_name_show_how_many(self):
+        for cmd in ("show", "location", "rm", "edit"):
+            self.assertIn("[namespace] name\n", self.run_cli([cmd, "--help"]).stdout)
+
+    def test_init_global_leaves_an_existing_store_alone(self):
+        self.run_cli(["new", "keep", "--", "echo keep"])
+        res = self.run_cli(["init", "--global"])
+        self.assertIn("Global store already exists", res.stdout)
+        self.assertEqual(self.run_cli(["r", "keep"]).stdout, "keep\n")
+
     def test_add_and_link_paths(self):
         # 1. Add copy from file
         src_file = self.script("source.sh", "#!/usr/bin/env bash\necho source\n", mode=0o644)
@@ -773,6 +791,20 @@ class TestBrokenStores(ShortcutTestCase):
         registry.write_text(good, encoding="utf-8")
         self.assertEqual(self.run_cli(["r", "build"], cwd=str(proj)).stdout, "project\n")
 
+    def test_broken_project_stops_rm_and_edit_reaching_the_global_one(self):
+        self.run_cli(["new", "x", "--", "echo g"])
+        proj = self.broken_project()
+        for args in (["rm", "x", "-y"], ["edit", "x"]):
+            res = self.run_cli(args, cwd=str(proj))
+            self.assertEqual(res.returncode, 1, args)
+            self.assertIn("corrupt registry", res.stderr)
+            self.assertIn("add --global", res.stderr)
+        self.assertIn("x", self.load_global())
+
+        self.assertEqual(self.run_cli(["show", "x"], cwd=str(proj)).returncode, 0)
+        self.assertEqual(self.run_cli(["rm", "--global", "x", "-y"], cwd=str(proj)).returncode, 0)
+        self.assertNotIn("x", self.load_global())
+
     def test_broken_project_offers_the_global_one_only_when_there_is_one(self):
         proj = self.project({"go": {"inline": "echo project"}}, approved=True)
         self.corrupt_store(proj / ".shortcuts")
@@ -808,11 +840,6 @@ class TestBrokenStores(ShortcutTestCase):
         res = self.run_cli(["show", "docker", "ps"], cwd=str(proj))
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertNotIn("so this is the global", res.stderr)
-
-    def test_broken_project_warns_before_rm_reaches_the_global_one(self):
-        self.run_cli(["new", "build", "--", "true"])
-        proj = self.broken_project()
-        self.assertIn("so this is the global 'build'", self.run_cli(["rm", "build", "-y"], cwd=str(proj)).stderr)
 
     def test_broken_global_store_still_reports(self):
         self.corrupt_store(self.shortcuts_home)

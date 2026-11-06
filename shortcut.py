@@ -44,7 +44,8 @@ def validate_args(name: str, args: Any) -> None:
     if not isinstance(args, list):
         bad("'args' must be a list")
     for i, arg in enumerate(args):
-        if not isinstance(arg, dict) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", str(arg.get("name"))):
+        if not isinstance(arg, dict) or not isinstance(arg.get("name"), str) \
+                or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", arg["name"]):
             bad("every entry in 'args' needs a 'name' (letters, digits, _ and -)")
         unknown = sorted(set(arg) - {"name", "required", "default", "desc", "rest"})
         if unknown:
@@ -573,16 +574,25 @@ class ResolvedShortcut:
 
 
 def find_entry(
-    words: List[str], caller_cwd: Optional[str] = None, skip_local: bool = False, strict: bool = False
+    words: List[str],
+    caller_cwd: Optional[str] = None,
+    skip_local: bool = False,
+    strict: bool = False,
+    writes: bool = False,
 ) -> Tuple[Group, str, Any, List[str], bool]:
     """Find `name` or `namespace name` without judging the entry: (group, name, raw entry, leftover
     words, hides a global one). strict (for run) makes a store's load errors stop lookups in that store; the
-    commands that repair a store leave it False. A name found past a broken store gets a warning."""
+    commands that repair a store leave it False. A name found past a broken store gets a warning, or with
+    writes (for edit and rm) an error: it may be the wrong shortcut, and --global says it isn't."""
     stores = visible_stores(caller_cwd, skip_local)
     first, rest = words[0], words[1:]
     broken: List[str] = []
 
     def warn_broken() -> None:
+        if writes and broken:
+            raise ValueError(
+                f"{broken[0]}; this would change the global '{first}'. Repair the file, or add --global"
+            )
         for error in broken:
             print(f"warning: {error}; its shortcuts are skipped, so this is the global '{first}'", file=sys.stderr)
 
@@ -625,19 +635,23 @@ def resolve_run_dir(cwd: Optional[str], group: Group, caller_cwd: str) -> str:
 
 
 def resolve_shortcut(
-    words: List[str], caller_cwd: Optional[str] = None, skip_local: bool = False, strict: bool = False
+    words: List[str],
+    caller_cwd: Optional[str] = None,
+    skip_local: bool = False,
+    strict: bool = False,
+    writes: bool = False,
 ) -> Tuple[ResolvedShortcut, List[str]]:
     """Find what `shortcut run <words>` runs, and where; also returns the words left over as arguments."""
     caller_cwd = caller_cwd or os.getcwd()
-    group, name, raw, rest, hides_global = find_entry(words, caller_cwd, skip_local, strict)
+    group, name, raw, rest, hides_global = find_entry(words, caller_cwd, skip_local, strict, writes)
     entry = ShortcutEntry.from_dict(name, raw)
     run_cwd = resolve_run_dir(entry.cwd, group, caller_cwd)
     return ResolvedShortcut(entry=entry, group=group, run_cwd=run_cwd, hides_global=hides_global), rest
 
 
-def resolve_name(words: List[str], skip_local: bool = False) -> ResolvedShortcut:
+def resolve_name(words: List[str], skip_local: bool = False, writes: bool = False) -> ResolvedShortcut:
     """For commands that name a shortcut: `name` or `namespace name`, and nothing else."""
-    resolved, rest = resolve_shortcut(words, skip_local=skip_local)
+    resolved, rest = resolve_shortcut(words, skip_local=skip_local, writes=writes)
     if rest:
         die(f"too many names: {shlex.join(words)}")
     return resolved
@@ -1343,7 +1357,11 @@ def cmd_list(args: List[str]) -> int:
 
 
 def cmd_show(args: List[str]) -> int:
-    parser = Parser(prog="shortcut show", description="Show shortcut details and content")
+    parser = Parser(
+        prog="shortcut show",
+        usage="%(prog)s [-h] [--global] [namespace] name",
+        description="Show shortcut details and content",
+    )
     parser.add_argument("name", nargs="+", help="Shortcut name, or namespace and name")
     add_global_flag(parser)
     parsed = parser.parse_args(args)
@@ -1388,7 +1406,11 @@ def cmd_show(args: List[str]) -> int:
 
 
 def cmd_location(args: List[str]) -> int:
-    parser = Parser(prog="shortcut location", description="Print the path of a shortcut's script")
+    parser = Parser(
+        prog="shortcut location",
+        usage="%(prog)s [-h] [--log] [--global] [namespace] name",
+        description="Print the path of a shortcut's script",
+    )
     parser.add_argument("name", nargs="+", help="Shortcut name, or namespace and name")
     parser.add_argument("--log", action="store_true", help="Print the path of its log instead")
     add_global_flag(parser)
@@ -1406,14 +1428,16 @@ def cmd_location(args: List[str]) -> int:
 
 
 def cmd_rm(args: List[str]) -> int:
-    parser = Parser(prog="shortcut rm", description="Remove a shortcut")
+    parser = Parser(
+        prog="shortcut rm", usage="%(prog)s [-h] [-y] [--global] [namespace] name", description="Remove a shortcut"
+    )
     parser.add_argument("name", nargs="+", help="Shortcut name, or namespace and name")
     parser.add_argument("-y", "--yes", action="store_true", help="Do not prompt for confirmation")
     add_global_flag(parser)
     parsed = parser.parse_args(args)
 
     # Raw lookup: an entry that can't run must still be removable
-    group, name, raw_entry, rest, _ = find_entry(parsed.name, skip_local=parsed.skip_local)
+    group, name, raw_entry, rest, _ = find_entry(parsed.name, skip_local=parsed.skip_local, writes=True)
     if rest:
         die(f"too many names: {shlex.join(parsed.name)}")
     display = group.display(name)
@@ -1458,11 +1482,15 @@ def cmd_rm(args: List[str]) -> int:
 
 
 def cmd_edit(args: List[str]) -> int:
-    parser = Parser(prog="shortcut edit", description="Edit shortcut script in editor")
+    parser = Parser(
+        prog="shortcut edit",
+        usage="%(prog)s [-h] [--global] [namespace] name",
+        description="Edit shortcut script in editor",
+    )
     parser.add_argument("name", nargs="+", help="Shortcut name, or namespace and name")
     add_global_flag(parser)
     parsed = parser.parse_args(args)
-    resolved = resolve_name(parsed.name, parsed.skip_local)
+    resolved = resolve_name(parsed.name, parsed.skip_local, writes=True)
     editor_cmd = get_editor_cmd()
     entry = resolved.entry
     if entry.inline is not None:
@@ -1702,6 +1730,7 @@ def plan_import(
     scripts: Dict[str, bytes] = {}
     skipped: List[str] = []
     dest_shortcuts = dest_registry.get("shortcuts", {})
+    dest_namespaces = load_store(dest_store_dir).namespaces
     source_shortcuts = source_registry.get("shortcuts", {})
     if not isinstance(source_shortcuts, dict):
         return entries, scripts, skipped
@@ -1716,6 +1745,9 @@ def plan_import(
 
         if name in dest_shortcuts:
             skipped.append(f"{name} (already exists)")
+            continue
+        if name in dest_namespaces:
+            skipped.append(f"{name} (already a namespace)")
             continue
 
         script_field = entry_data.get("script")
@@ -1814,6 +1846,9 @@ def cmd_init(args: List[str]) -> int:
 
     dest_store_dir = get_global_store_dir()
     if not parsed.source:
+        if registry_exists(dest_store_dir):
+            print(f"Global store already exists at {dest_store_dir}")
+            return 0
         init_store(dest_store_dir)
         print(f"Initialized empty global store at {dest_store_dir}")
         return 0

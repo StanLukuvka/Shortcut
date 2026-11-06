@@ -16,6 +16,7 @@ Changes how a shortcut is run, where it runs and how a project is approved. `sho
 - Unknown fields are errors, at the top of a file, in an entry and in `args`. A file from a newer format is refused, with a prompt to upgrade.
 - `shortcut update` refuses a group with an entry that couldn't run: an invalid entry, or a missing script.
 - If a project's `shortcuts.json` can't be read, `run` refuses any name the project had when last approved. `run --global` reaches the global one. Any other name falls through to the global store with a warning.
+- With an unreadable project `shortcuts.json`, `edit` and `rm` refuse a name in the global store unless you pass `--global`.
 - Declining a prompt from `run`, `rm` or `update` exits 1 and prints `Aborted.` to stderr. The exit code for `rm` changes from 0 to 1.
 - Run logs of project shortcuts live in the global store, under `logs/<id>/`. A new project's `.gitignore` lists only `.lock`. Logs already in `.shortcuts/logs/` are left there and no longer read. A project's store is never written through a symlink: `.shortcuts/` itself, `.lock`, `.gitignore`, or a script `new` or `add` would create.
 - `init --global SOURCE` shows what it would add and asks. Without a terminal it needs `-y`. It copies what it showed, writes nothing if you decline, and never replaces a file already in the store.
