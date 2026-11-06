@@ -2264,6 +2264,56 @@ class TestShortcut(unittest.TestCase):
             self.assertEqual(res.returncode, 1, name)
             self.assertEqual(victim.read_text(encoding="utf-8"), "keep\n", name)
 
+    def test_new_and_add_never_write_through_a_committed_symlink(self):
+        victim = self.tmp_path / "victim"
+        victim.write_text("keep\n", encoding="utf-8")
+        source = self.tmp_path / "source.sh"
+        source.write_text("echo new\n", encoding="utf-8")
+        proj = self.tmp_path / "proj"
+        (proj / ".shortcuts" / "scripts").mkdir(parents=True)
+        self.write_store(proj / ".shortcuts", {})
+        (proj / ".shortcuts" / "scripts" / "build.sh").symlink_to(victim)
+        res = self.run_cli(["add", "build", str(source), "--desc", "d", "--local"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("is a symlink", res.stderr)
+        res = self.run_cli(["new", "build", "--local", "--desc", "d"], cwd=str(proj),
+                           env={"SHORTCUT_EDITOR_CMD": "true"})
+        self.assertEqual(res.returncode, 1, res.stdout)
+        self.assertEqual(victim.read_text(encoding="utf-8"), "keep\n")
+        self.assertNotIn("build", json.loads((proj / ".shortcuts" / "shortcuts.json").read_text())["shortcuts"])
+
+        # A symlinked folder is the same hole
+        elsewhere = self.tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        other = self.tmp_path / "other"
+        (other / ".shortcuts").mkdir(parents=True)
+        self.write_store(other / ".shortcuts", {})
+        (other / ".shortcuts" / "scripts").symlink_to(elsewhere)
+        res = self.run_cli(["add", "build", str(source), "--desc", "d", "--local"], cwd=str(other))
+        self.assertEqual(res.returncode, 1)
+        self.assertEqual(list(elsewhere.iterdir()), [])
+
+    def test_a_symlinked_store_is_not_initialised(self):
+        home = self.tmp_path / "elsewhere"
+        home.mkdir()
+        (home / ".gitignore").write_text("keep\n", encoding="utf-8")
+        proj = self.tmp_path / "proj"
+        proj.mkdir()
+        (proj / ".shortcuts").symlink_to(home)
+        res = self.run_cli(["init"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("is a symlink", res.stderr)
+        self.assertEqual((home / ".gitignore").read_text(encoding="utf-8"), "keep\n")
+        self.assertEqual(sorted(p.name for p in home.iterdir()), [".gitignore"])
+
+    def test_import_with_a_closed_stdout_still_imports(self):
+        src = self.tmp_path / "source"
+        self.write_store(src, {"hi": {"inline": "echo hi"}})
+        cmd = f"{shlex.quote(sys.executable)} {shlex.quote(str(SHORTCUT))} init --global {shlex.quote(str(src))} -y >&-"
+        res = subprocess.run(["bash", "-c", cmd], cwd=str(self.home_dir), env=self.env, capture_output=True, text=True)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("hi", self.load_global())
+
     def test_import_with_nothing_new_asks_nothing(self):
         src = self.tmp_path / "source"
         self.write_store(src, {"hi": {"inline": "echo hi"}})

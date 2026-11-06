@@ -213,6 +213,8 @@ def new_local_store_dir(cwd: str) -> str:
     store_dir = os.path.join(cwd, ".shortcuts")
     if is_global_store(store_dir):
         die(f"{store_dir} is the global store, so it can't hold local shortcuts. Run this inside a project folder.")
+    if os.path.islink(store_dir):
+        die(f"{store_dir} is a symlink, so a store there would be written somewhere else.")
     return store_dir
 
 
@@ -1078,6 +1080,17 @@ def _stored_script_field(group: Group, filename: str) -> Tuple[str, str]:
     return os.path.relpath(abs_path, group.script_base), abs_path
 
 
+def refuse_symlinks(group: Group, path: str) -> None:
+    """A repo can commit scripts/, or one script, as a symlink to a file of yours. Your own stores can do what they like."""
+    if not group.needs_approval:
+        return
+    base = group.folder if group.name else group.store_dir
+    parts = pathlib.Path(os.path.relpath(path, base)).parts
+    for depth in range(1, len(parts) + 1):
+        if os.path.islink(os.path.join(base, *parts[:depth])):
+            raise ValueError(f"{os.path.join(base, *parts[:depth])} is a symlink, so this would write somewhere else")
+
+
 def add_global_flag(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--global", dest="skip_local", action="store_true",
                         help="Skip this project's shortcuts, to reach a global one it hides")
@@ -1182,6 +1195,7 @@ def cmd_new(args: List[str]) -> int:
                 die(f"editor exited with code {rc}; shortcut '{parsed.name}' was not created")
 
         def write_script() -> None:
+            refuse_symlinks(group, abs_script_path)
             shutil.copyfile(draft, abs_script_path)
             os.chmod(abs_script_path, 0o755)
 
@@ -1223,6 +1237,7 @@ def cmd_add(args: List[str]) -> int:
     rel_script_path, abs_script_path = _stored_script_field(group, f"{parsed.name}{ext}")
 
     def write_script() -> None:
+        refuse_symlinks(group, abs_script_path)
         if content is not None:
             with open(abs_script_path, "w", encoding="utf-8") as f:
                 f.write(content)
@@ -1484,6 +1499,8 @@ def diff_files(old: Dict[str, str], new: Dict[str, str]) -> List[str]:
 
 def show_diff(lines: List[str]) -> None:
     """A definition must not be able to rewrite the screen you approve it on."""
+    if not sys.stdout:
+        return
     lines = [safe(line) for line in lines]
     tty_out = sys.stdout.isatty()
     if tty_out:
