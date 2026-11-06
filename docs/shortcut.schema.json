@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "shortcut namespace file",
+  "description": "A .shortcut file: one namespace of shortcuts, in format version 2. Only the last entry in 'args' can set 'rest'; the schema doesn't check that, but shortcut does.",
+  "type": "object",
+  "required": ["version", "shortcuts"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "description": "Format version.",
+      "const": 2
+    },
+    "description": {
+      "description": "Description of the namespace. Shown in 'list'.",
+      "type": "string"
+    },
+    "shortcuts": {
+      "description": "The shortcuts in this namespace, by name.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "entry": {
+      "description": "One shortcut. Needs exactly one of 'inline' and 'script'.",
+      "type": "object",
+      "additionalProperties": false,
+      "oneOf": [
+        { "required": ["inline"] },
+        { "required": ["script"] }
+      ],
+      "properties": {
+        "description": {
+          "description": "Shown in 'list' and 'show'.",
+          "type": "string"
+        },
+        "inline": {
+          "description": "The command to run.",
+          "type": "string"
+        },
+        "script": {
+          "description": "Path to a script. A relative path starts at this file's folder and can't escape it. An absolute path is used as it is.",
+          "type": "string"
+        },
+        "cwd": {
+          "description": "Where it runs: 'caller', a path relative to this file's folder, an absolute path, or a path starting with ~. Default 'caller'.",
+          "type": "string"
+        },
+        "confirm": {
+          "description": "Ask before running. Default false.",
+          "type": "boolean"
+        },
+        "args": {
+          "description": "Declared arguments.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/arg"
+          }
+        },
+        "log": {
+          "description": "Log the output. Default true.",
+          "type": "boolean"
+        },
+        "icon": {
+          "description": "Freedesktop icon name for a desktop launcher. Default 'utilities-terminal'.",
+          "type": "string"
+        },
+        "created": {
+          "description": "Date created, YYYY-MM-DD.",
+          "type": "string"
+        },
+        "created_by": {
+          "description": "Who created it, from --by.",
+          "type": "string"
+        }
+      }
+    },
+    "arg": {
+      "description": "One declared argument.",
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "Argument name.",
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+        },
+        "required": {
+          "description": "Refuse to run when this argument is missing and has no default.",
+          "type": "boolean"
+        },
+        "default": {
+          "description": "Value used when the argument is missing.",
+          "type": "string"
+        },
+        "desc": {
+          "description": "A note for people reading the file. Nothing prints it.",
+          "type": "string"
+        },
+        "rest": {
+          "description": "Take all remaining arguments. Last entry only.",
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}
