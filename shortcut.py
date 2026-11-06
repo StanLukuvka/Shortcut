@@ -31,7 +31,9 @@ CALLER: str = "caller"  # 'cwd' value, and the default: run in the user's curren
 LEGACY_PREFIXES: Tuple[str, ...] = ("g_", "glob_", "global_")
 IMPORT_SUFFIX: str = ".shortcut"  # an imported namespace, in the same JSON format as shortcuts.json
 APPROVALS_DIR: str = "approvals"  # in the global store: one file per approved group, hash + snapshot
-BINARY_MARK: str = "\0binary:"  # snapshot value for non-UTF-8 content, followed by its SHA-256
+BINARY_MARK: str = "\0binary:"  # snapshot value for a binary file, followed by its SHA-256
+INVALID_MARK: str = "\0not UTF-8, sha256 "  # last line of a text file with bad bytes; shown text alone is ambiguous
+CONTROL_CHARS = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069]")
 POSITIONAL = r"\$(?:[1-9@*]|\{[1-9@*])"  # $1, $@, $*, ${1}: how a shell command reads its arguments
 
 
@@ -115,6 +117,33 @@ class ShortcutEntry:
         return d
 
 
+def safe(text: str) -> str:
+    """Text as it can be shown: control characters are printed, never obeyed. Keeps newlines and tabs."""
+    def visible(match: re.Match) -> str:
+        code = ord(match.group())
+        return f"^{chr(code ^ 0x40)}" if code < 0x80 else f"\\u{code:04x}"
+    return CONTROL_CHARS.sub(visible, text)
+
+
+class SafeOutput:
+    """Wraps sys.stdout and sys.stderr so nothing printed from a file can rewrite the screen a person
+    approves on. A child's output goes to .buffer and isn't touched; write_styled adds our own colour."""
+
+    def __init__(self, stream: Any) -> None:
+        self.stream = stream
+
+    def write(self, text: str) -> int:
+        return self.stream.write(safe(text))
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.stream, name)
+
+
+def write_styled(file: Any, text: str) -> None:
+    """Write past SafeOutput, for colour codes of our own. Everything from a file must already be safe()."""
+    getattr(file, "stream", file).write(text)
+
+
 def die(msg: str, exit_code: int = 1) -> NoReturn:
     print(f"error: {msg}", file=sys.stderr)
     sys.exit(exit_code)
@@ -156,7 +185,7 @@ def init_store(store_dir: str) -> None:
         if not registry_exists(store_dir):
             if not is_global_store(store_dir):
                 with open(os.path.join(store_dir, ".gitignore"), "w", encoding="utf-8") as f:
-                    f.write("logs/\n.lock\n")
+                    f.write(".lock\n")
             save_registry_atomic(store_dir, {"version": REGISTRY_VERSION, "shortcuts": {}})
 
 
@@ -282,8 +311,13 @@ class Group:
         return f"{self.name} {name}" if self.name else name
 
     def log_path(self, name: str) -> str:
+        """Always in the global store: a repo could commit a project's logs/ as a symlink and have a run
+        write through it, and nothing approved would show that."""
         stem = f"{self.name}.{name}" if self.name else name
-        return os.path.join(self.store_dir, "logs", f"{stem}.log")
+        logs = os.path.join(get_global_store_dir(), "logs")
+        if not is_global_store(self.store_dir):
+            logs = os.path.join(logs, hashlib.sha256(os.path.realpath(self.store_dir).encode()).hexdigest())
+        return os.path.join(logs, f"{stem}.log")
 
     @property
     def needs_approval(self) -> bool:
@@ -412,10 +446,27 @@ def display_path(group: Group, path: str) -> str:
     return path if rel.startswith("..") else rel
 
 
+def reviewable(raw: bytes) -> str:
+    """A file as it's hashed and shown. Only a real binary is hidden: a bad byte must not hide a script,
+    and the digest keeps two files that display the same from hashing the same."""
+    digest = hashlib.sha256(raw).hexdigest()
+    if b"\0" in raw or raw.startswith(b"\x7fELF"):
+        return BINARY_MARK + digest
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return f"{raw.decode('utf-8', 'backslashreplace')}\n{INVALID_MARK}{digest}\n"
+
+
 def group_files(group: Group) -> Dict[str, str]:
-    """The group as {path: content}, the JSON normalised: exactly what is hashed, snapshotted and diffed."""
+    """The group as {path: content}, the JSON normalised: exactly what is hashed, snapshotted and diffed.
+    A relative cwd also adds where it really leads, so a symlink moved under it needs approving; the
+    leading ./ keeps that key apart from any script, whose path is normalised."""
     files = {display_path(group, group.file): json.dumps(group.data, indent=2, sort_keys=True) + "\n"}
-    for data in group.shortcuts.values():
+    for name, data in group.shortcuts.items():
+        cwd = data.get("cwd") if isinstance(data, dict) else None
+        if isinstance(cwd, str) and cwd and cwd != CALLER and not os.path.isabs(os.path.expanduser(cwd)):
+            files[f"./cwd of {name}"] = os.path.realpath(resolve_run_dir(cwd, group, "")) + "\n"
         script = data.get("script") if isinstance(data, dict) else None
         if not isinstance(script, str):
             continue
@@ -425,10 +476,7 @@ def group_files(group: Group) -> Dict[str, str]:
                 raw = f.read()
         except (ValueError, OSError):
             continue  # shows up as a change the moment it becomes readable
-        try:
-            files[display_path(group, path)] = raw.decode("utf-8")
-        except UnicodeDecodeError:
-            files[display_path(group, path)] = BINARY_MARK + hashlib.sha256(raw).hexdigest()
+        files[display_path(group, path)] = reviewable(raw)
     return files
 
 
@@ -524,8 +572,11 @@ def find_entry(
         if strict and problems and (first in store.main.shortcuts or first in store.namespaces):
             raise ValueError("; ".join(problems))
         if strict and store.main.error and first in approved_names(store.main):
+            home = stores[-1]
+            if first not in home.main.shortcuts and first not in home.namespaces:
+                raise ValueError(f"{store.main.error}; '{first}' was approved as this project's. Repair the file.")
             raise ValueError(
-                f"{store.main.error}; '{first}' was approved as this project's, so it won't run a global one "
+                f"{store.main.error}; '{first}' was approved as this project's, so it won't run the global one "
                 f"instead. Repair the file, or run: shortcut run --global {first}"
             )
         if first in store.main.shortcuts and (not rest or first not in store.namespaces):
@@ -741,9 +792,9 @@ def _run_in_pty(cmd: List[str], cwd: str, env: Dict[str, str], lf: Any) -> Tuple
             os.close(master)
 
 
-def ask(prompt: str) -> bool:
+def ask(prompt: str, accept: Tuple[str, ...] = ("y", "yes")) -> bool:
     try:
-        return input(prompt).strip().lower() in ("y", "yes")
+        return input(safe(prompt)).strip().lower() in accept
     except (EOFError, KeyboardInterrupt):
         print()
         return False
@@ -806,14 +857,16 @@ def run_shortcut(words: List[str], skip_local: bool = False, assume_yes: bool = 
     if entry.confirm and not assume_yes:
         if not sys.stdin.isatty():
             die(f"'{name}' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y {name})")
-        if not ask(f"run '{name}' in {resolved.run_cwd}? [y/N] "):
+        if not ask(f"run '{name}' in {os.path.realpath(resolved.run_cwd)}? [y/N] "):
             print("Aborted.", file=sys.stderr)
             return 1
     if os.environ.get("SHORTCUT_SHOW_DIR", "1") != "0":
-        line = f"→ {resolved.run_cwd}"
+        line = f"→ {os.path.realpath(resolved.run_cwd)}"
         if resolved.hides_global:
             line += f"  (project shortcut; your global '{name}' is hidden here: shortcut run --global {name})"
-        print(f"\033[2m{line}\033[0m" if sys.stderr.isatty() else line, file=sys.stderr, flush=True)
+        line = safe(line)
+        write_styled(sys.stderr, f"\033[2m{line}\033[0m\n" if sys.stderr.isatty() else f"{line}\n")
+        sys.stderr.flush()
 
     # Build command argv
     if entry.inline is not None:
@@ -1396,22 +1449,25 @@ def diff_files(old: Dict[str, str], new: Dict[str, str]) -> List[str]:
         before, after = old.get(path, ""), new.get(path, "")
         if path in old and path in new and before == after:
             continue
-        if before.startswith(BINARY_MARK) or after.startswith(BINARY_MARK):
+        if after.startswith(BINARY_MARK):
             lines.append(f"Binary file {path} changed")
             continue
+        if before.startswith(BINARY_MARK):
+            before = ""
+        shown = path.removeprefix("./")
         changed = list(difflib.unified_diff(
             before.splitlines(keepends=True), after.splitlines(keepends=True),
-            fromfile=f"a/{path}", tofile=f"b/{path}", lineterm="",
+            fromfile=f"a/{shown}", tofile=f"b/{shown}", lineterm="",
         ))
         lines.extend(line.rstrip("\r\n") for line in changed)
         if not changed:  # an empty file added or removed
-            lines.extend([f"--- a/{path}", f"+++ b/{path}"])
+            lines.extend([f"--- a/{shown}", f"+++ b/{shown}"])
     return lines
 
 
 def show_diff(lines: List[str]) -> None:
     """A definition must not be able to rewrite the screen you approve it on."""
-    lines = [line.translate({0x1b: "^[", 0x0d: "^M", 0x08: "^H"}) for line in lines]
+    lines = [safe(line) for line in lines]
     tty_out = sys.stdout.isatty()
     if tty_out:
         def colour(line: str) -> str:
@@ -1426,8 +1482,16 @@ def show_diff(lines: List[str]) -> None:
             env = {**os.environ, "LESS": os.environ.get("LESS", "FRX")}
             subprocess.run(shlex.split(pager), input=text.encode(), env=env, check=True)
             return
-    sys.stdout.write(text)
+    write_styled(sys.stdout, text)
     sys.stdout.flush()
+
+
+def confirm_review(verb: str, old: Dict[str, str], new: Dict[str, str]) -> bool:
+    """Ask after a diff. A binary file can't be shown, so taking one unseen has to be typed out."""
+    unseen = sorted(path for path, text in new.items() if text.startswith(BINARY_MARK) and old.get(path) != text)
+    if unseen:
+        return ask(f"can't show {', '.join(unseen)}. Type binary to {verb} it unseen: ", ("binary",))
+    return ask(f"{verb}? [y/N] ")
 
 
 def approve_group(group: Group, assume_yes: bool, global_names: Set[str]) -> int:
@@ -1445,19 +1509,21 @@ def approve_group(group: Group, assume_yes: bool, global_names: Set[str]) -> int
     if record is not None and record.get("hash") == files_hash(files):
         print(f"{group.label}: already approved, nothing has changed.")
         return 0
+    old = record["snapshot"] if record else {}
     print(f"{'Changes to' if record else 'New to you:'} {group.label}")
-    show_diff(diff_files(record["snapshot"] if record else {}, files))
+    show_diff(diff_files(old, files))
     if not group.name:
         for name in sorted(set(group.shortcuts) & global_names):
             print(f"Inside this project, '{name}' hides your global '{name}'.")
     if not assume_yes:
         if not sys.stdin.isatty():
             die(f"approve {group.label} in a terminal, or pass -y")
-        if not ask("approve? [y/N] "):
+        if not confirm_review("approve", old, files):
             print("Aborted.", file=sys.stderr)
             return 1
     save_approval(group, files)
-    print(f"Approved {group.label}. Any change needs `{group.update_cmd}` again.")
+    print(f"Approved {group.label}. This covers its definitions, not what they call. "
+          f"Any change to them needs `{group.update_cmd}` again.")
     return 0
 
 
@@ -1509,7 +1575,8 @@ def store_report(stores: List[Store]) -> List[str]:
                 status = f"BROKEN: {'; '.join(errors)}"
             else:
                 state = approval_state(group)
-                status = {"ok": "ok", "new": "not approved", "changed": "changed since approved"}[state]
+                ok = "definitions unchanged since approved" if group.needs_approval else "ok"
+                status = {"ok": ok, "new": "not approved", "changed": "changed since approved"}[state]
             lines.append(f"{group.file}: {status}")
         lines.extend(f"{store.dir}: BROKEN: {problem}" for problem in store.problems)
     return lines
@@ -1589,19 +1656,21 @@ def is_git_source(source: str) -> bool:
     )
 
 
-def merge_init_entries(
+def plan_import(
     source_base: str,
     dest_store_dir: str,
     dest_registry: Dict[str, Any],
     source_registry: Dict[str, Any],
-) -> Tuple[List[str], List[str]]:
-    """Copy a collection's entries into the global store. Returns (imported, skipped)."""
-    imported: List[str] = []
+) -> Tuple[Dict[str, Any], Dict[str, bytes], List[str]]:
+    """What a collection would add to the global store, changing nothing: (entries, {stored script path:
+    its bytes}, skipped). The bytes are read once here, so what gets copied is what was reviewed."""
+    entries: Dict[str, Any] = {}
+    scripts: Dict[str, bytes] = {}
     skipped: List[str] = []
-    dest_shortcuts = dest_registry.setdefault("shortcuts", {})
+    dest_shortcuts = dest_registry.get("shortcuts", {})
     source_shortcuts = source_registry.get("shortcuts", {})
     if not isinstance(source_shortcuts, dict):
-        return imported, skipped
+        return entries, scripts, skipped
 
     for name, entry_data in source_shortcuts.items():
         # Validate entry structure
@@ -1657,24 +1726,38 @@ def merge_init_entries(
             dest_rel_script, dest_abs_script = _stored_script_field(
                 load_store(dest_store_dir).main, f"{name}{pathlib.Path(script_field).suffix or '.sh'}"
             )
-            os.makedirs(os.path.dirname(dest_abs_script), exist_ok=True)
-            shutil.copyfile(src_path, dest_abs_script, follow_symlinks=False)
-            os.chmod(dest_abs_script, os.stat(dest_abs_script, follow_symlinks=False).st_mode | 0o111)
+            with open(src_path, "rb") as f:
+                scripts[dest_abs_script] = f.read()
             new_entry["script"] = dest_rel_script
 
-        dest_shortcuts[name] = new_entry
-        imported.append(name)
+        entries[name] = new_entry
 
-    return imported, skipped
+    return entries, scripts, skipped
+
+
+def apply_import(store_dir: str, entries: Dict[str, Any], scripts: Dict[str, bytes]) -> None:
+    for path, raw in scripts.items():
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(raw)
+        os.chmod(path, os.stat(path).st_mode | 0o111)
+    with registry_lock(store_dir):
+        registry = load_registry(store_dir)
+        registry.setdefault("shortcuts", {}).update(entries)
+        save_registry_atomic(store_dir, registry)
+
+
 
 
 def cmd_init(args: List[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="shortcut init",
-        description="Create an empty project store here, or with --global import a collection into the global store",
+        description="Create an empty project store here, or with --global review a collection and copy it "
+                    "into the global store",
     )
     parser.add_argument("source", nargs="?", default=None, help="Local path or git URL to import from (needs --global)")
     parser.add_argument("--global", dest="is_global", action="store_true", help="Import into global store")
+    parser.add_argument("-y", "--yes", action="store_true", help="Import without asking")
     parsed = parser.parse_args(args)
 
     if not parsed.is_global:
@@ -1731,28 +1814,35 @@ def cmd_init(args: List[str]) -> int:
         else:
             die(f"no shortcuts.json found in {source_root} (checked root and .shortcuts/)")
 
-        source_registry = load_registry(source_store_dir)
-        with registry_lock(dest_store_dir):
-            dest_registry = load_registry(dest_store_dir)
-            imported, skipped = merge_init_entries(
-                source_base=source_root,
-                dest_store_dir=dest_store_dir,
-                dest_registry=dest_registry,
-                source_registry=source_registry,
-            )
-            save_registry_atomic(dest_store_dir, dest_registry)
-
-        if imported:
-            print(f"Imported ({len(imported)}):")
-            for name in imported:
-                print(f"  {name}")
+        entries, scripts, skipped = plan_import(
+            source_base=source_root,
+            dest_store_dir=dest_store_dir,
+            dest_registry=load_registry(dest_store_dir),
+            source_registry=load_registry(source_store_dir),
+        )
         if skipped:
             print(f"Skipped ({len(skipped)}):")
             for s in skipped:
                 print(f"  {s}")
-        if imported:
-            print("review with: shortcut show <name>")
+        if not entries:
+            return 0
 
+        # Global shortcuts have no approval step, so an import is reviewed here or never
+        files = {"shortcuts.json": json.dumps(entries, indent=2, sort_keys=True) + "\n"}
+        files.update({os.path.relpath(path, dest_store_dir): reviewable(raw) for path, raw in scripts.items()})
+        print(f"New from {source_str}:")
+        show_diff(diff_files({}, files))
+        if not parsed.yes:
+            if not sys.stdin.isatty():
+                die(f"import {source_str} in a terminal, or pass -y")
+            if not confirm_review("import", {}, files):
+                print("Aborted.", file=sys.stderr)
+                return 1
+        apply_import(dest_store_dir, entries, scripts)
+
+        print(f"Imported ({len(entries)}):")
+        for name in entries:
+            print(f"  {name}")
         return 0
 
     finally:
@@ -1990,7 +2080,7 @@ _shortcut() {
 
     case "$prev" in
         init)
-            COMPREPLY=( $(compgen -W "--global" -- "$cur") )
+            COMPREPLY=( $(compgen -W "--global -y" -- "$cur") )
             return 0
             ;;
         completion)
@@ -2029,7 +2119,7 @@ _shortcut() {
             fi
             ;;
         init)
-            compadd -- --global
+            compadd -- --global -y
             _files -/
             ;;
         completion)
@@ -2057,6 +2147,7 @@ complete -c shortcut -n "__fish_seen_subcommand_from run r show edit location rm
 complete -c shortcut -n "__fish_seen_subcommand_from run r rm" -s y
 complete -c shortcut -n "__fish_seen_subcommand_from location" -l log
 complete -c shortcut -n "__fish_seen_subcommand_from init" -F -l global
+complete -c shortcut -n "__fish_seen_subcommand_from init" -s y
 complete -c shortcut -n "__fish_seen_subcommand_from completion" -a "bash zsh fish"
 """
 
@@ -2096,7 +2187,8 @@ Usage:
   shortcut fix [--global] [name]            Print agent diagnostic block; with no name, check the stores
   shortcut update [group] [-y]              Review changes to project shortcuts and namespaces, and approve them
   shortcut init                             Create an empty project store (.shortcuts/) here
-  shortcut init --global [SOURCE]           Import a collection (folder or git URL) into the global store
+  shortcut init --global [SOURCE] [-y]      Review a collection (folder or git URL) and copy it into the
+                                            global store. Later changes to the source don't reach it
   shortcut migrate                          Convert 1.x shortcuts and flat ~/.shortcuts/*.sh scripts
   shortcut completion bash|zsh|fish         Print a shell completion script
   shortcut help, -h, --help                 Show this help message
@@ -2112,7 +2204,9 @@ FLAGS for new, add and link:
   --by C                    Creator identifier
 
 Project shortcuts and namespaces don't run until approved with `shortcut update`,
-and must be approved again after any change.
+and must be approved again after any change to their definitions. Approval covers
+shortcuts.json, imports and the scripts they name, not the programs those call.
+Global shortcuts have no approval step, so a global link target can change freely.
 Set SHORTCUT_SHOW_DIR=0 to hide the "→ <run directory>" line.
 """
     print(usage_text, end="")
@@ -2120,6 +2214,7 @@ Set SHORTCUT_SHOW_DIR=0 to hide the "→ <run directory>" line.
 
 def main(argv: Optional[List[str]] = None) -> NoReturn:
     args = sys.argv[1:] if argv is None else argv
+    sys.stdout, sys.stderr = SafeOutput(sys.stdout), SafeOutput(sys.stderr)
 
     if not args:
         print_usage()

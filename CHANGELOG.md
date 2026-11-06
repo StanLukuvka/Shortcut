@@ -17,6 +17,12 @@ Running a shortcut, where it runs, and how a project is trusted all change. `sho
 - `shortcut update` refuses a group with an entry that couldn't run: an invalid entry, or a missing script.
 - If a project's `shortcuts.json` can't be read, `run` refuses any name the project had when last approved, so a global shortcut never stands in for it. `run --global` still reaches the global one. Any other name falls through to the global store with a warning.
 - Declining a prompt from `run`, `rm` or `update` always exits 1 and prints `Aborted.` to stderr. `rm` used to exit 0.
+- Run logs of project shortcuts live in the global store, under `logs/<id>/`, so a symlink committed to a repo can't turn a run into a write to another file. A new project's `.gitignore` lists only `.lock`.
+- `init --global SOURCE` shows what it would add and asks, because a global shortcut has no approval step. Without a terminal it needs `-y`. What's copied is what was shown.
+- `shortcut update` approves the resolved target of a relative `cwd`, so a symlink moved under it needs approving. The run line and the confirm prompt show the real path.
+- `shortcut update` shows a script with a bad byte as text, with the bytes escaped, and only hides real binaries. Taking a binary it can't show means typing `binary` at the prompt; `-y` still skips that.
+- `shortcut fix` says `definitions unchanged since approved` instead of `ok`, and `update` says what approval covers: definitions, not what they call.
+- Nothing shortcut prints from a file can move the cursor or rewrite the screen. Control characters show as `^[`, and only a shortcut's own output reaches the terminal unchanged.
 - `shortcut version` and `init -g` are gone. Use `shortcut --version` and `init --global`.
 
 ### Added
