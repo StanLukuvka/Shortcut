@@ -508,7 +508,7 @@ The tests never touch your real `~/.shortcuts`; every test uses a temporary `HOM
 python3 -m unittest discover -s tests -v
 ```
 
-The diagrams are drawn in [docs/shortcut-overview.drawio](docs/shortcut-overview.drawio). Release notes are in [CHANGELOG.md](CHANGELOG.md).
+The diagrams are drawn in [docs/shortcut-overview.drawio](docs/shortcut-overview.drawio). The design review of 2.0.0 is in [docs/design-critique.md](docs/design-critique.md), with its [lifecycle diagram](docs/shortcut-lifecycle.png). Release notes are in [CHANGELOG.md](CHANGELOG.md).
 
 ## Uninstall
 
