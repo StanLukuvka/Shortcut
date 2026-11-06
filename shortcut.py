@@ -594,7 +594,7 @@ def find_entry(
                 f"{broken[0]}; this would change the global '{first}'. Repair the file, or add --global"
             )
         for error in broken:
-            print(f"warning: {error}; its shortcuts are skipped, so this is the global '{first}'", file=sys.stderr)
+            print(f"warning: {error}; this is the global '{first}'", file=sys.stderr)
 
     for store in stores:
         problems = ([store.main.error] if store.main.error else []) + store.problems

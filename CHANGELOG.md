@@ -45,6 +45,9 @@ Changes how a shortcut is run, where it runs and how a project is approved. `sho
 - An entry with both `inline` and `script`, or neither, is refused everywhere. With both, `run` ran the inline and ignored the script, and `fix` reported the entry as broken.
 - `new x -- echo '$1'` stored `$1` in single quotes, where it never expanded. `$1`, `$@`, `$*` and `${1}` in a several-word command now stay live.
 - `~/.shortcuts` could be taken for a project's store when `SHORTCUTS_HOME` pointed elsewhere, sending writes to the wrong store.
+- An `args` entry needs a `name` that is a string. A missing name, or `true`, passed the check.
+- `init --global SOURCE` skips a name that is already a namespace in the global store.
+- `init --global` with no source on an existing store says it already exists. It said it had created an empty one.
 
 ## 1.0.0 — 2026-10-30
 

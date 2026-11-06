@@ -761,7 +761,7 @@ class TestBrokenStores(ShortcutTestCase):
 
         res = self.run_cli(["r", "outside"], cwd=str(proj))
         self.assertEqual(res.stdout, "outside\n")
-        self.assertIn("so this is the global 'outside'", res.stderr)
+        self.assertIn("this is the global 'outside'", res.stderr)
         self.assertIn("outside", self.run_cli(["list", "--names"], cwd=str(proj)).stdout.split())
         self.assertIn("corrupt registry", self.run_cli(["list"], cwd=str(proj)).stderr)
         report = self.run_cli(["fix"], cwd=str(proj))
@@ -786,7 +786,7 @@ class TestBrokenStores(ShortcutTestCase):
 
         res = self.run_cli(["r", "other"], cwd=str(proj))
         self.assertEqual(res.stdout, "other\n")
-        self.assertIn("so this is the global 'other'", res.stderr)
+        self.assertIn("this is the global 'other'", res.stderr)
 
         registry.write_text(good, encoding="utf-8")
         self.assertEqual(self.run_cli(["r", "build"], cwd=str(proj)).stdout, "project\n")
@@ -834,12 +834,25 @@ class TestBrokenStores(ShortcutTestCase):
         self.assertEqual(res.returncode, 1)
         self.assertIn("shortcut run --global docker", res.stderr)
 
+    def test_unknown_field_warning_does_not_say_the_project_is_skipped(self):
+        self.run_cli(["new", "outside", "--", "echo outside"])
+        proj = self.project({"inside": {"inline": "true"}})
+        registry = proj / ".shortcuts" / "shortcuts.json"
+        data = json.loads(registry.read_text(encoding="utf-8"))
+        registry.write_text(json.dumps({**data, "bogus": 1}), encoding="utf-8")
+
+        res = self.run_cli(["show", "outside"], cwd=str(proj))
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("unknown field: bogus; this is the global 'outside'", res.stderr)
+        self.assertNotIn("skipped", res.stderr)
+        self.assertEqual(self.run_cli(["show", "inside"], cwd=str(proj)).returncode, 0)
+
     def test_broken_project_does_not_call_its_own_namespace_global(self):
         proj = self.broken_project()
         self.write_import(proj / ".shortcuts", "docker", {"version": 2, "shortcuts": {"ps": {"inline": "true"}}})
         res = self.run_cli(["show", "docker", "ps"], cwd=str(proj))
         self.assertEqual(res.returncode, 0, res.stderr)
-        self.assertNotIn("so this is the global", res.stderr)
+        self.assertNotIn("this is the global", res.stderr)
 
     def test_broken_global_store_still_reports(self):
         self.corrupt_store(self.shortcuts_home)
