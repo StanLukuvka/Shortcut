@@ -141,7 +141,17 @@ class SafeOutput:
 
 def write_styled(file: Any, text: str) -> None:
     """Write past SafeOutput, for colour codes of our own. Everything from a file must already be safe()."""
-    getattr(file, "stream", file).write(text)
+    stream = getattr(file, "stream", file)
+    if stream:  # None when the stream was closed
+        stream.write(text)
+
+
+class Parser(argparse.ArgumentParser):
+    """Plain output: on 3.14 argparse adds colour, and SafeOutput would print it as ^[ text."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.color = False
 
 
 def die(msg: str, exit_code: int = 1) -> NoReturn:
@@ -170,12 +180,17 @@ def find_local_store_dir(start_dir: Optional[str] = None) -> Optional[str]:
     return None
 
 
+def no_follow(path: str, flags: int) -> int:
+    """open() opener: a repo can commit any file in a project store as a symlink to one of yours."""
+    return os.open(path, flags | os.O_NOFOLLOW, 0o644)
+
+
 @contextlib.contextmanager
 def registry_lock(store_dir: str) -> Iterator[None]:
     """Serialize read-modify-write of a store's registry across processes (e.g. two agents at once).
     Not reentrant: never nest it, and never call init_store while holding it."""
     os.makedirs(store_dir, exist_ok=True)
-    with open(os.path.join(store_dir, ".lock"), "a") as lock_file:
+    with open(os.path.join(store_dir, ".lock"), "a", opener=no_follow) as lock_file:
         fcntl.flock(lock_file, fcntl.LOCK_EX)
         yield
 
@@ -184,7 +199,7 @@ def init_store(store_dir: str) -> None:
     with registry_lock(store_dir):
         if not registry_exists(store_dir):
             if not is_global_store(store_dir):
-                with open(os.path.join(store_dir, ".gitignore"), "w", encoding="utf-8") as f:
+                with open(os.path.join(store_dir, ".gitignore"), "w", encoding="utf-8", opener=no_follow) as f:
                     f.write(".lock\n")
             save_registry_atomic(store_dir, {"version": REGISTRY_VERSION, "shortcuts": {}})
 
@@ -447,15 +462,16 @@ def display_path(group: Group, path: str) -> str:
 
 
 def reviewable(raw: bytes) -> str:
-    """A file as it's hashed and shown. Only a real binary is hidden: a bad byte must not hide a script,
-    and the digest keeps two files that display the same from hashing the same."""
+    """A file as it's hashed and shown. Only a compiled program is hidden: a NUL or a bad byte must not
+    hide a script bash will still run. The digest keeps two files that display the same from hashing
+    the same, so a text file can't copy the mark, or pass for one with a bad byte."""
     digest = hashlib.sha256(raw).hexdigest()
-    if b"\0" in raw or raw.startswith(b"\x7fELF"):
+    if raw.startswith((b"\x7fELF", BINARY_MARK.encode())):
         return BINARY_MARK + digest
-    try:
-        return raw.decode("utf-8")
-    except UnicodeDecodeError:
-        return f"{raw.decode('utf-8', 'backslashreplace')}\n{INVALID_MARK}{digest}\n"
+    text = raw.decode("utf-8", "backslashreplace")
+    if text.encode("utf-8") == raw and INVALID_MARK not in text:
+        return text
+    return f"{text}\n{INVALID_MARK}{digest}\n"
 
 
 def group_files(group: Group) -> Dict[str, str]:
@@ -466,7 +482,8 @@ def group_files(group: Group) -> Dict[str, str]:
     for name, data in group.shortcuts.items():
         cwd = data.get("cwd") if isinstance(data, dict) else None
         if isinstance(cwd, str) and cwd and cwd != CALLER and not os.path.isabs(os.path.expanduser(cwd)):
-            files[f"./cwd of {name}"] = os.path.realpath(resolve_run_dir(cwd, group, "")) + "\n"
+            with contextlib.suppress(ValueError):  # a NUL: it can't run, and the JSON already shows it
+                files[f"./cwd of {name}"] = os.path.realpath(resolve_run_dir(cwd, group, "")) + "\n"
         script = data.get("script") if isinstance(data, dict) else None
         if not isinstance(script, str):
             continue
@@ -860,7 +877,7 @@ def run_shortcut(words: List[str], skip_local: bool = False, assume_yes: bool = 
         if not ask(f"run '{name}' in {os.path.realpath(resolved.run_cwd)}? [y/N] "):
             print("Aborted.", file=sys.stderr)
             return 1
-    if os.environ.get("SHORTCUT_SHOW_DIR", "1") != "0":
+    if sys.stderr and os.environ.get("SHORTCUT_SHOW_DIR", "1") != "0":
         line = f"→ {os.path.realpath(resolved.run_cwd)}"
         if resolved.hides_global:
             line += f"  (project shortcut; your global '{name}' is hidden here: shortcut run --global {name})"
@@ -1106,7 +1123,7 @@ def join_command(words: List[str]) -> str:
 
 
 def cmd_new(args: List[str]) -> int:
-    parser = argparse.ArgumentParser(prog="shortcut new", description="Create a new shortcut")
+    parser = Parser(prog="shortcut new", description="Create a new shortcut")
     parser.add_argument("name", help="Shortcut name")
     parser.add_argument("--desc", default=None, help="Shortcut description")
     add_entry_flags(parser)
@@ -1184,7 +1201,7 @@ def cmd_new(args: List[str]) -> int:
 
 
 def cmd_add(args: List[str]) -> int:
-    parser = argparse.ArgumentParser(prog="shortcut add", description="Add an existing script to shortcut store")
+    parser = Parser(prog="shortcut add", description="Add an existing script to shortcut store")
     parser.add_argument("name", help="Shortcut name")
     parser.add_argument("file", help="Path to script file, or '-' for stdin")
     parser.add_argument("--desc", required=True, help="Shortcut description")
@@ -1221,7 +1238,7 @@ def cmd_add(args: List[str]) -> int:
 
 
 def cmd_link(args: List[str]) -> int:
-    parser = argparse.ArgumentParser(prog="shortcut link", description="Link an external script to shortcut store")
+    parser = Parser(prog="shortcut link", description="Link an external script to shortcut store")
     parser.add_argument("name", help="Shortcut name")
     parser.add_argument("path", help="Path to existing script")
     parser.add_argument("--desc", required=True, help="Shortcut description")
@@ -1240,7 +1257,7 @@ def cmd_link(args: List[str]) -> int:
 
 
 def cmd_list(args: List[str]) -> int:
-    parser = argparse.ArgumentParser(prog="shortcut list", description="List available shortcuts")
+    parser = Parser(prog="shortcut list", description="List available shortcuts")
     parser.add_argument("--names", nargs="?", const="", metavar="NAMESPACE",
                         help="Print bare visible names only, or the names in one namespace")
     parsed = parser.parse_args(args)
@@ -1311,7 +1328,7 @@ def cmd_list(args: List[str]) -> int:
 
 
 def cmd_show(args: List[str]) -> int:
-    parser = argparse.ArgumentParser(prog="shortcut show", description="Show shortcut details and content")
+    parser = Parser(prog="shortcut show", description="Show shortcut details and content")
     parser.add_argument("name", nargs="+", help="Shortcut name, or namespace and name")
     add_global_flag(parser)
     parsed = parser.parse_args(args)
@@ -1356,7 +1373,7 @@ def cmd_show(args: List[str]) -> int:
 
 
 def cmd_location(args: List[str]) -> int:
-    parser = argparse.ArgumentParser(prog="shortcut location", description="Print the path of a shortcut's script")
+    parser = Parser(prog="shortcut location", description="Print the path of a shortcut's script")
     parser.add_argument("name", nargs="+", help="Shortcut name, or namespace and name")
     parser.add_argument("--log", action="store_true", help="Print the path of its log instead")
     add_global_flag(parser)
@@ -1374,7 +1391,7 @@ def cmd_location(args: List[str]) -> int:
 
 
 def cmd_rm(args: List[str]) -> int:
-    parser = argparse.ArgumentParser(prog="shortcut rm", description="Remove a shortcut")
+    parser = Parser(prog="shortcut rm", description="Remove a shortcut")
     parser.add_argument("name", nargs="+", help="Shortcut name, or namespace and name")
     parser.add_argument("-y", "--yes", action="store_true", help="Do not prompt for confirmation")
     add_global_flag(parser)
@@ -1426,7 +1443,7 @@ def cmd_rm(args: List[str]) -> int:
 
 
 def cmd_edit(args: List[str]) -> int:
-    parser = argparse.ArgumentParser(prog="shortcut edit", description="Edit shortcut script in editor")
+    parser = Parser(prog="shortcut edit", description="Edit shortcut script in editor")
     parser.add_argument("name", nargs="+", help="Shortcut name, or namespace and name")
     add_global_flag(parser)
     parsed = parser.parse_args(args)
@@ -1528,7 +1545,7 @@ def approve_group(group: Group, assume_yes: bool, global_names: Set[str]) -> int
 
 
 def cmd_update(args: List[str]) -> int:
-    parser = argparse.ArgumentParser(
+    parser = Parser(
         prog="shortcut update",
         description="Review changes to project shortcuts and namespaces, and approve them",
     )
@@ -1583,7 +1600,7 @@ def store_report(stores: List[Store]) -> List[str]:
 
 
 def cmd_fix(args: List[str]) -> int:
-    parser = argparse.ArgumentParser(prog="shortcut fix", description="Print diagnostic block for an agent")
+    parser = Parser(prog="shortcut fix", description="Print diagnostic block for an agent")
     parser.add_argument("name", nargs="*", help="Shortcut name, or namespace and name (none: check the stores)")
     add_global_flag(parser)
     parsed = parser.parse_args(args)
@@ -1642,7 +1659,7 @@ def cmd_fix(args: List[str]) -> int:
         log_text.rstrip("\r\n"),
         f"Last exit code: {last_exit}",
     ]
-    bad = [line for line in report if "BROKEN" in line or "changed since" in line or "not approved" in line]
+    bad = [line for line in report if "BROKEN" in line or ": changed since" in line or "not approved" in line]
     if bad:
         lines.extend(["--- Stores ---", *bad])
     print("\n".join(lines))
@@ -1726,6 +1743,9 @@ def plan_import(
             dest_rel_script, dest_abs_script = _stored_script_field(
                 load_store(dest_store_dir).main, f"{name}{pathlib.Path(script_field).suffix or '.sh'}"
             )
+            if os.path.lexists(dest_abs_script) or dest_abs_script in scripts:
+                skipped.append(f"{name} (would replace {dest_rel_script})")
+                continue
             with open(src_path, "rb") as f:
                 scripts[dest_abs_script] = f.read()
             new_entry["script"] = dest_rel_script
@@ -1736,6 +1756,7 @@ def plan_import(
 
 
 def apply_import(store_dir: str, entries: Dict[str, Any], scripts: Dict[str, bytes]) -> None:
+    init_store(store_dir)
     for path, raw in scripts.items():
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as f:
@@ -1750,7 +1771,7 @@ def apply_import(store_dir: str, entries: Dict[str, Any], scripts: Dict[str, byt
 
 
 def cmd_init(args: List[str]) -> int:
-    parser = argparse.ArgumentParser(
+    parser = Parser(
         prog="shortcut init",
         description="Create an empty project store here, or with --global review a collection and copy it "
                     "into the global store",
@@ -1775,8 +1796,8 @@ def cmd_init(args: List[str]) -> int:
         return 0
 
     dest_store_dir = get_global_store_dir()
-    init_store(dest_store_dir)
     if not parsed.source:
+        init_store(dest_store_dir)
         print(f"Initialized empty global store at {dest_store_dir}")
         return 0
 
@@ -1817,7 +1838,7 @@ def cmd_init(args: List[str]) -> int:
         entries, scripts, skipped = plan_import(
             source_base=source_root,
             dest_store_dir=dest_store_dir,
-            dest_registry=load_registry(dest_store_dir),
+            dest_registry=load_registry(dest_store_dir) if registry_exists(dest_store_dir) else {},
             source_registry=load_registry(source_store_dir),
         )
         if skipped:
@@ -1858,7 +1879,7 @@ def legacy_stem(name: str) -> str:
 
 
 def cmd_migrate(args: List[str]) -> int:
-    parser = argparse.ArgumentParser(
+    parser = Parser(
         prog="shortcut migrate",
         description="Convert 1.x shortcuts (g_ names, prefixes, 'dir') and flat ~/.shortcuts/*.sh scripts",
     )
@@ -2159,7 +2180,7 @@ COMPLETION_SCRIPTS: Dict[str, str] = {
 
 
 def cmd_completion(args: List[str]) -> int:
-    parser = argparse.ArgumentParser(prog="shortcut completion", description="Generate shell completion script")
+    parser = Parser(prog="shortcut completion", description="Generate shell completion script")
     parser.add_argument("shell", choices=sorted(COMPLETION_SCRIPTS), nargs="?", default="bash", help="Shell type")
     parsed = parser.parse_args(args)
     sys.stdout.write(COMPLETION_SCRIPTS[parsed.shell])
@@ -2214,7 +2235,7 @@ Set SHORTCUT_SHOW_DIR=0 to hide the "→ <run directory>" line.
 
 def main(argv: Optional[List[str]] = None) -> NoReturn:
     args = sys.argv[1:] if argv is None else argv
-    sys.stdout, sys.stderr = SafeOutput(sys.stdout), SafeOutput(sys.stderr)
+    sys.stdout, sys.stderr = (SafeOutput(stream) if stream else None for stream in (sys.stdout, sys.stderr))
 
     if not args:
         print_usage()

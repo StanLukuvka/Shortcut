@@ -2025,6 +2025,23 @@ class TestShortcut(unittest.TestCase):
         self.assertIn("+echo two", res.stdout)
         self.assertIn("+# \\xff\\xfd", res.stdout)
 
+    def test_a_nul_cannot_hide_a_script_bash_would_run(self):
+        proj = self.tmp_path / "proj"
+        (proj / "bin").mkdir(parents=True)
+        (proj / "bin" / "tool").write_bytes(b"#!/bin/bash\necho PWNED\n\0")
+        self.write_store(proj / ".shortcuts", {"tool": {"script": "bin/tool"}})
+        res = self.run_cli(["update", "-y"], cwd=str(proj))
+        self.assertIn("+echo PWNED", res.stdout)
+        self.assertNotIn("Binary file", res.stdout)
+
+    def test_a_text_file_cannot_forge_either_mark(self):
+        bad = b"a \xff\n"
+        shown = shortcut_mod.reviewable(bad)
+        self.assertNotEqual(shortcut_mod.reviewable(shown.encode()), shown)
+        forged = shortcut_mod.BINARY_MARK.encode() + b"echo hidden\n"
+        self.assertTrue(shortcut_mod.reviewable(forged).startswith(shortcut_mod.BINARY_MARK))
+        self.assertNotIn("echo hidden", shortcut_mod.reviewable(forged))
+
     def test_invalid_utf8_and_its_escaped_text_are_different_files(self):
         one = shortcut_mod.reviewable(b"a \xff\n")
         two = shortcut_mod.reviewable(b"a \\xff\n")
@@ -2144,6 +2161,8 @@ class TestShortcut(unittest.TestCase):
         self.allow(proj / ".shortcuts")
         res = self.run_cli(["fix"], cwd=str(proj))
         self.assertIn("definitions unchanged since approved", res.stdout)
+        res = self.run_cli(["fix", "go"], cwd=str(proj))
+        self.assertNotIn("--- Stores ---", res.stdout)
 
     def test_approving_says_what_it_covers(self):
         proj = self.tmp_path / "proj"
@@ -2189,6 +2208,61 @@ class TestShortcut(unittest.TestCase):
             (src / "bin" / "tool.sh").write_text("echo swapped\n", encoding="utf-8")
             shortcut_mod.apply_import(store, entries, scripts)
         self.assertEqual(self.run_cli(["r", "tool"]).stdout, "reviewed\n")
+
+    def test_declining_an_import_writes_nothing_at_all(self):
+        src = self.tmp_path / "source"
+        self.write_store(src, {"hi": {"inline": "echo hi"}})
+        code, output = self.run_in_terminal(["init", "--global", str(src)], keys=[(b"import? [y/N]", b"n\n")])
+        self.assertEqual(code, 1, output)
+        self.assertEqual(list(self.shortcuts_home.iterdir()), [])
+
+    def test_an_import_never_replaces_a_stored_script(self):
+        self.write_store(self.shortcuts_home, {"deploy": {"script": "scripts/g_deploy.sh"}})
+        (self.shortcuts_home / "scripts").mkdir()
+        mine = self.shortcuts_home / "scripts" / "g_deploy.sh"
+        mine.write_text("echo mine\n", encoding="utf-8")
+        src = self.tmp_path / "source"
+        (src / "bin").mkdir(parents=True)
+        (src / "bin" / "x.sh").write_text("echo EVIL\n", encoding="utf-8")
+        self.write_store(src, {"g_deploy": {"description": "x", "script": "bin/x.sh"}})
+        res = self.run_cli(["init", "--global", str(src), "-y"])
+        self.assertIn("would replace", res.stdout)
+        self.assertEqual(mine.read_text(encoding="utf-8"), "echo mine\n")
+
+    def test_a_cwd_with_a_nul_does_not_stop_the_tools_that_find_it(self):
+        proj = self.tmp_path / "proj"
+        self.write_store(proj / ".shortcuts", {"go": {"inline": "echo ran"}})
+        self.allow(proj / ".shortcuts")
+        self.write_store(proj / ".shortcuts", {"go": {"inline": "echo ran", "cwd": "a\0b"}})
+        for args in (["list"], ["update", "-y"], ["fix"]):
+            res = self.run_cli(args, cwd=str(proj))
+            self.assertNotIn("embedded null", res.stderr, args)
+            self.assertNotIn("Traceback", res.stderr, args)
+
+    def test_help_stays_plain_on_a_terminal(self):
+        code, output = self.run_in_terminal(["new", "--help"])
+        self.assertEqual(code, 0, output)
+        self.assertNotIn("^[", output)
+        self.assertNotIn("\x1b", output)
+
+    def test_a_closed_stream_changes_nothing(self):
+        self.run_cli(["new", "go", "--", "echo ran"])
+        for shell in ("{cmd} list >&-", "{cmd} r go 2>&-"):
+            cmd = f"{shlex.quote(sys.executable)} {shlex.quote(str(SHORTCUT))}"
+            res = subprocess.run(["bash", "-c", shell.format(cmd=cmd)], cwd=str(self.home_dir), env=self.env,
+                                 capture_output=True, text=True)
+            self.assertEqual(res.returncode, 0, shell + res.stderr)
+
+    def test_a_store_never_writes_through_a_symlink(self):
+        victim = self.tmp_path / "victim"
+        victim.write_text("keep\n", encoding="utf-8")
+        for name in (".gitignore", ".lock"):
+            proj = self.tmp_path / f"proj{name}"
+            (proj / ".shortcuts").mkdir(parents=True)
+            (proj / ".shortcuts" / name).symlink_to(victim)
+            res = self.run_cli(["init"], cwd=str(proj))
+            self.assertEqual(res.returncode, 1, name)
+            self.assertEqual(victim.read_text(encoding="utf-8"), "keep\n", name)
 
     def test_import_with_nothing_new_asks_nothing(self):
         src = self.tmp_path / "source"
