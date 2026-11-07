@@ -32,7 +32,7 @@ Without a terminal:
 
 - `shortcut new <name>` without `-- CMD` skips the editor, creates a script from the template and prints `Edit it at: <path>`. Write to that file.
 - Editors don't open. Change the script or the JSON file directly.
-- `shortcut rm` needs `-y`.
+- `shortcut rm` and `shortcut promote` need `-y`.
 - A shortcut with `confirm` fails without `shortcut r -y <name>`. Check with the user first.
 
 To see what exists, use `shortcut list` and `shortcut show <name>`. `list` shows an unapproved group only as a line saying how to review it, and `list --names` leaves it out. `show` works before approval. Writes to a store take a lock, and agents working at the same time don't overwrite each other.

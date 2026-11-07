@@ -1420,6 +1420,81 @@ def cmd_rm(args: List[str]) -> int:
     return 0
 
 
+def cmd_promote(args: List[str]) -> int:
+    parser = Parser(prog="shortcut promote", description="Copy a project shortcut into your global shortcuts")
+    parser.add_argument("name", help="Project shortcut name")
+    parser.add_argument("--as", dest="new_name", metavar="NEW", help="Global name to give it")
+    parser.add_argument("-y", "--yes", action="store_true", help="Do not prompt for confirmation")
+    parsed = parser.parse_args(args)
+
+    caller_cwd = os.getcwd()
+    if find_project_root(caller_cwd) is None:
+        die(f"promote runs inside a project: there's no {PROJECT_FILE} or {LOCAL_FILE} here or above")
+    name, new_name = parsed.name, parsed.new_name or parsed.name
+    validate_name(new_name)
+    resolved, _ = resolve_shortcut([name], caller_cwd, strict=True)
+    group, entry = resolved.group, resolved.entry
+    if not group.is_project or group.name:
+        die(f"'{name}' isn't a project shortcut here")
+    require_approved(group)
+
+    home = load_store(get_global_store_dir())
+    if home.main.error:
+        die(home.main.error)
+    if new_name in home.main.shortcuts or new_name in home.namespaces:
+        if parsed.new_name is None:
+            die(f"you already have a global '{name}'; give this one another name: shortcut promote {name} --as NEW")
+        die(f"you already have a global '{new_name}'")
+
+    fields = entry.to_dict()
+    old_cwd = entry.cwd
+    if old_cwd and old_cwd != CALLER and not os.path.isabs(os.path.expanduser(old_cwd)):
+        fields["cwd"] = os.path.realpath(resolve_run_dir(old_cwd, group, caller_cwd))  # what was approved
+
+    raw: Optional[bytes] = None
+    if entry.script is not None:
+        src = resolve_script_path(group.script_base, entry.script)
+        if not os.path.isfile(src):
+            die(f"script file not found: {src}")
+        with open(src, "rb") as f:
+            raw = f.read()
+        # Copy what was approved: the file may have changed since require_approved hashed it
+        record = load_approval(group) or {}
+        key = display_path(group, src)
+        if reviewable(raw) not in (record.get("snapshot", {}).get(key), record.get("local", {}).get(key)):
+            die(f"{src} changed since you approved it; run: {group.update_cmd}")
+        fields["script"], dest = _stored_script_field(home.main, new_name + (pathlib.Path(src).suffix or ".sh"))
+    new_entry = ShortcutEntry.from_dict(new_name, fields)
+
+    print(f"From {group.defining_file(name)}, as your global '{new_name}':")
+    print(json.dumps({new_name: fields}, indent=2))
+    if raw is not None:
+        print(f"\nScript {src}, copied to {dest}:")
+        print(reviewable(raw).rstrip())
+    if fields.get("cwd") != old_cwd:
+        print(f"\ncwd: {old_cwd} becomes {fields['cwd']}")
+    if not parsed.yes:
+        if not sys.stdin.isatty():
+            die(f"promote '{name}' in a terminal, or pass -y")
+        if not ask(f"add '{new_name}' to {home.main.file}? [y/N] "):
+            print("Aborted.", file=sys.stderr)
+            return 1
+
+    def write_script() -> None:
+        with open(dest, "wb", opener=lambda path, flags: os.open(path, flags | getattr(os, "O_NOFOLLOW", 0), 0o755)) as f:
+            f.write(raw)
+        os.chmod(dest, 0o755)
+
+    _register(home.main, new_entry, write_script if raw is not None else None)
+    print(f"Promoted '{name}' to your global shortcuts as '{new_name}'.")
+    if fields.get("cwd") != old_cwd:
+        print(f"It runs in {fields['cwd']}, which was '{old_cwd}' relative to {group.folder}.")
+    if new_name == name:
+        print(f"note: inside this project '{name}' is still the project's; shortcut r --global {name} runs yours",
+              file=sys.stderr)
+    return 0
+
+
 def diff_files(old: Dict[str, str], new: Dict[str, str]) -> List[str]:
     """Unified diff of two {path: content} maps. No rename detection: a path on one side only
     diffs against "", so any difference in the maps gives at least one line."""
@@ -1754,8 +1829,8 @@ _shortcut() {
         prev="${COMP_WORDS[COMP_CWORD-1]}"
     fi
 
-    local subcommands="run r new list show location rm update init completion help"
-    local name_commands="run r show location rm"
+    local subcommands="run r new list show location rm promote update init completion help"
+    local name_commands="run r show location rm promote"
 
     if [ "${COMP_CWORD:-1}" -eq 1 ]; then
         COMPREPLY=( $(compgen -W "${subcommands}" -- "$cur") )
@@ -1776,6 +1851,7 @@ _shortcut() {
                 case "$cmd" in
                     run|r) flags="--global -y" ;;
                     rm) flags="--global --local -y" ;;
+                    promote) flags="--as -y" ;;
                     show) flags="--global --json" ;;
                 esac
                 COMPREPLY=( $(compgen -W "${flags}" -- "$cur") )
@@ -1807,7 +1883,7 @@ ZSH_COMPLETION_SCRIPT: str = """# zsh completion for shortcut (load after compin
 
 _shortcut() {
     local -a subcommands
-    subcommands=(run r new list show location rm update init completion help)
+    subcommands=(run r new list show location rm promote update init completion help)
 
     if (( CURRENT == 2 )); then
         compadd -- $subcommands
@@ -1815,15 +1891,16 @@ _shortcut() {
     fi
 
     case $words[2] in
-        run|r|show|location|rm)
+        run|r|show|location|rm|promote)
             local -a typed
             typed=(${words[3,CURRENT-1]:#-*})
             if (( $#typed == 0 )) && [[ $PREFIX == -* ]]; then
-                compadd -- --global
                 case $words[2] in
-                    run|r) compadd -- -y ;;
-                    rm) compadd -- --local -y ;;
-                    show) compadd -- --json ;;
+                    run|r) compadd -- --global -y ;;
+                    rm) compadd -- --global --local -y ;;
+                    show) compadd -- --global --json ;;
+                    promote) compadd -- --as -y ;;
+                    *) compadd -- --global ;;
                 esac
             elif (( $#typed <= 1 )); then
                 compadd -- ${(f)"$(shortcut list --names $typed[1] 2>/dev/null)"}
@@ -1852,10 +1929,11 @@ function __shortcut_names
 end
 
 complete -c shortcut -f
-complete -c shortcut -n __fish_use_subcommand -a "run r new list show location rm update init completion help"
-complete -c shortcut -n "__fish_seen_subcommand_from run r show location rm" -a "(__shortcut_names)"
+complete -c shortcut -n __fish_use_subcommand -a "run r new list show location rm promote update init completion help"
+complete -c shortcut -n "__fish_seen_subcommand_from run r show location rm promote" -a "(__shortcut_names)"
 complete -c shortcut -n "__fish_seen_subcommand_from run r show location rm" -l global
-complete -c shortcut -n "__fish_seen_subcommand_from run r rm" -s y
+complete -c shortcut -n "__fish_seen_subcommand_from run r rm promote" -s y
+complete -c shortcut -n "__fish_seen_subcommand_from promote" -l as -r
 complete -c shortcut -n "__fish_seen_subcommand_from rm" -l local
 complete -c shortcut -n "__fish_seen_subcommand_from show" -l json
 complete -c shortcut -n "__fish_seen_subcommand_from init" -F -l global
@@ -1893,6 +1971,8 @@ Usage:
   shortcut rm [--global|--local] <name> [-y]
                                             Remove a shortcut. With --local, take it out of .shortcuts.local,
                                             or hide a shared one from you
+  shortcut promote <name> [--as NEW] [-y]   Copy an approved project shortcut, and its script, into your
+                                            global shortcuts. The project entry stays as it is
   shortcut update [group] [-y]              Review changes to project shortcuts and namespaces, and approve them
   shortcut init --global [SOURCE] [-y]      Review a collection (folder or git URL) and copy it into the
                                             global store. Later changes to the source don't reach it
@@ -1947,6 +2027,7 @@ def main(argv: Optional[List[str]] = None) -> NoReturn:
         "show": cmd_show,
         "location": cmd_location,
         "rm": cmd_rm,
+        "promote": cmd_promote,
         "update": cmd_update,
         "init": cmd_init,
         "completion": cmd_completion,

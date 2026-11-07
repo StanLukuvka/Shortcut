@@ -63,6 +63,9 @@ shortcut location <name>              script path
 shortcut rm <name> [-y]               remove
 shortcut rm --local <name>            undo your override, or hide a shared entry
 
+shortcut promote <name> [-y]          copy an approved project shortcut to your global ones
+shortcut promote <name> --as NEW      the same, under another global name
+
 shortcut update [ns|.] [-y]           review and approve
 shortcut init --global <src> [-y]     import a folder or git URL
 shortcut completion bash|zsh|fish
