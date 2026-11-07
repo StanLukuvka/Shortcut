@@ -91,8 +91,6 @@ shortcut r nano <name>       same, in nano
 shortcut r logged <name>     run through tee, keep the output
 shortcut r desktop <name>    desktop launcher (global only)
 shortcut r search <pattern>  find files by name
-shortcut r serve [port]      HTTP server here (default 8000)
-shortcut r ports             listening ports
 ```
 
 ## Settings
