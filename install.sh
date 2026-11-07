@@ -14,8 +14,6 @@ chmod +x "$BIN_DIR/shortcut"
 
 "$BIN_DIR/shortcut" completion bash > "$COMPL_DIR/shortcut"
 
-"$BIN_DIR/shortcut" migrate
-
 echo "Installed shortcut to $BIN_DIR/shortcut"
 echo "Installed bash completion to $COMPL_DIR/shortcut"
 echo "Bundled shortcuts: shortcut init --global $SCRIPT_DIR/templates"

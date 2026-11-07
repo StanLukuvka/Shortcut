@@ -117,7 +117,7 @@ class TestFixtures(ShortcutTestCase):
         proj = self.project(fixtures.GO, dirs=["src"], files={"bin/tool": b"\xff"}, imports={"a": "a.shortcut"})
         self.assertTrue((proj / "src").is_dir())
         self.assertEqual((proj / "bin" / "tool").read_bytes(), b"\xff")
-        data = json.loads((proj / ".shortcuts" / "shortcuts.json").read_text())
+        data = json.loads((proj / ".shortcuts").read_text())
         self.assertEqual(data, {"version": 2, "shortcuts": fixtures.GO, "imports": {"a": "a.shortcut"}})
 
     def test_project_without_shortcuts_has_no_store(self):
@@ -128,7 +128,7 @@ class TestFixtures(ShortcutTestCase):
         self.assertEqual(self.run_cli(["r", "go"], cwd=str(proj)).stdout, "ran\n")
 
     def test_a_broken_project_reads_as_corrupt(self):
-        self.assertIn("corrupt registry", self.run_cli(["fix"], cwd=str(self.broken_project())).stdout)
+        self.assertIn("corrupt registry", self.run_cli(["list"], cwd=str(self.broken_project())).stderr)
 
     def test_a_collection_imports(self):
         src = self.collection(fixtures.HI, files={"bin/a.sh": "echo a\n"}, mode=0o755)

@@ -149,6 +149,7 @@ class ShortcutTestCase(unittest.TestCase):
         cwd: Optional[str] = None,
         env: Optional[dict[str, str]] = None,
         input: Optional[str] = None,
+        timeout: float = 60,
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             argv,
@@ -157,6 +158,7 @@ class ShortcutTestCase(unittest.TestCase):
             stdin=subprocess.DEVNULL if input is None else None,
             text=True,
             capture_output=True,
+            timeout=timeout,
         )
 
     def run_cli(
@@ -165,8 +167,9 @@ class ShortcutTestCase(unittest.TestCase):
         cwd: Optional[str] = None,
         env: Optional[dict[str, str]] = None,
         input: Optional[str] = None,
+        timeout: float = 60,
     ) -> subprocess.CompletedProcess[str]:
-        return self.run_cmd([*CLI, *args], cwd=cwd, env=env, input=input)
+        return self.run_cmd([*CLI, *args], cwd=cwd, env=env, input=input, timeout=timeout)
 
     def popen(
         self,
@@ -184,20 +187,6 @@ class ShortcutTestCase(unittest.TestCase):
     def popen_cli(self, args: list[str], **kwargs: Any) -> subprocess.Popen:
         return self.popen([*CLI, *args], **kwargs)
 
-    def interrupt_once_started(self, proc: subprocess.Popen) -> None:
-        """Ctrl-C a popen_cli(..., bufsize=0, start_new_session=True) once it prints "started", and reap it."""
-        assert proc.stdout is not None
-        line = b""
-        start_time = time.time()
-        while b"started" not in line and (time.time() - start_time < 5):
-            chunk = proc.stdout.readline()
-            if not chunk:
-                break
-            line += chunk
-
-        os.killpg(proc.pid, signal.SIGINT)
-        proc.communicate(timeout=15)
-
     def run_in_terminal(
         self,
         args: list[str],
@@ -207,8 +196,7 @@ class ShortcutTestCase(unittest.TestCase):
         timeout: float = 15,
     ) -> tuple[int, str]:
         """Run the CLI on a fresh 30x100 pseudo-terminal, as if typed into a real one.
-        keys: (wait until this appears in the output, then type these bytes, or send this signal) pairs.
-        Afterwards self.terminal_lflag holds the terminal's local modes, to check they were restored."""
+        keys: (wait until this appears in the output, then type these bytes, or send this signal) pairs."""
         launch = self.launch_args(cwd, env)
         master, slave = os.openpty()
         fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 100, 0, 0))
@@ -244,7 +232,6 @@ class ShortcutTestCase(unittest.TestCase):
                     out += chunk
                 elif proc.poll() is not None:
                     break
-            self.terminal_lflag = termios.tcgetattr(master)[3]
         finally:
             os.close(master)
         return proc.wait(timeout=timeout), out.decode("utf-8", errors="replace")
@@ -291,23 +278,32 @@ class ShortcutTestCase(unittest.TestCase):
     # Stores
 
     def write_registry(self, store_dir: pathlib.Path, data: Any) -> None:
-        """Write this exact data as a store's shortcuts.json, valid or not."""
-        self.write_file(store_dir / "shortcuts.json", json.dumps(data))
+        """Write this exact data as a store's file, valid or not: a project's .shortcuts, or shortcuts.json."""
+        self.write_file(self.registry_path(store_dir), json.dumps(data))
+
+    def registry_path(self, store_dir: pathlib.Path) -> pathlib.Path:
+        return store_dir if store_dir.name == ".shortcuts" and store_dir != self.shortcuts_home else store_dir / "shortcuts.json"
 
     def write_store(self, store_dir: pathlib.Path, shortcuts: dict, **extra: Any) -> None:
         self.write_registry(store_dir, {"version": 2, "shortcuts": shortcuts, **extra})
 
     def write_import(self, store_dir: pathlib.Path, name: str, data: dict) -> pathlib.Path:
-        path = store_dir / "imports" / f"{name}.shortcut"
-        return self.write_file(path, json.dumps(data))
+        """A namespace file. A project lists it under "imports" in .shortcuts; the global store just finds it."""
+        if store_dir == self.shortcuts_home or store_dir.name != ".shortcuts":
+            return self.write_file(store_dir / "imports" / f"{name}.shortcut", json.dumps(data))
+        path = self.write_file(store_dir.parent / "imports" / f"{name}.shortcut", json.dumps(data))
+        registry = json.loads(store_dir.read_text(encoding="utf-8"))
+        registry.setdefault("imports", {})[name] = f"imports/{name}.shortcut"
+        store_dir.write_text(json.dumps(registry), encoding="utf-8")
+        return path
 
     def corrupt_store(self, store_dir: pathlib.Path) -> None:
-        self.write_file(store_dir / "shortcuts.json", BROKEN_JSON)
+        self.write_file(self.registry_path(store_dir), BROKEN_JSON)
 
     def load_global(self) -> dict:
         return json.loads((self.shortcuts_home / "shortcuts.json").read_text())["shortcuts"]
 
-    def allow(self, store_dir: pathlib.Path) -> None:
+    def approve(self, store_dir: pathlib.Path) -> None:
         """Approve everything in a project, as `shortcut update -y` there does."""
         res = self.run_cli(["update", "-y"], cwd=str(store_dir.parent))
         self.assertEqual(res.returncode, 0, res.stderr)
@@ -334,7 +330,7 @@ class ShortcutTestCase(unittest.TestCase):
         if shortcuts is not None:
             self.write_store(proj / ".shortcuts", shortcuts, **extra)
         if approved:
-            self.allow(proj / ".shortcuts")
+            self.approve(proj / ".shortcuts")
         return proj
 
     def broken_project(self) -> pathlib.Path:

@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""Running a shortcut: arguments, logs, exit codes, signals, terminals, directories."""
+"""Running a shortcut: arguments, exit codes, signals, terminals, directories."""
 
-import os
-import pathlib
 import signal
-import termios
 import time
 import unittest
+import unittest.mock
 
-from fixtures import ShortcutTestCase
+from fixtures import CLI_SHELL, ShortcutTestCase, shortcut_mod
 
 
 class TestRunning(ShortcutTestCase):
@@ -23,29 +21,6 @@ class TestRunning(ShortcutTestCase):
         res_run = self.run_cli(["run", "echo", "-v", "--option", "arg1", "arg2"])
         self.assertEqual(res_run.returncode, 0)
         self.assertEqual(res_run.stdout.strip(), "name=echo first=-v all=-v --option arg1 arg2")
-
-    def test_run_script_tee_logging_and_exit_code(self):
-        script_file = self.script("script_fail.sh", "#!/usr/bin/env bash\necho stdout line\necho stderr line >&2\nexit 42\n")
-
-        res_add = self.run_cli(["add", "fail42", str(script_file), "--desc", "Fails with 42"])
-        self.assertEqual(res_add.returncode, 0)
-
-        res = self.run_cli(["run", "fail42"])
-        self.assertEqual(res.returncode, 42)
-        self.assertIn("stdout line", res.stdout)
-        self.assertIn("stderr line", res.stdout)
-
-        log_path = self.shortcuts_home / "logs" / "fail42.log"
-        self.assertTrue(log_path.is_file())
-        log_content = log_path.read_text(encoding="utf-8")
-        self.assertTrue(log_content.startswith("=== SHORTCUT RUN: fail42 |"))
-        self.assertIn("stdout line", log_content)
-        self.assertIn("stderr line", log_content)
-        self.assertTrue(log_content.rstrip().endswith("=== exit: 42 ==="))
-
-        res_fix = self.run_cli(["fix", "fail42"])
-        self.assertEqual(res_fix.returncode, 0)
-        self.assertIn("Last exit code: 42", res_fix.stdout)
 
     def test_a_name_alone_never_runs_a_shortcut(self):
         self.run_cli(["new", "hello", "--", "echo hello"])
@@ -70,19 +45,19 @@ class TestRunning(ShortcutTestCase):
 
     def test_script_shebang_without_exec_and_elf(self):
         script = self.script("py_script.py", "#!/usr/bin/env python3\nimport sys\nprint('py', 1 + 1)\n", mode=0o644)
-        self.assertEqual(self.run_cli(["add", "py", str(script), "--desc", "python"]).returncode, 0)
+        self.assertEqual(self.run_cli(["new", "py", "--copy", str(script), "--desc", "python"]).returncode, 0)
         res = self.run_cli(["run", "py"])
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertIn("py 2", res.stdout)
 
         sh_no_exec = self.script("no_shebang.sh", "echo nonexec\n", mode=0o644)
-        self.assertEqual(self.run_cli(["add", "noshebang", str(sh_no_exec), "--desc", "noshebang"]).returncode, 0)
+        self.assertEqual(self.run_cli(["new", "noshebang", "--copy", str(sh_no_exec), "--desc", "noshebang"]).returncode, 0)
         res2 = self.run_cli(["run", "noshebang"])
         self.assertEqual(res2.returncode, 0, res2.stderr)
         self.assertIn("nonexec", res2.stdout)
 
         sh_exec = self.script("exec.sh", "#!/usr/bin/env bash\necho exec_shebang\n")
-        self.assertEqual(self.run_cli(["add", "exec", str(sh_exec), "--desc", "exec"]).returncode, 0)
+        self.assertEqual(self.run_cli(["new", "exec", "--copy", str(sh_exec), "--desc", "exec"]).returncode, 0)
         res3 = self.run_cli(["run", "exec"])
         self.assertEqual(res3.returncode, 0, res3.stderr)
         self.assertIn("exec_shebang", res3.stdout)
@@ -107,11 +82,10 @@ class TestRunning(ShortcutTestCase):
             {
                 "default": {"inline": "pwd"},
                 "caller": {"inline": "pwd", "cwd": "caller"},
-                "defining": {"inline": "pwd", "cwd": "."},
-                "root": {"inline": "pwd", "cwd": ".."},
-                "sibling": {"inline": "pwd", "cwd": "../frontend"},
+                "root": {"inline": "pwd", "cwd": "."},
+                "sibling": {"inline": "pwd", "cwd": "frontend"},
                 "fixed": {"inline": "pwd", "cwd": str(fixed)},
-                "gone": {"inline": "pwd", "cwd": "../nope"},
+                "gone": {"inline": "pwd", "cwd": "nope"},
             },
             dirs=["frontend", "src"],
             approved=True,
@@ -120,7 +94,6 @@ class TestRunning(ShortcutTestCase):
         for name, expected in (
             ("default", here),
             ("caller", here),
-            ("defining", proj / ".shortcuts"),
             ("root", proj),
             ("sibling", proj / "frontend"),
             ("fixed", fixed),
@@ -169,31 +142,32 @@ class TestRunning(ShortcutTestCase):
         self.run_cli(["new", "echoes", "--", 'echo "$@"'])
         self.assertEqual(self.run_cli(["r", "echoes", "-y"]).stdout, "-y\n")
 
-    def test_fix_output_formatting(self):
-        res_new = self.run_cli(["new", "fix_sample", "--desc", "Fix sample description", "--", "echo", "fix output running"])
-        self.assertEqual(res_new.returncode, 0)
+    def test_show_prints_the_entry_script_cwd_and_args(self):
+        script_file = self.script("shown.sh", "#!/usr/bin/env bash\necho show output running\n")
+        self.run_cli(["new", "shown", "--copy", str(script_file), "--desc", "Show sample", "--cwd", str(self.tmp_path),
+                      "--arg", "target", "--arg", "mode=fast"])
+        res = self.run_cli(["show", "shown"])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("Description: Show sample\n", res.stdout)
+        self.assertIn("echo show output running", res.stdout)
+        self.assertIn(f"Run CWD:     {self.tmp_path.resolve()}\n", res.stdout)
+        self.assertIn("Usage:       shortcut r shown <target> [mode]\n", res.stdout)
 
-        # Before any run: metadata and script present, "no log yet"
-        res_fix_pre = self.run_cli(["fix", "fix_sample"])
-        self.assertEqual(res_fix_pre.returncode, 0)
-        self.assertIn("Fix sample description", res_fix_pre.stdout)
-        self.assertIn("fix output running", res_fix_pre.stdout)
-        self.assertIn("no log yet", res_fix_pre.stdout)
-        self.assertTrue(res_fix_pre.stdout.strip().endswith("Last exit code: none"))
+    def test_show_says_when_the_run_directory_or_script_is_gone(self):
+        self.write_store(self.shortcuts_home, {"gone": {"inline": "true", "cwd": "/no/such/folder"}})
+        self.assertIn("/no/such/folder", self.run_cli(["show", "gone"]).stdout)
+        self.write_store(self.shortcuts_home, {"gone": {"script": "scripts/none.sh"}})
+        self.assertIn("[file missing:", self.run_cli(["show", "gone"]).stdout)
 
-        # Run the shortcut
-        res_run = self.run_cli(["run", "fix_sample"])
-        self.assertEqual(res_run.returncode, 0)
+    def test_show_json_prints_an_entry_show_refuses(self):
+        self.write_store(self.shortcuts_home, {"bad": {"inline": "true", "cwd": 123}})
+        self.assertIn("'cwd' must be a string", self.run_cli(["show", "bad"]).stderr)
+        res = self.run_cli(["show", "--json", "bad"])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn('"cwd": 123', res.stdout)
 
-        # After run: log contents present and ends with last exit code 0
-        res_fix_post = self.run_cli(["fix", "fix_sample"])
-        self.assertEqual(res_fix_post.returncode, 0)
-        self.assertIn("Fix sample description", res_fix_post.stdout)
-        self.assertIn("fix output running", res_fix_post.stdout)
-        self.assertTrue(res_fix_post.stdout.strip().endswith("Last exit code: 0"))
-
-    def test_removed_commands_are_gone(self):
-        for word in ("allow", "prefix", "log", "desktop", "nano", "activate", "version"):
+    def test_unknown_commands_point_to_run(self):
+        for word in ("nano", "activate", "version"):
             res = self.run_cli([word, "x"])
             self.assertEqual(res.returncode, 2)
             self.assertEqual(res.stderr, f"unknown command '{word}' (to run a shortcut: shortcut run {word})\n")
@@ -201,43 +175,7 @@ class TestRunning(ShortcutTestCase):
 
 
 class TestSignalsAndTerminals(ShortcutTestCase):
-    def test_run_ctrl_c_writes_footer(self):
-        sleeper_script = self.script("sleeper.sh", "#!/usr/bin/env bash\necho started\nsleep 10\n")
-
-        res_add = self.run_cli(["add", "sleeper", str(sleeper_script), "--desc", "Sleeping script"])
-        self.assertEqual(res_add.returncode, 0)
-
-        proc = self.popen_cli(["run", "sleeper"], bufsize=0, start_new_session=True)
-        self.interrupt_once_started(proc)
-        self.assertEqual(proc.returncode, 130)
-
-        log_path = self.shortcuts_home / "logs" / "sleeper.log"
-        self.assertTrue(log_path.is_file())
-        log_text = log_path.read_text(encoding="utf-8")
-        self.assertTrue(log_text.rstrip().endswith("=== exit: 130 ==="), f"Footer missing in:\n{log_text}")
-
-    def test_run_nolog_ctrl_c_returns_130(self):
-        self.write_file(
-            self.shortcuts_home / "scripts" / "nolog_sleep.sh", "#!/usr/bin/env bash\necho started\nsleep 10\n", mode=0o755
-        )
-
-        reg = {
-            "version": 1,
-            "shortcuts": {
-                "nolog_sleep": {
-                    "description": "Sleeper without log",
-                    "script": "scripts/nolog_sleep.sh",
-                    "log": False,
-                },
-            },
-        }
-        self.write_registry(self.shortcuts_home, reg)
-
-        proc = self.popen_cli(["run", "nolog_sleep"], bufsize=0, start_new_session=True)
-        self.interrupt_once_started(proc)
-        self.assertEqual(proc.returncode, 130)
-
-    def test_run_on_terminal_uses_pty_and_logs(self):
+    def test_a_run_keeps_the_real_terminal(self):
         inline = '[ -t 1 ] && echo "stdout:tty" || echo "stdout:pipe"; stty size; echo ready; read -r line; echo "got:$line"'
         self.assertEqual(self.run_cli(["new", "tty", "--", inline]).returncode, 0)
 
@@ -247,35 +185,44 @@ class TestSignalsAndTerminals(ShortcutTestCase):
         self.assertIn("30 100", out)
         self.assertIn("got:hello", out)
 
-        log = (self.shortcuts_home / "logs" / "tty.log").read_bytes()
-        self.assertIn(b"stdout:tty", log)
-        self.assertIn(b"got:hello", log)
-        self.assertNotIn(b"\r\n", log)
-        self.assertTrue(log.rstrip().endswith(b"=== exit: 0 ==="), log)
-
         res = self.run_cli(["run", "tty"], input="x\n")
         self.assertIn("stdout:pipe", res.stdout)
         self.assertIn("got:x", res.stdout)
 
-    def test_ctrl_c_on_terminal_returns_130(self):
+    def test_ctrl_c_reaches_the_shortcut(self):
         self.assertEqual(self.run_cli(["new", "sleep", "--", "echo started; sleep 10"]).returncode, 0)
         start = time.time()
         rc, out = self.run_in_terminal(["run", "sleep"], keys=[(b"started", b"\x03")])
-        self.assertEqual(rc, 130, out)
+        self.assertEqual(rc, -signal.SIGINT, out)
         self.assertLess(time.time() - start, 8)
-        log = (self.shortcuts_home / "logs" / "sleep.log").read_text()
-        self.assertTrue(log.rstrip().endswith("=== exit: 130 ==="), log)
 
-    def test_sigterm_on_terminal_restores_terminal(self):
-        self.assertEqual(self.run_cli(["new", "sleep", "--", "echo started; sleep 10"]).returncode, 0)
-        rc, out = self.run_in_terminal(["run", "sleep"], keys=[(b"started", signal.SIGTERM)])
-        self.assertEqual(rc, 143, out)
-        self.assertTrue(self.terminal_lflag & termios.ICANON, "terminal left in raw mode")
-        self.assertTrue(self.terminal_lflag & termios.ISIG, "terminal left in raw mode")
-        log = (self.shortcuts_home / "logs" / "sleep.log").read_text()
-        self.assertTrue(log.rstrip().endswith("=== exit: 143 ==="), log)
+    def test_exit_code_and_signals_pass_straight_through(self):
+        # stdout and stderr stay apart, and the exit code is the shortcut's own
+        self.run_cli(["new", "fail", "--", "echo out; echo err >&2; exit 42"])
+        res = self.run_cli(["r", "fail"], env={"SHORTCUT_SHOW_DIR": "0"})
+        self.assertEqual((res.returncode, res.stdout, res.stderr), (42, "out\n", "err\n"))
 
-    def test_broken_output_pipe_exits_141_and_logs(self):
+        # The run is the shortcut's process: same pid, and nothing in between to relay a signal
+        self.run_cli(["new", "pid", "--", 'echo "$$"; exec sleep 30'])
+        for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGKILL):
+            proc = self.popen_cli(["run", "pid"], text=True)
+            assert proc.stdout is not None
+            self.assertEqual(int(proc.stdout.readline()), proc.pid)
+            proc.send_signal(sig)
+            proc.communicate(timeout=5)
+            self.assertEqual(proc.returncode, -sig)
+
+        # A signal the shortcut handles is its to answer
+        self.run_cli(["new", "trap", "--", "trap 'kill $!; exit 7' USR1; echo ready; sleep 30 >/dev/null 2>&1 & wait"])
+        proc = self.popen_cli(["run", "trap"], text=True)
+        assert proc.stdout is not None
+        self.assertEqual(proc.stdout.readline(), "ready\n")
+        proc.send_signal(signal.SIGUSR1)
+        proc.communicate(timeout=5)
+        self.assertEqual(proc.returncode, 7)
+
+    def test_a_shortcut_starts_with_sigpipe_on(self):
+        # Python ignores SIGPIPE, and exec would pass that on: seq would print errors instead of dying
         self.assertEqual(self.run_cli(["new", "seq", "--", "seq 1 1000000"]).returncode, 0)
         p_shortcut = self.popen_cli(["run", "seq"], text=True)
         p_head = self.popen(["head", "-n", "1"], stdin=p_shortcut.stdout, text=True)
@@ -284,59 +231,26 @@ class TestSignalsAndTerminals(ShortcutTestCase):
         head_out, _ = p_head.communicate(timeout=5)
         _, sc_err = p_shortcut.communicate(timeout=5)
         self.assertEqual(head_out.strip(), "1")
-        self.assertEqual(p_shortcut.returncode, 141)
-        self.assertNotIn("BrokenPipeError", sc_err)
-        self.assertNotIn("Exception ignored", sc_err)
-        log_path = self.shortcuts_home / "logs" / "seq.log"
-        self.assertTrue(log_path.is_file())
-        log_content = log_path.read_text(encoding="utf-8")
-        self.assertIn("=== exit: 141 ===", log_content)
+        self.assertEqual(p_shortcut.returncode, -signal.SIGPIPE)
+        self.assertNotIn("Broken pipe", sc_err)
 
-    def test_signals_reach_child_group_in_pipe_mode(self):
-        pid_file = self.tmp_path / "child.pid"
-        inline = f"sh -c 'echo $$ > {pid_file}; exec sleep 300'; echo done"
-        self.assertEqual(self.run_cli(["new", "group_sig", "--", inline]).returncode, 0)
-        proc = self.popen_cli(["run", "group_sig"], bufsize=0, start_new_session=True)
-        start = time.time()
-        child_pid = None
-        while time.time() - start < 5:
-            if pid_file.exists():
-                text = pid_file.read_text().strip()
-                if text.isdigit():
-                    child_pid = int(text)
-                    break
-            time.sleep(0.05)
-        self.assertIsNotNone(child_pid, "PIDFILE was not written in time")
-        assert child_pid is not None
-        def is_alive(pid: int) -> bool:
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
-                return False
-            try:
-                status_file = pathlib.Path(f"/proc/{pid}/status")
-                if status_file.exists():
-                    for line in status_file.read_text().splitlines():
-                        if line.startswith("State:"):
-                            return "Z" not in line
-            except OSError:
-                return False
-            return True
+    def test_a_closed_stdout_is_the_shortcuts_problem(self):
+        self.run_cli(["new", "quiet", "--", "true"])
+        res = self.run_cmd(["sh", "-c", f"{CLI_SHELL} r quiet >&-"])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertNotIn("Traceback", res.stderr)
 
-        self.assertTrue(is_alive(child_pid), f"child process {child_pid} not running before SIGTERM")
+    def test_a_run_that_cant_start_is_an_error(self):
+        self.write_store(self.shortcuts_home, {"go": {"inline": "true"}})
+        res = self.run_cli(["r", "go"], env={"PATH": str(self.tmp_path)})
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("error:", res.stderr)
 
-        proc.send_signal(signal.SIGTERM)
-        proc.communicate(timeout=5)
-
-        deadline = time.time() + 2.0
-        alive = True
-        while time.time() < deadline:
-            if not is_alive(child_pid):
-                alive = False
-                break
-            time.sleep(0.05)
-        self.assertFalse(alive, f"child pid {child_pid} still running after SIGTERM")
-
+    def test_on_windows_a_run_is_a_child_with_the_same_exit_code(self):
+        cmd = ["sh", "-c", 'test "$PWD" = "$0" && exit 9', str(self.tmp_path)]
+        with unittest.mock.patch.object(shortcut_mod, "WINDOWS", True):
+            rc = shortcut_mod.exec_child(cmd, str(self.tmp_path), {"PATH": "/usr/bin:/bin"})
+        self.assertEqual(rc, 9)
 
 class TestArguments(ShortcutTestCase):
     def test_declared_args(self):

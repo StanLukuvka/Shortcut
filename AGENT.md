@@ -1,8 +1,8 @@
 # shortcut for agents
 
-`shortcut` names shell commands and scripts, and runs them from any directory. The [README](README.md) is the full reference.
+`shortcut` names shell commands and scripts, and runs them from any directory. The [README](README.md) lists the commands.
 
-Agents use the same commands as people. Inside a project, work from the project root: `--local` uses `.shortcuts/` in the current directory, and refuses if there isn't one. `shortcut init` creates it. `--cwd .` records the current directory. To set up a shortcut for a user:
+Agents use the same commands as people. In a project, `--local` writes to `.shortcuts.local` in the project root, and refuses from a subfolder. `.shortcuts` is shared and edited by hand: `shortcut` doesn't write it. `shortcut show --json <name>` prints an entry to paste there. `--cwd .` records the current directory. To set up a shortcut for a user:
 
 1. **Always pass `--desc`.** `--by <your name>` records who made it.
 
@@ -10,14 +10,15 @@ Agents use the same commands as people. Inside a project, work from the project 
    shortcut new test --local --desc "Run full integration test suite" --cwd . -- 'pytest tests/ "$@"'
    ```
 
-2. **Choose where it lives and runs.** [Stores](README.md#stores) shows which store each command uses.
+2. **Choose where it lives and runs.** See [Where shortcuts live](README.md#where-shortcuts-live).
    - General-purpose tool: use the defaults, the global store and `cwd: caller`.
-   - Project-specific work (builds, test runners, linters): use `--local` for the project store, from the project root.
+   - Your own project-specific work: use `--local`, from the project root. For something the whole project shares, propose an entry for `.shortcuts` and let the user commit it.
    - A process that must run in a specific directory: use `--cwd <dir>`.
+   - A script that already exists: `--script PATH` uses it where it is, `--copy FILE` copies it into the global store. With `--local`, only `--script`.
 
 3. **Single-quote the command.** Read arguments with `$1` or `"$@"`. A shortcut doesn't append them. `--arg NAME` declares a required argument and `--arg NAME=DEFAULT` an optional one.
 
-4. **Leave approval to the user.** A shortcut made with `--local` or `--namespace` doesn't run until the user has run `shortcut update`; `new` prints the exact command. Any later change needs `shortcut update` again. Don't approve on their behalf with `-y`.
+4. **Leave approval to the user.** A shortcut made with `--namespace`, or anything in `.shortcuts`, doesn't run until the user has run `shortcut update`; `new` prints the exact command. A change made with `--local` keeps an approved `.shortcuts.local` approved, and in a project that isn't approved yet it needs `shortcut update` too. Don't approve on their behalf with `-y`.
 
 5. **Tell the user how to run it.**
 
@@ -25,12 +26,12 @@ Agents use the same commands as people. Inside a project, work from the project 
 
    If it needs approving, give that command first.
 
-6. **Diagnose failures with `shortcut fix`.** See [Look around](README.md#look-around).
+6. **Diagnose failures with `shortcut show <name>`.** It prints the entry, run directory, usage line and script. `shortcut list` reports a broken file, and warns about invalid entries and missing scripts. `shortcut show --json <name>` prints the raw entry even when it's invalid. See [Commands](README.md#commands).
 
 Without a terminal:
 
-- `shortcut new <name>` without `-- CMD` skips the editor, creates a script from the template and prints its path after `file:`. Write to that file.
-- `shortcut edit` fails. Change the script or the JSON file directly.
+- `shortcut new <name>` without `-- CMD` skips the editor, creates a script from the template and prints `Edit it at: <path>`. Write to that file.
+- Editors don't open. Change the script or the JSON file directly.
 - `shortcut rm` needs `-y`.
 - A shortcut with `confirm` fails without `shortcut r -y <name>`. Check with the user first.
 

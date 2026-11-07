@@ -11,12 +11,12 @@ from fixtures import BIN_TOOL, DOCKER_PS, GO, HI, KUBE_GET, OWN, shortcut_mod, S
 class TestApproval(ShortcutTestCase):
     def test_approval_blocks_until_approved_and_after_any_change(self):
         data = {"version": 2, "shortcuts": {
-            "hi": {"description": "Say hi", "script": ".shortcuts/scripts/hi.sh"},
+            "hi": {"description": "Say hi", "script": "scripts/hi.sh"},
             "there": {"description": "There", "inline": "echo there"},
         }}
-        proj = self.project(data["shortcuts"], files={".shortcuts/scripts/hi.sh": "#!/usr/bin/env bash\necho hi\n"})
-        script = proj / ".shortcuts" / "scripts" / "hi.sh"
-        registry = proj / ".shortcuts" / "shortcuts.json"
+        proj = self.project(data["shortcuts"], files={"scripts/hi.sh": "#!/usr/bin/env bash\necho hi\n"})
+        script = proj / "scripts" / "hi.sh"
+        registry = proj / ".shortcuts"
 
         # First run blocked; full listing on first approval
         res = self.run_cli(["r", "hi"], cwd=str(proj))
@@ -26,8 +26,8 @@ class TestApproval(ShortcutTestCase):
         res = self.run_cli(["update"], cwd=str(proj))
         self.assertEqual(res.returncode, 1)
         self.assertIn("in a terminal, or pass -y", res.stderr)
-        self.assertIn("+++ b/.shortcuts/shortcuts.json", res.stdout)
-        self.assertIn("+++ b/.shortcuts/scripts/hi.sh", res.stdout)
+        self.assertIn("+++ b/.shortcuts\n", res.stdout)
+        self.assertIn("+++ b/scripts/hi.sh", res.stdout)
         self.assertIn("+echo hi", res.stdout)
         self.assertEqual(self.run_cli(["r", "hi"], cwd=str(proj)).returncode, 1)
 
@@ -57,18 +57,12 @@ class TestApproval(ShortcutTestCase):
         script.write_text("#!/usr/bin/env bash\necho evil\n", encoding="utf-8")
         self.assertEqual(self.run_cli(["r", "hi"], cwd=str(proj)).returncode, 1)
         res = self.run_cli(["update", "-y"], cwd=str(proj))
-        self.assertIn("--- a/.shortcuts/scripts/hi.sh", res.stdout)
+        self.assertIn("--- a/scripts/hi.sh", res.stdout)
         self.assertIn("-echo hi", res.stdout)
         self.assertIn("+echo evil", res.stdout)
         self.assertEqual(self.run_cli(["r", "hi"], cwd=str(proj)).stdout, "evil\n")
 
-        # A change made through shortcut counts too
-        res = self.run_cli(["new", "more", "--local", "--", "echo more"], cwd=str(proj))
-        self.assertIn("needs approving", res.stderr)
-        self.assertEqual(self.run_cli(["r", "hi"], cwd=str(proj)).returncode, 1)
-
         # The script going away is a change, and can't be approved while the entry needs it
-        self.allow(proj / ".shortcuts")
         script.unlink()
         self.assertEqual(self.run_cli(["r", "there"], cwd=str(proj)).returncode, 1)
         res = self.run_cli(["update", "-y"], cwd=str(proj))
@@ -90,19 +84,19 @@ class TestApproval(ShortcutTestCase):
     def test_approval_is_kept_outside_what_it_approves(self):
         proj = self.project(HI)
         before = {p for p in proj.rglob("*")}
-        self.allow(proj / ".shortcuts")
-        self.assertEqual({p for p in proj.rglob("*")} - before, {proj / ".shortcuts" / ".lock"} & {p for p in proj.rglob("*")})
+        self.approve(proj / ".shortcuts")
+        self.assertEqual({p for p in proj.rglob("*")}, before)
         records = list((self.shortcuts_home / "approvals").glob("*.json"))
         self.assertEqual(len(records), 1)
         record = json.loads(records[0].read_text())
         self.assertEqual(record["key"], str(proj))
-        self.assertIn(".shortcuts/shortcuts.json", record["snapshot"])
+        self.assertIn(".shortcuts", record["snapshot"])
 
     def test_one_changed_group_leaves_the_others_running(self):
         proj = self.project(OWN)
         docker = self.write_import(proj / ".shortcuts", "docker", DOCKER_PS)
         self.write_import(proj / ".shortcuts", "kube", KUBE_GET)
-        self.allow(proj / ".shortcuts")
+        self.approve(proj / ".shortcuts")
 
         docker.write_text('{"version": 2, "shortcuts": {"ps": {"inline": "echo evil"}}}', encoding="utf-8")
         res = self.run_cli(["r", "docker", "ps"], cwd=str(proj))
@@ -117,15 +111,15 @@ class TestApproval(ShortcutTestCase):
     def test_a_script_cannot_stand_in_for_a_cwd_record(self):
         proj = self.project(
             {
-                "go": {"inline": "pwd", "cwd": "../work"},
+                "go": {"inline": "pwd", "cwd": "work"},
                 "pad": {"script": "cwd of go"},
             },
             dirs=["safe"],
             files={"cwd of go": "x"},
         )
         (proj / "work").symlink_to(proj / "safe")
-        store = shortcut_mod.load_store(str(proj / ".shortcuts"))
-        files = shortcut_mod.group_files(store.main)
+        store = shortcut_mod.load_store(str(proj))
+        files = shortcut_mod.shared_files(store.main)
         self.assertEqual(files["cwd of go"], "x")
         self.assertEqual(files["./cwd of go"], f"{os.path.realpath(proj / 'safe')}\n")
 
@@ -137,13 +131,6 @@ class TestApproval(ShortcutTestCase):
         self.assertEqual(res.returncode, 1)
         self.assertIn("changed since you approved it", res.stderr)
 
-    def test_fix_says_approval_covers_definitions(self):
-        proj = self.project(GO, approved=True)
-        res = self.run_cli(["fix"], cwd=str(proj))
-        self.assertIn("definitions unchanged since approved", res.stdout)
-        res = self.run_cli(["fix", "go"], cwd=str(proj))
-        self.assertNotIn("--- Stores ---", res.stdout)
-
     def test_approving_says_what_it_covers(self):
         proj = self.project(GO)
         res = self.run_cli(["update", "-y"], cwd=str(proj))
@@ -152,7 +139,7 @@ class TestApproval(ShortcutTestCase):
     def test_a_cwd_with_a_nul_does_not_stop_the_tools_that_find_it(self):
         proj = self.project(GO, approved=True)
         self.write_store(proj / ".shortcuts", {"go": {"inline": "echo ran", "cwd": "a\0b"}})
-        for args in (["list"], ["update", "-y"], ["fix"]):
+        for args in (["list"], ["update", "-y"]):
             res = self.run_cli(args, cwd=str(proj))
             self.assertNotIn("embedded null", res.stderr, args)
             self.assertNotIn("Traceback", res.stderr, args)
