@@ -634,6 +634,23 @@ class TestNamespaces(ShortcutTestCase):
         self.assertIn("import 'tools'", res.stderr)
         self.assertIn("must be a .shortcut file", res.stderr)
 
+    def test_a_bare_shortcut_file_is_refused_with_why(self):
+        self.run_cli(["new", "hi", "--", "echo hi"])
+        bare = self.write_file(self.shortcuts_home / "imports" / ".shortcut", json.dumps(DOCKER_PS))
+        res = self.run_cli(["list"])
+        self.assertIn(f"warning: {bare}: a namespace file needs a name, e.g. docker.shortcut", res.stderr)
+        self.assertNotIn("invalid shortcut name", res.stderr)
+        self.assertEqual(self.run_cli(["r", "hi"]).stdout, "hi\n")
+        bare.unlink()
+
+        proj = self.project(OWN, imports={"x": ".shortcut"}, files={".shortcut": json.dumps(DOCKER_PS)}, approved=True)
+        for cmd in (["r", "x", "ps"], ["r", "own"]):
+            res = self.run_cli(cmd, cwd=str(proj))
+            self.assertEqual(res.returncode, 1)
+            self.assertIn("import 'x'", res.stderr)
+            self.assertIn("a namespace file needs a name, e.g. docker.shortcut", res.stderr)
+        self.assertEqual(self.run_cli(["r", "hi"], cwd=str(proj)).stdout, "hi\n")
+
     def test_shortcut_file_needs_the_current_version(self):
         self.run_cli(["init", "--global"])
         path = self.write_import(self.shortcuts_home, "docker", {"shortcuts": {"ps": {"inline": "echo ps"}}})

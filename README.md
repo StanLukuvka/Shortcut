@@ -38,6 +38,7 @@ git clone https://github.com/StanLukuvka/Shortcut.git && cd Shortcut && ./instal
 - The project is the nearest folder, walking up, with `.shortcuts` or `.shortcuts.local`.
 - `.shortcuts.local` overrides `.shortcuts` per entry. `"name": null` hides a shared one.
 - Relative `script` and `cwd` paths resolve from the folder holding the file.
+- A namespace file is `<name>.shortcut`, such as `docker.shortcut`. A bare `.shortcut` is an error.
 - Projects and namespaces run only after `shortcut update`. Global shortcuts need no approval.
 - If a project's file can't be read, nothing runs inside the project. `--global` reaches your own shortcuts.
 

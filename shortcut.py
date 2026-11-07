@@ -31,6 +31,7 @@ WINDOWS: bool = os.name == "nt"
 REGISTRY_VERSION: int = 2
 CALLER: str = "caller"  # 'cwd' value, and the default: run in the user's current directory
 IMPORT_SUFFIX: str = ".shortcut"  # an imported namespace, in the same JSON format as shortcuts.json
+BARE_IMPORT: str = "a namespace file needs a name, e.g. docker.shortcut"  # a bare .shortcut is one letter from .shortcuts
 PROJECT_FILE: str = ".shortcuts"  # shared and committed; shortcut never writes it
 LOCAL_FILE: str = ".shortcuts.local"  # personal; overlays PROJECT_FILE entry by entry
 APPROVALS_DIR: str = "approvals"  # in the global store: one file per approved group, hash + snapshot
@@ -470,6 +471,8 @@ def load_store(store_dir: str) -> Store:
             problems.append(f"import '{name}' in {main.file} must be a path")
         elif not path.endswith(IMPORT_SUFFIX):
             problems.append(f"import '{name}' in {main.file} must be a {IMPORT_SUFFIX} file")
+        elif os.path.basename(path) == IMPORT_SUFFIX:
+            problems.append(f"import '{name}' in {main.file}: {BARE_IMPORT}")
         elif name in sources:
             problems.append(f"namespace '{name}' is imported twice in {store_dir}")
         else:
@@ -481,7 +484,7 @@ def load_store(store_dir: str) -> Store:
         try:
             validate_name(name)
         except ValueError as e:
-            group = dataclasses.replace(group, error=str(e))
+            group = dataclasses.replace(group, error=str(e) if name else f"{path}: {BARE_IMPORT}")
         namespaces[name] = group
         if name in main.shortcuts:
             problems.append(f"'{name}' is both a shortcut and a namespace in {store_dir}; rename one")
@@ -648,7 +651,9 @@ def find_entry(
                 f"shortcut r --global {first} reaches your own shortcuts"
             )
         problems = ([store.main.error] if store.main.error else []) + store.problems
-        if strict and problems and (first in store.main.shortcuts or first in store.namespaces):
+        imports = store.main.data.get("imports", {})
+        named = first in store.main.shortcuts or first in store.namespaces or (isinstance(imports, dict) and first in imports)
+        if strict and problems and named:
             raise ValueError("; ".join(problems))
         if first in store.main.shortcuts and (not rest or first not in store.namespaces):
             hides = store is not home and first in home.main.shortcuts
