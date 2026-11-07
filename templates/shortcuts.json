@@ -20,15 +20,21 @@
       "description": "List open listening TCP and UDP ports",
       "script": "scripts/ports.sh"
     },
+    "edit": {
+      "description": "Open a shortcut's script, or the file that defines an inline one",
+      "script": "scripts/edit.sh"
+    },
     "nano": {
       "description": "Edit a shortcut in nano",
-      "inline": "VISUAL= EDITOR=nano shortcut edit \"$@\"",
-      "log": false
+      "inline": "VISUAL= EDITOR=nano shortcut run --global edit \"$@\""
     },
-    "log": {
-      "description": "Print a shortcut's most recent run",
-      "inline": "path=\"$(shortcut location --log \"$@\")\" || exit; if [ -f \"$path\" ]; then cat -- \"$path\"; else echo \"no log yet: $path\" >&2; exit 1; fi",
-      "log": false
+    "logged": {
+      "description": "Run a shortcut and keep a copy of its output",
+      "script": "scripts/logged.sh",
+      "args": [
+        {"name": "shortcut", "required": true, "desc": "Name to run, then its arguments"},
+        {"name": "args", "rest": true}
+      ]
     },
     "desktop": {
       "description": "Create a desktop launcher for a global shortcut",

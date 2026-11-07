@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Output safety: what a store or log holds can't rewrite the terminal or fake a prompt."""
+"""Output safety: what a store holds can't rewrite the terminal or fake a prompt."""
 
 import unittest
 
@@ -7,22 +7,11 @@ from fixtures import BIN_TOOL, CLI_SHELL, ShortcutTestCase
 
 
 class TestOutputSafety(ShortcutTestCase):
-    def test_fix_strips_terminal_codes(self):
-        inline = 'printf "\\033[31mred\\033[0m\\n50%%\\r100%%\\n"'
-        self.assertEqual(self.run_cli(["new", "color", "--", inline]).returncode, 0)
-        self.run_cli(["run", "color"])
-        fix = self.run_cli(["fix", "color"]).stdout
-        log_part = fix.split("--- Last Log ---", 1)[1]
-        self.assertNotIn("\x1b", log_part)
-        self.assertIn("\nred\n", log_part)
-        self.assertIn("\n100%\n", log_part)
-        self.assertNotIn("50%", log_part)
-
     def test_stored_text_cannot_rewrite_the_terminal(self):
         self.write_store(self.shortcuts_home, {
             "go": {"description": "clean\x1b[2K\rfaked \x9b1m \u202egnp", "inline": "printf '\\033[31mred\\033[0m'"},
         })
-        for args in (["list"], ["show", "go"], ["fix", "go"]):
+        for args in (["list"], ["show", "go"], ["show", "--json", "go"]):
             res = self.run_cli(args)
             self.assertEqual(res.returncode, 0, res.stderr)
             for char in ("\x1b", "\r", "\x9b", "\u202e"):

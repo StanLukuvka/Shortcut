@@ -33,24 +33,21 @@ class TestBundled(ShortcutTestCase):
         self.assertIn("serve", res_init.stdout)
         self.assertIn("ports", res_init.stdout)
         self.assertNotIn("Skipped", res_init.stdout)
-        for name in ("nano", "log", "desktop"):
+        for name in ("edit", "nano", "logged", "desktop"):
             self.assertIn(name, self.load_global())
 
-    def test_bundled_nano_log_and_desktop(self):
+    def test_bundled_nano_logged_and_desktop(self):
         self.install_bundled()
         self.run_cli(["new", "job", "--desc", "A job", "--", "echo job output"])
-        self.run_cli(["r", "job"])
+        self.run_cli(["new", "failing", "--", "echo out; echo err >&2; exit 3"])
 
-        res = self.run_cli(["r", "log", "job"])
-        self.assertEqual(res.returncode, 0, res.stderr)
-        self.assertIn("job output", res.stdout)
-        self.assertIn("=== exit: 0 ===", res.stdout)
-        res = self.run_cli(["r", "log", "unrun"])
-        self.assertEqual(res.returncode, 1)
-        self.run_cli(["new", "unrun", "--", "true"])
-        res = self.run_cli(["r", "log", "unrun"])
-        self.assertEqual(res.returncode, 1)
-        self.assertIn("no log yet", res.stderr)
+        # logged is a plain wrapper: the output reaches you and the file, with the shortcut's exit code
+        res = self.run_cli(["r", "logged", "failing"], env={"XDG_STATE_HOME": str(self.tmp_path / "state")})
+        self.assertEqual(res.returncode, 3, res.stderr)
+        self.assertIn("out\n", res.stdout)
+        log = (self.tmp_path / "state" / "shortcut" / "failing.log").read_text(encoding="utf-8")
+        self.assertIn("out\n", log)
+        self.assertIn("err\n", log)
 
         # nano wins over whatever editor is configured, and finds what a fixed folder couldn't
         self.write_file(self.tool_bin / "nano", '#!/bin/sh\necho "nano opened $1"\n', mode=0o755)
@@ -82,13 +79,37 @@ class TestBundled(ShortcutTestCase):
         self.assertIn("rc=\\$?", exec_line)
         self.assertIn("\\$rc", exec_line)
 
+    def test_bundled_edit_opens_the_script_or_the_defining_file(self):
+        self.install_bundled()
+        script = self.script("tool.sh", "#!/usr/bin/env bash\n")
+        self.run_cli(["new", "tool", "--copy", str(script), "--desc", "A tool"])
+        self.run_cli(["new", "line", "--", "true"])
+        self.write_file(self.tool_bin / "opener", '#!/bin/sh\necho "$1 opened $2"\n', mode=0o755)
+        env = {"VISUAL": "opener first"}
+
+        res = self.run_cli(["r", "edit", "tool"], env=env)
+        self.assertEqual(res.stdout, f"first opened {self.shortcuts_home / 'scripts' / 'tool.sh'}\n", res.stderr)
+        res = self.run_cli(["r", "edit", "line"], env=env)
+        self.assertEqual(res.stdout, f"first opened {self.shortcuts_home / 'shortcuts.json'}\n", res.stderr)
+
+        proj = self.project({"line": {"inline": "true"}}, approved=True)
+        res = self.run_cli(["r", "edit", "line"], cwd=str(proj), env=env)
+        self.assertEqual(res.stdout, f"first opened {proj / '.shortcuts'}\n", res.stderr)
+        res = self.run_cli(["r", "edit", "--global", "line"], cwd=str(proj), env=env)
+        self.assertEqual(res.stdout, f"first opened {self.shortcuts_home / 'shortcuts.json'}\n", res.stderr)
+
+        res = self.run_cli(["r", "edit", "nothing"], env=env)
+        self.assertEqual(res.returncode, 1)
+        self.assertEqual(res.stdout, "")
+        self.assertIn("not found", res.stderr)
+
     def test_bundled_desktop_refuses_a_project_shortcut(self):
         self.install_bundled()
         proj = self.project()
         self.run_cli(["new", "local_desk", "--local", "--", "echo 1"], cwd=str(proj))
         res = self.run_cli(["r", "desktop", "local_desk"], cwd=str(proj))
         self.assertEqual(res.returncode, 1)
-        self.assertIn("not found", res.stdout)  # a logged run merges stderr into stdout
+        self.assertIn("not found", res.stderr)
         self.assertFalse((self.xdg_data_home / "applications" / "shortcut-local_desk.desktop").exists())
 
     def test_rm_cleans_desktop_file(self):
@@ -115,7 +136,7 @@ class TestBundled(ShortcutTestCase):
 
         res = self.run_cli(["new", "penpot", "--local", "--desc", "Project penpot", "--", "echo", "local"], cwd=str(proj_dir))
         self.assertEqual(res.returncode, 0)
-        res_rm = self.run_cli(["rm", "penpot", "-y"], cwd=str(proj_dir))
+        res_rm = self.run_cli(["rm", "--local", "penpot", "-y"], cwd=str(proj_dir))
         self.assertEqual(res_rm.returncode, 0)
         self.assertTrue(desktop_file.is_file(), "Removing local shortcut must keep global desktop file")
         self.assertIn("penpot", self.load_global())

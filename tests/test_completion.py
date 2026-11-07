@@ -13,10 +13,8 @@ class TestCompletion(ShortcutTestCase):
         self.assertIn("_shortcut", res_comp.stdout)
         self.assertIn("complete -F _shortcut shortcut", res_comp.stdout)
         self.assertIn("list --names", res_comp.stdout)
-        for cmd in ("run r", "show", "edit", "location", "rm", "fix", "update"):
+        for cmd in ("run r", "show", "location", "rm", "update"):
             self.assertIn(cmd, res_comp.stdout)
-        for cmd in (" log ", " desktop ", " prefix ", " allow "):
-            self.assertNotIn(cmd, res_comp.stdout)
 
     def test_completion_zsh_and_fish(self):
         zsh = self.run_cli(["completion", "zsh"])
@@ -43,8 +41,8 @@ class TestCompletion(ShortcutTestCase):
         self.assertEqual(self.bash_complete("r", "other", ""), [])
 
         self.assertEqual(self.bash_complete("r", "-"), ["--global", "-y"])
-        self.assertEqual(self.bash_complete("show", "-"), ["--global"])
-        self.assertEqual(self.bash_complete("location", "--"), ["--global", "--log"])
+        self.assertEqual(self.bash_complete("show", "-"), ["--global", "--json"])
+        self.assertEqual(self.bash_complete("location", "--"), ["--global"])
         self.assertEqual(self.bash_complete("r", "other", "--"), [])
 
 

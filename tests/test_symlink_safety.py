@@ -1,34 +1,24 @@
 #!/usr/bin/env python3
 """Symlink safety: a symlink in a project or a collection can't redirect a write or a run."""
 
-import json
-import pathlib
 import unittest
 
 from fixtures import GO, shortcut_mod, ShortcutTestCase
 
 
 class TestSymlinkSafety(ShortcutTestCase):
-    def test_a_run_cannot_write_through_a_symlink_in_the_project(self):
+    def test_a_run_writes_nothing_in_the_project_or_the_store(self):
         proj = self.project(GO)
-        victim = self.folder("victim")
-        store = proj / ".shortcuts"
-        (store / "logs").symlink_to(victim)
-        self.allow(store)
+        self.approve(proj / ".shortcuts")
+        before = sorted(self.shortcuts_home.rglob("*")), sorted(proj.rglob("*"))
         self.assertEqual(self.run_cli(["r", "go"], cwd=str(proj)).stdout, "ran\n")
-        self.assertEqual(list(victim.iterdir()), [])
-        log = pathlib.Path(self.run_cli(["location", "go", "--log"], cwd=str(proj)).stdout.strip())
-        self.assertTrue(log.is_relative_to(self.shortcuts_home / "logs"), log)
-        self.assertIn("ran", log.read_text())
-        # Two projects with the same name don't share a log
-        other = self.project(GO, name="other")
-        self.assertNotEqual(str(log), self.run_cli(["location", "go", "--log"], cwd=str(other)).stdout.strip())
+        self.assertEqual((sorted(self.shortcuts_home.rglob("*")), sorted(proj.rglob("*"))), before)
 
     def test_moving_a_symlink_under_a_relative_cwd_needs_approval(self):
-        proj = self.project({"go": {"inline": "pwd", "cwd": "../work"}}, dirs=["safe"])
+        proj = self.project({"go": {"inline": "pwd", "cwd": "work"}}, dirs=["safe"])
         elsewhere = self.folder("elsewhere")
         (proj / "work").symlink_to(proj / "safe")
-        self.allow(proj / ".shortcuts")
+        self.approve(proj / ".shortcuts")
         res = self.run_cli(["r", "go"], cwd=str(proj))
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertIn(f"→ {proj / 'safe'}", res.stderr)
@@ -50,38 +40,14 @@ class TestSymlinkSafety(ShortcutTestCase):
             self.assertEqual(res.returncode, 1, name)
             self.assertEqual(victim.read_text(encoding="utf-8"), "keep\n", name)
 
-    def test_new_and_add_never_write_through_a_committed_symlink(self):
+    def test_local_never_writes_through_a_committed_symlink(self):
         victim = self.write_file(self.tmp_path / "victim", "keep\n")
-        source = self.write_file(self.tmp_path / "source.sh", "echo new\n")
-        proj = self.project({}, dirs=[".shortcuts/scripts"])
-        (proj / ".shortcuts" / "scripts" / "build.sh").symlink_to(victim)
-        res = self.run_cli(["add", "build", str(source), "--desc", "d", "--local"], cwd=str(proj))
+        proj = self.project({})
+        (proj / ".shortcuts.local").symlink_to(victim)
+        res = self.run_cli(["new", "build", "--local", "--", "true"], cwd=str(proj))
         self.assertEqual(res.returncode, 1)
         self.assertIn("is a symlink", res.stderr)
-        res = self.run_cli(["new", "build", "--local", "--desc", "d"], cwd=str(proj),
-                           env={"SHORTCUT_EDITOR_CMD": "true"})
-        self.assertEqual(res.returncode, 1, res.stdout)
         self.assertEqual(victim.read_text(encoding="utf-8"), "keep\n")
-        self.assertNotIn("build", json.loads((proj / ".shortcuts" / "shortcuts.json").read_text())["shortcuts"])
-
-        # A symlinked folder is the same hole
-        elsewhere = self.folder("elsewhere")
-        other = self.project({}, name="other")
-        (other / ".shortcuts" / "scripts").symlink_to(elsewhere)
-        res = self.run_cli(["add", "build", str(source), "--desc", "d", "--local"], cwd=str(other))
-        self.assertEqual(res.returncode, 1)
-        self.assertEqual(list(elsewhere.iterdir()), [])
-
-    def test_a_symlinked_store_is_not_initialised(self):
-        home = self.folder("elsewhere")
-        self.write_file(home / ".gitignore", "keep\n")
-        proj = self.project()
-        (proj / ".shortcuts").symlink_to(home)
-        res = self.run_cli(["init"], cwd=str(proj))
-        self.assertEqual(res.returncode, 1)
-        self.assertIn("is a symlink", res.stderr)
-        self.assertEqual((home / ".gitignore").read_text(encoding="utf-8"), "keep\n")
-        self.assertEqual(sorted(p.name for p in home.iterdir()), [".gitignore"])
 
     def test_init_skips_symlinked_source_script(self):
         src_repo = self.collection(
