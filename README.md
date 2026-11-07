@@ -39,6 +39,7 @@ git clone https://github.com/StanLukuvka/Shortcut.git && cd Shortcut && ./instal
 - `.shortcuts.local` overrides `.shortcuts` per entry. `"name": null` hides a shared one.
 - Relative `script` and `cwd` paths resolve from the folder holding the file.
 - Projects and namespaces run only after `shortcut update`. Global shortcuts need no approval.
+- If a project's file can't be read, nothing runs inside the project. `--global` reaches your own shortcuts.
 
 ## Commands
 
