@@ -17,6 +17,14 @@ class TestImport(ShortcutTestCase):
         self.assertIn("used in place, never copied", res.stderr)
         self.assertFalse((proj_dir / ".shortcuts").exists())
 
+    def test_init_global_skips_a_namespace_name(self):
+        self.run_cli(["new", "keep", "--", "echo keep"])
+        self.write_import(self.shortcuts_home, "tools", {"version": 2, "shortcuts": HI})
+        res = self.run_cli(["init", "--global", str(self.collection({"tools": {"inline": "echo t"}})), "-y"])
+        self.assertIn("tools (already a namespace)", res.stdout)
+        self.assertNotIn("tools", self.load_global())
+        self.assertEqual(self.run_cli(["r", "keep"]).stdout, "keep\n")
+
     def test_init_global_merge_skips(self):
         self.run_cli(["new", "collide", "--", "echo existing"])
         ext_script = self.write_file(self.tmp_path / "external_source.sh", "#!/usr/bin/env bash\necho ext\n")

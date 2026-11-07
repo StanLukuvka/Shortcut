@@ -101,10 +101,14 @@ class TestStores(ShortcutTestCase):
         self.assertIn("anywhere", self.load_global())
         self.assertFalse((proj_dir / ".shortcuts").exists())
 
-        # 2. --local creates ./.shortcuts/ with a stderr notice, and it needs approving
+        # 2. --local needs a store in this directory, and what it adds needs approving
+        res = self.run_cli(["new", "local_cmd", "--local", "--", "echo local"], cwd=str(proj_dir))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("no project store in", res.stderr)
+        self.assertFalse((proj_dir / ".shortcuts").exists())
+        self.run_cli(["init"], cwd=str(proj_dir))
         res = self.run_cli(["new", "local_cmd", "--local", "--", "echo local"], cwd=str(proj_dir))
         self.assertEqual(res.returncode, 0, res.stderr)
-        self.assertIn("created project store", res.stderr)
         self.assertIn("needs approving before it runs: shortcut update", res.stderr)
         self.assertTrue((proj_dir / ".shortcuts" / "shortcuts.json").is_file())
         self.assertNotEqual(self.run_cli(["run", "local_cmd"], cwd=str(proj_dir)).returncode, 0)
@@ -161,15 +165,34 @@ class TestStores(ShortcutTestCase):
         real = self.tmp_path / "custom_store"
         env = {"SHORTCUTS_HOME": str(real)}
         (self.home_dir / "work").mkdir()
+        res = self.run_cli(["new", "here", "--local", "--", "echo 1"], cwd=str(self.home_dir), env=env)
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("no project store in", res.stderr)
+        self.assertEqual(self.load_global(), {})
+        self.run_cli(["init"], cwd=str(self.home_dir / "work"), env=env)
         res = self.run_cli(["new", "here", "--local", "--", "echo 1"], cwd=str(self.home_dir / "work"), env=env)
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertTrue((self.home_dir / "work" / ".shortcuts" / "shortcuts.json").is_file())
         self.assertEqual(self.load_global(), {})
 
+    def test_local_only_uses_a_store_in_this_directory(self):
+        proj = self.project({"up": {"inline": "true"}}, dirs=["sub"])
+        registry = proj / ".shortcuts" / "shortcuts.json"
+        before = registry.read_text(encoding="utf-8")
+        source = self.script("tool.sh", "#!/usr/bin/env bash\n", mode=0o644)
+
+        for cmd in (["new", "x", "--local", "--", "true"], ["add", "x", str(source), "--desc", "d", "--local"],
+                    ["link", "x", str(source), "--desc", "d", "--local"]):
+            res = self.run_cli(cmd, cwd=str(proj / "sub"))
+            self.assertEqual(res.returncode, 1, cmd)
+            self.assertIn("no project store in", res.stderr)
+        self.assertFalse((proj / "sub" / ".shortcuts").exists())
+        self.assertEqual(registry.read_text(encoding="utf-8"), before)
+
     def test_local_shortcut_hiding_global_warns(self):
         fixed = self.folder("fixed")
         self.assertEqual(self.run_cli(["new", "penpot", "--cwd", str(fixed), "--", "echo global"]).returncode, 0)
-        proj = self.project()
+        proj = self.project({})
         res = self.run_cli(["new", "penpot", "--local", "--cwd", ".", "--", "echo local"], cwd=str(proj))
         self.assertEqual(res.returncode, 0)
         update = self.run_cli(["update", "-y"], cwd=str(proj))
@@ -191,7 +214,7 @@ class TestStores(ShortcutTestCase):
         self.assertEqual(res_elsewhere.stderr, f"\u2192 {fixed}\n")
 
     def test_global_flag_reaches_a_hidden_shortcut(self):
-        proj = self.project()
+        proj = self.project({})
         script = self.write_file(self.tmp_path / "tool.sh", "#!/usr/bin/env bash\n")
         self.run_cli(["new", "build", "--", "echo global"])
         self.run_cli(["new", "build", "--local", "--", "echo project"], cwd=str(proj))
@@ -244,6 +267,7 @@ class TestStores(ShortcutTestCase):
     def test_list_and_names(self):
         proj_dir = self.home_dir / "list_proj"
         proj_dir.mkdir()
+        self.run_cli(["init"], cwd=str(proj_dir))
         self.run_cli(["new", "local_cmd", "--local", "--cwd", ".", "--", "echo local"], cwd=str(proj_dir))
         shortcut_mod.save_registry_atomic(
             str(self.shortcuts_home),
@@ -309,6 +333,24 @@ class TestStores(ShortcutTestCase):
 
 
 class TestEntries(ShortcutTestCase):
+    def test_args_need_a_name_that_is_a_string(self):
+        for arg in ({"required": True}, {"name": None}, {"name": True}):
+            entry = {"inline": "echo hi", "args": [arg]}
+            self.write_import(self.shortcuts_home, "ns", {"version": 2, "shortcuts": {"go": entry}})
+            res = self.run_cli(["update", "ns", "-y"])
+            self.assertEqual(res.returncode, 1, arg)
+            self.assertIn("needs a 'name'", res.stderr)
+
+    def test_commands_that_take_a_name_show_how_many(self):
+        for cmd in ("show", "location", "rm", "edit"):
+            self.assertIn("[namespace] name\n", self.run_cli([cmd, "--help"]).stdout)
+
+    def test_init_global_leaves_an_existing_store_alone(self):
+        self.run_cli(["new", "keep", "--", "echo keep"])
+        res = self.run_cli(["init", "--global"])
+        self.assertIn("Global store already exists", res.stdout)
+        self.assertEqual(self.run_cli(["r", "keep"]).stdout, "keep\n")
+
     def test_add_and_link_paths(self):
         # 1. Add copy from file
         src_file = self.script("source.sh", "#!/usr/bin/env bash\necho source\n", mode=0o644)
@@ -709,7 +751,7 @@ class TestNamespaces(ShortcutTestCase):
         self.assertTrue((self.shortcuts_home / "imports" / "scripts" / "kube" / "delete.sh").exists())
 
     def test_namespace_flag_in_a_project_uses_the_files_folder_for_cwd(self):
-        proj = self.project(dirs=["src"])
+        proj = self.project({}, dirs=["src"])
         res = self.run_cli(
             ["new", "where", "--namespace", "dev", "--local", "--cwd", str(proj / "src"), "--", "pwd"], cwd=str(proj)
         )
@@ -743,7 +785,7 @@ class TestBrokenStores(ShortcutTestCase):
 
         res = self.run_cli(["r", "outside"], cwd=str(proj))
         self.assertEqual(res.stdout, "outside\n")
-        self.assertIn("so this is the global 'outside'", res.stderr)
+        self.assertIn("this is the global 'outside'", res.stderr)
         self.assertIn("outside", self.run_cli(["list", "--names"], cwd=str(proj)).stdout.split())
         self.assertIn("corrupt registry", self.run_cli(["list"], cwd=str(proj)).stderr)
         report = self.run_cli(["fix"], cwd=str(proj))
@@ -768,10 +810,24 @@ class TestBrokenStores(ShortcutTestCase):
 
         res = self.run_cli(["r", "other"], cwd=str(proj))
         self.assertEqual(res.stdout, "other\n")
-        self.assertIn("so this is the global 'other'", res.stderr)
+        self.assertIn("this is the global 'other'", res.stderr)
 
         registry.write_text(good, encoding="utf-8")
         self.assertEqual(self.run_cli(["r", "build"], cwd=str(proj)).stdout, "project\n")
+
+    def test_broken_project_stops_rm_and_edit_reaching_the_global_one(self):
+        self.run_cli(["new", "x", "--", "echo g"])
+        proj = self.broken_project()
+        for args in (["rm", "x", "-y"], ["edit", "x"]):
+            res = self.run_cli(args, cwd=str(proj))
+            self.assertEqual(res.returncode, 1, args)
+            self.assertIn("corrupt registry", res.stderr)
+            self.assertIn("add --global", res.stderr)
+        self.assertIn("x", self.load_global())
+
+        self.assertEqual(self.run_cli(["show", "x"], cwd=str(proj)).returncode, 0)
+        self.assertEqual(self.run_cli(["rm", "--global", "x", "-y"], cwd=str(proj)).returncode, 0)
+        self.assertNotIn("x", self.load_global())
 
     def test_broken_project_offers_the_global_one_only_when_there_is_one(self):
         proj = self.project({"go": {"inline": "echo project"}}, approved=True)
@@ -802,17 +858,25 @@ class TestBrokenStores(ShortcutTestCase):
         self.assertEqual(res.returncode, 1)
         self.assertIn("shortcut run --global docker", res.stderr)
 
+    def test_unknown_field_warning_does_not_say_the_project_is_skipped(self):
+        self.run_cli(["new", "outside", "--", "echo outside"])
+        proj = self.project({"inside": {"inline": "true"}})
+        registry = proj / ".shortcuts" / "shortcuts.json"
+        data = json.loads(registry.read_text(encoding="utf-8"))
+        registry.write_text(json.dumps({**data, "bogus": 1}), encoding="utf-8")
+
+        res = self.run_cli(["show", "outside"], cwd=str(proj))
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("unknown field: bogus; this is the global 'outside'", res.stderr)
+        self.assertNotIn("skipped", res.stderr)
+        self.assertEqual(self.run_cli(["show", "inside"], cwd=str(proj)).returncode, 0)
+
     def test_broken_project_does_not_call_its_own_namespace_global(self):
         proj = self.broken_project()
         self.write_import(proj / ".shortcuts", "docker", {"version": 2, "shortcuts": {"ps": {"inline": "true"}}})
         res = self.run_cli(["show", "docker", "ps"], cwd=str(proj))
         self.assertEqual(res.returncode, 0, res.stderr)
-        self.assertNotIn("so this is the global", res.stderr)
-
-    def test_broken_project_warns_before_rm_reaches_the_global_one(self):
-        self.run_cli(["new", "build", "--", "true"])
-        proj = self.broken_project()
-        self.assertIn("so this is the global 'build'", self.run_cli(["rm", "build", "-y"], cwd=str(proj)).stderr)
+        self.assertNotIn("this is the global", res.stderr)
 
     def test_broken_global_store_still_reports(self):
         self.corrupt_store(self.shortcuts_home)

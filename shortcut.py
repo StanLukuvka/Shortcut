@@ -44,7 +44,8 @@ def validate_args(name: str, args: Any) -> None:
     if not isinstance(args, list):
         bad("'args' must be a list")
     for i, arg in enumerate(args):
-        if not isinstance(arg, dict) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", str(arg.get("name"))):
+        if not isinstance(arg, dict) or not isinstance(arg.get("name"), str) \
+                or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", arg["name"]):
             bad("every entry in 'args' needs a 'name' (letters, digits, _ and -)")
         unknown = sorted(set(arg) - {"name", "required", "default", "desc", "rest"})
         if unknown:
@@ -167,15 +168,17 @@ def registry_exists(store_dir: str) -> bool:
     return os.path.isfile(os.path.join(store_dir, "shortcuts.json"))
 
 
-def find_local_store_dir(start_dir: Optional[str] = None) -> Optional[str]:
-    curr = pathlib.Path(start_dir or os.getcwd()).resolve()
+def is_project_store(store_dir: pathlib.Path) -> bool:
     # ~/.shortcuts is never a project, also when SHORTCUTS_HOME points the global store elsewhere
     never = {pathlib.Path(get_global_store_dir()).resolve(), (pathlib.Path.home() / ".shortcuts").resolve()}
+    return store_dir.resolve() not in never and (store_dir / "shortcuts.json").is_file()
+
+
+def find_local_store_dir(start_dir: Optional[str] = None) -> Optional[str]:
+    curr = pathlib.Path(start_dir or os.getcwd()).resolve()
     for p in [curr, *curr.parents]:
         candidate = p / ".shortcuts"
-        if candidate.resolve() in never:
-            continue
-        if (candidate / "shortcuts.json").is_file():
+        if is_project_store(candidate):
             return str(candidate)
     return None
 
@@ -215,6 +218,14 @@ def new_local_store_dir(cwd: str) -> str:
         die(f"{store_dir} is the global store, so it can't hold local shortcuts. Run this inside a project folder.")
     if os.path.islink(store_dir):
         die(f"{store_dir} is a symlink, so a store there would be written somewhere else.")
+    return store_dir
+
+
+def existing_local_store_dir(cwd: str) -> str:
+    """The store --local writes to: the one in cwd. It never looks in a parent folder or creates one."""
+    store_dir = new_local_store_dir(cwd)
+    if not is_project_store(pathlib.Path(store_dir)):
+        die(f"no project store in {cwd}. Run this from the project root, or create one with: shortcut init")
     return store_dir
 
 
@@ -573,18 +584,27 @@ class ResolvedShortcut:
 
 
 def find_entry(
-    words: List[str], caller_cwd: Optional[str] = None, skip_local: bool = False, strict: bool = False
+    words: List[str],
+    caller_cwd: Optional[str] = None,
+    skip_local: bool = False,
+    strict: bool = False,
+    writes: bool = False,
 ) -> Tuple[Group, str, Any, List[str], bool]:
     """Find `name` or `namespace name` without judging the entry: (group, name, raw entry, leftover
     words, hides a global one). strict (for run) makes a store's load errors stop lookups in that store; the
-    commands that repair a store leave it False. A name found past a broken store gets a warning."""
+    commands that repair a store leave it False. A name found past a broken store gets a warning, or with
+    writes (for edit and rm) an error: it may be the wrong shortcut, and --global says it isn't."""
     stores = visible_stores(caller_cwd, skip_local)
     first, rest = words[0], words[1:]
     broken: List[str] = []
 
     def warn_broken() -> None:
+        if writes and broken:
+            raise ValueError(
+                f"{broken[0]}; this would change the global '{first}'. Repair the file, or add --global"
+            )
         for error in broken:
-            print(f"warning: {error}; its shortcuts are skipped, so this is the global '{first}'", file=sys.stderr)
+            print(f"warning: {error}; this is the global '{first}'", file=sys.stderr)
 
     for store in stores:
         problems = ([store.main.error] if store.main.error else []) + store.problems
@@ -625,19 +645,23 @@ def resolve_run_dir(cwd: Optional[str], group: Group, caller_cwd: str) -> str:
 
 
 def resolve_shortcut(
-    words: List[str], caller_cwd: Optional[str] = None, skip_local: bool = False, strict: bool = False
+    words: List[str],
+    caller_cwd: Optional[str] = None,
+    skip_local: bool = False,
+    strict: bool = False,
+    writes: bool = False,
 ) -> Tuple[ResolvedShortcut, List[str]]:
     """Find what `shortcut run <words>` runs, and where; also returns the words left over as arguments."""
     caller_cwd = caller_cwd or os.getcwd()
-    group, name, raw, rest, hides_global = find_entry(words, caller_cwd, skip_local, strict)
+    group, name, raw, rest, hides_global = find_entry(words, caller_cwd, skip_local, strict, writes)
     entry = ShortcutEntry.from_dict(name, raw)
     run_cwd = resolve_run_dir(entry.cwd, group, caller_cwd)
     return ResolvedShortcut(entry=entry, group=group, run_cwd=run_cwd, hides_global=hides_global), rest
 
 
-def resolve_name(words: List[str], skip_local: bool = False) -> ResolvedShortcut:
+def resolve_name(words: List[str], skip_local: bool = False, writes: bool = False) -> ResolvedShortcut:
     """For commands that name a shortcut: `name` or `namespace name`, and nothing else."""
-    resolved, rest = resolve_shortcut(words, skip_local=skip_local)
+    resolved, rest = resolve_shortcut(words, skip_local=skip_local, writes=writes)
     if rest:
         die(f"too many names: {shlex.join(words)}")
     return resolved
@@ -960,7 +984,7 @@ def stored_cwd(value: Optional[str], group: Group) -> Optional[str]:
 def target_group(parsed: argparse.Namespace, cwd: str) -> Group:
     """The file a new shortcut goes in. Creates nothing; _register does."""
     validate_name(parsed.name)
-    store_dir = (find_local_store_dir(cwd) or new_local_store_dir(cwd)) if parsed.local else get_global_store_dir()
+    store_dir = existing_local_store_dir(cwd) if parsed.local else get_global_store_dir()
     store = load_store(store_dir)
     group = store.main
     if parsed.namespace:
@@ -1047,11 +1071,8 @@ def _register(group: Group, entry: ShortcutEntry, write_script: Optional[Any] = 
     """Add entry to group's file under the registry lock; write_script() runs first, once the name is known free.
     Creates a missing store or namespace file."""
     store_dir = group.store_dir
-    is_project = not is_global_store(store_dir)
     if not registry_exists(store_dir):
         init_store(store_dir)
-        if is_project:
-            print(f"created project store {store_dir}", file=sys.stderr)
     with registry_lock(store_dir):
         is_new_file = bool(group.name) and not os.path.exists(group.file)
         reg = {"version": REGISTRY_VERSION, "shortcuts": {}} if is_new_file else load_registry_file(group.file)
@@ -1098,7 +1119,7 @@ def add_global_flag(parser: argparse.ArgumentParser) -> None:
 
 def add_entry_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--cwd", default=None, help="Where it runs: caller (default) or a directory")
-    parser.add_argument("--local", action="store_true", help="Store it in this project's .shortcuts/, not globally")
+    parser.add_argument("--local", action="store_true", help="Store it in .shortcuts/ in this directory, not globally")
     parser.add_argument("--namespace", default=None, metavar="NAME",
                         help="Put it in this namespace, creating imports/NAME.shortcut if needed")
     parser.add_argument("--by", default=None, help="Creator identifier")
@@ -1343,7 +1364,11 @@ def cmd_list(args: List[str]) -> int:
 
 
 def cmd_show(args: List[str]) -> int:
-    parser = Parser(prog="shortcut show", description="Show shortcut details and content")
+    parser = Parser(
+        prog="shortcut show",
+        usage="%(prog)s [-h] [--global] [namespace] name",
+        description="Show shortcut details and content",
+    )
     parser.add_argument("name", nargs="+", help="Shortcut name, or namespace and name")
     add_global_flag(parser)
     parsed = parser.parse_args(args)
@@ -1388,7 +1413,11 @@ def cmd_show(args: List[str]) -> int:
 
 
 def cmd_location(args: List[str]) -> int:
-    parser = Parser(prog="shortcut location", description="Print the path of a shortcut's script")
+    parser = Parser(
+        prog="shortcut location",
+        usage="%(prog)s [-h] [--log] [--global] [namespace] name",
+        description="Print the path of a shortcut's script",
+    )
     parser.add_argument("name", nargs="+", help="Shortcut name, or namespace and name")
     parser.add_argument("--log", action="store_true", help="Print the path of its log instead")
     add_global_flag(parser)
@@ -1406,14 +1435,16 @@ def cmd_location(args: List[str]) -> int:
 
 
 def cmd_rm(args: List[str]) -> int:
-    parser = Parser(prog="shortcut rm", description="Remove a shortcut")
+    parser = Parser(
+        prog="shortcut rm", usage="%(prog)s [-h] [-y] [--global] [namespace] name", description="Remove a shortcut"
+    )
     parser.add_argument("name", nargs="+", help="Shortcut name, or namespace and name")
     parser.add_argument("-y", "--yes", action="store_true", help="Do not prompt for confirmation")
     add_global_flag(parser)
     parsed = parser.parse_args(args)
 
     # Raw lookup: an entry that can't run must still be removable
-    group, name, raw_entry, rest, _ = find_entry(parsed.name, skip_local=parsed.skip_local)
+    group, name, raw_entry, rest, _ = find_entry(parsed.name, skip_local=parsed.skip_local, writes=True)
     if rest:
         die(f"too many names: {shlex.join(parsed.name)}")
     display = group.display(name)
@@ -1458,11 +1489,15 @@ def cmd_rm(args: List[str]) -> int:
 
 
 def cmd_edit(args: List[str]) -> int:
-    parser = Parser(prog="shortcut edit", description="Edit shortcut script in editor")
+    parser = Parser(
+        prog="shortcut edit",
+        usage="%(prog)s [-h] [--global] [namespace] name",
+        description="Edit shortcut script in editor",
+    )
     parser.add_argument("name", nargs="+", help="Shortcut name, or namespace and name")
     add_global_flag(parser)
     parsed = parser.parse_args(args)
-    resolved = resolve_name(parsed.name, parsed.skip_local)
+    resolved = resolve_name(parsed.name, parsed.skip_local, writes=True)
     editor_cmd = get_editor_cmd()
     entry = resolved.entry
     if entry.inline is not None:
@@ -1702,6 +1737,7 @@ def plan_import(
     scripts: Dict[str, bytes] = {}
     skipped: List[str] = []
     dest_shortcuts = dest_registry.get("shortcuts", {})
+    dest_namespaces = load_store(dest_store_dir).namespaces
     source_shortcuts = source_registry.get("shortcuts", {})
     if not isinstance(source_shortcuts, dict):
         return entries, scripts, skipped
@@ -1716,6 +1752,9 @@ def plan_import(
 
         if name in dest_shortcuts:
             skipped.append(f"{name} (already exists)")
+            continue
+        if name in dest_namespaces:
+            skipped.append(f"{name} (already a namespace)")
             continue
 
         script_field = entry_data.get("script")
@@ -1814,6 +1853,9 @@ def cmd_init(args: List[str]) -> int:
 
     dest_store_dir = get_global_store_dir()
     if not parsed.source:
+        if registry_exists(dest_store_dir):
+            print(f"Global store already exists at {dest_store_dir}")
+            return 0
         init_store(dest_store_dir)
         print(f"Initialized empty global store at {dest_store_dir}")
         return 0
@@ -2237,7 +2279,7 @@ FLAGS for new, add and link:
   --cwd caller|DIR          Where it runs (default: caller, your current directory)
   --arg NAME[=DEFAULT]      Declare a required argument, or an optional one with a default
   --confirm                 Ask before running it
-  --local                   Store it in this project's .shortcuts/ (default: the global store)
+  --local                   Store it in .shortcuts/ in this directory (default: the global store)
   --namespace NAME          Put it in namespace NAME, creating imports/NAME.shortcut if needed
   --by C                    Creator identifier
 
