@@ -75,6 +75,7 @@ class ShortcutEntry:
     created_by: Optional[str] = None
     created: Optional[str] = None
     confirm: bool = False
+    export: bool = False  # made to work outside its project; only a project's own files can say so
     args: Optional[List[Dict[str, Any]]] = None
 
     TEXT_FIELDS = ("inline", "script", "cwd", "icon", "created_by", "created")
@@ -96,8 +97,9 @@ class ShortcutEntry:
             val = data.get(field)
             if val is not None and not isinstance(val, str):
                 raise bad(f"'{field}' must be a string")
-        if not isinstance(data.get("confirm", False), bool):
-            raise bad("'confirm' must be a boolean")
+        for field in ("confirm", "export"):
+            if not isinstance(data.get(field, False), bool):
+                raise bad(f"'{field}' must be a boolean")
         if (data.get("inline") is None) == (data.get("script") is None):
             raise bad("it needs exactly one of 'inline' and 'script'")
         if data.get("args") is not None:
@@ -111,9 +113,35 @@ class ShortcutEntry:
                 d[field] = getattr(self, field)
         if self.confirm:
             d["confirm"] = True
+        if self.export:
+            d["export"] = True
         if self.args is not None:
             d["args"] = self.args
         return d
+
+
+def is_relative_cwd(cwd: Optional[str]) -> bool:
+    """A cwd that means a folder next to the file defining it, so it's only right in that checkout."""
+    return bool(cwd) and cwd != CALLER and not os.path.isabs(os.path.expanduser(cwd))
+
+
+def export_error(entry: ShortcutEntry, in_project: bool) -> Optional[str]:
+    if not entry.export:
+        return None
+    if not in_project:
+        return f"'{entry.name}' is not a valid entry: 'export' is only for {PROJECT_FILE} and {LOCAL_FILE}"
+    if is_relative_cwd(entry.cwd):
+        return f"'{entry.name}' is exported, so its cwd must be caller or an absolute path, not '{entry.cwd}'"
+    return None
+
+
+def load_entry(group: "Group", name: str, data: Any) -> ShortcutEntry:
+    """An entry as its group allows it: ShortcutEntry.from_dict, plus the rules for 'export'."""
+    entry = ShortcutEntry.from_dict(name, data)
+    error = export_error(entry, bool(group.local_file))
+    if error:
+        raise ValueError(error)
+    return entry
 
 
 def safe(text: str) -> str:
@@ -435,7 +463,7 @@ def entry_errors(group: Group) -> List[str]:
     for name, data in group.shortcuts.items():
         try:
             validate_name(name)
-            entry = ShortcutEntry.from_dict(name, data)
+            entry = load_entry(group, name, data)
             if entry.script is not None and not os.path.isfile(resolve_script_path(group.script_base, entry.script)):
                 raise ValueError(f"'{name}' is not a valid entry: script not found: {entry.script}")
         except ValueError as e:
@@ -522,7 +550,7 @@ def entry_files(group: Group, shortcuts: Dict[str, Any], origin: str = "") -> Di
     files: Dict[str, str] = {}
     for name, data in shortcuts.items():
         cwd = data.get("cwd") if isinstance(data, dict) else None
-        if isinstance(cwd, str) and cwd and cwd != CALLER and not os.path.isabs(os.path.expanduser(cwd)):
+        if isinstance(cwd, str) and is_relative_cwd(cwd):
             with contextlib.suppress(ValueError):  # a NUL: it can't run, and the JSON already shows it
                 files[f"./cwd of {name}{origin}"] = os.path.realpath(resolve_run_dir(cwd, group, "")) + "\n"
         script = data.get("script") if isinstance(data, dict) else None
@@ -686,7 +714,7 @@ def resolve_shortcut(
     """Find what `shortcut run <words>` runs, and where; also returns the words left over as arguments."""
     caller_cwd = caller_cwd or os.getcwd()
     group, name, raw, rest, hides_global = find_entry(words, caller_cwd, skip_local, strict)
-    entry = ShortcutEntry.from_dict(name, raw)
+    entry = load_entry(group, name, raw)
     run_cwd = resolve_run_dir(entry.cwd, group, caller_cwd)
     return ResolvedShortcut(entry=entry, group=group, run_cwd=run_cwd, hides_global=hides_global), rest
 
@@ -1273,6 +1301,8 @@ def cmd_show(args: List[str]) -> int:
         print(f"Usage:       {usage_line(resolved.display, entry.args)}")
     if entry.confirm:
         print("Confirm:     True")
+    if entry.export:
+        print("Export:      True")
     if entry.created:
         print(f"Created:     {entry.created}")
     if entry.created_by:
@@ -1315,7 +1345,7 @@ def show_json(words: List[str], skip_local: bool) -> int:
         "entry": raw,
     }
     try:
-        entry = ShortcutEntry.from_dict(name, raw)
+        entry = load_entry(group, name, raw)
         out["run_cwd"] = resolve_run_dir(entry.cwd, group, os.getcwd())
         if entry.script is not None:
             out["script_path"] = resolve_script_path(group.script_base, entry.script)
@@ -1430,6 +1460,7 @@ def cmd_promote(args: List[str]) -> int:
     parser.add_argument("name", help="Project shortcut name")
     parser.add_argument("--as", dest="new_name", metavar="NEW", help="Global name to give it")
     parser.add_argument("-y", "--yes", action="store_true", help="Do not prompt for confirmation")
+    parser.add_argument("--force", action="store_true", help="Promote an entry that isn't exported")
     parsed = parser.parse_args(args)
 
     caller_cwd = os.getcwd()
@@ -1442,6 +1473,9 @@ def cmd_promote(args: List[str]) -> int:
     if not group.is_project or group.name:
         die(f"'{name}' isn't a project shortcut here")
     require_approved(group)
+    if not entry.export and not parsed.force:
+        die(f"'{name}' isn't exported, so it's written for this project. Copy it anyway with: "
+            f"shortcut promote {name} --force")
 
     home = load_store(get_global_store_dir())
     if home.main.error:
@@ -1452,8 +1486,9 @@ def cmd_promote(args: List[str]) -> int:
         die(f"you already have a global '{new_name}'")
 
     fields = entry.to_dict()
+    fields.pop("export", None)  # a global entry can't export
     old_cwd = entry.cwd
-    if old_cwd and old_cwd != CALLER and not os.path.isabs(os.path.expanduser(old_cwd)):
+    if is_relative_cwd(old_cwd):
         fields["cwd"] = os.path.realpath(resolve_run_dir(old_cwd, group, caller_cwd))  # what was approved
 
     raw: Optional[bytes] = None
@@ -1477,7 +1512,7 @@ def cmd_promote(args: List[str]) -> int:
         print(f"\nScript {src}, copied to {dest}:")
         print(reviewable(raw).rstrip())
     if fields.get("cwd") != old_cwd:
-        print(f"\ncwd: {old_cwd} becomes {fields['cwd']}")
+        print(f"\ncwd: '{old_cwd}' becomes {fields['cwd']}. It will always run there, in this checkout.")
     if not parsed.yes:
         if not sys.stdin.isatty():
             die(f"promote '{name}' in a terminal, or pass -y")
@@ -1493,7 +1528,7 @@ def cmd_promote(args: List[str]) -> int:
     _register(home.main, new_entry, write_script if raw is not None else None)
     print(f"Promoted '{name}' to your global shortcuts as '{new_name}'.")
     if fields.get("cwd") != old_cwd:
-        print(f"It runs in {fields['cwd']}, which was '{old_cwd}' relative to {group.folder}.")
+        print(f"It will always run in {fields['cwd']}, this checkout's '{old_cwd}'.")
     if new_name == name:
         print(f"note: inside this project '{name}' is still the project's; shortcut r --global {name} runs yours",
               file=sys.stderr)
@@ -1632,9 +1667,11 @@ def plan_import(
     dest_store_dir: str,
     dest_registry: Dict[str, Any],
     source_registry: Dict[str, Any],
+    from_project: bool = False,
 ) -> Tuple[Dict[str, Any], Dict[str, bytes], List[str]]:
     """What a collection would add to the global store, changing nothing: (entries, {stored script path:
-    its bytes}, skipped). The bytes are read once here, so what gets copied is what was reviewed."""
+    its bytes}, skipped). The bytes are read once here, so what gets copied is what was reviewed.
+    From a project's .shortcuts, only exported entries come; a collection offers every entry."""
     entries: Dict[str, Any] = {}
     scripts: Dict[str, bytes] = {}
     skipped: List[str] = []
@@ -1645,11 +1682,16 @@ def plan_import(
         return entries, scripts, skipped
 
     for name, entry_data in source_shortcuts.items():
-        # Validate entry structure
         try:
-            ShortcutEntry.from_dict(name, entry_data)
+            entry = ShortcutEntry.from_dict(name, entry_data)
+            error = export_error(entry, from_project)
+            if error:
+                raise ValueError(error)
         except ValueError as e:
             skipped.append(f"{name} (invalid entry: {e})")
+            continue
+        if from_project and not entry.export:
+            skipped.append(f"{name} (project-only)")
             continue
 
         if name in dest_shortcuts:
@@ -1670,13 +1712,15 @@ def plan_import(
             skipped.append(f"{name!r} (invalid name: {e})")
             continue
 
-        # A relative cwd means nothing once the entry leaves the file that defined it
+        # A collection's relative cwd means nothing once the entry leaves the file that defined it.
+        # An exported entry can't have one, and says it works elsewhere.
         d = entry_data.get("cwd")
-        if d and d != CALLER and (not os.path.isabs(d) or not os.path.isdir(d)):
+        if not from_project and d and d != CALLER and (not os.path.isabs(d) or not os.path.isdir(d)):
             skipped.append(f"{name} (cwd is relative or not found here: {d})")
             continue
 
         new_entry = dict(entry_data)
+        new_entry.pop("export", None)  # a global entry can't export
         if script_field:
             curr = pathlib.Path(source_base)
             symlink_found = False
@@ -1791,6 +1835,7 @@ def cmd_init(args: List[str]) -> int:
             dest_store_dir=dest_store_dir,
             dest_registry=load_registry(dest_store_dir) if registry_exists(dest_store_dir) else {},
             source_registry=load_registry_file(source_file),
+            from_project=os.path.basename(source_file) == PROJECT_FILE,
         )
         if skipped:
             print(f"Skipped ({len(skipped)}):")
@@ -1856,7 +1901,7 @@ _shortcut() {
                 case "$cmd" in
                     run|r) flags="--global -y" ;;
                     rm) flags="--global --local -y" ;;
-                    promote) flags="--as -y" ;;
+                    promote) flags="--as -y --force" ;;
                     show) flags="--global --json" ;;
                 esac
                 COMPREPLY=( $(compgen -W "${flags}" -- "$cur") )
@@ -1904,7 +1949,7 @@ _shortcut() {
                     run|r) compadd -- --global -y ;;
                     rm) compadd -- --global --local -y ;;
                     show) compadd -- --global --json ;;
-                    promote) compadd -- --as -y ;;
+                    promote) compadd -- --as -y --force ;;
                     *) compadd -- --global ;;
                 esac
             elif (( $#typed <= 1 )); then
@@ -1939,6 +1984,7 @@ complete -c shortcut -n "__fish_seen_subcommand_from run r show location rm prom
 complete -c shortcut -n "__fish_seen_subcommand_from run r show location rm" -l global
 complete -c shortcut -n "__fish_seen_subcommand_from run r rm promote" -s y
 complete -c shortcut -n "__fish_seen_subcommand_from promote" -l as -r
+complete -c shortcut -n "__fish_seen_subcommand_from promote" -l force
 complete -c shortcut -n "__fish_seen_subcommand_from rm" -l local
 complete -c shortcut -n "__fish_seen_subcommand_from show" -l json
 complete -c shortcut -n "__fish_seen_subcommand_from init" -F -l global
@@ -1976,8 +2022,10 @@ Usage:
   shortcut rm [--global|--local] <name> [-y]
                                             Remove a shortcut. With --local, take it out of .shortcuts.local,
                                             or hide a shared one from you
-  shortcut promote <name> [--as NEW] [-y]   Copy an approved project shortcut, and its script, into your
-                                            global shortcuts. The project entry stays as it is
+  shortcut promote <name> [--as NEW] [-y] [--force]
+                                            Copy an approved, exported project shortcut, and its script,
+                                            into your global shortcuts. --force takes one that isn't
+                                            exported. The project entry stays as it is
   shortcut update [group] [-y]              Review changes to project shortcuts and namespaces, and approve them
   shortcut init --global [SOURCE] [-y]      Review a collection (folder or git URL) and copy it into the
                                             global store. Later changes to the source don't reach it

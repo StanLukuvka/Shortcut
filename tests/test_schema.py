@@ -15,7 +15,7 @@ SAMPLES = {"string": "x", "boolean": True, "array": []}
 
 def entry_fields() -> set[str]:
     entry = next(n for n in ast.walk(TREE) if isinstance(n, ast.ClassDef) and n.name == "ShortcutEntry")
-    return {n.target.id for n in entry.body if isinstance(n, ast.AnnAssign)} - {"name"}
+    return {n.target.id for n in entry.body if isinstance(n, ast.AnnAssign)} - {"name", "export"}  # export: projects only
 
 
 def arg_fields() -> set[str]:

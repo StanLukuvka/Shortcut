@@ -14,6 +14,7 @@ Agents use the same commands as people. In a project, `--local` writes to `.shor
    - General-purpose tool: use the defaults, the global store and `cwd: caller`.
    - Your own project-specific work: use `--local`, from the project root. For something the whole project shares, propose an entry for `.shortcuts` and let the user commit it.
    - A process that must run in a specific directory: use `--cwd <dir>`.
+   - A `.shortcuts` entry that also works outside the repo: propose `"export": true`, with `cwd` `caller` or absolute. Only exported entries reach `init --global <repo>` and `shortcut promote` without `--force`.
    - A script that already exists: `--script PATH` uses it where it is, `--copy FILE` copies it into the global store. With `--local`, only `--script`.
 
 3. **Single-quote the command.** Read arguments with `$1` or `"$@"`. A shortcut doesn't append them. `--arg NAME` declares a required argument and `--arg NAME=DEFAULT` an optional one.

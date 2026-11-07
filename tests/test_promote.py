@@ -8,21 +8,36 @@ import unittest
 from fixtures import ShortcutTestCase
 
 TOOL_SCRIPT = '#!/bin/sh\necho "tool in $PWD"\n'
-TOOL = {"tool": {"description": "a tool", "script": "bin/tool", "cwd": "sub"}}
+TOOL = {"tool": {"description": "a tool", "script": "bin/tool", "cwd": "sub"}}  # project-only: its cwd is here
 
 
 class TestPromote(ShortcutTestCase):
     def tool_project(self, approved: bool = True):
         return self.project(TOOL, dirs=["sub"], files={"bin/tool": TOOL_SCRIPT}, approved=approved)
 
-    def test_promote_copies_the_script_and_makes_cwd_absolute(self):
+    def test_an_exported_entry_promotes_without_its_export(self):
+        proj = self.project({"tool": {"script": "bin/tool", "export": True}}, files={"bin/tool": TOOL_SCRIPT}, approved=True)
+        res = self.run_cli(["promote", "tool", "-y"], cwd=str(proj))
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertEqual(self.load_global()["tool"], {"description": "", "script": "scripts/tool.sh"})
+        self.assertEqual(self.run_cli(["r", "tool"], cwd=str(self.folder("elsewhere"))).returncode, 0)
+
+    def test_an_entry_that_isnt_exported_needs_force(self):
+        proj = self.tool_project()
+        res = self.run_cli(["promote", "tool", "-y"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("'tool' isn't exported", res.stderr)
+        self.assertIn("shortcut promote tool --force", res.stderr)
+        self.assertFalse((self.shortcuts_home / "shortcuts.json").exists())
+
+    def test_force_copies_the_script_and_makes_cwd_absolute(self):
         proj = self.tool_project()
         before = (proj / ".shortcuts").read_bytes()
 
-        res = self.run_cli(["promote", "tool", "-y"], cwd=str(proj))
+        res = self.run_cli(["promote", "tool", "--force", "-y"], cwd=str(proj))
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertIn('echo "tool in $PWD"', res.stdout)
-        self.assertIn(f"It runs in {proj / 'sub'}, which was 'sub' relative to {proj}.", res.stdout)
+        self.assertIn(f"It will always run in {proj / 'sub'}, this checkout's 'sub'.", res.stdout)
         self.assertIn("shortcut r --global tool runs yours", res.stderr)
 
         entry = self.load_global()["tool"]
@@ -47,14 +62,14 @@ class TestPromote(ShortcutTestCase):
             "py": {"script": "mine.py"}}}))
         self.approve(proj / ".shortcuts")
 
-        res = self.run_cli(["promote", "py", "-y"], cwd=str(proj))
+        res = self.run_cli(["promote", "py", "--force", "-y"], cwd=str(proj))
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertEqual(self.load_global()["py"]["script"], "scripts/py.py")
         self.assertEqual((self.shortcuts_home / "scripts" / "py.py").read_text(), "print('mine')\n")
 
-        res = self.run_cli(["promote", "hello", "-y"], cwd=str(proj))
+        res = self.run_cli(["promote", "hello", "--force", "-y"], cwd=str(proj))
         self.assertEqual(res.returncode, 0, res.stderr)
-        self.assertNotIn("It runs in", res.stdout)
+        self.assertNotIn("always run", res.stdout)
         self.assertEqual(self.load_global()["hello"]["inline"], 'echo "hi $1"')
         self.assertEqual(self.load_global()["hello"]["confirm"], True)
         self.assertEqual(self.load_global()["hello"]["cwd"], "caller")
@@ -62,13 +77,13 @@ class TestPromote(ShortcutTestCase):
 
     def test_promote_needs_approval_first(self):
         proj = self.tool_project(approved=False)
-        res = self.run_cli(["promote", "tool", "-y"], cwd=str(proj))
+        res = self.run_cli(["promote", "tool", "--force", "-y"], cwd=str(proj))
         self.assertEqual(res.returncode, 1)
         self.assertIn("isn't approved yet", res.stderr)
 
         self.approve(proj / ".shortcuts")
         (proj / "bin" / "tool").write_text('#!/bin/sh\necho swapped\n')
-        res = self.run_cli(["promote", "tool", "-y"], cwd=str(proj))
+        res = self.run_cli(["promote", "tool", "--force", "-y"], cwd=str(proj))
         self.assertEqual(res.returncode, 1)
         self.assertIn("changed since you approved it", res.stderr)
         self.assertFalse((self.shortcuts_home / "shortcuts.json").exists())
@@ -77,16 +92,16 @@ class TestPromote(ShortcutTestCase):
         self.run_cli(["new", "tool", "--", "echo mine"])
         proj = self.tool_project()
 
-        res = self.run_cli(["promote", "tool", "-y"], cwd=str(proj))
+        res = self.run_cli(["promote", "tool", "--force", "-y"], cwd=str(proj))
         self.assertEqual(res.returncode, 1)
         self.assertIn("shortcut promote tool --as NEW", res.stderr)
         self.assertEqual(self.load_global()["tool"]["inline"], "echo mine")
 
-        res = self.run_cli(["promote", "tool", "--as", "tool", "-y"], cwd=str(proj))
+        res = self.run_cli(["promote", "tool", "--as", "tool", "--force", "-y"], cwd=str(proj))
         self.assertEqual(res.returncode, 1)
         self.assertIn("you already have a global 'tool'", res.stderr)
 
-        res = self.run_cli(["promote", "tool", "--as", "projtool", "-y"], cwd=str(proj))
+        res = self.run_cli(["promote", "tool", "--as", "projtool", "--force", "-y"], cwd=str(proj))
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertNotIn("still the project's", res.stderr)
         self.assertEqual(self.load_global()["projtool"]["script"], "scripts/projtool.sh")
@@ -94,39 +109,40 @@ class TestPromote(ShortcutTestCase):
 
     def test_without_a_terminal_it_needs_y(self):
         proj = self.tool_project()
-        res = self.run_cli(["promote", "tool"], cwd=str(proj))
+        res = self.run_cli(["promote", "tool", "--force"], cwd=str(proj))
         self.assertEqual(res.returncode, 1)
         self.assertIn("promote 'tool' in a terminal, or pass -y", res.stderr)
         self.assertFalse((self.shortcuts_home / "shortcuts.json").exists())
 
     def test_in_a_terminal_it_shows_the_entry_and_script_then_asks(self):
         proj = self.tool_project()
-        code, out = self.run_in_terminal(["promote", "tool"], cwd=str(proj), keys=[(b"[y/N]", b"n\n")])
+        code, out = self.run_in_terminal(["promote", "tool", "--force"], cwd=str(proj), keys=[(b"[y/N]", b"n\n")])
         self.assertEqual(code, 1)
         self.assertIn('"script": "scripts/tool.sh"', out)
         self.assertIn('echo "tool in $PWD"', out)
-        self.assertIn("cwd: sub becomes", out)
+        self.assertIn("cwd: 'sub' becomes", out)
+        self.assertIn("It will always run there, in this checkout.", out)
         self.assertIn("Aborted.", out)
         self.assertFalse((self.shortcuts_home / "shortcuts.json").exists())
 
-        code, out = self.run_in_terminal(["promote", "tool"], cwd=str(proj), keys=[(b"[y/N]", b"y\n")])
+        code, out = self.run_in_terminal(["promote", "tool", "--force"], cwd=str(proj), keys=[(b"[y/N]", b"y\n")])
         self.assertEqual(code, 0, out)
         self.assertIn("tool", self.load_global())
 
     def test_only_a_project_shortcut_from_inside_a_project(self):
         self.run_cli(["new", "mine", "--", "echo mine"])
-        res = self.run_cli(["promote", "mine", "-y"], cwd=str(self.folder("plain")))
+        res = self.run_cli(["promote", "mine", "--force", "-y"], cwd=str(self.folder("plain")))
         self.assertEqual(res.returncode, 1)
         self.assertIn("promote runs inside a project", res.stderr)
 
         proj = self.tool_project()
-        res = self.run_cli(["promote", "mine", "-y"], cwd=str(proj))
+        res = self.run_cli(["promote", "mine", "--force", "-y"], cwd=str(proj))
         self.assertEqual(res.returncode, 1)
         self.assertIn("'mine' isn't a project shortcut here", res.stderr)
 
     def test_bash_completion_offers_promote_flags(self):
         self.assertIn("promote", self.bash_complete("pro"))
-        self.assertEqual(self.bash_complete("promote", "-"), ["--as", "-y"])
+        self.assertEqual(self.bash_complete("promote", "-"), ["--as", "-y", "--force"])
 
 
 if __name__ == "__main__":

@@ -251,7 +251,7 @@ class TestList(ShortcutTestCase):
 
 class TestImportFromAProject(ShortcutTestCase):
     def test_a_project_can_be_a_collection(self):
-        proj = self.project({"tool": {"description": "t", "inline": "echo tool"}})
+        proj = self.project({"tool": {"description": "t", "inline": "echo tool", "export": True}})
         res = self.run_cli(["init", "--global", str(proj), "-y"])
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertIn("tool", self.load_global())
