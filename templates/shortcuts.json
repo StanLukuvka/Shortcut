@@ -26,7 +26,7 @@
       ]
     },
     "desktop": {
-      "description": "Create a desktop launcher for a global shortcut",
+      "description": "Create a desktop launcher for a global shortcut, or remove one with --remove",
       "script": "scripts/desktop.sh",
       "args": [
         {"name": "shortcut", "required": true}

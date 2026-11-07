@@ -732,12 +732,16 @@ def usage_line(display: str, spec: List[Dict[str, Any]]) -> str:
 
 def bind_args(display: str, spec: List[Dict[str, Any]], argv: List[str]) -> Tuple[List[str], Dict[str, str]]:
     """Check presence and count against declared args, fill defaults. Returns (argv, SC_ARG_* env).
-    --flags are never parsed: they don't count, and stay where they are in argv."""
+    --flags are never parsed: they don't count, and stay where they are in argv. A first -- is dropped,
+    and every word after it counts, so a value can start with a dash."""
     def fail(msg: str) -> NoReturn:
         print(f"error: {msg}\nusage: {usage_line(display, spec)}", file=sys.stderr)
         sys.exit(2)
 
-    positional = [t for t in argv if not is_flag(t)]
+    end = argv.index("--") if "--" in argv else len(argv)
+    argv = argv[:end] + argv[end + 1:]
+    counts = [i >= end or not is_flag(t) for i, t in enumerate(argv)]
+    positional = [t for t, c in zip(argv, counts) if c]
     has_rest = bool(spec) and bool(spec[-1].get("rest"))
     if len(positional) > len(spec) and not has_rest:
         fail("too many arguments")
@@ -758,7 +762,7 @@ def bind_args(display: str, spec: List[Dict[str, Any]], argv: List[str]) -> Tupl
         env[var] = shlex.join(values) if is_rest else "".join(values)
     while fill and not fill[-1]:
         fill.pop()
-    last = max((i for i, t in enumerate(argv) if not is_flag(t)), default=-1)
+    last = max((i for i, c in enumerate(counts) if c), default=-1)
     return argv[:last + 1] + fill + argv[last + 1:], env
 
 
@@ -1241,16 +1245,12 @@ def cmd_show(args: List[str]) -> int:
         description="Show shortcut details and content",
     )
     parser.add_argument("name", nargs="+", help="Shortcut name, or namespace and name")
-    parser.add_argument("--json", action="store_true", help="Print the entry as JSON, to paste into a file")
+    parser.add_argument("--json", action="store_true", help="Print the entry and where it resolves, as one JSON object")
     add_global_flag(parser)
     parsed = parser.parse_args(args)
 
     if parsed.json:
-        _, name, raw, rest, _ = find_entry(parsed.name, skip_local=parsed.skip_local)
-        if rest:
-            die(f"too many names: {shlex.join(parsed.name)}")
-        print(f"{json.dumps(name)}: {json.dumps(raw, indent=2)}")
-        return 0
+        return show_json(parsed.name, parsed.skip_local)
 
     resolved = resolve_name(parsed.name, parsed.skip_local)
     entry, group = resolved.entry, resolved.group
@@ -1288,6 +1288,35 @@ def cmd_show(args: List[str]) -> int:
                 print(sf.read().rstrip())
         else:
             print(f"  [file missing: {script_path}]")
+    return 0
+
+
+def show_json(words: List[str], skip_local: bool) -> int:
+    """One JSON object: the entry as written, plus where it resolves. A broken entry still prints, with
+    its error and null for what can't be worked out."""
+    group, name, raw, rest, hides_global = find_entry(words, skip_local=skip_local)
+    if rest:
+        die(f"too many names: {shlex.join(words)}")
+    out: Dict[str, Any] = {
+        "name": group.display(name),
+        "scope": "namespace" if group.name else ("project" if group.needs_approval else "global"),
+        "defined_in": group.defining_file(name),
+        "source": group.source(name) if group.local_file else None,
+        "hides_global": hides_global,
+        "approval": approval_state(group),
+        "run_cwd": None,
+        "script_path": None,
+        "error": None,
+        "entry": raw,
+    }
+    try:
+        entry = ShortcutEntry.from_dict(name, raw)
+        out["run_cwd"] = resolve_run_dir(entry.cwd, group, os.getcwd())
+        if entry.script is not None:
+            out["script_path"] = resolve_script_path(group.script_base, entry.script)
+    except ValueError as e:
+        out["error"] = str(e)
+    print(json.dumps(out, indent=2))
     return 0
 
 
@@ -1385,12 +1414,6 @@ def cmd_rm(args: List[str]) -> int:
             stored_path = resolve_script_path(group.script_base, script)
             if pathlib.Path(stored_path).resolve().is_relative_to(pathlib.Path(scripts_dir(group)).resolve()):
                 os.unlink(stored_path)
-
-    # 3. Remove desktop file if present (global entries only)
-    if not group.needs_approval:
-        xdg_data = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
-        with contextlib.suppress(OSError):
-            os.unlink(os.path.join(xdg_data, "applications", f"shortcut-{name}.desktop"))
 
     print(f"Removed shortcut '{display}'.")
     note_if_unapproved(group)

@@ -2,7 +2,7 @@
 
 `shortcut` names shell commands and scripts, and runs them from any directory. The [README](README.md) lists the commands.
 
-Agents use the same commands as people. In a project, `--local` writes to `.shortcuts.local` in the project root, and refuses from a subfolder. `.shortcuts` is shared and edited by hand: `shortcut` doesn't write it. `shortcut show --json <name>` prints an entry to paste there. `--cwd .` records the current directory. To set up a shortcut for a user:
+Agents use the same commands as people. In a project, `--local` writes to `.shortcuts.local` in the project root, and refuses from a subfolder. `.shortcuts` is shared and edited by hand: `shortcut` doesn't write it. Its `entry` field in `shortcut show --json <name>` is what to paste there. `--cwd .` records the current directory. To set up a shortcut for a user:
 
 1. **Always pass `--desc`.** `--by <your name>` records who made it.
 
@@ -26,7 +26,7 @@ Agents use the same commands as people. In a project, `--local` writes to `.shor
 
    If it needs approving, give that command first.
 
-6. **Diagnose failures with `shortcut show <name>`.** It prints the entry, run directory, usage line and script. `shortcut list` reports a broken file, and warns about invalid entries and missing scripts. `shortcut show --json <name>` prints the raw entry even when it's invalid. See [Commands](README.md#commands).
+6. **Diagnose failures with `shortcut show <name>`.** It prints the entry, run directory, usage line and script. `shortcut list` reports a broken file, and warns about invalid entries and missing scripts. `shortcut show --json <name>` prints the entry and where it resolves as JSON, even when the entry is invalid. See [Commands](README.md#commands).
 
 Without a terminal:
 
