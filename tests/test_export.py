@@ -8,21 +8,25 @@ from fixtures import ShortcutTestCase
 
 
 class TestExport(ShortcutTestCase):
-    def test_update_needs_an_exported_cwd_to_be_caller_or_absolute(self):
-        proj = self.project({"rel": {"inline": "echo rel", "cwd": "sub", "export": True}}, dirs=["sub"])
+    def test_update_warns_about_an_exported_relative_cwd_and_approves(self):
+        proj = self.project({"rel": {"inline": "pwd", "cwd": "sub", "export": True}}, dirs=["sub"])
         res = self.run_cli(["update", "-y"], cwd=str(proj))
-        self.assertEqual(res.returncode, 1)
-        self.assertIn("'rel' is exported, so its cwd must be caller or an absolute path, not 'sub'", res.stderr)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("warning: 'rel' is exported, but its cwd 'sub' only exists in this checkout", res.stderr)
+        self.assertIn("Approved", res.stdout)
+        self.assertEqual(self.run_cli(["r", "rel"], cwd=str(proj)).stdout, f"{proj / 'sub'}\n")
 
+    def test_update_doesnt_warn_about_other_cwds(self):
         fixed = self.folder("fixed")
-        self.write_store(proj / ".shortcuts", {
+        proj = self.project({
             "abs": {"inline": "echo abs", "cwd": str(fixed), "export": True},
             "here": {"inline": "echo here", "cwd": "caller", "export": True},
             "copied": {"script": "bin/tool", "export": True},
             "mine": {"inline": "echo mine", "cwd": "sub"},
-        })
-        self.write_file(proj / "bin" / "tool", "#!/bin/sh\necho tool\n", 0o755)
-        self.approve(proj / ".shortcuts")
+        }, dirs=["sub"], files={"bin/tool": "#!/bin/sh\necho tool\n"})
+        res = self.run_cli(["update", "-y"], cwd=str(proj))
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertNotIn("warning", res.stderr)
         self.assertEqual(self.run_cli(["r", "abs"], cwd=str(proj)).stdout, "abs\n")
         self.assertIn("Export:      True", self.run_cli(["show", "abs"], cwd=str(proj)).stdout)
 
@@ -62,7 +66,7 @@ class TestExport(ShortcutTestCase):
         res = self.run_cli(["init", "--global", str(proj), "-y"])
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertIn("mine (project-only)", res.stdout)
-        self.assertIn("rel (invalid entry: 'rel' is exported, so its cwd must be", res.stdout)
+        self.assertIn("rel (exported, but its cwd 'sub' only exists in the project)", res.stdout)
         reg = self.load_global()
         self.assertEqual(sorted(reg), ["here", "tool"])
         self.assertEqual(reg["tool"], {"description": "t", "script": "scripts/tool.sh"})

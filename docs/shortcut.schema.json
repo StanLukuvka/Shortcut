@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "shortcut namespace file",
-  "description": "A .shortcut file: one namespace of shortcuts, in format version 2. Only the last entry in 'args' can set 'rest'; the schema doesn't check that, but shortcut does.",
+  "title": "shortcut file",
+  "description": "A shortcut file, in format version 2. The top level here is a .shortcut namespace file's; the global store's shortcuts.json and a project's .shortcuts may also have 'imports'. Every file uses the same entry format, except that 'export' is only allowed in .shortcuts and .shortcuts.local, and 'from' only in the global store's shortcuts.json. Only the last entry in 'args' can set 'rest'; the schema doesn't check that, but shortcut does.",
   "type": "object",
   "required": ["version", "shortcuts"],
   "additionalProperties": false,
@@ -73,6 +73,26 @@
         "created_by": {
           "description": "Who created it, from --by.",
           "type": "string"
+        },
+        "export": {
+          "description": "Made to work outside its project: 'init --global' takes only these from a project, and 'promote' takes them without --force. Only allowed in .shortcuts and .shortcuts.local. Default false.",
+          "type": "boolean"
+        },
+        "from": {
+          "description": "Where 'promote' took this entry from: the project's folder and the entry's name there. Only allowed in the global store's shortcuts.json.",
+          "type": "object",
+          "required": ["source", "name"],
+          "additionalProperties": false,
+          "properties": {
+            "source": {
+              "description": "The project's folder.",
+              "type": "string"
+            },
+            "name": {
+              "description": "The entry's name in that project.",
+              "type": "string"
+            }
+          }
         }
       }
     },
