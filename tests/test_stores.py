@@ -686,9 +686,7 @@ class TestNamespaces(ShortcutTestCase):
         self.assertEqual(self.run_cli(["update", "docker", "-y"]).returncode, 0)
         self.assertEqual(self.run_cli(["r", "docker", "delete", "x"]).stdout, "rm x\n")
 
-        # Adding to it is a change, so it needs approving again
-        self.run_cli(["new", "ps", "--namespace", "docker", "--", "echo ps"])
-        self.assertIn("changed since you approved it", self.run_cli(["r", "docker", "ps"]).stderr)
+        self.assertEqual(self.run_cli(["new", "ps", "--namespace", "docker", "--", "echo ps"]).returncode, 0)
         res = self.run_cli(["new", "ps", "--namespace", "docker", "--", "echo again"])
         self.assertEqual(res.returncode, 1)
         self.assertIn("already exists", res.stderr)
@@ -744,27 +742,65 @@ class TestNamespaces(ShortcutTestCase):
         proj = self.project({"docker": {"inline": "true"}}, approved=True)
         self.assertEqual(self.run_cli(["list", "--names", "docker"], cwd=str(proj)).stdout, "")
 
+    def test_cli_writes_keep_an_approved_namespace_approved(self):
+        self.run_cli(["new", "a", "--namespace", "dk", "--", "echo a"])
+        self.assertEqual(self.run_cli(["update", "dk", "-y"]).returncode, 0)
+
+        res = self.run_cli(["new", "ps", "--namespace", "dk", "--", "echo ps"])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertNotIn("needs approving", res.stderr)
+        self.assertEqual(self.run_cli(["r", "dk", "ps"]).stdout, "ps\n")
+
+        self.assertEqual(self.run_cli(["rm", "dk", "ps", "-y"]).returncode, 0)
+        self.assertEqual(self.run_cli(["r", "dk", "a"]).stdout, "a\n")
+
+        source = self.write_file(self.tmp_path / "src.sh", "#!/usr/bin/env bash\necho copied\n")
+        res = self.run_cli(["new", "cp", "--copy", str(source), "--namespace", "dk", "--desc", "d"])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertEqual(self.run_cli(["r", "dk", "cp"]).stdout, "copied\n")
+
+        # A hand edit still needs update, and a later CLI write doesn't approve it on the way
+        path = self.shortcuts_home / "imports" / "dk.shortcut"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["shortcuts"]["a"]["inline"] = "echo edited"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        self.assertIn("changed since you approved it", self.run_cli(["r", "dk", "a"]).stderr)
+        res = self.run_cli(["new", "more", "--namespace", "dk", "--", "echo more"])
+        self.assertIn("needs approving before it runs: shortcut update dk", res.stderr)
+        self.assertIn("changed since you approved it", self.run_cli(["r", "dk", "more"]).stderr)
+        self.assertEqual(self.run_cli(["rm", "dk", "more", "-y"]).returncode, 0)
+        self.assertIn("changed since you approved it", self.run_cli(["r", "dk", "a"]).stderr)
+
     def test_new_in_a_namespace_gives_its_script_path(self):
         res = self.run_cli(["new", "ps", "--namespace", "docker", "--desc", "d"])
         self.assertIn(f"Edit it at: {self.shortcuts_home / 'imports' / 'scripts' / 'docker' / 'ps.sh'}", res.stdout)
 
 
 class TestBrokenStores(ShortcutTestCase):
-    def test_broken_project_stops_every_lookup_inside_it(self):
+    def test_broken_project_stops_every_run_inside_it(self):
         self.run_cli(["new", "outside", "--", "echo outside"])
         proj = self.broken_project()
         registry = str(proj / ".shortcuts")
 
-        for cmd in (["r", "outside"], ["show", "outside"], ["location", "outside"], ["rm", "outside", "-y"], ["r", "nothing"]):
-            res = self.run_cli(cmd, cwd=str(proj))
-            self.assertEqual(res.returncode, 1, cmd)
-            self.assertEqual(res.stdout, "", cmd)
-            self.assertIn(f"corrupt registry {registry}", res.stderr, cmd)
-            self.assertIn(f"shortcut r --global {cmd[-2] if cmd[0] == 'rm' else cmd[-1]} reaches your own shortcuts", res.stderr, cmd)
-        self.assertIn("outside", self.load_global())
-
+        for name in ("outside", "nothing"):
+            res = self.run_cli(["r", name], cwd=str(proj))
+            self.assertEqual(res.returncode, 1, name)
+            self.assertEqual(res.stdout, "", name)
+            self.assertIn(f"corrupt registry {registry}", res.stderr, name)
+            self.assertIn(
+                f". Nothing runs inside this project until it's fixed; for your own: shortcut r --global {name}\n",
+                res.stderr, name)
         self.assertEqual(self.run_cli(["r", "--global", "outside"], cwd=str(proj)).stdout, "outside\n")
-        self.assertEqual(self.run_cli(["rm", "--global", "outside", "-y"], cwd=str(proj)).returncode, 0)
+
+        # Looking is not running: show and location read past the file, quietly
+        for cmd in (["show", "outside"], ["show", "--json", "outside"], ["location", "outside"]):
+            res = self.run_cli(cmd, cwd=str(proj))
+            self.assertNotIn("corrupt registry", res.stderr, cmd)
+            self.assertNotIn("warning", res.stderr, cmd)
+        self.assertIn("Scope:       global", self.run_cli(["show", "outside"], cwd=str(proj)).stdout)
+        self.assertIn("'nothing' not found", self.run_cli(["show", "nothing"], cwd=str(proj)).stderr)
+
+        self.assertEqual(self.run_cli(["rm", "outside", "-y"], cwd=str(proj)).returncode, 0)
         self.assertNotIn("outside", self.load_global())
         self.assertIn("corrupt registry", self.run_cli(["list"], cwd=str(proj)).stderr)
         self.assertEqual(self.run_cli(["update"], cwd=str(proj)).returncode, 1)
@@ -775,7 +811,10 @@ class TestBrokenStores(ShortcutTestCase):
         registry = proj / ".shortcuts"
         good = registry.read_text(encoding="utf-8")
         registry.write_text("<<<<<<< HEAD\n" + good, encoding="utf-8")
-        self.assertEqual(self.run_cli(["r", "build"], cwd=str(proj)).returncode, 1)
+        res = self.run_cli(["r", "build"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("Nothing runs inside this project", res.stderr)
+        self.assertEqual(self.run_cli(["r", "--global", "build"], cwd=str(proj)).stdout, "global\n")
         registry.write_text(good, encoding="utf-8")
         self.assertEqual(self.run_cli(["r", "build"], cwd=str(proj)).stdout, "project\n")
 
@@ -791,18 +830,33 @@ class TestBrokenStores(ShortcutTestCase):
 
         res = self.run_cli(["r", "docker", "ps"], cwd=str(proj))
         self.assertEqual(res.returncode, 1)
-        self.assertIn("shortcut r --global docker", res.stderr)
+        self.assertIn("for your own: shortcut r --global docker", res.stderr)
+        # The file can't be read, so its imports are gone too: show finds the global 'docker'
+        self.assertIn("Scope:       global", self.run_cli(["show", "docker"], cwd=str(proj)).stdout)
 
     def test_an_unknown_top_level_field_stops_the_project_too(self):
-        proj = self.project({"inside": {"inline": "true"}})
+        self.run_cli(["new", "outside", "--", "echo outside"])
+        proj = self.project({"inside": {"inline": "true"}, "mine": {"inline": "true"}}, approved=True)
+        self.assertEqual(self.run_cli(["new", "mine", "--local", "--", "echo mine"], cwd=str(proj)).returncode, 0)
         registry = proj / ".shortcuts"
         data = json.loads(registry.read_text(encoding="utf-8"))
         registry.write_text(json.dumps({**data, "bogus": 1}), encoding="utf-8")
 
+        for name in ("inside", "mine", "outside"):
+            res = self.run_cli(["r", name], cwd=str(proj))
+            self.assertEqual(res.returncode, 1, name)
+            self.assertIn(f"{registry} has an unknown field: bogus. Nothing runs inside this project", res.stderr)
+
+        # The file still parses, so show and rm --local find its entries
         res = self.run_cli(["show", "inside"], cwd=str(proj))
-        self.assertEqual(res.returncode, 1)
-        self.assertIn("unknown field: bogus", res.stderr)
-        self.assertIn(str(registry), res.stderr)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("Scope:       project", res.stdout)
+        self.assertIn("Approval:    changed", res.stdout)
+        self.assertEqual(self.run_cli(["rm", "inside", "-y"], cwd=str(proj)).returncode, 1)  # a project entry, as ever
+        res = self.run_cli(["rm", "--local", "mine", "-y"], cwd=str(proj))
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertNotIn("mine", json.loads((proj / ".shortcuts.local").read_text(encoding="utf-8"))["shortcuts"])
+        self.assertIn('"bogus": 1', registry.read_text(encoding="utf-8"))
 
     def test_broken_global_store_still_reports(self):
         self.corrupt_store(self.shortcuts_home)

@@ -642,8 +642,7 @@ def require_approved(group: Group) -> None:
 
 def note_if_unapproved(group: Group) -> None:
     """After a change made through shortcut: say so if it needs approving before it runs."""
-    fresh = load_project_group(group.store_dir) if group.local_file else load_group(group.file, group.store_dir, group.name)
-    if group.needs_approval and approval_state(fresh) != "ok":
+    if group.needs_approval and approval_state(reload_group(group)) != "ok":
         print(f"note: {group.label} needs approving before it runs: {group.update_cmd}", file=sys.stderr)
 
 
@@ -666,17 +665,18 @@ def find_entry(
     strict: bool = False,
 ) -> Tuple[Group, str, Any, List[str], bool]:
     """Find `name` or `namespace name` without judging the entry: (group, name, raw entry, leftover
-    words, hides a global one). A project whose file can't be read stops every lookup inside it.
-    strict (for run) also stops on a global store's load errors for the name it has."""
+    words, hides a global one). strict (for run) refuses every name inside a project whose file can't be
+    used, and a store's load errors for the name it has. Without it (show, location, rm) a broken file is
+    looked in as far as it reads, so you can still see and fix what's there."""
     stores = visible_stores(caller_cwd, skip_local)
     first, rest = words[0], words[1:]
     home = stores[-1]
 
     for store in stores:
-        if store is not home and store.main.error:
+        if strict and store is not home and store.main.error:
             raise ValueError(
-                f"{store.main.error}. Nothing runs from this project until it's repaired; "
-                f"shortcut r --global {first} reaches your own shortcuts"
+                f"{store.main.error}. Nothing runs inside this project until it's fixed; "
+                f"for your own: shortcut r --global {first}"
             )
         problems = ([store.main.error] if store.main.error else []) + store.problems
         imports = store.main.data.get("imports", {})
@@ -935,8 +935,10 @@ def _register(group: Group, entry: ShortcutEntry, write_script: Optional[Any] = 
         return
     if not registry_exists(store_dir):
         init_store(store_dir)
+    keep: Optional[Dict[str, str]] = None
     with registry_lock(store_dir):
         is_new_file = bool(group.name) and not os.path.exists(group.file)
+        approved = namespace_is_approved(group)
         reg = {"version": REGISTRY_VERSION, "shortcuts": {}} if is_new_file else load_registry_file(group.file)
         shortcuts = reg.setdefault("shortcuts", {})
         if entry.name in shortcuts:
@@ -949,7 +951,21 @@ def _register(group: Group, entry: ShortcutEntry, write_script: Optional[Any] = 
         shortcuts[entry.name] = entry.to_dict()
         os.makedirs(os.path.dirname(group.file), exist_ok=True)
         save_registry_file(group.file, reg)
+        if approved:
+            keep = shared_files(reload_group(group))
+    if keep is not None:
+        save_approval(group, keep, {})  # after the lock: for a namespace, save_approval takes the same one
     note_if_unapproved(group)
+
+
+def reload_group(group: Group) -> Group:
+    return load_project_group(group.store_dir) if group.local_file else load_group(group.file, group.store_dir, group.name)
+
+
+def namespace_is_approved(group: Group) -> bool:
+    """Before shortcut writes to a global namespace, under its lock: whether the file matches its approval.
+    Only then does the approval follow the write, as write_local does, so a hand edit still needs update."""
+    return bool(group.name) and os.path.exists(group.file) and approval_state(reload_group(group)) == "ok"
 
 
 def write_local(root: str, change: Any) -> Group:
@@ -1333,12 +1349,14 @@ def show_json(words: List[str], skip_local: bool) -> int:
     if rest:
         die(f"too many names: {shlex.join(words)}")
     out: Dict[str, Any] = {
-        "name": group.display(name),
+        "name": name,
+        "namespace": group.name or None,
         "scope": "namespace" if group.name else ("project" if group.needs_approval else "global"),
         "defined_in": group.defining_file(name),
         "source": group.source(name) if group.local_file else None,
         "hides_global": hides_global,
         "approval": approval_state(group),
+        "cwd": None,
         "run_cwd": None,
         "script_path": None,
         "error": None,
@@ -1346,6 +1364,7 @@ def show_json(words: List[str], skip_local: bool) -> int:
     }
     try:
         entry = load_entry(group, name, raw)
+        out["cwd"] = entry.cwd
         out["run_cwd"] = resolve_run_dir(entry.cwd, group, os.getcwd())
         if entry.script is not None:
             out["script_path"] = resolve_script_path(group.script_base, entry.script)
@@ -1433,22 +1452,28 @@ def cmd_rm(args: List[str]) -> int:
             print("Aborted.", file=sys.stderr)
             return 1
 
-    # 1. Remove from registry
+    keep: Optional[Dict[str, str]] = None
     with registry_lock(group.store_dir):
+        approved = namespace_is_approved(group)
+        # 1. Remove from registry
         reg = load_registry_file(group.file)
         shortcuts = reg.get("shortcuts", {})
         if name in shortcuts:
             del shortcuts[name]
             save_registry_file(group.file, reg)
 
-    # 2. Remove the stored copy: only files shortcut keeps in its scripts folder, never a --script
-    #    file or a project's own file. A copy is always recorded as a relative path; --script never is outside a project.
-    script = raw_entry.get("script") if isinstance(raw_entry, dict) else None
-    if isinstance(script, str) and script and not os.path.isabs(script):
-        with contextlib.suppress(OSError, ValueError):
-            stored_path = resolve_script_path(group.script_base, script)
-            if pathlib.Path(stored_path).resolve().is_relative_to(pathlib.Path(scripts_dir(group)).resolve()):
-                os.unlink(stored_path)
+        # 2. Remove the stored copy: only files shortcut keeps in its scripts folder, never a --script
+        #    file or a project's own file. A copy is always recorded as a relative path; --script never is outside a project.
+        script = raw_entry.get("script") if isinstance(raw_entry, dict) else None
+        if isinstance(script, str) and script and not os.path.isabs(script):
+            with contextlib.suppress(OSError, ValueError):
+                stored_path = resolve_script_path(group.script_base, script)
+                if pathlib.Path(stored_path).resolve().is_relative_to(pathlib.Path(scripts_dir(group)).resolve()):
+                    os.unlink(stored_path)
+        if approved:
+            keep = shared_files(reload_group(group))
+    if keep is not None:
+        save_approval(group, keep, {})  # after the lock: for a namespace, save_approval takes the same one
 
     print(f"Removed shortcut '{display}'.")
     note_if_unapproved(group)

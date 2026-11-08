@@ -151,6 +151,8 @@ class TestWrites(ShortcutTestCase):
         proj = overlaid(self)
         info = json.loads(run_here(self, proj, "show", "--json", "mine").stdout)
         self.assertEqual(info["entry"], {"inline": "echo mine"})
+        self.assertEqual(info["name"], "mine")
+        self.assertIsNone(info["namespace"])
         self.assertEqual(info["scope"], "project")
         self.assertEqual(info["source"], "local")
         self.assertEqual(info["defined_in"], str(proj / ".shortcuts.local"))
