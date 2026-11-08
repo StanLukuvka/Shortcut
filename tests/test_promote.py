@@ -64,7 +64,7 @@ class TestPromote(ShortcutTestCase):
         self.assertEqual(res.returncode, 1)
         self.assertIn(f"script file not found: {proj / 'bin' / 'tool'}", res.stderr)
 
-    def test_a_moved_checkout_fails_on_the_run_directory(self):
+    def test_a_missing_run_directory_fails_loudly(self):
         proj = self.project({"here": {"inline": "pwd", "cwd": "sub"}}, dirs=["sub"], approved=True)
         self.assertEqual(self.run_cli(["promote", "here", "--force", "-y"], cwd=str(proj)).returncode, 0)
         (proj / "sub").rmdir()
