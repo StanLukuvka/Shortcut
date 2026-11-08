@@ -424,7 +424,7 @@ class TestEntries(ShortcutTestCase):
         self.assertEqual(reg["shortcuts"]["hello"]["description"], "echo hello world")
 
         # Template script: description defaults to "(no description)"
-        res2 = self.run_cli(["new", "template"], env={"SHORTCUT_EDITOR_CMD": "true"})
+        res2 = self.run_cli(["new", "template"])
         self.assertEqual(res2.returncode, 0)
         script_file = self.shortcuts_home / "scripts" / "template.sh"
         self.assertTrue(script_file.is_file())
@@ -435,42 +435,13 @@ class TestEntries(ShortcutTestCase):
         reg2 = shortcut_mod.load_registry(str(self.shortcuts_home))
         self.assertEqual(reg2["shortcuts"]["template"]["description"], "(no description)")
 
-    def test_new_without_terminal_skips_editor(self):
-        self.env.pop("SHORTCUT_EDITOR_CMD", None)
-        res = self.run_cli(["new", "tmpl", "--desc", "x"], env={"EDITOR": "/bin/false"})
-        self.assertEqual(res.returncode, 0, res.stderr)
-        self.assertIn(f"Edit it at: {self.shortcuts_home / 'scripts' / 'tmpl.sh'}", res.stdout)
-        self.assertTrue((self.shortcuts_home / "scripts" / "tmpl.sh").is_file())
-
-    def test_new_uses_EDITOR_then_falls_back_to_nano(self):
-        fakebin = self.folder("fakebin")
-        for editor in ("myeditor", "nano"):
-            self.write_file(fakebin / editor, f'#!/usr/bin/env bash\necho "# edited by {editor}" >> "$1"\n', mode=0o755)
-        path = f"{fakebin}:{self.env.get('PATH', '')}"
-        self.env.pop("SHORTCUT_EDITOR_CMD", None)
-
-        rc, out = self.run_in_terminal(["new", "tmpl", "--desc", "x"], env={"PATH": path, "VISUAL": "", "EDITOR": "myeditor"})
+    def test_new_opens_no_editor_and_prints_the_script_path(self):
+        rc, out = self.run_in_terminal(["new", "tmpl", "--desc", "x"], env={"VISUAL": "false", "EDITOR": "false"})
         self.assertEqual(rc, 0, out)
         script = self.shortcuts_home / "scripts" / "tmpl.sh"
-        self.assertIn("# edited by myeditor", script.read_text(), out)
-
-        rc, out = self.run_in_terminal(["new", "other", "--desc", "x"], env={"PATH": path, "VISUAL": "", "EDITOR": ""})
-        self.assertEqual(rc, 0, out)
-        self.assertIn("# edited by nano", (self.shortcuts_home / "scripts" / "other.sh").read_text(), out)
-
-    def test_new_with_missing_editor_creates_nothing(self):
-        res = self.run_cli(["new", "tmpl", "--desc", "x"], env={"SHORTCUT_EDITOR_CMD": "no-such-editor-xyz"})
-        self.assertEqual(res.returncode, 1)
-        self.assertIn("editor not found: no-such-editor-xyz", res.stderr)
-        self.assertFalse((self.shortcuts_home / "shortcuts.json").exists() and "tmpl" in self.load_global())
-        self.assertFalse((self.shortcuts_home / "scripts" / "tmpl.sh").exists())
-
-    def test_new_editor_failure_creates_nothing(self):
-        res = self.run_cli(["new", "tmpl", "--desc", "x"], env={"SHORTCUT_EDITOR_CMD": "false"})
-        self.assertEqual(res.returncode, 1)
-        self.assertIn("was not created", res.stderr)
-        self.assertNotIn("tmpl", self.load_global() if (self.shortcuts_home / "shortcuts.json").exists() else {})
-        self.assertFalse((self.shortcuts_home / "scripts" / "tmpl.sh").exists())
+        self.assertIn(f"Edit it at: {script}", out)
+        self.assertEqual(script.read_text(encoding="utf-8"), "#!/usr/bin/env bash\nset -euo pipefail\n\n")
+        self.assertIn("tmpl", self.load_global())
 
     def test_rm_malformed_entry(self):
         reg = {"shortcuts": {"bad_entry": {"description": "x", "inline": "true", "cwd": 123}}}

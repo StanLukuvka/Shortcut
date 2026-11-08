@@ -897,17 +897,6 @@ def target_group(parsed: argparse.Namespace, cwd: str) -> Group:
     return group
 
 
-def get_editor_cmd() -> List[str]:
-    """SHORTCUT_EDITOR_CMD (test hook) wins; then $VISUAL, $EDITOR, nano."""
-    if env_cmd := os.environ.get("SHORTCUT_EDITOR_CMD"):
-        cmd = shlex.split(env_cmd)
-    else:
-        cmd = shlex.split(os.environ.get("VISUAL") or os.environ.get("EDITOR") or "nano")
-    if not cmd or shutil.which(cmd[0]) is None:
-        die(f"editor not found: {cmd[0] if cmd else '(empty)'} (install nano or set $EDITOR)")
-    return cmd
-
-
 RUN_USAGE: str = "usage: shortcut run|r [--global] [-y] <name> [args...]\n       shortcut run|r [--global] [-y] <namespace> <name> [args...]"
 
 
@@ -1107,15 +1096,6 @@ def cmd_new(args: List[str]) -> int:
     if parsed.local and inline_cmd_tokens is None and not parsed.script:
         die("a local shortcut needs a command after '--', or --script PATH")
 
-    # Pick the editor before creating anything, so a missing editor leaves nothing half-made.
-    # Without a terminal (an agent running this), skip the editor and say how to open it later.
-    # SHORTCUT_EDITOR_CMD is the test hook from get_editor_cmd.
-    editor_cmd: Optional[List[str]] = None
-    if inline_cmd_tokens is None and not (parsed.script or parsed.copy) and (
-        "SHORTCUT_EDITOR_CMD" in os.environ or (sys.stdin.isatty() and sys.stdout.isatty())
-    ):
-        editor_cmd = get_editor_cmd()
-
     group = target_group(parsed, os.getcwd())
     fields = entry_fields(parsed.name, parsed, group)
     if parsed.script:
@@ -1141,33 +1121,21 @@ def cmd_new(args: List[str]) -> int:
         die(f"shortcut '{parsed.name}' already exists in {group.file}")
     rel_script_path, abs_script_path = _stored_script_field(group, f"{parsed.name}.sh")
 
-    # Edit a temporary copy; the shortcut exists only once the editor exits successfully.
-    fd, draft = tempfile.mkstemp(prefix=f"shortcut-{parsed.name}-", suffix=".sh")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as sf:
-            sf.write("#!/usr/bin/env bash\nset -euo pipefail\n\n")
-        if editor_cmd is not None:
-            rc = subprocess.run([*editor_cmd, draft]).returncode
-            if rc != 0:
-                die(f"editor exited with code {rc}; shortcut '{parsed.name}' was not created")
+    def write_script() -> None:
+        refuse_symlinks(group, abs_script_path)
+        with open(abs_script_path, "w", encoding="utf-8") as f:
+            f.write("#!/usr/bin/env bash\nset -euo pipefail\n\n")
+        os.chmod(abs_script_path, 0o755)
 
-        def write_script() -> None:
-            refuse_symlinks(group, abs_script_path)
-            shutil.copyfile(draft, abs_script_path)
-            os.chmod(abs_script_path, 0o755)
-
-        entry = ShortcutEntry(
-            name=parsed.name,
-            description=parsed.desc if parsed.desc is not None else "(no description)",
-            script=rel_script_path,
-            **fields,
-        )
-        _register(group, entry, write_script)
-    finally:
-        os.unlink(draft)
+    entry = ShortcutEntry(
+        name=parsed.name,
+        description=parsed.desc if parsed.desc is not None else "(no description)",
+        script=rel_script_path,
+        **fields,
+    )
+    _register(group, entry, write_script)
     print(f"Created script shortcut '{parsed.name}'.")
-    if editor_cmd is None:
-        print(f"Edit it at: {abs_script_path}")
+    print(f"Edit it at: {abs_script_path}")
     return 0
 
 
@@ -2034,7 +2002,8 @@ Usage:
                                             Run a shortcut, or `<namespace> <name>`; r is short for run.
                                             --global skips project shortcuts, -y answers a confirm prompt
   shortcut new <name> [FLAGS] [-- CMD...]   Create a shortcut: an inline command after --, a script
-                                            opened in $EDITOR, or a file with --script or --copy
+                                            from a template at the path it prints, or a file with
+                                            --script or --copy
   shortcut list [--names [NAMESPACE]]       List visible shortcuts, with where each runs
   shortcut show [--global] [--json] <name>  Show shortcut metadata and script contents, or the entry as JSON
   shortcut location [--global] <name>       Print the path of its script (fails for inline)

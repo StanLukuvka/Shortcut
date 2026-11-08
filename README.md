@@ -52,7 +52,7 @@ shortcut r -y <name>                  answer a confirm prompt
 shortcut r <name> -- -5               after --, a declared argument can start with -
 
 shortcut new <name> -- CMD            inline shortcut
-shortcut new <name>                   script, opened in your editor
+shortcut new <name>                   script from a template; prints its path
 shortcut new <name> --copy FILE|-     copy a script in
 shortcut new <name> --script PATH     use a script where it is
 
@@ -110,7 +110,6 @@ shortcut r search <pattern>  find files by name
 ```
 SHORTCUTS_HOME        global store (default ~/.shortcuts)
 SHORTCUT_SHOW_DIR=0   hide the "→ dir" line
-VISUAL, EDITOR        editor for new and r edit (default nano)
 PAGER                 pages long update diffs
 ```
 

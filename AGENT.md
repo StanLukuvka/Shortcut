@@ -16,6 +16,7 @@ Agents use the same commands as people. In a project, `--local` writes to `.shor
    - A process that must run in a specific directory: use `--cwd <dir>`.
    - A `.shortcuts` entry that also works outside the repo: propose `"export": true`, with `cwd` `caller` or absolute. Only exported entries reach `init --global <repo>` and `shortcut promote` without `--force`.
    - A script that already exists: `--script PATH` uses it where it is, `--copy FILE` copies it into the global store. With `--local`, only `--script`.
+   - A new script: `shortcut new <name>` without `-- CMD` creates one from a template and prints `Edit it at: <path>`. Write to that file. Not with `--local`.
 
 3. **Single-quote the command.** Read arguments with `$1` or `"$@"`. A shortcut doesn't append them. `--arg NAME` declares a required argument and `--arg NAME=DEFAULT` an optional one.
 
@@ -31,7 +32,6 @@ Agents use the same commands as people. In a project, `--local` writes to `.shor
 
 Without a terminal:
 
-- `shortcut new <name>` without `-- CMD` skips the editor, creates a script from the template and prints `Edit it at: <path>`. Write to that file.
 - Editors don't open. Change the script or the JSON file directly.
 - `shortcut rm` needs `-y`.
 - A shortcut with `confirm` fails without `shortcut r -y <name>`. Check with the user first.

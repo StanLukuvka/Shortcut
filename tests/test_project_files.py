@@ -116,7 +116,7 @@ class TestWrites(ShortcutTestCase):
     def test_new_local_takes_a_command_and_add_records_the_path(self):
         proj = self.project({}, files={"tools/run.sh": "#!/usr/bin/env bash\n"})
         outside = self.script("outside.sh", "#!/usr/bin/env bash\n")
-        res = run_here(self, proj, "new", "x", "--local", "--desc", "d", env={"SHORTCUT_EDITOR_CMD": "true"})
+        res = run_here(self, proj, "new", "x", "--local", "--desc", "d")
         self.assertEqual(res.returncode, 1)
         self.assertIn("after '--'", res.stderr)
         self.assertEqual(run_here(self, proj, "new", "in", "--script", "tools/run.sh", "--desc", "d", "--local").returncode, 0)
