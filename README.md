@@ -110,7 +110,7 @@ shortcut r search <pattern>  find files by name
 ```
 SHORTCUTS_HOME        global store (default ~/.shortcuts)
 SHORTCUT_SHOW_DIR=0   hide the "→ dir" line
-PAGER                 pages long update diffs
+PAGER                 pages long update and init --global diffs
 ```
 
 ## Security model

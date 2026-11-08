@@ -1,6 +1,6 @@
 # shortcut 2.0.0: adversarial design critique
 
-**Status, 2026-11-06.** Findings 1 to 6 are fixed; see `CHANGELOG.md`. Finding 7 was left alone on purpose. Findings 8 onward are undecided, and the text below still describes commit `9604209`. `shortcut-lifecycle.png` shows that same commit and is older than the current behaviour.
+**Status, 2026-11-06.** Findings 1 to 6 are fixed, in commit `e460acf`. Finding 7 was left alone on purpose. Findings 8 onward are undecided, and the text below still describes commit `9604209`. The lifecycle diagram that showed that same commit was removed; its last version is in commit `e436e8d`.
 
 Reviewed: commit `9604209` (`shortcut.py` sha256 `bdf114b9…`). Line numbers refer to that commit.
 

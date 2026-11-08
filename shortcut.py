@@ -2035,7 +2035,7 @@ FLAGS for new:
 Project shortcuts and namespaces don't run until approved with `shortcut update`,
 and must be approved again after any change to their definitions. Approval covers
 .shortcuts, .shortcuts.local, imports and the scripts they name, not the programs those
-call. A change shortcut makes to .shortcuts.local keeps its approval.
+call. A change shortcut makes to .shortcuts.local or a namespace keeps its approval.
 Global shortcuts have no approval step, so a global link target can change freely.
 Set SHORTCUT_SHOW_DIR=0 to hide the "→ <run directory>" line.
 """
