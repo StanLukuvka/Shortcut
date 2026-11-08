@@ -451,6 +451,20 @@ class TestEntries(ShortcutTestCase):
         after = shortcut_mod.load_registry(str(self.shortcuts_home))
         self.assertNotIn("bad_entry", after.get("shortcuts", {}))
 
+    def test_rm_says_what_it_removes_and_what_happens_to_the_script(self):
+        source = self.script("src.sh", "#!/usr/bin/env bash\n")
+        self.run_cli(["new", "copied", "--copy", str(source)])
+        self.run_cli(["new", "linked", "--script", str(source)])
+        rc, out = self.run_in_terminal(["rm", "copied"], keys=[(b"[y/N]", b"n\n")])
+        self.assertEqual(rc, 1, out)
+        self.assertIn(f"Removes 'copied' from your global shortcuts: {self.shortcuts_home / 'shortcuts.json'}", out)
+        self.assertIn(f"Deletes its script copy: {self.shortcuts_home / 'scripts' / 'copied.sh'}", out)
+        rc, out = self.run_in_terminal(["rm", "linked"], keys=[(b"[y/N]", b"y\n")])
+        self.assertEqual(rc, 0, out)
+        self.assertIn(f"Keeps its script: {source}", out)
+        self.assertTrue(source.is_file())
+        self.assertNotIn("linked", self.load_global())
+
     def test_declining_rm_exits_1(self):
         self.run_cli(["new", "keep", "--", "true"])
         rc, out = self.run_in_terminal(["rm", "keep"], keys=[(b"[y/N]", b"n\n")])
@@ -771,7 +785,10 @@ class TestBrokenStores(ShortcutTestCase):
         self.assertIn("Scope:       global", self.run_cli(["show", "outside"], cwd=str(proj)).stdout)
         self.assertIn("'nothing' not found", self.run_cli(["show", "nothing"], cwd=str(proj)).stderr)
 
-        self.assertEqual(self.run_cli(["rm", "outside", "-y"], cwd=str(proj)).returncode, 0)
+        # rm doesn't reach past the broken file either; --global does
+        self.assertEqual(self.run_cli(["rm", "outside", "-y"], cwd=str(proj)).returncode, 1)
+        self.assertIn("outside", self.load_global())
+        self.assertEqual(self.run_cli(["rm", "--global", "outside", "-y"], cwd=str(proj)).returncode, 0)
         self.assertNotIn("outside", self.load_global())
         self.assertIn("corrupt registry", self.run_cli(["list"], cwd=str(proj)).stderr)
         self.assertEqual(self.run_cli(["update"], cwd=str(proj)).returncode, 1)
@@ -788,6 +805,30 @@ class TestBrokenStores(ShortcutTestCase):
         self.assertEqual(self.run_cli(["r", "--global", "build"], cwd=str(proj)).stdout, "global\n")
         registry.write_text(good, encoding="utf-8")
         self.assertEqual(self.run_cli(["r", "build"], cwd=str(proj)).stdout, "project\n")
+
+    def test_rm_in_a_broken_project_never_reaches_a_global_one(self):
+        self.run_cli(["new", "build", "--", "echo global"])
+        proj = self.project({"build": {"inline": "echo project"}}, approved=True)
+        self.corrupt_store(proj / ".shortcuts")
+        res = self.run_cli(["rm", "build", "-y"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("Inside this project rm only takes --local", res.stderr)
+        self.assertIn("for your own: shortcut rm --global build", res.stderr)
+        self.assertIn("build", self.load_global())
+        self.assertEqual(self.run_cli(["rm", "--global", "build", "-y"], cwd=str(proj)).returncode, 0)
+        self.assertNotIn("build", self.load_global())
+
+    def test_rm_local_hides_a_name_when_the_project_file_cant_be_read(self):
+        proj = self.project({"build": {"inline": "echo project"}}, approved=True)
+        self.corrupt_store(proj / ".shortcuts")
+        broken = (proj / ".shortcuts").read_bytes()
+        rc, out = self.run_in_terminal(["rm", "--local", "build"], cwd=str(proj), keys=[(b"[y/N]", b"y\n")])
+        self.assertEqual(rc, 0, out)
+        self.assertIn(".shortcuts stays as it is.", out)
+        self.assertIn('Hides \'build\' from you: writes "build": null to', out)
+        local = json.loads((proj / ".shortcuts.local").read_text(encoding="utf-8"))["shortcuts"]
+        self.assertEqual(local, {"build": None})
+        self.assertEqual((proj / ".shortcuts").read_bytes(), broken)
 
     def test_broken_project_refuses_a_namespace_it_imported(self):
         self.run_cli(["new", "docker", "--", "echo global"])

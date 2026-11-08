@@ -41,7 +41,7 @@ git clone https://github.com/StanLukuvka/Shortcut.git && cd Shortcut && ./instal
 - A namespace file is `<name>.shortcut`, such as `docker.shortcut`. A bare `.shortcut` is an error.
 - `"export": true` on a project entry marks it as made to work outside the repo. `shortcut update` warns if its `cwd` is relative. Only `.shortcuts` and `.shortcuts.local` can export.
 - Projects and namespaces run only after `shortcut update`. Global shortcuts need no approval.
-- If a project's file can't be read, nothing runs inside the project until it's fixed. `--global` reaches your own shortcuts.
+- If a project's file can't be read, nothing runs inside the project until it's fixed, and `rm` there only takes `--local`. `--global` reaches your own shortcuts.
 
 ## Commands
 
@@ -62,8 +62,8 @@ shortcut show <name>                  details and script
 shortcut show --json <name>           entry and where it resolves, as JSON
 shortcut location <name>              script path
 
-shortcut rm <name> [-y]               remove
-shortcut rm --local <name>            undo your override, or hide a shared entry
+shortcut rm <name> [-y]               remove a global or namespace shortcut; says what goes first
+shortcut rm --local <name>            undo your override, or hide a shared entry. Never changes .shortcuts
 
 shortcut promote <name> [-y]          make an approved, exported project shortcut one of your global ones
 shortcut promote <name> --as NEW      the same, under another global name

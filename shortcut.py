@@ -759,6 +759,29 @@ def ask(prompt: str, accept: Tuple[str, ...] = ("y", "yes")) -> bool:
         return False
 
 
+@dataclasses.dataclass(frozen=True)
+class Confirm:
+    """Every question shortcut asks before it runs or changes something. message says what will happen
+    and is shown above the question. -y answers yes. Without a terminal it stops with no_terminal."""
+    question: str
+    no_terminal: str
+    message: str = ""
+    accept: Tuple[str, ...] = ("y", "yes")  # anything else means the answer has to be typed out
+
+    def granted(self, assume_yes: bool) -> bool:
+        if assume_yes:
+            return True
+        if not sys.stdin.isatty():
+            die(self.no_terminal)
+        if self.message:
+            print(self.message)
+        suffix = " [y/N] " if self.accept == Confirm.accept else " "
+        if ask(self.question + suffix, self.accept):
+            return True
+        print("Aborted.", file=sys.stderr)
+        return False
+
+
 def is_flag(token: str) -> bool:
     return len(token) > 1 and token.startswith("-")
 
@@ -817,12 +840,11 @@ def run_shortcut(words: List[str], skip_local: bool = False, assume_yes: bool = 
         args, arg_env = bind_args(name, entry.args, args)
     if not os.path.isdir(resolved.run_cwd):
         raise FileNotFoundError(f"run directory does not exist: {resolved.run_cwd}")
-    if entry.confirm and not assume_yes:
-        if not sys.stdin.isatty():
-            die(f"'{name}' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y {name})")
-        if not ask(f"run '{name}' in {os.path.realpath(resolved.run_cwd)}? [y/N] "):
-            print("Aborted.", file=sys.stderr)
-            return 1
+    if entry.confirm and not Confirm(
+        f"run '{name}' in {os.path.realpath(resolved.run_cwd)}?",
+        f"'{name}' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y {name})",
+    ).granted(assume_yes):
+        return 1
     if sys.stderr and os.environ.get("SHORTCUT_SHOW_DIR", "1") != "0":
         line = f"→ {os.path.realpath(resolved.run_cwd)}"
         if resolved.hides_global:
@@ -1370,6 +1392,58 @@ def cmd_location(args: List[str]) -> int:
     return 0
 
 
+def stored_copy(group: Group, raw_entry: Any) -> Optional[str]:
+    """The copy shortcut keeps of an entry's script, which rm deletes with it: a relative path inside the
+    group's scripts folder. A --script file is recorded as an absolute path, so it's never one."""
+    script = raw_entry.get("script") if isinstance(raw_entry, dict) else None
+    if not isinstance(script, str) or not script or os.path.isabs(script):
+        return None
+    with contextlib.suppress(OSError, ValueError):
+        path = resolve_script_path(group.script_base, script)
+        if pathlib.Path(path).is_relative_to(pathlib.Path(scripts_dir(group)).resolve()):
+            return path
+    return None
+
+
+def kept_script(group: Group, raw_entry: Any) -> Optional[str]:
+    """The script an entry names, as a path, for saying it stays."""
+    script = raw_entry.get("script") if isinstance(raw_entry, dict) else None
+    if not isinstance(script, str) or not script:
+        return None
+    try:
+        return resolve_script_path(group.script_base, script)
+    except ValueError:
+        return script
+
+
+def rm_message(group: Group, display: str, raw_entry: Any, copy: Optional[str]) -> str:
+    """What rm is about to change, shown above its question."""
+    where = f"namespace {group.name}" if group.name else "your global shortcuts"
+    lines = [f"Removes '{display}' from {where}: {group.file}"]
+    if copy:
+        lines.append(f"Deletes its script copy: {copy}")
+    elif kept := kept_script(group, raw_entry):
+        lines.append(f"Keeps its script: {kept}")
+    return "\n".join(lines)
+
+
+def rm_local_message(group: Group, name: str, unreadable: Optional[str]) -> str:
+    """What rm --local is about to change in .shortcuts.local, shown above its question."""
+    local = group.local_file
+    lines = [f"{unreadable}. {PROJECT_FILE} stays as it is."] if unreadable else []
+    if name not in group.local_shortcuts:
+        lines.append(f"Hides '{name}' from you: writes \"{name}\": null to {local}.")
+    elif group.local_shortcuts[name] is None:
+        lines.append(f"Stops hiding '{name}': takes its null out of {local}. The one in {PROJECT_FILE} applies again.")
+    else:
+        lines.append(f"Removes your '{name}' from {local}.")
+        if name in group.shared_shortcuts:
+            lines.append(f"The '{name}' in {PROJECT_FILE} applies again.")
+        if kept := kept_script(group, group.local_shortcuts[name]):
+            lines.append(f"Keeps its script: {kept}")
+    return "\n".join(lines)
+
+
 def rm_local(parsed: argparse.Namespace) -> int:
     """Take a name out of .shortcuts.local, which also undoes an override or a hide. A name only in
     .shortcuts is hidden instead."""
@@ -1379,15 +1453,13 @@ def rm_local(parsed: argparse.Namespace) -> int:
         die("--local takes one name: namespaces aren't in .shortcuts.local")
     name = parsed.name[0]
     group = load_store(local_project_root(os.getcwd())).main
-    if name not in group.local_shortcuts and name not in group.shared_shortcuts:
+    unreadable = load_group(group.file, group.store_dir).error  # .shortcuts can't be read: hide the name anyway
+    if name not in group.local_shortcuts and name not in group.shared_shortcuts and not unreadable:
         die(f"'{name}' isn't in {PROJECT_FILE} or {LOCAL_FILE} here")
     verb = "remove" if name in group.local_shortcuts else "hide"
-    if not parsed.yes:
-        if not sys.stdin.isatty():
-            die(f"{verb} '{name}' in a terminal, or pass -y")
-        if not ask(f"{verb} '{name}' in {group.local_file}? [y/N] "):
-            print("Aborted.", file=sys.stderr)
-            return 1
+    if not Confirm(f"{verb} '{name}'?", f"{verb} '{name}' in a terminal, or pass -y",
+                   rm_local_message(group, name, unreadable)).granted(parsed.yes):
+        return 1
 
     def change(shortcuts: Dict[str, Any]) -> None:
         if name in shortcuts:
@@ -1414,6 +1486,13 @@ def cmd_rm(args: List[str]) -> int:
     if parsed.local:
         return rm_local(parsed)
 
+    # A project that can't be read might hide the name, so rm doesn't reach past it to a global one
+    root = None if parsed.skip_local else find_project_root(os.getcwd())
+    broken = load_project_group(root).error if root else None
+    if broken:
+        die(f"{broken}. Inside this project rm only takes --local until it's fixed; "
+            f"for your own: shortcut rm --global {shlex.join(parsed.name)}")
+
     # Raw lookup: an entry that can't run must still be removable
     group, name, raw_entry, rest, _ = find_entry(parsed.name, skip_local=parsed.skip_local)
     if rest:
@@ -1423,12 +1502,10 @@ def cmd_rm(args: List[str]) -> int:
         die(f"'{display}' is a project shortcut, and shortcut doesn't change {PROJECT_FILE}. "
             f"Edit it by hand, or use: shortcut rm --local {display}")
 
-    if not parsed.yes:
-        if not sys.stdin.isatty():
-            die(f"remove '{display}' in a terminal, or pass -y")
-        if not ask(f"remove '{display}' from {group.file}? [y/N] "):
-            print("Aborted.", file=sys.stderr)
-            return 1
+    copy = stored_copy(group, raw_entry)
+    if not Confirm(f"remove '{display}'?", f"remove '{display}' in a terminal, or pass -y",
+                   rm_message(group, display, raw_entry, copy)).granted(parsed.yes):
+        return 1
 
     keep: Optional[Dict[str, str]] = None
     with registry_lock(group.store_dir):
@@ -1440,14 +1517,10 @@ def cmd_rm(args: List[str]) -> int:
             del shortcuts[name]
             save_registry_file(group.file, reg)
 
-        # 2. Remove the stored copy: only files shortcut keeps in its scripts folder, never a --script
-        #    file or a project's own file. A copy is always recorded as a relative path; --script never is outside a project.
-        script = raw_entry.get("script") if isinstance(raw_entry, dict) else None
-        if isinstance(script, str) and script and not os.path.isabs(script):
-            with contextlib.suppress(OSError, ValueError):
-                stored_path = resolve_script_path(group.script_base, script)
-                if pathlib.Path(stored_path).resolve().is_relative_to(pathlib.Path(scripts_dir(group)).resolve()):
-                    os.unlink(stored_path)
+        # 2. Remove the stored copy, never a --script file
+        if copy:
+            with contextlib.suppress(OSError):
+                os.unlink(copy)
         if approved:
             keep = shared_files(reload_group(group))
     if keep is not None:
@@ -1501,12 +1574,9 @@ def cmd_promote(args: List[str]) -> int:
     print(json.dumps({new_name: fields}, indent=2))
     print("This runs the project's files as they are now, like typing the command there. "
           "It isn't reviewed again when they change.")
-    if not parsed.yes:
-        if not sys.stdin.isatty():
-            die(f"promote '{name}' in a terminal, or pass -y")
-        if not ask(f"add '{new_name}' to {home.main.file}? [y/N] "):
-            print("Aborted.", file=sys.stderr)
-            return 1
+    if not Confirm(f"add '{new_name}' to {home.main.file}?",
+                   f"promote '{name}' in a terminal, or pass -y").granted(parsed.yes):
+        return 1
 
     _register(home.main, new_entry)
     print(f"Promoted '{name}' to your global shortcuts as '{new_name}'.")
@@ -1563,12 +1633,12 @@ def show_diff(lines: List[str]) -> None:
     sys.stdout.flush()
 
 
-def confirm_review(verb: str, old: Dict[str, str], new: Dict[str, str]) -> bool:
-    """Ask after a diff. A binary file can't be shown, so taking one unseen has to be typed out."""
+def confirm_review(verb: str, old: Dict[str, str], new: Dict[str, str], no_terminal: str) -> Confirm:
+    """The question after a diff. A binary file can't be shown, so taking one unseen has to be typed out."""
     unseen = sorted(path for path, text in new.items() if text.startswith(BINARY_MARK) and old.get(path) != text)
     if unseen:
-        return ask(f"can't show {', '.join(unseen)}. Type binary to {verb} it unseen: ", ("binary",))
-    return ask(f"{verb}? [y/N] ")
+        return Confirm(f"can't show {', '.join(unseen)}. Type binary to {verb} it unseen:", no_terminal, accept=("binary",))
+    return Confirm(f"{verb}?", no_terminal)
 
 
 def approve_group(group: Group, assume_yes: bool, global_names: Set[str]) -> int:
@@ -1599,12 +1669,8 @@ def approve_group(group: Group, assume_yes: bool, global_names: Set[str]) -> int
         if data.get("export") and is_relative_cwd(data.get("cwd")):
             print(f"warning: '{name}' is exported, but its cwd '{data['cwd']}' only exists in this checkout",
                   file=sys.stderr)
-    if not assume_yes:
-        if not sys.stdin.isatty():
-            die(f"approve {group.label} in a terminal, or pass -y")
-        if not confirm_review("approve", old, files):
-            print("Aborted.", file=sys.stderr)
-            return 1
+    if not confirm_review("approve", old, files, f"approve {group.label} in a terminal, or pass -y").granted(assume_yes):
+        return 1
     save_approval(group, shared, local)
     print(f"Approved {group.label}. This covers its definitions, not what they call. "
           f"Any change to them needs `{group.update_cmd}` again.")
@@ -1836,12 +1902,8 @@ def cmd_init(args: List[str]) -> int:
         files.update({os.path.relpath(path, dest_store_dir): reviewable(raw) for path, raw in scripts.items()})
         print(f"New from {source_str}:")
         show_diff(diff_files({}, files))
-        if not parsed.yes:
-            if not sys.stdin.isatty():
-                die(f"import {source_str} in a terminal, or pass -y")
-            if not confirm_review("import", {}, files):
-                print("Aborted.", file=sys.stderr)
-                return 1
+        if not confirm_review("import", {}, files, f"import {source_str} in a terminal, or pass -y").granted(parsed.yes):
+            return 1
         apply_import(dest_store_dir, entries, scripts)
 
         print(f"Imported ({len(entries)}):")

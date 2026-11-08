@@ -159,6 +159,17 @@ class TestWrites(ShortcutTestCase):
         self.assertIsNone(info["script_path"])
 
 
+class TestRmLocalMessage(ShortcutTestCase):
+    def test_rm_local_says_the_shared_entry_applies_again(self):
+        proj = overlaid(self)
+        rc, out = self.run_in_terminal(["rm", "--local", "swap"], cwd=str(proj), keys=[(b"[y/N]", b"n\n")])
+        self.assertEqual(rc, 1, out)
+        self.assertIn(f"Removes your 'swap' from {proj / '.shortcuts.local'}.", out)
+        self.assertIn("The 'swap' in .shortcuts applies again.", out)
+        rc, out = self.run_in_terminal(["rm", "--local", "gone"], cwd=str(proj), keys=[(b"[y/N]", b"n\n")])
+        self.assertIn("Stops hiding 'gone'", out)
+
+
 class TestApproval(ShortcutTestCase):
     def test_a_hand_edit_to_local_needs_approving(self):
         proj = overlaid(self)
