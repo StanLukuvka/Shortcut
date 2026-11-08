@@ -30,8 +30,6 @@ class TestBundled(ShortcutTestCase):
         res_init = self.run_cli(["init", "--global", str(templates_dir), "-y"])
         self.assertEqual(res_init.returncode, 0)
         self.assertIn("search", res_init.stdout)
-        self.assertIn("serve", res_init.stdout)
-        self.assertIn("ports", res_init.stdout)
         self.assertNotIn("Skipped", res_init.stdout)
         for name in ("edit", "nano", "logged", "desktop"):
             self.assertIn(name, self.load_global())

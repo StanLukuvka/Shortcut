@@ -9,17 +9,6 @@
         {"name": "path", "default": ".", "desc": "Where to look"}
       ]
     },
-    "serve": {
-      "description": "Serve current directory over HTTP",
-      "script": "scripts/serve.sh",
-      "args": [
-        {"name": "port", "default": "8000"}
-      ]
-    },
-    "ports": {
-      "description": "List open listening TCP and UDP ports",
-      "script": "scripts/ports.sh"
-    },
     "edit": {
       "description": "Open a shortcut's script, or the file that defines an inline one",
       "script": "scripts/edit.sh"
