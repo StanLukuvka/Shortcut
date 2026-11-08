@@ -19,7 +19,7 @@ Agents use the same commands as people. In a project, `--local` writes to `.shor
 
 3. **Single-quote the command.** Read arguments with `$1` or `"$@"`. A shortcut doesn't append them. `--arg NAME` declares a required argument and `--arg NAME=DEFAULT` an optional one.
 
-4. **Leave approval to the user.** A shortcut made with `--namespace`, or anything in `.shortcuts`, doesn't run until the user has run `shortcut update`; `new` prints the exact command. A change made with `--local` keeps an approved `.shortcuts.local` approved, and in a project that isn't approved yet it needs `shortcut update` too. Don't approve on their behalf with `-y`.
+4. **Leave approval to the user.** A shortcut made with `--namespace`, or anything in `.shortcuts`, doesn't run until the user has run `shortcut update`; `new` prints the exact command. A change made with `--local` keeps an approved `.shortcuts.local` approved, and in a project that isn't approved yet it needs `shortcut update` too. Don't approve on their behalf with `-y`. You can suggest `shortcut promote <name>` to make a project shortcut one of theirs, but never run it with `-y`.
 
 5. **Tell the user how to run it.**
 
@@ -33,7 +33,7 @@ Without a terminal:
 
 - `shortcut new <name>` without `-- CMD` skips the editor, creates a script from the template and prints `Edit it at: <path>`. Write to that file.
 - Editors don't open. Change the script or the JSON file directly.
-- `shortcut rm` and `shortcut promote` need `-y`.
+- `shortcut rm` needs `-y`.
 - A shortcut with `confirm` fails without `shortcut r -y <name>`. Check with the user first.
 
 To see what exists, use `shortcut list` and `shortcut show <name>`. `list` shows an unapproved group only as a line saying how to review it, and `list --names` leaves it out. `show` works before approval. Writes to a store take a lock, and agents working at the same time don't overwrite each other.
