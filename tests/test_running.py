@@ -168,18 +168,42 @@ class TestRunning(ShortcutTestCase):
         info = json.loads(res.stdout)
         self.assertEqual(info["entry"], {"inline": "true", "cwd": 123})
         self.assertIn("'cwd' must be a string", info["error"])
+        self.assertEqual(info["name"], "bad")
+        self.assertIsNone(info["cwd"])
         self.assertIsNone(info["run_cwd"])
+        self.assertIsNone(info["script_path"])
 
     def test_show_json_is_one_object_with_where_it_resolves(self):
-        self.write_store(self.shortcuts_home, {"s": {"script": "scripts/s.sh", "cwd": "/tmp"}})
+        self.write_store(self.shortcuts_home, {"s": {"script": "scripts/s.sh", "cwd": "/tmp"}, "c": {"inline": "true"}})
         info = json.loads(self.run_cli(["show", "--json", "s"]).stdout)
         self.assertEqual(info["name"], "s")
+        self.assertIsNone(info["namespace"])
         self.assertEqual(info["scope"], "global")
         self.assertEqual(info["defined_in"], str(self.shortcuts_home / "shortcuts.json"))
+        self.assertIsNone(info["source"])
         self.assertEqual(info["script_path"], str(self.shortcuts_home / "scripts" / "s.sh"))
+        self.assertEqual(info["cwd"], "/tmp")
         self.assertEqual(info["run_cwd"], "/tmp")
         self.assertEqual(info["approval"], "ok")
         self.assertIsNone(info["error"])
+        self.assertIs(info["hides_global"], False)
+        self.assertEqual(info["entry"], {"script": "scripts/s.sh", "cwd": "/tmp"})
+
+        info = json.loads(self.run_cli(["show", "--json", "c"], cwd=str(self.tmp_path)).stdout)
+        self.assertIsNone(info["cwd"])
+        self.assertEqual(info["run_cwd"], str(self.tmp_path))
+
+    def test_show_json_names_a_namespace_entry_bare(self):
+        self.write_import(self.shortcuts_home, "dk", {"version": 2, "shortcuts": {"ps": {"inline": "true", "cwd": "."}}})
+        self.run_cli(["init", "--global"])
+        info = json.loads(self.run_cli(["show", "--json", "dk", "ps"]).stdout)
+        self.assertEqual(info["name"], "ps")
+        self.assertEqual(info["namespace"], "dk")
+        self.assertEqual(info["scope"], "namespace")
+        self.assertEqual(info["defined_in"], str(self.shortcuts_home / "imports" / "dk.shortcut"))
+        self.assertEqual(info["cwd"], ".")
+        self.assertEqual(info["run_cwd"], str(self.shortcuts_home / "imports"))
+        self.assertEqual(info["approval"], "new")
 
     def test_unknown_commands_point_to_run(self):
         for word in ("nano", "activate", "version"):

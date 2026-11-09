@@ -116,7 +116,7 @@ class TestWrites(ShortcutTestCase):
     def test_new_local_takes_a_command_and_add_records_the_path(self):
         proj = self.project({}, files={"tools/run.sh": "#!/usr/bin/env bash\n"})
         outside = self.script("outside.sh", "#!/usr/bin/env bash\n")
-        res = run_here(self, proj, "new", "x", "--local", "--desc", "d", env={"SHORTCUT_EDITOR_CMD": "true"})
+        res = run_here(self, proj, "new", "x", "--local", "--desc", "d")
         self.assertEqual(res.returncode, 1)
         self.assertIn("after '--'", res.stderr)
         self.assertEqual(run_here(self, proj, "new", "in", "--script", "tools/run.sh", "--desc", "d", "--local").returncode, 0)
@@ -151,10 +151,23 @@ class TestWrites(ShortcutTestCase):
         proj = overlaid(self)
         info = json.loads(run_here(self, proj, "show", "--json", "mine").stdout)
         self.assertEqual(info["entry"], {"inline": "echo mine"})
+        self.assertEqual(info["name"], "mine")
+        self.assertIsNone(info["namespace"])
         self.assertEqual(info["scope"], "project")
         self.assertEqual(info["source"], "local")
         self.assertEqual(info["defined_in"], str(proj / ".shortcuts.local"))
         self.assertIsNone(info["script_path"])
+
+
+class TestRmLocalMessage(ShortcutTestCase):
+    def test_rm_local_says_the_shared_entry_applies_again(self):
+        proj = overlaid(self)
+        rc, out = self.run_in_terminal(["rm", "--local", "swap"], cwd=str(proj), keys=[(b"[y/N]", b"n\n")])
+        self.assertEqual(rc, 1, out)
+        self.assertIn(f"Removes your 'swap' from {proj / '.shortcuts.local'}.", out)
+        self.assertIn("The 'swap' in .shortcuts applies again.", out)
+        rc, out = self.run_in_terminal(["rm", "--local", "gone"], cwd=str(proj), keys=[(b"[y/N]", b"n\n")])
+        self.assertIn("Stops hiding 'gone'", out)
 
 
 class TestApproval(ShortcutTestCase):
@@ -251,7 +264,7 @@ class TestList(ShortcutTestCase):
 
 class TestImportFromAProject(ShortcutTestCase):
     def test_a_project_can_be_a_collection(self):
-        proj = self.project({"tool": {"description": "t", "inline": "echo tool"}})
+        proj = self.project({"tool": {"description": "t", "inline": "echo tool", "export": True}})
         res = self.run_cli(["init", "--global", str(proj), "-y"])
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertIn("tool", self.load_global())

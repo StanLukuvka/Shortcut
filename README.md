@@ -38,8 +38,10 @@ git clone https://github.com/StanLukuvka/Shortcut.git && cd Shortcut && ./instal
 - The project is the nearest folder, walking up, with `.shortcuts` or `.shortcuts.local`.
 - `.shortcuts.local` overrides `.shortcuts` per entry. `"name": null` hides a shared one.
 - Relative `script` and `cwd` paths resolve from the folder holding the file.
+- A namespace file is `<name>.shortcut`, such as `docker.shortcut`. A bare `.shortcut` is an error.
+- `"export": true` on a project entry marks it as made to work outside the repo. `shortcut update` warns if its `cwd` is relative. Only `.shortcuts` and `.shortcuts.local` can export.
 - Projects and namespaces run only after `shortcut update`. Global shortcuts need no approval.
-- If a project's file can't be read, nothing runs inside the project. `--global` reaches your own shortcuts.
+- If a project's file can't be read, nothing runs inside the project until it's fixed, and `rm` there only takes `--local`. `--global` reaches your own shortcuts.
 
 ## Commands
 
@@ -50,7 +52,7 @@ shortcut r -y <name>                  answer a confirm prompt
 shortcut r <name> -- -5               after --, a declared argument can start with -
 
 shortcut new <name> -- CMD            inline shortcut
-shortcut new <name>                   script, opened in your editor
+shortcut new <name>                   script from a template; prints its path
 shortcut new <name> --copy FILE|-     copy a script in
 shortcut new <name> --script PATH     use a script where it is
 
@@ -60,11 +62,15 @@ shortcut show <name>                  details and script
 shortcut show --json <name>           entry and where it resolves, as JSON
 shortcut location <name>              script path
 
-shortcut rm <name> [-y]               remove
-shortcut rm --local <name>            undo your override, or hide a shared entry
+shortcut rm <name> [-y]               remove a global or namespace shortcut; says what goes first
+shortcut rm --local <name>            undo your override, or hide a shared entry. Never changes .shortcuts
+
+shortcut promote <name> [-y]          make an approved, exported project shortcut one of your global ones
+shortcut promote <name> --as NEW      the same, under another global name
+shortcut promote <name> --force       one that isn't exported
 
 shortcut update [ns|.] [-y]           review and approve
-shortcut init --global <src> [-y]     import a folder or git URL
+shortcut init --global <src> [-y]     copy the exported entries in a folder's or git URL's .shortcuts
 shortcut completion bash|zsh|fish
 shortcut --version
 ```
@@ -83,6 +89,10 @@ Flags for `new`:
 
 `show`, `location` and `rm` take `--global` too. In a project, `--local` works only from the project root.
 
+`show --json` prints one object: `name`, `namespace`, `scope`, `defined_in`, `source`, `hides_global`, `approval`, `cwd`, `run_cwd`, `script_path`, `error`, and `entry` as written. A field that can't be worked out is null.
+
+`promote` copies the entry, not its script. A relative `script` or `cwd` becomes its absolute path in this checkout, and `from` records the project and the original name. It runs the checkout's files as they are now. If the checkout moves or is deleted, it fails with script not found or run directory does not exist.
+
 ## Bundled shortcuts
 
 From a clone: `shortcut init --global templates`.
@@ -100,8 +110,7 @@ shortcut r search <pattern>  find files by name
 ```
 SHORTCUTS_HOME        global store (default ~/.shortcuts)
 SHORTCUT_SHOW_DIR=0   hide the "→ dir" line
-VISUAL, EDITOR        editor for new and r edit (default nano)
-PAGER                 pages long update diffs
+PAGER                 pages long update and init --global diffs
 ```
 
 ## Security model
@@ -111,11 +120,12 @@ PAGER                 pages long update diffs
 > 3. Approval covers definitions and the scripts they name, not the programs those call.
 > 4. Global shortcuts have no approval step, so a global link target can change freely. `init --global` shows a collection before copying it.
 > 5. Anyone who can write to your shortcut store can already run code as you; that's out of scope.
+> 6. A promoted shortcut runs the project's files as they are now. If you want something immutable, don't take it from a repo.
 
 ## More
 
 - [AGENT.md](AGENT.md): for coding agents.
-- [docs/](docs/): diagrams and the `.shortcut` JSON Schema.
+- [docs/](docs/): diagrams and the JSON Schema for shortcut files.
 - Tests: `python3 -m unittest discover -s tests`.
 
 ## License

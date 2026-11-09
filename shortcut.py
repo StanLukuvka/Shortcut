@@ -31,6 +31,7 @@ WINDOWS: bool = os.name == "nt"
 REGISTRY_VERSION: int = 2
 CALLER: str = "caller"  # 'cwd' value, and the default: run in the user's current directory
 IMPORT_SUFFIX: str = ".shortcut"  # an imported namespace, in the same JSON format as shortcuts.json
+BARE_IMPORT: str = "a namespace file needs a name, e.g. docker.shortcut"  # a bare .shortcut is one letter from .shortcuts
 PROJECT_FILE: str = ".shortcuts"  # shared and committed; shortcut never writes it
 LOCAL_FILE: str = ".shortcuts.local"  # personal; overlays PROJECT_FILE entry by entry
 APPROVALS_DIR: str = "approvals"  # in the global store: one file per approved group, hash + snapshot
@@ -74,7 +75,9 @@ class ShortcutEntry:
     created_by: Optional[str] = None
     created: Optional[str] = None
     confirm: bool = False
+    export: bool = False  # made to work outside its project; only a project's own files can say so
     args: Optional[List[Dict[str, Any]]] = None
+    origin: Optional[Dict[str, str]] = None  # "from" in JSON: the project promote took it from; global store only
 
     TEXT_FIELDS = ("inline", "script", "cwd", "icon", "created_by", "created")
 
@@ -86,7 +89,8 @@ class ShortcutEntry:
         if not isinstance(data, dict):
             raise bad("expected a dictionary")
         # An ignored field could be a safety setting from a newer version, so never ignore one
-        unknown = sorted(set(data) - ({f.name for f in dataclasses.fields(cls)} - {"name"}))
+        known = {f.name for f in dataclasses.fields(cls)} - {"name", "origin"} | {"from"}
+        unknown = sorted(set(data) - known)
         if unknown:
             raise bad(f"unknown field: {', '.join(unknown)}")
         if not isinstance(data.get("description", ""), str):
@@ -95,13 +99,19 @@ class ShortcutEntry:
             val = data.get(field)
             if val is not None and not isinstance(val, str):
                 raise bad(f"'{field}' must be a string")
-        if not isinstance(data.get("confirm", False), bool):
-            raise bad("'confirm' must be a boolean")
+        for field in ("confirm", "export"):
+            if not isinstance(data.get(field, False), bool):
+                raise bad(f"'{field}' must be a boolean")
         if (data.get("inline") is None) == (data.get("script") is None):
             raise bad("it needs exactly one of 'inline' and 'script'")
         if data.get("args") is not None:
             validate_args(name, data["args"])
-        return cls(name=name, **data)
+        data = dict(data)
+        origin = data.pop("from", None)
+        if origin is not None and not (isinstance(origin, dict) and set(origin) == {"source", "name"}
+                                       and all(isinstance(v, str) for v in origin.values())):
+            raise bad("'from' must be an object with a string 'source' and 'name'")
+        return cls(name=name, origin=origin, **data)
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {"description": self.description}
@@ -110,9 +120,36 @@ class ShortcutEntry:
                 d[field] = getattr(self, field)
         if self.confirm:
             d["confirm"] = True
+        if self.export:
+            d["export"] = True
         if self.args is not None:
             d["args"] = self.args
+        if self.origin is not None:
+            d["from"] = self.origin
         return d
+
+
+def is_relative_cwd(cwd: Optional[str]) -> bool:
+    """A cwd that means a folder next to the file defining it, so it's only right in that checkout."""
+    return bool(cwd) and cwd != CALLER and not os.path.isabs(os.path.expanduser(cwd))
+
+
+def placement_error(entry: ShortcutEntry, in_project: bool, in_global: bool) -> Optional[str]:
+    """Fields only some files can have: 'export' a project's own, 'from' the global store's shortcuts.json."""
+    if entry.export and not in_project:
+        return f"'{entry.name}' is not a valid entry: 'export' is only for {PROJECT_FILE} and {LOCAL_FILE}"
+    if entry.origin is not None and not in_global:
+        return f"'{entry.name}' is not a valid entry: 'from' is only for the global store's shortcuts.json"
+    return None
+
+
+def load_entry(group: "Group", name: str, data: Any) -> ShortcutEntry:
+    """An entry as its group allows it: ShortcutEntry.from_dict, plus where 'export' and 'from' can be."""
+    entry = ShortcutEntry.from_dict(name, data)
+    error = placement_error(entry, bool(group.local_file), not group.name and not group.is_project)
+    if error:
+        raise ValueError(error)
+    return entry
 
 
 def safe(text: str) -> str:
@@ -434,7 +471,7 @@ def entry_errors(group: Group) -> List[str]:
     for name, data in group.shortcuts.items():
         try:
             validate_name(name)
-            entry = ShortcutEntry.from_dict(name, data)
+            entry = load_entry(group, name, data)
             if entry.script is not None and not os.path.isfile(resolve_script_path(group.script_base, entry.script)):
                 raise ValueError(f"'{name}' is not a valid entry: script not found: {entry.script}")
         except ValueError as e:
@@ -470,6 +507,8 @@ def load_store(store_dir: str) -> Store:
             problems.append(f"import '{name}' in {main.file} must be a path")
         elif not path.endswith(IMPORT_SUFFIX):
             problems.append(f"import '{name}' in {main.file} must be a {IMPORT_SUFFIX} file")
+        elif os.path.basename(path) == IMPORT_SUFFIX:
+            problems.append(f"import '{name}' in {main.file}: {BARE_IMPORT}")
         elif name in sources:
             problems.append(f"namespace '{name}' is imported twice in {store_dir}")
         else:
@@ -481,7 +520,7 @@ def load_store(store_dir: str) -> Store:
         try:
             validate_name(name)
         except ValueError as e:
-            group = dataclasses.replace(group, error=str(e))
+            group = dataclasses.replace(group, error=str(e) if name else f"{path}: {BARE_IMPORT}")
         namespaces[name] = group
         if name in main.shortcuts:
             problems.append(f"'{name}' is both a shortcut and a namespace in {store_dir}; rename one")
@@ -519,7 +558,7 @@ def entry_files(group: Group, shortcuts: Dict[str, Any], origin: str = "") -> Di
     files: Dict[str, str] = {}
     for name, data in shortcuts.items():
         cwd = data.get("cwd") if isinstance(data, dict) else None
-        if isinstance(cwd, str) and cwd and cwd != CALLER and not os.path.isabs(os.path.expanduser(cwd)):
+        if isinstance(cwd, str) and is_relative_cwd(cwd):
             with contextlib.suppress(ValueError):  # a NUL: it can't run, and the JSON already shows it
                 files[f"./cwd of {name}{origin}"] = os.path.realpath(resolve_run_dir(cwd, group, "")) + "\n"
         script = data.get("script") if isinstance(data, dict) else None
@@ -611,8 +650,7 @@ def require_approved(group: Group) -> None:
 
 def note_if_unapproved(group: Group) -> None:
     """After a change made through shortcut: say so if it needs approving before it runs."""
-    fresh = load_project_group(group.store_dir) if group.local_file else load_group(group.file, group.store_dir, group.name)
-    if group.needs_approval and approval_state(fresh) != "ok":
+    if group.needs_approval and approval_state(reload_group(group)) != "ok":
         print(f"note: {group.label} needs approving before it runs: {group.update_cmd}", file=sys.stderr)
 
 
@@ -635,20 +673,23 @@ def find_entry(
     strict: bool = False,
 ) -> Tuple[Group, str, Any, List[str], bool]:
     """Find `name` or `namespace name` without judging the entry: (group, name, raw entry, leftover
-    words, hides a global one). A project whose file can't be read stops every lookup inside it.
-    strict (for run) also stops on a global store's load errors for the name it has."""
+    words, hides a global one). strict (for run) refuses every name inside a project whose file can't be
+    used, and a store's load errors for the name it has. Without it (show, location, rm) a broken file is
+    looked in as far as it reads, so you can still see and fix what's there."""
     stores = visible_stores(caller_cwd, skip_local)
     first, rest = words[0], words[1:]
     home = stores[-1]
 
     for store in stores:
-        if store is not home and store.main.error:
+        if strict and store is not home and store.main.error:
             raise ValueError(
-                f"{store.main.error}. Nothing runs from this project until it's repaired; "
-                f"shortcut r --global {first} reaches your own shortcuts"
+                f"{store.main.error}. Nothing runs inside this project until it's fixed; "
+                f"for your own: shortcut r --global {first}"
             )
         problems = ([store.main.error] if store.main.error else []) + store.problems
-        if strict and problems and (first in store.main.shortcuts or first in store.namespaces):
+        imports = store.main.data.get("imports", {})
+        named = first in store.main.shortcuts or first in store.namespaces or (isinstance(imports, dict) and first in imports)
+        if strict and problems and named:
             raise ValueError("; ".join(problems))
         if first in store.main.shortcuts and (not rest or first not in store.namespaces):
             hides = store is not home and first in home.main.shortcuts
@@ -681,7 +722,7 @@ def resolve_shortcut(
     """Find what `shortcut run <words>` runs, and where; also returns the words left over as arguments."""
     caller_cwd = caller_cwd or os.getcwd()
     group, name, raw, rest, hides_global = find_entry(words, caller_cwd, skip_local, strict)
-    entry = ShortcutEntry.from_dict(name, raw)
+    entry = load_entry(group, name, raw)
     run_cwd = resolve_run_dir(entry.cwd, group, caller_cwd)
     return ResolvedShortcut(entry=entry, group=group, run_cwd=run_cwd, hides_global=hides_global), rest
 
@@ -715,6 +756,29 @@ def ask(prompt: str, accept: Tuple[str, ...] = ("y", "yes")) -> bool:
         return input(safe(prompt)).strip().lower() in accept
     except (EOFError, KeyboardInterrupt):
         print()
+        return False
+
+
+@dataclasses.dataclass(frozen=True)
+class Confirm:
+    """Every question shortcut asks before it runs or changes something. message says what will happen
+    and is shown above the question. -y answers yes. Without a terminal it stops with no_terminal."""
+    question: str
+    no_terminal: str
+    message: str = ""
+    accept: Tuple[str, ...] = ("y", "yes")  # anything else means the answer has to be typed out
+
+    def granted(self, assume_yes: bool) -> bool:
+        if assume_yes:
+            return True
+        if not sys.stdin.isatty():
+            die(self.no_terminal)
+        if self.message:
+            print(self.message)
+        suffix = " [y/N] " if self.accept == Confirm.accept else " "
+        if ask(self.question + suffix, self.accept):
+            return True
+        print("Aborted.", file=sys.stderr)
         return False
 
 
@@ -776,12 +840,11 @@ def run_shortcut(words: List[str], skip_local: bool = False, assume_yes: bool = 
         args, arg_env = bind_args(name, entry.args, args)
     if not os.path.isdir(resolved.run_cwd):
         raise FileNotFoundError(f"run directory does not exist: {resolved.run_cwd}")
-    if entry.confirm and not assume_yes:
-        if not sys.stdin.isatty():
-            die(f"'{name}' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y {name})")
-        if not ask(f"run '{name}' in {os.path.realpath(resolved.run_cwd)}? [y/N] "):
-            print("Aborted.", file=sys.stderr)
-            return 1
+    if entry.confirm and not Confirm(
+        f"run '{name}' in {os.path.realpath(resolved.run_cwd)}?",
+        f"'{name}' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y {name})",
+    ).granted(assume_yes):
+        return 1
     if sys.stderr and os.environ.get("SHORTCUT_SHOW_DIR", "1") != "0":
         line = f"→ {os.path.realpath(resolved.run_cwd)}"
         if resolved.hides_global:
@@ -856,17 +919,6 @@ def target_group(parsed: argparse.Namespace, cwd: str) -> Group:
     return group
 
 
-def get_editor_cmd() -> List[str]:
-    """SHORTCUT_EDITOR_CMD (test hook) wins; then $VISUAL, $EDITOR, nano."""
-    if env_cmd := os.environ.get("SHORTCUT_EDITOR_CMD"):
-        cmd = shlex.split(env_cmd)
-    else:
-        cmd = shlex.split(os.environ.get("VISUAL") or os.environ.get("EDITOR") or "nano")
-    if not cmd or shutil.which(cmd[0]) is None:
-        die(f"editor not found: {cmd[0] if cmd else '(empty)'} (install nano or set $EDITOR)")
-    return cmd
-
-
 RUN_USAGE: str = "usage: shortcut run|r [--global] [-y] <name> [args...]\n       shortcut run|r [--global] [-y] <namespace> <name> [args...]"
 
 
@@ -902,8 +954,10 @@ def _register(group: Group, entry: ShortcutEntry, write_script: Optional[Any] = 
         return
     if not registry_exists(store_dir):
         init_store(store_dir)
+    keep: Optional[Dict[str, str]] = None
     with registry_lock(store_dir):
         is_new_file = bool(group.name) and not os.path.exists(group.file)
+        approved = namespace_is_approved(group)
         reg = {"version": REGISTRY_VERSION, "shortcuts": {}} if is_new_file else load_registry_file(group.file)
         shortcuts = reg.setdefault("shortcuts", {})
         if entry.name in shortcuts:
@@ -916,7 +970,21 @@ def _register(group: Group, entry: ShortcutEntry, write_script: Optional[Any] = 
         shortcuts[entry.name] = entry.to_dict()
         os.makedirs(os.path.dirname(group.file), exist_ok=True)
         save_registry_file(group.file, reg)
+        if approved:
+            keep = shared_files(reload_group(group))
+    if keep is not None:
+        save_approval(group, keep, {})  # after the lock: for a namespace, save_approval takes the same one
     note_if_unapproved(group)
+
+
+def reload_group(group: Group) -> Group:
+    return load_project_group(group.store_dir) if group.local_file else load_group(group.file, group.store_dir, group.name)
+
+
+def namespace_is_approved(group: Group) -> bool:
+    """Before shortcut writes to a global namespace, under its lock: whether the file matches its approval.
+    Only then does the approval follow the write, as write_local does, so a hand edit still needs update."""
+    return bool(group.name) and os.path.exists(group.file) and approval_state(reload_group(group)) == "ok"
 
 
 def write_local(root: str, change: Any) -> Group:
@@ -1050,15 +1118,6 @@ def cmd_new(args: List[str]) -> int:
     if parsed.local and inline_cmd_tokens is None and not parsed.script:
         die("a local shortcut needs a command after '--', or --script PATH")
 
-    # Pick the editor before creating anything, so a missing editor leaves nothing half-made.
-    # Without a terminal (an agent running this), skip the editor and say how to open it later.
-    # SHORTCUT_EDITOR_CMD is the test hook from get_editor_cmd.
-    editor_cmd: Optional[List[str]] = None
-    if inline_cmd_tokens is None and not (parsed.script or parsed.copy) and (
-        "SHORTCUT_EDITOR_CMD" in os.environ or (sys.stdin.isatty() and sys.stdout.isatty())
-    ):
-        editor_cmd = get_editor_cmd()
-
     group = target_group(parsed, os.getcwd())
     fields = entry_fields(parsed.name, parsed, group)
     if parsed.script:
@@ -1084,33 +1143,21 @@ def cmd_new(args: List[str]) -> int:
         die(f"shortcut '{parsed.name}' already exists in {group.file}")
     rel_script_path, abs_script_path = _stored_script_field(group, f"{parsed.name}.sh")
 
-    # Edit a temporary copy; the shortcut exists only once the editor exits successfully.
-    fd, draft = tempfile.mkstemp(prefix=f"shortcut-{parsed.name}-", suffix=".sh")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as sf:
-            sf.write("#!/usr/bin/env bash\nset -euo pipefail\n\n")
-        if editor_cmd is not None:
-            rc = subprocess.run([*editor_cmd, draft]).returncode
-            if rc != 0:
-                die(f"editor exited with code {rc}; shortcut '{parsed.name}' was not created")
+    def write_script() -> None:
+        refuse_symlinks(group, abs_script_path)
+        with open(abs_script_path, "w", encoding="utf-8") as f:
+            f.write("#!/usr/bin/env bash\nset -euo pipefail\n\n")
+        os.chmod(abs_script_path, 0o755)
 
-        def write_script() -> None:
-            refuse_symlinks(group, abs_script_path)
-            shutil.copyfile(draft, abs_script_path)
-            os.chmod(abs_script_path, 0o755)
-
-        entry = ShortcutEntry(
-            name=parsed.name,
-            description=parsed.desc if parsed.desc is not None else "(no description)",
-            script=rel_script_path,
-            **fields,
-        )
-        _register(group, entry, write_script)
-    finally:
-        os.unlink(draft)
+    entry = ShortcutEntry(
+        name=parsed.name,
+        description=parsed.desc if parsed.desc is not None else "(no description)",
+        script=rel_script_path,
+        **fields,
+    )
+    _register(group, entry, write_script)
     print(f"Created script shortcut '{parsed.name}'.")
-    if editor_cmd is None:
-        print(f"Edit it at: {abs_script_path}")
+    print(f"Edit it at: {abs_script_path}")
     return 0
 
 
@@ -1268,6 +1315,10 @@ def cmd_show(args: List[str]) -> int:
         print(f"Usage:       {usage_line(resolved.display, entry.args)}")
     if entry.confirm:
         print("Confirm:     True")
+    if entry.export:
+        print("Export:      True")
+    if entry.origin is not None:
+        print(f"From:        '{entry.origin['name']}' in {entry.origin['source']}")
     if entry.created:
         print(f"Created:     {entry.created}")
     if entry.created_by:
@@ -1298,19 +1349,22 @@ def show_json(words: List[str], skip_local: bool) -> int:
     if rest:
         die(f"too many names: {shlex.join(words)}")
     out: Dict[str, Any] = {
-        "name": group.display(name),
+        "name": name,
+        "namespace": group.name or None,
         "scope": "namespace" if group.name else ("project" if group.needs_approval else "global"),
         "defined_in": group.defining_file(name),
         "source": group.source(name) if group.local_file else None,
         "hides_global": hides_global,
         "approval": approval_state(group),
+        "cwd": None,
         "run_cwd": None,
         "script_path": None,
         "error": None,
         "entry": raw,
     }
     try:
-        entry = ShortcutEntry.from_dict(name, raw)
+        entry = load_entry(group, name, raw)
+        out["cwd"] = entry.cwd
         out["run_cwd"] = resolve_run_dir(entry.cwd, group, os.getcwd())
         if entry.script is not None:
             out["script_path"] = resolve_script_path(group.script_base, entry.script)
@@ -1338,6 +1392,58 @@ def cmd_location(args: List[str]) -> int:
     return 0
 
 
+def stored_copy(group: Group, raw_entry: Any) -> Optional[str]:
+    """The copy shortcut keeps of an entry's script, which rm deletes with it: a relative path inside the
+    group's scripts folder. A --script file is recorded as an absolute path, so it's never one."""
+    script = raw_entry.get("script") if isinstance(raw_entry, dict) else None
+    if not isinstance(script, str) or not script or os.path.isabs(script):
+        return None
+    with contextlib.suppress(OSError, ValueError):
+        path = resolve_script_path(group.script_base, script)
+        if pathlib.Path(path).is_relative_to(pathlib.Path(scripts_dir(group)).resolve()):
+            return path
+    return None
+
+
+def kept_script(group: Group, raw_entry: Any) -> Optional[str]:
+    """The script an entry names, as a path, for saying it stays."""
+    script = raw_entry.get("script") if isinstance(raw_entry, dict) else None
+    if not isinstance(script, str) or not script:
+        return None
+    try:
+        return resolve_script_path(group.script_base, script)
+    except ValueError:
+        return script
+
+
+def rm_message(group: Group, display: str, raw_entry: Any, copy: Optional[str]) -> str:
+    """What rm is about to change, shown above its question."""
+    where = f"namespace {group.name}" if group.name else "your global shortcuts"
+    lines = [f"Removes '{display}' from {where}: {group.file}"]
+    if copy:
+        lines.append(f"Deletes its script copy: {copy}")
+    elif kept := kept_script(group, raw_entry):
+        lines.append(f"Keeps its script: {kept}")
+    return "\n".join(lines)
+
+
+def rm_local_message(group: Group, name: str, unreadable: Optional[str]) -> str:
+    """What rm --local is about to change in .shortcuts.local, shown above its question."""
+    local = group.local_file
+    lines = [f"{unreadable}. {PROJECT_FILE} stays as it is."] if unreadable else []
+    if name not in group.local_shortcuts:
+        lines.append(f"Hides '{name}' from you: writes \"{name}\": null to {local}.")
+    elif group.local_shortcuts[name] is None:
+        lines.append(f"Stops hiding '{name}': takes its null out of {local}. The one in {PROJECT_FILE} applies again.")
+    else:
+        lines.append(f"Removes your '{name}' from {local}.")
+        if name in group.shared_shortcuts:
+            lines.append(f"The '{name}' in {PROJECT_FILE} applies again.")
+        if kept := kept_script(group, group.local_shortcuts[name]):
+            lines.append(f"Keeps its script: {kept}")
+    return "\n".join(lines)
+
+
 def rm_local(parsed: argparse.Namespace) -> int:
     """Take a name out of .shortcuts.local, which also undoes an override or a hide. A name only in
     .shortcuts is hidden instead."""
@@ -1347,15 +1453,13 @@ def rm_local(parsed: argparse.Namespace) -> int:
         die("--local takes one name: namespaces aren't in .shortcuts.local")
     name = parsed.name[0]
     group = load_store(local_project_root(os.getcwd())).main
-    if name not in group.local_shortcuts and name not in group.shared_shortcuts:
+    unreadable = load_group(group.file, group.store_dir).error  # .shortcuts can't be read: hide the name anyway
+    if name not in group.local_shortcuts and name not in group.shared_shortcuts and not unreadable:
         die(f"'{name}' isn't in {PROJECT_FILE} or {LOCAL_FILE} here")
     verb = "remove" if name in group.local_shortcuts else "hide"
-    if not parsed.yes:
-        if not sys.stdin.isatty():
-            die(f"{verb} '{name}' in a terminal, or pass -y")
-        if not ask(f"{verb} '{name}' in {group.local_file}? [y/N] "):
-            print("Aborted.", file=sys.stderr)
-            return 1
+    if not Confirm(f"{verb} '{name}'?", f"{verb} '{name}' in a terminal, or pass -y",
+                   rm_local_message(group, name, unreadable)).granted(parsed.yes):
+        return 1
 
     def change(shortcuts: Dict[str, Any]) -> None:
         if name in shortcuts:
@@ -1382,6 +1486,13 @@ def cmd_rm(args: List[str]) -> int:
     if parsed.local:
         return rm_local(parsed)
 
+    # A project that can't be read might hide the name, so rm doesn't reach past it to a global one
+    root = None if parsed.skip_local else find_project_root(os.getcwd())
+    broken = load_project_group(root).error if root else None
+    if broken:
+        die(f"{broken}. Inside this project rm only takes --local until it's fixed; "
+            f"for your own: shortcut rm --global {shlex.join(parsed.name)}")
+
     # Raw lookup: an entry that can't run must still be removable
     group, name, raw_entry, rest, _ = find_entry(parsed.name, skip_local=parsed.skip_local)
     if rest:
@@ -1391,32 +1502,87 @@ def cmd_rm(args: List[str]) -> int:
         die(f"'{display}' is a project shortcut, and shortcut doesn't change {PROJECT_FILE}. "
             f"Edit it by hand, or use: shortcut rm --local {display}")
 
-    if not parsed.yes:
-        if not sys.stdin.isatty():
-            die(f"remove '{display}' in a terminal, or pass -y")
-        if not ask(f"remove '{display}' from {group.file}? [y/N] "):
-            print("Aborted.", file=sys.stderr)
-            return 1
+    copy = stored_copy(group, raw_entry)
+    if not Confirm(f"remove '{display}'?", f"remove '{display}' in a terminal, or pass -y",
+                   rm_message(group, display, raw_entry, copy)).granted(parsed.yes):
+        return 1
 
-    # 1. Remove from registry
+    keep: Optional[Dict[str, str]] = None
     with registry_lock(group.store_dir):
+        approved = namespace_is_approved(group)
+        # 1. Remove from registry
         reg = load_registry_file(group.file)
         shortcuts = reg.get("shortcuts", {})
         if name in shortcuts:
             del shortcuts[name]
             save_registry_file(group.file, reg)
 
-    # 2. Remove the stored copy: only files shortcut keeps in its scripts folder, never a --script
-    #    file or a project's own file. A copy is always recorded as a relative path; --script never is outside a project.
-    script = raw_entry.get("script") if isinstance(raw_entry, dict) else None
-    if isinstance(script, str) and script and not os.path.isabs(script):
-        with contextlib.suppress(OSError, ValueError):
-            stored_path = resolve_script_path(group.script_base, script)
-            if pathlib.Path(stored_path).resolve().is_relative_to(pathlib.Path(scripts_dir(group)).resolve()):
-                os.unlink(stored_path)
+        # 2. Remove the stored copy, never a --script file
+        if copy:
+            with contextlib.suppress(OSError):
+                os.unlink(copy)
+        if approved:
+            keep = shared_files(reload_group(group))
+    if keep is not None:
+        save_approval(group, keep, {})  # after the lock: for a namespace, save_approval takes the same one
 
     print(f"Removed shortcut '{display}'.")
     note_if_unapproved(group)
+    return 0
+
+
+def cmd_promote(args: List[str]) -> int:
+    parser = Parser(prog="shortcut promote", description="Add a project shortcut to your global shortcuts, run from this checkout")
+    parser.add_argument("name", help="Project shortcut name")
+    parser.add_argument("--as", dest="new_name", metavar="NEW", help="Global name to give it")
+    parser.add_argument("-y", "--yes", action="store_true", help="Do not prompt for confirmation")
+    parser.add_argument("--force", action="store_true", help="Promote an entry that isn't exported")
+    parsed = parser.parse_args(args)
+
+    caller_cwd = os.getcwd()
+    if find_project_root(caller_cwd) is None:
+        die(f"promote runs inside a project: there's no {PROJECT_FILE} or {LOCAL_FILE} here or above")
+    name, new_name = parsed.name, parsed.new_name or parsed.name
+    validate_name(new_name)
+    resolved, _ = resolve_shortcut([name], caller_cwd, strict=True)
+    group, entry = resolved.group, resolved.entry
+    if not group.is_project or group.name:
+        die(f"'{name}' isn't a project shortcut here")
+    require_approved(group)
+    if not entry.export and not parsed.force:
+        die(f"'{name}' is marked project-only; promote anyway with --force")
+
+    home = load_store(get_global_store_dir())
+    if home.main.error:
+        die(home.main.error)
+    if new_name in home.main.shortcuts or new_name in home.namespaces:
+        if parsed.new_name is None:
+            die(f"you already have a global '{name}'; give this one another name: shortcut promote {name} --as NEW")
+        die(f"you already have a global '{new_name}'")
+
+    # The entry, pointing at this checkout's files: nothing is copied, so it runs them as they are then
+    fields = entry.to_dict()
+    fields.pop("export", None)  # a global entry can't export
+    if entry.script is not None:
+        fields["script"] = resolve_script_path(group.script_base, entry.script)
+    if is_relative_cwd(entry.cwd):
+        fields["cwd"] = os.path.realpath(resolve_run_dir(entry.cwd, group, caller_cwd))
+    fields["from"] = {"source": os.path.realpath(group.store_dir), "name": name}
+    new_entry = ShortcutEntry.from_dict(new_name, fields)
+
+    print(f"From {group.defining_file(name)}, as your global '{new_name}':")
+    print(json.dumps({new_name: fields}, indent=2))
+    print("This runs the project's files as they are now, like typing the command there. "
+          "It isn't reviewed again when they change.")
+    if not Confirm(f"add '{new_name}' to {home.main.file}?",
+                   f"promote '{name}' in a terminal, or pass -y").granted(parsed.yes):
+        return 1
+
+    _register(home.main, new_entry)
+    print(f"Promoted '{name}' to your global shortcuts as '{new_name}'.")
+    if new_name == name:
+        print(f"note: inside this project '{name}' is still the project's; shortcut r --global {name} runs yours",
+              file=sys.stderr)
     return 0
 
 
@@ -1467,12 +1633,12 @@ def show_diff(lines: List[str]) -> None:
     sys.stdout.flush()
 
 
-def confirm_review(verb: str, old: Dict[str, str], new: Dict[str, str]) -> bool:
-    """Ask after a diff. A binary file can't be shown, so taking one unseen has to be typed out."""
+def confirm_review(verb: str, old: Dict[str, str], new: Dict[str, str], no_terminal: str) -> Confirm:
+    """The question after a diff. A binary file can't be shown, so taking one unseen has to be typed out."""
     unseen = sorted(path for path, text in new.items() if text.startswith(BINARY_MARK) and old.get(path) != text)
     if unseen:
-        return ask(f"can't show {', '.join(unseen)}. Type binary to {verb} it unseen: ", ("binary",))
-    return ask(f"{verb}? [y/N] ")
+        return Confirm(f"can't show {', '.join(unseen)}. Type binary to {verb} it unseen:", no_terminal, accept=("binary",))
+    return Confirm(f"{verb}?", no_terminal)
 
 
 def approve_group(group: Group, assume_yes: bool, global_names: Set[str]) -> int:
@@ -1499,12 +1665,12 @@ def approve_group(group: Group, assume_yes: bool, global_names: Set[str]) -> int
     if not group.name:
         for name in sorted(set(group.shortcuts) & global_names):
             print(f"Inside this project, '{name}' hides your global '{name}'.")
-    if not assume_yes:
-        if not sys.stdin.isatty():
-            die(f"approve {group.label} in a terminal, or pass -y")
-        if not confirm_review("approve", old, files):
-            print("Aborted.", file=sys.stderr)
-            return 1
+    for name, data in sorted(group.shortcuts.items()):
+        if data.get("export") and is_relative_cwd(data.get("cwd")):
+            print(f"warning: '{name}' is exported, but its cwd '{data['cwd']}' only exists in this checkout",
+                  file=sys.stderr)
+    if not confirm_review("approve", old, files, f"approve {group.label} in a terminal, or pass -y").granted(assume_yes):
+        return 1
     save_approval(group, shared, local)
     print(f"Approved {group.label}. This covers its definitions, not what they call. "
           f"Any change to them needs `{group.update_cmd}` again.")
@@ -1553,8 +1719,9 @@ def plan_import(
     dest_registry: Dict[str, Any],
     source_registry: Dict[str, Any],
 ) -> Tuple[Dict[str, Any], Dict[str, bytes], List[str]]:
-    """What a collection would add to the global store, changing nothing: (entries, {stored script path:
-    its bytes}, skipped). The bytes are read once here, so what gets copied is what was reviewed."""
+    """What a source's .shortcuts would add to the global store, changing nothing: (entries, {stored script
+    path: its bytes}, skipped). Only exported entries come. The bytes are read once here, so what gets
+    copied is what was reviewed."""
     entries: Dict[str, Any] = {}
     scripts: Dict[str, bytes] = {}
     skipped: List[str] = []
@@ -1565,11 +1732,16 @@ def plan_import(
         return entries, scripts, skipped
 
     for name, entry_data in source_shortcuts.items():
-        # Validate entry structure
         try:
-            ShortcutEntry.from_dict(name, entry_data)
+            entry = ShortcutEntry.from_dict(name, entry_data)
+            error = placement_error(entry, in_project=True, in_global=False)  # 'from' is promote's, never a source's
+            if error:
+                raise ValueError(error)
         except ValueError as e:
             skipped.append(f"{name} (invalid entry: {e})")
+            continue
+        if not entry.export:
+            skipped.append(f"{name} (project-only)")
             continue
 
         if name in dest_shortcuts:
@@ -1592,11 +1764,15 @@ def plan_import(
 
         # A relative cwd means nothing once the entry leaves the file that defined it
         d = entry_data.get("cwd")
-        if d and d != CALLER and (not os.path.isabs(d) or not os.path.isdir(d)):
-            skipped.append(f"{name} (cwd is relative or not found here: {d})")
+        if is_relative_cwd(d):
+            skipped.append(f"{name} (exported, but its cwd '{d}' only exists in the project)")
+            continue
+        if d and d != CALLER and not os.path.isdir(os.path.expanduser(d)):
+            skipped.append(f"{name} (cwd not found here: {d})")
             continue
 
         new_entry = dict(entry_data)
+        new_entry.pop("export", None)  # a global entry can't export
         if script_field:
             curr = pathlib.Path(source_base)
             symlink_found = False
@@ -1651,7 +1827,7 @@ def apply_import(store_dir: str, entries: Dict[str, Any], scripts: Dict[str, byt
 def cmd_init(args: List[str]) -> int:
     parser = Parser(
         prog="shortcut init",
-        description="With --global, create the global store, or review a collection and copy it there",
+        description="With --global, create the global store, or review a project's exported shortcuts and copy them there",
     )
     parser.add_argument("source", nargs="?", default=None, help="Local path or git URL to import from (needs --global)")
     parser.add_argument("--global", dest="is_global", action="store_true", help="Import into global store")
@@ -1662,7 +1838,7 @@ def cmd_init(args: List[str]) -> int:
         if parsed.source:
             die(
                 f"a project's {PROJECT_FILE} is used in place, never copied: clone the project and run "
-                "`shortcut update` there. To copy a collection into your global store, add --global."
+                "`shortcut update` there. To copy its exported shortcuts into your global store, add --global."
             )
         die(f"a project's {PROJECT_FILE} is a file you write by hand, starting from: "
             f'{{"version": {REGISTRY_VERSION}, "shortcuts": {{}}}}. For your own shortcuts, use new --local.')
@@ -1699,12 +1875,10 @@ def cmd_init(args: List[str]) -> int:
             if not os.path.isdir(source_root):
                 die(f"source directory does not exist: {source_root}")
 
-        # A collection is a shortcuts.json at its root or a project's .shortcuts; either way its
-        # relative script paths resolve against the source root.
-        candidates = [os.path.join(source_root, "shortcuts.json"), os.path.join(source_root, PROJECT_FILE)]
-        source_file = next((path for path in candidates if os.path.isfile(path)), None)
-        if source_file is None:
-            die(f"no shortcuts.json or {PROJECT_FILE} found in {source_root}")
+        # A source is a project: a .shortcuts at its root, whose relative script paths resolve from there
+        source_file = os.path.join(source_root, PROJECT_FILE)
+        if not os.path.isfile(source_file):
+            die(f"no {PROJECT_FILE} found in {source_root}")
 
         entries, scripts, skipped = plan_import(
             source_base=source_root,
@@ -1724,12 +1898,8 @@ def cmd_init(args: List[str]) -> int:
         files.update({os.path.relpath(path, dest_store_dir): reviewable(raw) for path, raw in scripts.items()})
         print(f"New from {source_str}:")
         show_diff(diff_files({}, files))
-        if not parsed.yes:
-            if not sys.stdin.isatty():
-                die(f"import {source_str} in a terminal, or pass -y")
-            if not confirm_review("import", {}, files):
-                print("Aborted.", file=sys.stderr)
-                return 1
+        if not confirm_review("import", {}, files, f"import {source_str} in a terminal, or pass -y").granted(parsed.yes):
+            return 1
         apply_import(dest_store_dir, entries, scripts)
 
         print(f"Imported ({len(entries)}):")
@@ -1754,8 +1924,8 @@ _shortcut() {
         prev="${COMP_WORDS[COMP_CWORD-1]}"
     fi
 
-    local subcommands="run r new list show location rm update init completion help"
-    local name_commands="run r show location rm"
+    local subcommands="run r new list show location rm promote update init completion help"
+    local name_commands="run r show location rm promote"
 
     if [ "${COMP_CWORD:-1}" -eq 1 ]; then
         COMPREPLY=( $(compgen -W "${subcommands}" -- "$cur") )
@@ -1776,6 +1946,7 @@ _shortcut() {
                 case "$cmd" in
                     run|r) flags="--global -y" ;;
                     rm) flags="--global --local -y" ;;
+                    promote) flags="--as -y --force" ;;
                     show) flags="--global --json" ;;
                 esac
                 COMPREPLY=( $(compgen -W "${flags}" -- "$cur") )
@@ -1807,7 +1978,7 @@ ZSH_COMPLETION_SCRIPT: str = """# zsh completion for shortcut (load after compin
 
 _shortcut() {
     local -a subcommands
-    subcommands=(run r new list show location rm update init completion help)
+    subcommands=(run r new list show location rm promote update init completion help)
 
     if (( CURRENT == 2 )); then
         compadd -- $subcommands
@@ -1815,15 +1986,16 @@ _shortcut() {
     fi
 
     case $words[2] in
-        run|r|show|location|rm)
+        run|r|show|location|rm|promote)
             local -a typed
             typed=(${words[3,CURRENT-1]:#-*})
             if (( $#typed == 0 )) && [[ $PREFIX == -* ]]; then
-                compadd -- --global
                 case $words[2] in
-                    run|r) compadd -- -y ;;
-                    rm) compadd -- --local -y ;;
-                    show) compadd -- --json ;;
+                    run|r) compadd -- --global -y ;;
+                    rm) compadd -- --global --local -y ;;
+                    show) compadd -- --global --json ;;
+                    promote) compadd -- --as -y --force ;;
+                    *) compadd -- --global ;;
                 esac
             elif (( $#typed <= 1 )); then
                 compadd -- ${(f)"$(shortcut list --names $typed[1] 2>/dev/null)"}
@@ -1852,10 +2024,12 @@ function __shortcut_names
 end
 
 complete -c shortcut -f
-complete -c shortcut -n __fish_use_subcommand -a "run r new list show location rm update init completion help"
-complete -c shortcut -n "__fish_seen_subcommand_from run r show location rm" -a "(__shortcut_names)"
+complete -c shortcut -n __fish_use_subcommand -a "run r new list show location rm promote update init completion help"
+complete -c shortcut -n "__fish_seen_subcommand_from run r show location rm promote" -a "(__shortcut_names)"
 complete -c shortcut -n "__fish_seen_subcommand_from run r show location rm" -l global
-complete -c shortcut -n "__fish_seen_subcommand_from run r rm" -s y
+complete -c shortcut -n "__fish_seen_subcommand_from run r rm promote" -s y
+complete -c shortcut -n "__fish_seen_subcommand_from promote" -l as -r
+complete -c shortcut -n "__fish_seen_subcommand_from promote" -l force
 complete -c shortcut -n "__fish_seen_subcommand_from rm" -l local
 complete -c shortcut -n "__fish_seen_subcommand_from show" -l json
 complete -c shortcut -n "__fish_seen_subcommand_from init" -F -l global
@@ -1886,16 +2060,22 @@ Usage:
                                             Run a shortcut, or `<namespace> <name>`; r is short for run.
                                             --global skips project shortcuts, -y answers a confirm prompt
   shortcut new <name> [FLAGS] [-- CMD...]   Create a shortcut: an inline command after --, a script
-                                            opened in $EDITOR, or a file with --script or --copy
+                                            from a template at the path it prints, or a file with
+                                            --script or --copy
   shortcut list [--names [NAMESPACE]]       List visible shortcuts, with where each runs
   shortcut show [--global] [--json] <name>  Show shortcut metadata and script contents, or the entry as JSON
   shortcut location [--global] <name>       Print the path of its script (fails for inline)
   shortcut rm [--global|--local] <name> [-y]
                                             Remove a shortcut. With --local, take it out of .shortcuts.local,
                                             or hide a shared one from you
+  shortcut promote <name> [--as NEW] [-y] [--force]
+                                            Add an approved, exported project shortcut to your global
+                                            shortcuts. It runs this checkout's files as they are, not a
+                                            copy. --force takes one that isn't exported
   shortcut update [group] [-y]              Review changes to project shortcuts and namespaces, and approve them
-  shortcut init --global [SOURCE] [-y]      Review a collection (folder or git URL) and copy it into the
-                                            global store. Later changes to the source don't reach it
+  shortcut init --global [SOURCE] [-y]      Review the exported shortcuts in a folder's or git URL's
+                                            .shortcuts and copy them into the global store. Later
+                                            changes to the source don't reach them
   shortcut completion bash|zsh|fish         Print a shell completion script
   shortcut help, -h, --help                 Show this help message
   shortcut --version                        Show version
@@ -1914,7 +2094,7 @@ FLAGS for new:
 Project shortcuts and namespaces don't run until approved with `shortcut update`,
 and must be approved again after any change to their definitions. Approval covers
 .shortcuts, .shortcuts.local, imports and the scripts they name, not the programs those
-call. A change shortcut makes to .shortcuts.local keeps its approval.
+call. A change shortcut makes to .shortcuts.local or a namespace keeps its approval.
 Global shortcuts have no approval step, so a global link target can change freely.
 Set SHORTCUT_SHOW_DIR=0 to hide the "→ <run directory>" line.
 """
@@ -1947,6 +2127,7 @@ def main(argv: Optional[List[str]] = None) -> NoReturn:
         "show": cmd_show,
         "location": cmd_location,
         "rm": cmd_rm,
+        "promote": cmd_promote,
         "update": cmd_update,
         "init": cmd_init,
         "completion": cmd_completion,

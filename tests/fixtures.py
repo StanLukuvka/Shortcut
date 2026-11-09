@@ -348,10 +348,12 @@ class ShortcutTestCase(unittest.TestCase):
         mode: Optional[int] = None,
         **extra: Any,
     ) -> pathlib.Path:
-        """A folder to import from: shortcuts.json at its root, with files beside it."""
+        """A folder to import from: a .shortcuts at its root with every entry exported, unless it says
+        otherwise, and files beside it."""
         src = self.tmp_path / name
         self.write_files(src, files, mode)
-        self.write_store(src, shortcuts, **extra)
+        exported = {k: {"export": True, **v} if isinstance(v, dict) else v for k, v in shortcuts.items()}
+        self.write_store(src / ".shortcuts", exported, **extra)
         return src
 
     def commit_to_git(self, repo: pathlib.Path) -> None:
