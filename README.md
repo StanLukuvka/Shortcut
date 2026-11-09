@@ -62,7 +62,7 @@ shortcut show <name>                  details and script
 shortcut show --json <name>           entry and where it resolves, as JSON
 shortcut location <name>              script path
 
-shortcut rm <name> [-y]               remove a global or namespace shortcut; says what goes first
+shortcut rm <name> [-y]               remove a global or namespace shortcut; says what goes, with -y too
 shortcut rm --local <name>            undo your override, or hide a shared entry. Never changes .shortcuts
 
 shortcut promote <name> [-y]          make an approved, exported project shortcut one of your global ones
@@ -81,7 +81,9 @@ Flags for `new`:
 --desc D              description
 --cwd caller|DIR      where it runs (default: caller)
 --arg NAME            required argument; NAME=DEFAULT for optional
---confirm             ask before running
+--arg NAME...         the rest of the arguments; NAME...= for optional, NAME...=W for a one-word default
+--arg-desc NAME=T     describe an argument, shown by show and usage errors
+--confirm             ask before running, showing the description
 --local               write to .shortcuts.local here
 --namespace NS        write to a global namespace
 --by C                creator

@@ -465,6 +465,15 @@ class TestEntries(ShortcutTestCase):
         self.assertTrue(source.is_file())
         self.assertNotIn("linked", self.load_global())
 
+    def test_rm_y_still_says_what_it_removed(self):
+        source = self.script("src.sh", "#!/usr/bin/env bash\n")
+        self.run_cli(["new", "copied", "--copy", str(source)])
+        res = self.run_cli(["rm", "-y", "copied"])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn(f"Removes 'copied' from your global shortcuts: {self.shortcuts_home / 'shortcuts.json'}", res.stdout)
+        self.assertIn(f"Deletes its script copy: {self.shortcuts_home / 'scripts' / 'copied.sh'}", res.stdout)
+        self.assertNotIn("copied", self.load_global())
+
     def test_declining_rm_exits_1(self):
         self.run_cli(["new", "keep", "--", "true"])
         rc, out = self.run_in_terminal(["rm", "keep"], keys=[(b"[y/N]", b"n\n")])

@@ -194,22 +194,27 @@ class ShortcutTestCase(unittest.TestCase):
         env: Optional[dict[str, str]] = None,
         keys: Optional[list[tuple[bytes, Any]]] = None,
         timeout: float = 15,
+        stdout_file: Optional[Path] = None,
     ) -> tuple[int, str]:
         """Run the CLI on a fresh 30x100 pseudo-terminal, as if typed into a real one.
-        keys: (wait until this appears in the output, then type these bytes, or send this signal) pairs."""
+        keys: (wait until this appears in the output, then type these bytes, or send this signal) pairs.
+        stdout_file: send stdout to this file instead, as `> file` would."""
         launch = self.launch_args(cwd, env)
         master, slave = os.openpty()
         fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 100, 0, 0))
+        stdout = open(stdout_file, "wb") if stdout_file else slave
         proc = subprocess.Popen(
             [*CLI, *args],
             **launch,
             stdin=slave,
-            stdout=slave,
+            stdout=stdout,
             stderr=slave,
             start_new_session=True,
             preexec_fn=lambda: fcntl.ioctl(0, termios.TIOCSCTTY, 0),
         )
         os.close(slave)
+        if stdout_file:
+            stdout.close()
         pending = list(keys or [])
         out = b""
         deadline = time.time() + timeout
