@@ -10,7 +10,7 @@ from fixtures import REPO, ShortcutTestCase, TEMPLATES
 class TestBundled(ShortcutTestCase):
     def test_bundled_templates(self):
         templates_dir = TEMPLATES
-        self.assertTrue((templates_dir / "shortcuts.json").is_file())
+        self.assertTrue((templates_dir / ".shortcuts").is_file())
 
         search_script = templates_dir / "scripts" / "search.sh"
         self.assertTrue(search_script.is_file())

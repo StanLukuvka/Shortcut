@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Importing a collection with `init --global`: reviewed first, and copied as reviewed."""
+"""Importing a project's exported shortcuts with `init --global`: reviewed first, and copied as reviewed."""
 
 import os
 import shlex
@@ -62,8 +62,8 @@ class TestImport(ShortcutTestCase):
 
         res = self.run_cli(["init", "--global", str(src_repo), "-y"])
         self.assertEqual(res.returncode, 0)
-        self.assertIn("fixed_bad (cwd is relative or not found here", res.stdout)
-        self.assertIn("relative (cwd is relative or not found here", res.stdout)
+        self.assertIn("fixed_bad (cwd not found here: /nonexistent/fixed/xyz)", res.stdout)
+        self.assertIn("relative (exported, but its cwd '../sibling' only exists in the project)", res.stdout)
         self.assertIn("traversal (script path escapes the source", res.stdout)
         reg = self.load_global()
         self.assertEqual(reg["fixed_ok"]["cwd"], str(fixed))
@@ -150,7 +150,7 @@ class TestImport(ShortcutTestCase):
         self.run_cli(["init", "--global"])
         store = str(self.shortcuts_home)
         entries, scripts, _ = shortcut_mod.plan_import(
-            str(src), store, shortcut_mod.load_registry(store), shortcut_mod.load_registry(str(src))
+            str(src), store, shortcut_mod.load_registry(store), shortcut_mod.load_registry_file(str(src / ".shortcuts"))
         )
         (src / "bin" / "tool.sh").write_text("echo swapped\n", encoding="utf-8")
         shortcut_mod.apply_import(store, entries, scripts)
@@ -176,6 +176,14 @@ class TestImport(ShortcutTestCase):
         res = self.run_cmd(["bash", "-c", cmd])
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertIn("hi", self.load_global())
+
+    def test_a_source_needs_a_project_file(self):
+        src = self.folder("plain")
+        self.write_store(src, HI)  # a shortcuts.json, as in a copy of a global store
+        res = self.run_cli(["init", "--global", str(src), "-y"])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn(f"no .shortcuts found in {src}", res.stderr)
+        self.assertFalse((self.shortcuts_home / "shortcuts.json").exists())
 
     def test_import_with_nothing_new_asks_nothing(self):
         src = self.collection(HI)

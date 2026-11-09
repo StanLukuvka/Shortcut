@@ -73,10 +73,13 @@ class TestExport(ShortcutTestCase):
         self.assertNotIn("export", reg["here"])
         self.assertEqual(self.run_cli(["r", "tool"]).stdout, "tool\n")
 
-    def test_a_collection_cant_export(self):
-        src = self.collection({"x": {"inline": "echo x", "export": True}, "y": {"inline": "echo y"}})
-        res = self.run_cli(["init", "--global", str(src), "-y"])
-        self.assertIn("x (invalid entry: 'x' is not a valid entry: 'export' is only for", res.stdout)
+    def test_init_skips_an_exported_cwd_that_isnt_here(self):
+        proj = self.project({
+            "x": {"inline": "echo x", "cwd": "/nonexistent/xyz", "export": True},
+            "y": {"inline": "echo y", "export": True},
+        })
+        res = self.run_cli(["init", "--global", str(proj), "-y"])
+        self.assertIn("x (cwd not found here: /nonexistent/xyz)", res.stdout)
         self.assertEqual(sorted(self.load_global()), ["y"])
 
 

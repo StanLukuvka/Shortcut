@@ -70,7 +70,7 @@ shortcut promote <name> --as NEW      the same, under another global name
 shortcut promote <name> --force       one that isn't exported
 
 shortcut update [ns|.] [-y]           review and approve
-shortcut init --global <src> [-y]     import a folder or git URL; from a project, only exported entries
+shortcut init --global <src> [-y]     copy the exported entries in a folder's or git URL's .shortcuts
 shortcut completion bash|zsh|fish
 shortcut --version
 ```

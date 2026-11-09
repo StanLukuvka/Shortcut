@@ -7,15 +7,18 @@
       "args": [
         {"name": "pattern", "required": true, "desc": "Text to look for in file names"},
         {"name": "path", "default": ".", "desc": "Where to look"}
-      ]
+      ],
+      "export": true
     },
     "edit": {
       "description": "Open a shortcut's script, or the file that defines an inline one",
-      "script": "scripts/edit.sh"
+      "script": "scripts/edit.sh",
+      "export": true
     },
     "nano": {
       "description": "Edit a shortcut in nano",
-      "inline": "VISUAL= EDITOR=nano shortcut run --global edit \"$@\""
+      "inline": "VISUAL= EDITOR=nano shortcut run --global edit \"$@\"",
+      "export": true
     },
     "logged": {
       "description": "Run a shortcut and keep a copy of its output",
@@ -23,14 +26,16 @@
       "args": [
         {"name": "shortcut", "required": true, "desc": "Name to run, then its arguments"},
         {"name": "args", "rest": true}
-      ]
+      ],
+      "export": true
     },
     "desktop": {
       "description": "Create a desktop launcher for a global shortcut, or remove one with --remove",
       "script": "scripts/desktop.sh",
       "args": [
         {"name": "shortcut", "required": true}
-      ]
+      ],
+      "export": true
     }
   }
 }

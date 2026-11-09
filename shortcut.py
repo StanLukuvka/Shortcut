@@ -1718,11 +1718,10 @@ def plan_import(
     dest_store_dir: str,
     dest_registry: Dict[str, Any],
     source_registry: Dict[str, Any],
-    from_project: bool = False,
 ) -> Tuple[Dict[str, Any], Dict[str, bytes], List[str]]:
-    """What a collection would add to the global store, changing nothing: (entries, {stored script path:
-    its bytes}, skipped). The bytes are read once here, so what gets copied is what was reviewed.
-    From a project's .shortcuts, only exported entries come; a collection offers every entry."""
+    """What a source's .shortcuts would add to the global store, changing nothing: (entries, {stored script
+    path: its bytes}, skipped). Only exported entries come. The bytes are read once here, so what gets
+    copied is what was reviewed."""
     entries: Dict[str, Any] = {}
     scripts: Dict[str, bytes] = {}
     skipped: List[str] = []
@@ -1735,13 +1734,13 @@ def plan_import(
     for name, entry_data in source_shortcuts.items():
         try:
             entry = ShortcutEntry.from_dict(name, entry_data)
-            error = placement_error(entry, from_project, in_global=False)  # 'from' is promote's, never a source's
+            error = placement_error(entry, in_project=True, in_global=False)  # 'from' is promote's, never a source's
             if error:
                 raise ValueError(error)
         except ValueError as e:
             skipped.append(f"{name} (invalid entry: {e})")
             continue
-        if from_project and not entry.export:
+        if not entry.export:
             skipped.append(f"{name} (project-only)")
             continue
 
@@ -1765,11 +1764,11 @@ def plan_import(
 
         # A relative cwd means nothing once the entry leaves the file that defined it
         d = entry_data.get("cwd")
-        if from_project and is_relative_cwd(d):
+        if is_relative_cwd(d):
             skipped.append(f"{name} (exported, but its cwd '{d}' only exists in the project)")
             continue
-        if not from_project and d and d != CALLER and (not os.path.isabs(d) or not os.path.isdir(d)):
-            skipped.append(f"{name} (cwd is relative or not found here: {d})")
+        if d and d != CALLER and not os.path.isdir(os.path.expanduser(d)):
+            skipped.append(f"{name} (cwd not found here: {d})")
             continue
 
         new_entry = dict(entry_data)
@@ -1828,7 +1827,7 @@ def apply_import(store_dir: str, entries: Dict[str, Any], scripts: Dict[str, byt
 def cmd_init(args: List[str]) -> int:
     parser = Parser(
         prog="shortcut init",
-        description="With --global, create the global store, or review a collection and copy it there",
+        description="With --global, create the global store, or review a project's exported shortcuts and copy them there",
     )
     parser.add_argument("source", nargs="?", default=None, help="Local path or git URL to import from (needs --global)")
     parser.add_argument("--global", dest="is_global", action="store_true", help="Import into global store")
@@ -1839,7 +1838,7 @@ def cmd_init(args: List[str]) -> int:
         if parsed.source:
             die(
                 f"a project's {PROJECT_FILE} is used in place, never copied: clone the project and run "
-                "`shortcut update` there. To copy a collection into your global store, add --global."
+                "`shortcut update` there. To copy its exported shortcuts into your global store, add --global."
             )
         die(f"a project's {PROJECT_FILE} is a file you write by hand, starting from: "
             f'{{"version": {REGISTRY_VERSION}, "shortcuts": {{}}}}. For your own shortcuts, use new --local.')
@@ -1876,19 +1875,16 @@ def cmd_init(args: List[str]) -> int:
             if not os.path.isdir(source_root):
                 die(f"source directory does not exist: {source_root}")
 
-        # A collection is a shortcuts.json at its root or a project's .shortcuts; either way its
-        # relative script paths resolve against the source root.
-        candidates = [os.path.join(source_root, "shortcuts.json"), os.path.join(source_root, PROJECT_FILE)]
-        source_file = next((path for path in candidates if os.path.isfile(path)), None)
-        if source_file is None:
-            die(f"no shortcuts.json or {PROJECT_FILE} found in {source_root}")
+        # A source is a project: a .shortcuts at its root, whose relative script paths resolve from there
+        source_file = os.path.join(source_root, PROJECT_FILE)
+        if not os.path.isfile(source_file):
+            die(f"no {PROJECT_FILE} found in {source_root}")
 
         entries, scripts, skipped = plan_import(
             source_base=source_root,
             dest_store_dir=dest_store_dir,
             dest_registry=load_registry(dest_store_dir) if registry_exists(dest_store_dir) else {},
             source_registry=load_registry_file(source_file),
-            from_project=os.path.basename(source_file) == PROJECT_FILE,
         )
         if skipped:
             print(f"Skipped ({len(skipped)}):")
@@ -2077,8 +2073,9 @@ Usage:
                                             shortcuts. It runs this checkout's files as they are, not a
                                             copy. --force takes one that isn't exported
   shortcut update [group] [-y]              Review changes to project shortcuts and namespaces, and approve them
-  shortcut init --global [SOURCE] [-y]      Review a collection (folder or git URL) and copy it into the
-                                            global store. Later changes to the source don't reach it
+  shortcut init --global [SOURCE] [-y]      Review the exported shortcuts in a folder's or git URL's
+                                            .shortcuts and copy them into the global store. Later
+                                            changes to the source don't reach them
   shortcut completion bash|zsh|fish         Print a shell completion script
   shortcut help, -h, --help                 Show this help message
   shortcut --version                        Show version
