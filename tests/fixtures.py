@@ -194,7 +194,7 @@ class ShortcutTestCase(unittest.TestCase):
         env: Optional[dict[str, str]] = None,
         keys: Optional[list[tuple[bytes, Any]]] = None,
         timeout: float = 15,
-        stdout_file: Optional[Path] = None,
+        stdout_file: Optional[pathlib.Path] = None,
     ) -> tuple[int, str]:
         """Run the CLI on a fresh 30x100 pseudo-terminal, as if typed into a real one.
         keys: (wait until this appears in the output, then type these bytes, or send this signal) pairs.
