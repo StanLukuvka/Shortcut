@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Running a shortcut: arguments, exit codes, signals, terminals, directories."""
 
+import json
 import signal
 import time
 import unittest
@@ -164,7 +165,21 @@ class TestRunning(ShortcutTestCase):
         self.assertIn("'cwd' must be a string", self.run_cli(["show", "bad"]).stderr)
         res = self.run_cli(["show", "--json", "bad"])
         self.assertEqual(res.returncode, 0, res.stderr)
-        self.assertIn('"cwd": 123', res.stdout)
+        info = json.loads(res.stdout)
+        self.assertEqual(info["entry"], {"inline": "true", "cwd": 123})
+        self.assertIn("'cwd' must be a string", info["error"])
+        self.assertIsNone(info["run_cwd"])
+
+    def test_show_json_is_one_object_with_where_it_resolves(self):
+        self.write_store(self.shortcuts_home, {"s": {"script": "scripts/s.sh", "cwd": "/tmp"}})
+        info = json.loads(self.run_cli(["show", "--json", "s"]).stdout)
+        self.assertEqual(info["name"], "s")
+        self.assertEqual(info["scope"], "global")
+        self.assertEqual(info["defined_in"], str(self.shortcuts_home / "shortcuts.json"))
+        self.assertEqual(info["script_path"], str(self.shortcuts_home / "scripts" / "s.sh"))
+        self.assertEqual(info["run_cwd"], "/tmp")
+        self.assertEqual(info["approval"], "ok")
+        self.assertIsNone(info["error"])
 
     def test_unknown_commands_point_to_run(self):
         for word in ("nano", "activate", "version"):
@@ -292,8 +307,15 @@ class TestArguments(ShortcutTestCase):
         self.assertIn("too many arguments", res.stderr)
         self.assertIn("usage: shortcut r one [only]", res.stderr)
 
-        # No `args` key: no checking
+        # After --, every word is a value, even one starting with a dash; the -- itself is dropped
+        self.assertIn("missing <container>", self.run_cli(["r", "kill", "-5"]).stderr)
+        out = self.run_cli(["r", "kill", "--force", "--", "-5", "-x"]).stdout.splitlines()
+        self.assertEqual(out, ["[--force][-5][-x]", "c=-5 s=-x e="])
+        self.assertEqual(self.run_cli(["r", "two", "--", "-a"]).stdout, "2:-a B\n")
+
+        # No `args` key: no checking, and -- passes through
         self.assertEqual(self.run_cli(["r", "free", "1", "2", "3"]).stdout, "3\n")
+        self.assertEqual(self.run_cli(["r", "free", "--", "x"]).stdout, "2\n")
         self.assertIn("Usage:       shortcut r kill <container> [signal] [extra...]", self.run_cli(["show", "kill"]).stdout)
 
     def test_new_declares_args(self):

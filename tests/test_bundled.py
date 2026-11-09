@@ -110,34 +110,25 @@ class TestBundled(ShortcutTestCase):
         self.assertIn("not found", res.stderr)
         self.assertFalse((self.xdg_data_home / "applications" / "shortcut-local_desk.desktop").exists())
 
-    def test_rm_cleans_desktop_file(self):
+    def test_desktop_remove_deletes_only_its_own_launcher(self):
         self.install_bundled()
-        res_new = self.run_cli(["new", "rm_desk_test", "--desc", "Clean desktop test", "--", "echo", "rm_desk"])
-        self.assertEqual(res_new.returncode, 0)
-        res_desk = self.run_cli(["r", "desktop", "rm_desk_test"])
-        self.assertEqual(res_desk.returncode, 0, res_desk.stderr)
+        self.assertEqual(self.run_cli(["new", "app", "--desc", "An app", "--", "echo", "app"]).returncode, 0)
+        self.assertEqual(self.run_cli(["r", "desktop", "app"]).returncode, 0)
+        desktop_file = self.xdg_data_home / "applications" / "shortcut-app.desktop"
 
-        desktop_file = self.xdg_data_home / "applications" / "shortcut-rm_desk_test.desktop"
+        # rm leaves launchers alone: they belong to the desktop shortcut
+        self.assertEqual(self.run_cli(["rm", "app", "-y"]).returncode, 0)
         self.assertTrue(desktop_file.is_file())
 
-        res_rm = self.run_cli(["rm", "rm_desk_test", "-y"])
-        self.assertEqual(res_rm.returncode, 0)
+        res = self.run_cli(["r", "desktop", "--remove", "app"])
+        self.assertEqual(res.returncode, 0, res.stderr)
         self.assertFalse(desktop_file.exists())
 
-    def test_rm_local_keeps_global_desktop_file(self):
-        self.install_bundled()
-        proj_dir = self.project({}, name="penpot_proj")
-        self.assertEqual(self.run_cli(["new", "penpot", "--desc", "Global penpot", "--", "echo", "global"]).returncode, 0)
-        self.assertEqual(self.run_cli(["r", "desktop", "penpot"]).returncode, 0)
-        desktop_file = self.xdg_data_home / "applications" / "shortcut-penpot.desktop"
-        self.assertTrue(desktop_file.is_file())
-
-        res = self.run_cli(["new", "penpot", "--local", "--desc", "Project penpot", "--", "echo", "local"], cwd=str(proj_dir))
-        self.assertEqual(res.returncode, 0)
-        res_rm = self.run_cli(["rm", "--local", "penpot", "-y"], cwd=str(proj_dir))
-        self.assertEqual(res_rm.returncode, 0)
-        self.assertTrue(desktop_file.is_file(), "Removing local shortcut must keep global desktop file")
-        self.assertIn("penpot", self.load_global())
+        # A launcher it didn't make is never deleted
+        other = self.write_file(self.xdg_data_home / "applications" / "shortcut-mine.desktop", "[Desktop Entry]\nName=mine\n")
+        res = self.run_cli(["r", "desktop", "--remove", "mine"])
+        self.assertEqual(res.returncode, 1)
+        self.assertTrue(other.is_file())
 
     def test_install_script_dry_run(self):
         install_script = REPO / "install.sh"

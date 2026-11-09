@@ -39,6 +39,7 @@ git clone https://github.com/StanLukuvka/Shortcut.git && cd Shortcut && ./instal
 - `.shortcuts.local` overrides `.shortcuts` per entry. `"name": null` hides a shared one.
 - Relative `script` and `cwd` paths resolve from the folder holding the file.
 - Projects and namespaces run only after `shortcut update`. Global shortcuts need no approval.
+- If a project's file can't be read, nothing runs inside the project. `--global` reaches your own shortcuts.
 
 ## Commands
 
@@ -46,6 +47,7 @@ git clone https://github.com/StanLukuvka/Shortcut.git && cd Shortcut && ./instal
 shortcut r <name> [args]              run (also: run, r <ns> <name>)
 shortcut r --global <name>            skip the project, run the global one
 shortcut r -y <name>                  answer a confirm prompt
+shortcut r <name> -- -5               after --, a declared argument can start with -
 
 shortcut new <name> -- CMD            inline shortcut
 shortcut new <name>                   script, opened in your editor
@@ -55,7 +57,7 @@ shortcut new <name> --script PATH     use a script where it is
 shortcut list                         everything visible; warns about invalid entries and missing scripts
 shortcut list --names [ns]            bare names
 shortcut show <name>                  details and script
-shortcut show --json <name>           raw entry, also for a broken one
+shortcut show --json <name>           entry and where it resolves, as JSON
 shortcut location <name>              script path
 
 shortcut rm <name> [-y]               remove
@@ -89,7 +91,7 @@ From a clone: `shortcut init --global templates`.
 shortcut r edit <name>       open its script, or the file defining an inline one
 shortcut r nano <name>       same, in nano
 shortcut r logged <name>     run through tee, keep the output
-shortcut r desktop <name>    desktop launcher (global only)
+shortcut r desktop <name>    desktop launcher (global only); --remove deletes it
 shortcut r search <pattern>  find files by name
 ```
 

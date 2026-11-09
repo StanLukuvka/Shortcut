@@ -733,66 +733,34 @@ class TestNamespaces(ShortcutTestCase):
 
 
 class TestBrokenStores(ShortcutTestCase):
-    def test_broken_project_never_stops_core_commands_or_unrelated_global_shortcuts(self):
+    def test_broken_project_stops_every_lookup_inside_it(self):
         self.run_cli(["new", "outside", "--", "echo outside"])
         proj = self.broken_project()
+        registry = str(proj / ".shortcuts")
 
-        res = self.run_cli(["r", "outside"], cwd=str(proj))
-        self.assertEqual(res.stdout, "outside\n")
-        self.assertIn("this is the global 'outside'", res.stderr)
-        self.assertIn("outside", self.run_cli(["list", "--names"], cwd=str(proj)).stdout.split())
+        for cmd in (["r", "outside"], ["show", "outside"], ["location", "outside"], ["rm", "outside", "-y"], ["r", "nothing"]):
+            res = self.run_cli(cmd, cwd=str(proj))
+            self.assertEqual(res.returncode, 1, cmd)
+            self.assertEqual(res.stdout, "", cmd)
+            self.assertIn(f"corrupt registry {registry}", res.stderr, cmd)
+            self.assertIn(f"shortcut r --global {cmd[-2] if cmd[0] == 'rm' else cmd[-1]} reaches your own shortcuts", res.stderr, cmd)
+        self.assertIn("outside", self.load_global())
+
+        self.assertEqual(self.run_cli(["r", "--global", "outside"], cwd=str(proj)).stdout, "outside\n")
+        self.assertEqual(self.run_cli(["rm", "--global", "outside", "-y"], cwd=str(proj)).returncode, 0)
+        self.assertNotIn("outside", self.load_global())
         self.assertIn("corrupt registry", self.run_cli(["list"], cwd=str(proj)).stderr)
         self.assertEqual(self.run_cli(["update"], cwd=str(proj)).returncode, 1)
 
-    def test_broken_project_refuses_a_name_it_had_when_approved(self):
+    def test_a_repaired_project_runs_again(self):
         self.run_cli(["new", "build", "--", "echo global"])
-        self.run_cli(["new", "other", "--", "echo other"])
         proj = self.project({"build": {"inline": "echo project"}}, approved=True)
         registry = proj / ".shortcuts"
         good = registry.read_text(encoding="utf-8")
         registry.write_text("<<<<<<< HEAD\n" + good, encoding="utf-8")
-
-        res = self.run_cli(["r", "build"], cwd=str(proj))
-        self.assertEqual(res.returncode, 1)
-        self.assertEqual(res.stdout, "")
-        self.assertIn("corrupt registry", res.stderr)
-        self.assertIn("shortcut run --global build", res.stderr)
-        self.assertEqual(self.run_cli(["r", "--global", "build"], cwd=str(proj)).stdout, "global\n")
-
-        res = self.run_cli(["r", "other"], cwd=str(proj))
-        self.assertEqual(res.stdout, "other\n")
-        self.assertIn("this is the global 'other'", res.stderr)
-
+        self.assertEqual(self.run_cli(["r", "build"], cwd=str(proj)).returncode, 1)
         registry.write_text(good, encoding="utf-8")
         self.assertEqual(self.run_cli(["r", "build"], cwd=str(proj)).stdout, "project\n")
-
-    def test_broken_project_stops_rm_reaching_the_global_one(self):
-        self.run_cli(["new", "x", "--", "echo g"])
-        proj = self.broken_project()
-        res = self.run_cli(["rm", "x", "-y"], cwd=str(proj))
-        self.assertEqual(res.returncode, 1)
-        self.assertIn("corrupt registry", res.stderr)
-        self.assertIn("add --global", res.stderr)
-        self.assertIn("x", self.load_global())
-
-        self.assertEqual(self.run_cli(["show", "x"], cwd=str(proj)).returncode, 0)
-        self.assertEqual(self.run_cli(["rm", "--global", "x", "-y"], cwd=str(proj)).returncode, 0)
-        self.assertNotIn("x", self.load_global())
-
-    def test_broken_project_offers_the_global_one_only_when_there_is_one(self):
-        proj = self.project({"go": {"inline": "echo project"}}, approved=True)
-        self.corrupt_store(proj / ".shortcuts")
-
-        res = self.run_cli(["r", "go"], cwd=str(proj))
-        self.assertEqual(res.returncode, 1)
-        self.assertIn("Repair the file.", res.stderr)
-        self.assertNotIn("--global", res.stderr)
-
-        self.run_cli(["new", "go", "--", "echo global"])
-        res = self.run_cli(["r", "go"], cwd=str(proj))
-        self.assertEqual(res.returncode, 1)
-        self.assertIn("shortcut run --global go", res.stderr)
-        self.assertEqual(self.run_cli(["r", "--global", "go"], cwd=str(proj)).stdout, "global\n")
 
     def test_broken_project_refuses_a_namespace_it_imported(self):
         self.run_cli(["new", "docker", "--", "echo global"])
@@ -804,22 +772,20 @@ class TestBrokenStores(ShortcutTestCase):
         self.assertEqual(self.run_cli(["update", ".", "-y"], cwd=str(proj)).returncode, 0)
         self.corrupt_store(proj / ".shortcuts")
 
-        res = self.run_cli(["r", "docker"], cwd=str(proj))
+        res = self.run_cli(["r", "docker", "ps"], cwd=str(proj))
         self.assertEqual(res.returncode, 1)
-        self.assertIn("shortcut run --global docker", res.stderr)
+        self.assertIn("shortcut r --global docker", res.stderr)
 
-    def test_unknown_field_warning_does_not_say_the_project_is_skipped(self):
-        self.run_cli(["new", "outside", "--", "echo outside"])
+    def test_an_unknown_top_level_field_stops_the_project_too(self):
         proj = self.project({"inside": {"inline": "true"}})
         registry = proj / ".shortcuts"
         data = json.loads(registry.read_text(encoding="utf-8"))
         registry.write_text(json.dumps({**data, "bogus": 1}), encoding="utf-8")
 
-        res = self.run_cli(["show", "outside"], cwd=str(proj))
-        self.assertEqual(res.returncode, 0, res.stderr)
-        self.assertIn("unknown field: bogus; this is the global 'outside'", res.stderr)
-        self.assertNotIn("skipped", res.stderr)
-        self.assertEqual(self.run_cli(["show", "inside"], cwd=str(proj)).returncode, 0)
+        res = self.run_cli(["show", "inside"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("unknown field: bogus", res.stderr)
+        self.assertIn(str(registry), res.stderr)
 
     def test_broken_global_store_still_reports(self):
         self.corrupt_store(self.shortcuts_home)

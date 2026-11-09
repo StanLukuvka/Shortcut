@@ -147,10 +147,14 @@ class TestWrites(ShortcutTestCase):
         self.assertEqual(run_here(self, proj, "new", "a", "--local", "--", "true").returncode, 0)
         self.assertFalse((proj / ".git").exists())
 
-    def test_show_json_prints_an_entry_to_paste(self):
+    def test_show_json_says_which_file_an_entry_comes_from(self):
         proj = overlaid(self)
-        res = run_here(self, proj, "show", "--json", "mine")
-        self.assertEqual(json.loads("{" + res.stdout + "}"), {"mine": {"inline": "echo mine"}})
+        info = json.loads(run_here(self, proj, "show", "--json", "mine").stdout)
+        self.assertEqual(info["entry"], {"inline": "echo mine"})
+        self.assertEqual(info["scope"], "project")
+        self.assertEqual(info["source"], "local")
+        self.assertEqual(info["defined_in"], str(proj / ".shortcuts.local"))
+        self.assertIsNone(info["script_path"])
 
 
 class TestApproval(ShortcutTestCase):
