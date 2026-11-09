@@ -1,6 +1,6 @@
 # shortcut 2.0.0: adversarial design critique
 
-**Status, 2026-11-06.** Findings 1 to 6 are fixed, in commit `e460acf`. Finding 7 was left alone on purpose. Findings 8 onward are undecided, and the text below still describes commit `9604209`. The lifecycle diagram that showed that same commit was removed; its last version is in commit `e436e8d`.
+**Status, 2026-11-06.** Findings 1 to 6 are fixed, in commit `e460acf`. Finding 7 was left alone on purpose. Finding 8 is fixed: a namespace's approval is recorded against its store, its name and its file, and `update` shows the file's real path. Findings 9 onward are undecided, and the text below still describes commit `9604209`. The lifecycle diagram that showed that same commit was removed; its last version is in commit `e436e8d`.
 
 Reviewed: commit `9604209` (`shortcut.py` sha256 `bdf114b9…`). Line numbers refer to that commit.
 

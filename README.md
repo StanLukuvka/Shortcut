@@ -40,7 +40,7 @@ git clone https://github.com/StanLukuvka/Shortcut.git && cd Shortcut && ./instal
 - Relative `script` and `cwd` paths resolve from the folder holding the file.
 - A namespace file is `<name>.shortcut`, such as `docker.shortcut`. A bare `.shortcut` is an error.
 - `"export": true` on a project entry marks it as made to work outside the repo. `shortcut update` warns if its `cwd` is relative. Only `.shortcuts` and `.shortcuts.local` can export.
-- Projects and namespaces run only after `shortcut update`. Global shortcuts need no approval.
+- Projects and namespaces run only after `shortcut update`. A namespace name pointed at another file needs approving again. Global shortcuts need no approval.
 - If a project's file can't be read, nothing runs inside the project until it's fixed, and `rm` there only takes `--local`. `--global` reaches your own shortcuts.
 
 ## Commands
