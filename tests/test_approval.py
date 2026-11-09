@@ -108,6 +108,35 @@ class TestApproval(ShortcutTestCase):
         self.assertEqual(self.run_cli(["update", "docker", "-y"], cwd=str(proj)).returncode, 0)
         self.assertEqual(self.run_cli(["r", "docker", "ps"], cwd=str(proj)).stdout, "evil\n")
 
+    def test_swapping_two_approved_namespaces_needs_approval(self):
+        proj = self.project(OWN)
+        self.write_import(proj / ".shortcuts", "dev", {"version": 2, "shortcuts": {"deploy": {"inline": "echo dev"}}})
+        self.write_import(proj / ".shortcuts", "prod", {"version": 2, "shortcuts": {"deploy": {"inline": "echo prod"}}})
+        self.approve(proj / ".shortcuts")
+        self.assertEqual(self.run_cli(["r", "dev", "deploy"], cwd=str(proj)).stdout, "dev\n")
+
+        registry = json.loads((proj / ".shortcuts").read_text(encoding="utf-8"))
+        registry["imports"] = {"dev": "imports/prod.shortcut", "prod": "imports/dev.shortcut"}
+        (proj / ".shortcuts").write_text(json.dumps(registry), encoding="utf-8")
+        res = self.run_cli(["r", "dev", "deploy"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("dev isn't approved yet; review it with: shortcut update dev", res.stderr)
+        self.assertNotIn("prod", res.stdout)
+
+        self.assertEqual(self.run_cli(["update", "dev", "-y"], cwd=str(proj)).returncode, 0)
+        self.assertEqual(self.run_cli(["r", "dev", "deploy"], cwd=str(proj)).stdout, "prod\n")
+
+    def test_a_namespace_approved_in_one_project_is_new_in_another(self):
+        first = self.project(OWN, name="first")
+        tools = self.write_import(first / ".shortcuts", "tools", {"version": 2, "shortcuts": {"go": {"inline": "echo go"}}})
+        self.approve(first / ".shortcuts")
+        second = self.project({}, name="second", imports={"tools": str(tools)})
+        res = self.run_cli(["r", "tools", "go"], cwd=str(second))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("tools isn't approved yet", res.stderr)
+        self.assertEqual(self.run_cli(["r", "tools", "go"], cwd=str(first)).stdout, "go\n")
+        self.assertIn(f"New to you: tools ({os.path.realpath(tools)})", self.run_cli(["update", "-y"], cwd=str(second)).stdout)
+
     def test_a_script_cannot_stand_in_for_a_cwd_record(self):
         proj = self.project(
             {

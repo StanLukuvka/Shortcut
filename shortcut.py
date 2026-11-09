@@ -407,8 +407,10 @@ class Group:
 
     @property
     def key(self) -> str:
-        """What the approval is recorded against: the import's path, or the project's."""
-        return os.path.realpath(self.file if self.name else self.store_dir)
+        """What the approval is recorded against: the project's path, or for a namespace the store it's in,
+        its name there and its file. Pointing a name at another file, even one approved elsewhere, is new."""
+        store = os.path.realpath(self.store_dir)
+        return json.dumps([store, self.name, os.path.realpath(self.file)]) if self.name else store
 
     @property
     def label(self) -> str:
@@ -1658,7 +1660,8 @@ def approve_group(group: Group, assume_yes: bool, global_names: Set[str]) -> int
         return 0
     record = load_approval(group) or {"snapshot": {}}
     old = {**record["snapshot"], **record.get("local", {})}
-    print(f"{'Changes to' if old else 'New to you:'} {group.label}")
+    where = f" ({safe(os.path.realpath(group.file))})" if group.name else ""  # the real place, wherever it points
+    print(f"{'Changes to' if old else 'New to you:'} {group.label}{where}")
     show_diff(diff_files(old, files))
     for name in sorted(set(group.shared_shortcuts) & set(group.local_shortcuts)):
         print(f"'{name}' in {PROJECT_FILE} is {group.source(name)} by {LOCAL_FILE} for you.")
