@@ -587,6 +587,12 @@ class TestNamespaces(ShortcutTestCase):
         self.assertIn("'docker' is a namespace; run one of its shortcuts: delete, where", res.stderr)
         res = self.run_cli(["r", "docker", "nope"])
         self.assertIn("'nope' not found in namespace 'docker'", res.stderr)
+        # A name with words after it may be meant as a namespace: say where one would be
+        res = self.run_cli(["r", "podman", "list"])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn(f"shortcut or namespace 'podman' not found. A global namespace is the file "
+                      f"{self.shortcuts_home.resolve() / 'imports' / 'podman.shortcut'}.", res.stderr)
+        self.assertIn("shortcut 'podman' not found.", self.run_cli(["r", "podman"]).stderr)
 
     def test_namespace_from_imports_key(self):
         self.write_file(

@@ -710,7 +710,12 @@ def find_entry(
             if rest[0] not in group.shortcuts:
                 raise KeyError(f"'{rest[0]}' not found in namespace '{first}'. It has: {members}")
             return group, rest[0], group.shortcuts[rest[0]], rest[1:], False
-    raise KeyError(" ".join([f"shortcut '{first}' not found.", *([home.main.error] if home.main.error else [])]))
+    if rest:  # `first` may be meant as a namespace
+        missing = (f"shortcut or namespace '{first}' not found. A global namespace is the file "
+                   f"{os.path.join(home.main.store_dir, 'imports', first + '.shortcut')}.")
+    else:
+        missing = f"shortcut '{first}' not found."
+    raise KeyError(" ".join([missing, *([home.main.error] if home.main.error else [])]))
 
 
 def resolve_run_dir(cwd: Optional[str], group: Group, caller_cwd: str) -> str:
