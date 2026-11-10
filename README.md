@@ -120,9 +120,9 @@ A namespace is a file named `<ns>.shortcut`: `{"version": 2, "shortcuts": {...}}
 - `~/.shortcuts/imports/<ns>.shortcut` is found by its name.
 - `shortcut init --global <dir|git URL>` copies a folder's `<ns>.shortcut` files there, each with its `scripts/<ns>/` folder, after showing them. Every script an entry names has to be in that folder.
 - A file anywhere else is listed in `shortcuts.json`, or in a project's `.shortcuts`: `"imports": {"<ns>": "path/to/<ns>.shortcut"}`. The path is relative to the file that lists it, and can start with `~`.
-- It runs only after `shortcut update <ns>`, and again after each change.
+- It runs only after `shortcut update <ns>`, and again after each change to its file, a script it names, or anything in its `scripts/<ns>/` folder.
 - `shortcut new --namespace <ns> <name> ...` adds an entry, and keeps an approved namespace approved.
-- `imports/scripts/<ns>/` is where shortcut keeps a namespace's copied scripts. `rm` deletes an entry's script there with the entry.
+- `scripts/<ns>/`, next to the file, is the namespace's own folder: shortcut keeps its copied scripts there, and helpers its scripts run belong there too. `rm` deletes an entry's script there with the entry.
 - A script runs a sibling with `shortcut r "$SHORTCUT_NAMESPACE" <name>`. `SHORTCUT_SHOW_DIR=0` keeps the `→ dir` line out when capturing it.
 
 [examples/podman](examples/podman/) is one, with scripts.

@@ -582,16 +582,38 @@ def entry_files(group: Group, shortcuts: Dict[str, Any], origin: str = "") -> Di
     return files
 
 
+def folder_files(group: Group) -> Dict[str, str]:
+    """Everything in a namespace's scripts folder, as {path: content}: a script it names can run or source
+    a file beside it, so a change to any of them needs approving. A symlinked folder in it is recorded as
+    where it leads."""
+    files: Dict[str, str] = {}
+    if not group.name:
+        return files
+    for dirpath, dirs, names in os.walk(scripts_dir(group)):
+        real = os.path.realpath(dirpath)  # as entry_files resolves a script's path
+        for name in dirs:
+            link = os.path.join(dirpath, name)
+            if os.path.islink(link):
+                with contextlib.suppress(OSError):
+                    files[display_path(group, os.path.join(real, name))] = f"symlink to {os.readlink(link)}\n"
+        for name in names:
+            path = os.path.join(real, name)
+            with contextlib.suppress(OSError):
+                if os.path.isfile(path):  # a FIFO or device would block or never end
+                    files[display_path(group, path)] = reviewable(pathlib.Path(path).read_bytes())
+    return files
+
+
 def json_file(group: Group, path: str, data: Dict[str, Any]) -> Dict[str, str]:
     return {display_path(group, path): json.dumps(data, indent=2, sort_keys=True) + "\n"}
 
 
 def shared_files(group: Group) -> Dict[str, str]:
-    """The group's own file and what it names, the JSON normalised: exactly what is hashed, snapshotted
-    and diffed. A project may have no .shortcuts, and then this is empty."""
+    """The group's own file and what it names, the JSON normalised, and for a namespace its scripts folder:
+    exactly what is hashed, snapshotted and diffed. A project may have no .shortcuts, and then this is empty."""
     if group.local_file and not os.path.exists(group.file):
         return {}
-    return {**json_file(group, group.file, group.data), **entry_files(group, group.shared_shortcuts)}
+    return {**json_file(group, group.file, group.data), **folder_files(group), **entry_files(group, group.shared_shortcuts)}
 
 
 def local_files(group: Group) -> Dict[str, str]:
@@ -1748,7 +1770,8 @@ def approve_group(group: Group, assume_yes: bool, global_names: Set[str]) -> int
     if not confirm_review("approve", old, files, f"approve {group.label} in a terminal, or pass -y").granted(assume_yes):
         return 1
     save_approval(group, shared, local)
-    print(f"Approved {group.label}. This covers its definitions, not what they call. "
+    covers = "its definitions and its scripts folder" if group.name else "its definitions"
+    print(f"Approved {group.label}. This covers {covers}, not what they call. "
           f"Any change to them needs `{group.update_cmd}` again.")
     return 0
 
@@ -2271,8 +2294,8 @@ FLAGS for new:
 
 Project shortcuts and namespaces don't run until approved with `shortcut update`,
 and must be approved again after any change to their definitions. Approval covers
-.shortcuts, .shortcuts.local, imports and the scripts they name, not the programs those
-call. A change shortcut makes to .shortcuts.local or a namespace keeps its approval.
+.shortcuts, .shortcuts.local, imports, the scripts they name and each namespace's
+scripts/<ns>/ folder, not the programs those call. A change shortcut makes to .shortcuts.local or a namespace keeps its approval.
 Global shortcuts have no approval step, so a global link target can change freely.
 Set SHORTCUT_SHOW_DIR=0 to hide the "→ <run directory>" line.
 """
