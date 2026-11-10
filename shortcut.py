@@ -582,16 +582,38 @@ def entry_files(group: Group, shortcuts: Dict[str, Any], origin: str = "") -> Di
     return files
 
 
+def folder_files(group: Group) -> Dict[str, str]:
+    """Everything in a namespace's scripts folder, as {path: content}: a script it names can run or source
+    a file beside it, so a change to any of them needs approving. A symlinked folder in it is recorded as
+    where it leads."""
+    files: Dict[str, str] = {}
+    if not group.name:
+        return files
+    for dirpath, dirs, names in os.walk(scripts_dir(group)):
+        real = os.path.realpath(dirpath)  # as entry_files resolves a script's path
+        for name in dirs:
+            link = os.path.join(dirpath, name)
+            if os.path.islink(link):
+                with contextlib.suppress(OSError):
+                    files[display_path(group, os.path.join(real, name))] = f"symlink to {os.readlink(link)}\n"
+        for name in names:
+            path = os.path.join(real, name)
+            with contextlib.suppress(OSError):
+                if os.path.isfile(path):  # a FIFO or device would block or never end
+                    files[display_path(group, path)] = reviewable(pathlib.Path(path).read_bytes())
+    return files
+
+
 def json_file(group: Group, path: str, data: Dict[str, Any]) -> Dict[str, str]:
     return {display_path(group, path): json.dumps(data, indent=2, sort_keys=True) + "\n"}
 
 
 def shared_files(group: Group) -> Dict[str, str]:
-    """The group's own file and what it names, the JSON normalised: exactly what is hashed, snapshotted
-    and diffed. A project may have no .shortcuts, and then this is empty."""
+    """The group's own file and what it names, the JSON normalised, and for a namespace its scripts folder:
+    exactly what is hashed, snapshotted and diffed. A project may have no .shortcuts, and then this is empty."""
     if group.local_file and not os.path.exists(group.file):
         return {}
-    return {**json_file(group, group.file, group.data), **entry_files(group, group.shared_shortcuts)}
+    return {**json_file(group, group.file, group.data), **folder_files(group), **entry_files(group, group.shared_shortcuts)}
 
 
 def local_files(group: Group) -> Dict[str, str]:
@@ -881,14 +903,17 @@ def run_shortcut(words: List[str], skip_local: bool = False, assume_yes: bool = 
     resolved, args = resolve_shortcut(words, caller_cwd, skip_local=skip_local, strict=True)
     require_approved(resolved.group)
     entry, name = resolved.entry, resolved.display
+    typed = args  # as given, for the question and the command that answers it
     arg_env: Dict[str, str] = {}
     if entry.args is not None:
         args, arg_env = bind_args(name, entry.args, args)
     if not os.path.isdir(resolved.run_cwd):
         raise FileNotFoundError(f"run directory does not exist: {resolved.run_cwd}")
+    with_args = f" with {one_line(shlex.join(typed))}" if typed else ""
+    again = shlex.join(["shortcut", "r", "-y", *(["--global"] if skip_local else []), *name.split(), *typed])
     if entry.confirm and not Confirm(
-        f"run '{name}' in {os.path.realpath(resolved.run_cwd)}?",
-        f"'{name}' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y {name})",
+        f"run '{name}'{with_args} in {os.path.realpath(resolved.run_cwd)}?",
+        f"'{name}' asks for confirmation: run it in a terminal, or pass -y ({one_line(again)})",
         "" if entry.description in ("(no description)", entry.inline) else one_line(entry.description),
     ).granted(assume_yes):
         return 1
@@ -925,8 +950,10 @@ def run_shortcut(words: List[str], skip_local: bool = False, assume_yes: bool = 
         else:
             cmd = ["bash", script_path, *args]
 
-    env = os.environ.copy()
+    # A shortcut run from another one gets its own SC_ARG_ variables, not the caller's
+    env = {key: value for key, value in os.environ.items() if not key.startswith("SC_ARG_")}
     env["SHORTCUT_NAME"] = name
+    env["SHORTCUT_NAMESPACE"] = resolved.group.name
     env["SHORTCUT_CALLER_CWD"] = caller_cwd
     env.update(arg_env)
 
@@ -1227,15 +1254,18 @@ def cmd_new(args: List[str]) -> int:
 
 
 def new_from_script(parsed: argparse.Namespace, group: Group, fields: Dict[str, Any]) -> int:
-    """new --script: the entry names the file where it is. In .shortcuts.local a file inside the project is kept relative."""
+    """new --script: the entry names the file where it is. A file inside the folder its paths resolve from
+    (the project, the namespace file's folder, the global store) is kept relative, so the folder can move.
+    One in the scripts folder stays absolute: a relative path there is a copy, which rm deletes."""
     path = parsed.script
     abs_path = os.path.abspath(os.path.expanduser(path))
     if path == "-" or not os.path.isfile(abs_path):
         die(f"script file not found: {path}")
-    script = abs_path
-    if parsed.local:
-        relative = os.path.relpath(os.path.realpath(abs_path), group.store_dir)
-        script = abs_path if relative.startswith("..") else relative
+    base = os.path.realpath(group.script_base)
+    real = os.path.realpath(abs_path)
+    copies = os.path.realpath(scripts_dir(group))
+    inside = pathlib.Path(real).is_relative_to(base) and not pathlib.Path(real).is_relative_to(copies)
+    script = os.path.relpath(real, base) if inside else abs_path
     entry = ShortcutEntry(name=parsed.name, description=parsed.desc or "(no description)", script=script, **fields)
     _register(group, entry)
     print(f"Created shortcut '{parsed.name}' using {abs_path}.")
@@ -1461,7 +1491,7 @@ def cmd_location(args: List[str]) -> int:
 
 def stored_copy(group: Group, raw_entry: Any) -> Optional[str]:
     """The copy shortcut keeps of an entry's script, which rm deletes with it: a relative path inside the
-    group's scripts folder. A --script file is recorded as an absolute path, so it's never one."""
+    group's scripts folder. new --script never records one there as relative, so it's never one."""
     script = raw_entry.get("script") if isinstance(raw_entry, dict) else None
     if not isinstance(script, str) or not script or os.path.isabs(script):
         return None
@@ -1539,17 +1569,77 @@ def rm_local(parsed: argparse.Namespace) -> int:
     return 0
 
 
+def is_listed_import(store: Store, ns: str) -> bool:
+    """Whether a namespace comes from the store file's "imports" rather than its imports/ folder."""
+    imports = store.main.data.get("imports")
+    return isinstance(imports, dict) and ns in imports
+
+
+def rm_namespace(ns: str, assume_yes: bool) -> int:
+    """rm --namespace: a global namespace, whole. One in imports/ goes with its scripts folder. One that
+    shortcuts.json imports from elsewhere is only no longer imported: its files are someone's own."""
+    store_dir = get_global_store_dir()
+    store = load_store(store_dir)
+    group = store.namespaces.get(ns)
+    if group is None:
+        die(f"no namespace named '{ns}' in your global store ({os.path.join(store_dir, 'imports')})")
+    listed = is_listed_import(store, ns)
+    folder = scripts_dir(group)
+    if listed:
+        lines = [f"Stops importing '{ns}' in {store.main.file}", f"Keeps its file: {group.file}"]
+    else:
+        lines = [f"Removes namespace '{ns}' ({len(group.shortcuts)} shortcuts): {group.file}"]
+        if os.path.lexists(folder):
+            lines.append(f"Deletes its scripts folder: {folder}")
+    if not Confirm(f"remove namespace '{ns}'?", f"remove namespace '{ns}' in a terminal, or pass -y",
+                   "\n".join(lines), tell_on_yes=True).granted(assume_yes):
+        return 1
+    approval = approval_path(group)  # its key needs the file, so before it goes
+    with registry_lock(store_dir):
+        if listed:
+            reg = load_registry(store_dir)
+            reg["imports"].pop(ns, None)
+            if not reg["imports"]:
+                del reg["imports"]
+            save_registry_atomic(store_dir, reg)
+        else:
+            remove_namespace_files(group)
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(approval)
+    print(f"Removed namespace '{ns}'.")
+    return 0
+
+
+def remove_namespace_files(group: Group) -> None:
+    """A namespace's file in imports/ and its scripts folder. A symlinked folder loses only the link."""
+    folder = scripts_dir(group)
+    with contextlib.suppress(FileNotFoundError):
+        os.unlink(group.file)
+    if os.path.islink(folder):
+        os.unlink(folder)
+    elif os.path.isdir(folder):
+        shutil.rmtree(folder)
+
+
 def cmd_rm(args: List[str]) -> int:
     parser = Parser(
-        prog="shortcut rm", usage="%(prog)s [-h] [-y] [--global | --local] [namespace] name", description="Remove a shortcut"
+        prog="shortcut rm", usage="%(prog)s [-h] [-y] [--global | --local] [namespace] name\n       %(prog)s [-y] --namespace NS",
+        description="Remove a shortcut, or a whole namespace"
     )
-    parser.add_argument("name", nargs="+", help="Shortcut name, or namespace and name")
+    parser.add_argument("name", nargs="*", help="Shortcut name, or namespace and name")
+    parser.add_argument("--namespace", metavar="NS", help="Remove this namespace from the global store, with its scripts folder")
     parser.add_argument("-y", "--yes", action="store_true", help="Do not prompt for confirmation")
     parser.add_argument("--local", action="store_true",
                         help="Remove it from .shortcuts.local, or hide a shared shortcut from you there")
     add_global_flag(parser)
     parsed = parser.parse_args(args)
 
+    if parsed.namespace is not None:
+        if parsed.local or parsed.name:
+            die(f"--namespace takes the namespace alone: shortcut rm --namespace {parsed.namespace}")
+        return rm_namespace(parsed.namespace, parsed.yes)
+    if not parsed.name:
+        parser.error("the following arguments are required: name")
     if parsed.local:
         return rm_local(parsed)
 
@@ -1740,7 +1830,8 @@ def approve_group(group: Group, assume_yes: bool, global_names: Set[str]) -> int
     if not confirm_review("approve", old, files, f"approve {group.label} in a terminal, or pass -y").granted(assume_yes):
         return 1
     save_approval(group, shared, local)
-    print(f"Approved {group.label}. This covers its definitions, not what they call. "
+    covers = "its definitions and its scripts folder" if group.name else "its definitions"
+    print(f"Approved {group.label}. This covers {covers}, not what they call. "
           f"Any change to them needs `{group.update_cmd}` again.")
     return 0
 
@@ -1892,14 +1983,143 @@ def apply_import(store_dir: str, entries: Dict[str, Any], scripts: Dict[str, byt
 
 
 
+def plan_namespaces(
+    source_root: str, dest_store_dir: str, replace: bool = False
+) -> Tuple[Dict[str, Dict[str, Tuple[bytes, bool]]], List[str]]:
+    """What a folder of namespace files would add to the global store's imports/, changing nothing:
+    ({namespace: {path under imports/: (its bytes, executable)}}, skipped). A namespace comes whole, as
+    <ns>.shortcut and its scripts/<ns>/ folder, the layout it has in imports/, or not at all. With
+    replace, one already in imports/ is planned too, to go in place of what's there."""
+    plans: Dict[str, Dict[str, Tuple[bytes, bool]]] = {}
+    skipped: List[str] = []
+    dest = load_store(dest_store_dir)
+    imports_dir = os.path.join(dest_store_dir, "imports")
+    for filename in sorted(os.listdir(source_root)):
+        if not filename.endswith(IMPORT_SUFFIX):
+            continue
+        ns = filename[:-len(IMPORT_SUFFIX)]
+        path = os.path.join(source_root, filename)
+        folder = os.path.join("scripts", ns)
+        try:
+            validate_name(ns)  # untrusted source
+        except ValueError as e:
+            skipped.append(f"{filename} ({e})")
+            continue
+        replacing = replace and ns in dest.namespaces and not is_listed_import(dest, ns)
+        if os.path.islink(path) or not os.path.isfile(path):
+            skipped.append(f"{ns} (not a regular file: {filename})")
+        elif replace and is_listed_import(dest, ns):
+            skipped.append(f"{ns} (imported from {dest.namespaces[ns].file}, so it isn't replaced)")
+        elif not replacing and (ns in dest.namespaces or os.path.lexists(os.path.join(imports_dir, filename))):
+            skipped.append(f"{ns} (already a namespace; --replace puts this one in its place)")
+        elif ns in dest.main.shortcuts:
+            skipped.append(f"{ns} (already a shortcut)")
+        elif not replacing and os.path.lexists(os.path.join(imports_dir, folder)):
+            skipped.append(f"{ns} (would replace imports/{folder})")
+        elif (group := load_group(path, source_root, ns)).error:
+            skipped.append(f"{ns} ({group.error})")
+        elif problem := namespace_folder_problem(group, source_root, folder):
+            skipped.append(f"{ns} ({problem})")
+        else:
+            files = {filename: (pathlib.Path(path).read_bytes(), False)}
+            for dirpath, _, names in os.walk(os.path.join(source_root, folder)):
+                for name in names:
+                    file = os.path.join(dirpath, name)
+                    files[os.path.relpath(file, source_root)] = (pathlib.Path(file).read_bytes(), os.access(file, os.X_OK))
+            plans[ns] = files
+    return plans, skipped
+
+
+def namespace_folder_problem(group: Group, source_root: str, folder: str) -> Optional[str]:
+    """Why a namespace in a source can't be copied as it is: a script outside its scripts folder or
+    missing, or a symlink, which would copy something else."""
+    for name, data in group.shared_shortcuts.items():
+        script = data.get("script") if isinstance(data, dict) else None
+        if not isinstance(script, str):
+            continue
+        if not os.path.normpath(script).startswith(folder + os.sep):
+            return f"'{name}' has its script outside {folder}/: {script}"
+        if not os.path.isfile(os.path.join(source_root, script)):
+            return f"'{name}' has a missing script: {script}"
+    parts = [os.path.join(source_root, "scripts"), os.path.join(source_root, folder)]
+    for dirpath, dirs, names in os.walk(os.path.join(source_root, folder)):
+        parts += [os.path.join(dirpath, name) for name in dirs + names]
+    links = [os.path.relpath(p, source_root) for p in parts if os.path.islink(p)]
+    if links:
+        return f"symlink in source: {links[0]}"
+    return None
+
+
+def installed_files(group: Group, imports_dir: str) -> Dict[str, str]:
+    """A namespace in imports/ as init shows it: its file and its scripts folder, under imports/."""
+    paths = [group.file] + [os.path.join(d, n) for d, _, names in os.walk(scripts_dir(group)) for n in names]
+    files: Dict[str, str] = {}
+    for path in paths:
+        with contextlib.suppress(OSError):
+            if os.path.isfile(path):
+                files[os.path.join("imports", os.path.relpath(path, imports_dir))] = reviewable(pathlib.Path(path).read_bytes())
+    return files
+
+
+def apply_namespaces(store_dir: str, plans: Dict[str, Dict[str, Tuple[bytes, bool]]], replaced: List[Group]) -> None:
+    init_store(store_dir)
+    imports_dir = os.path.join(store_dir, "imports")
+    with registry_lock(store_dir):
+        for group in replaced:
+            remove_namespace_files(group)
+        for files in plans.values():
+            for rel, (raw, executable) in files.items():
+                path = os.path.join(imports_dir, rel)
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "xb") as f:  # never over a file that appeared since the review
+                    f.write(raw)
+                if executable:
+                    os.chmod(path, os.stat(path).st_mode | 0o111)
+
+
+def init_namespaces(source_str: str, source_root: str, dest_store_dir: str, assume_yes: bool, replace: bool) -> int:
+    """init --global from a folder of <ns>.shortcut files: copy each into imports/, or with replace in
+    place of the one there. Like any namespace, it runs once shortcut update approves it."""
+    plans, skipped = plan_namespaces(source_root, dest_store_dir, replace)
+    installed = load_store(dest_store_dir).namespaces
+    imports_dir = os.path.join(dest_store_dir, "imports")
+    old: Dict[str, str] = {}
+    for ns in list(plans):
+        if ns not in installed:
+            continue
+        before = installed_files(installed[ns], imports_dir)
+        if before == {os.path.join("imports", rel): reviewable(raw) for rel, (raw, _) in plans[ns].items()}:
+            del plans[ns]
+            skipped.append(f"{ns} (the same as what's installed)")
+        else:
+            old.update(before)
+    if skipped:
+        print(f"Skipped ({len(skipped)}):")
+        for s in skipped:
+            print(f"  {s}")
+    if not plans:
+        return 0
+    files = {os.path.join("imports", rel): reviewable(raw) for plan in plans.values() for rel, (raw, _) in plan.items()}
+    print(f"{'Changes' if old else 'New'} from {source_str}:")
+    show_diff(diff_files(old, files))
+    if not confirm_review("import", old, files, f"import {source_str} in a terminal, or pass -y").granted(assume_yes):
+        return 1
+    apply_namespaces(dest_store_dir, plans, [installed[ns] for ns in plans if ns in installed])
+    print(f"Imported ({len(plans)}), to approve before they run:")
+    for ns in plans:
+        print(f"  shortcut update {ns}")
+    return 0
+
+
 def cmd_init(args: List[str]) -> int:
     parser = Parser(
         prog="shortcut init",
-        description="With --global, create the global store, or review a project's exported shortcuts and copy them there",
+        description="With --global, create the global store, or review a project's exported shortcuts, or a folder of namespaces, and copy them there",
     )
     parser.add_argument("source", nargs="?", default=None, help="Local path or git URL to import from (needs --global)")
     parser.add_argument("--global", dest="is_global", action="store_true", help="Import into global store")
     parser.add_argument("-y", "--yes", action="store_true", help="Import without asking")
+    parser.add_argument("--replace", action="store_true", help="Put a source's namespaces in place of installed ones of the same name")
     parsed = parser.parse_args(args)
 
     if not parsed.is_global:
@@ -1943,10 +2163,15 @@ def cmd_init(args: List[str]) -> int:
             if not os.path.isdir(source_root):
                 die(f"source directory does not exist: {source_root}")
 
-        # A source is a project: a .shortcuts at its root, whose relative script paths resolve from there
+        # A source is a project: a .shortcuts at its root, whose relative script paths resolve from there.
+        # Without one, it's a folder of namespaces laid out as in imports/.
         source_file = os.path.join(source_root, PROJECT_FILE)
         if not os.path.isfile(source_file):
-            die(f"no {PROJECT_FILE} found in {source_root}")
+            if any(name.endswith(IMPORT_SUFFIX) for name in os.listdir(source_root)):
+                return init_namespaces(source_str, source_root, dest_store_dir, parsed.yes, parsed.replace)
+            die(f"no {PROJECT_FILE} or <ns>{IMPORT_SUFFIX} found in {source_root}")
+        if parsed.replace:
+            die(f"--replace is for a folder of namespaces, and {source_root} has a {PROJECT_FILE}")
 
         entries, scripts, skipped = plan_import(
             source_base=source_root,
@@ -2013,7 +2238,7 @@ _shortcut() {
                 local flags="--global"
                 case "$cmd" in
                     run|r) flags="--global -y" ;;
-                    rm) flags="--global --local -y" ;;
+                    rm) flags="--global --local --namespace -y" ;;
                     promote) flags="--as -y --force" ;;
                     show) flags="--global --json" ;;
                 esac
@@ -2029,7 +2254,7 @@ _shortcut() {
 
     case "$prev" in
         init)
-            COMPREPLY=( $(compgen -W "--global -y" -- "$cur") )
+            COMPREPLY=( $(compgen -W "--global --replace -y" -- "$cur") )
             return 0
             ;;
         completion)
@@ -2060,7 +2285,7 @@ _shortcut() {
             if (( $#typed == 0 )) && [[ $PREFIX == -* ]]; then
                 case $words[2] in
                     run|r) compadd -- --global -y ;;
-                    rm) compadd -- --global --local -y ;;
+                    rm) compadd -- --global --local --namespace -y ;;
                     show) compadd -- --global --json ;;
                     promote) compadd -- --as -y --force ;;
                     *) compadd -- --global ;;
@@ -2070,7 +2295,7 @@ _shortcut() {
             fi
             ;;
         init)
-            compadd -- --global -y
+            compadd -- --global --replace -y
             _files -/
             ;;
         completion)
@@ -2099,9 +2324,11 @@ complete -c shortcut -n "__fish_seen_subcommand_from run r rm promote" -s y
 complete -c shortcut -n "__fish_seen_subcommand_from promote" -l as -r
 complete -c shortcut -n "__fish_seen_subcommand_from promote" -l force
 complete -c shortcut -n "__fish_seen_subcommand_from rm" -l local
+complete -c shortcut -n "__fish_seen_subcommand_from rm" -l namespace -r
 complete -c shortcut -n "__fish_seen_subcommand_from show" -l json
 complete -c shortcut -n "__fish_seen_subcommand_from init" -F -l global
 complete -c shortcut -n "__fish_seen_subcommand_from init" -s y
+complete -c shortcut -n "__fish_seen_subcommand_from init" -l replace
 complete -c shortcut -n "__fish_seen_subcommand_from completion" -a "bash zsh fish"
 """
 
@@ -2136,14 +2363,18 @@ Usage:
   shortcut rm [--global|--local] <name> [-y]
                                             Remove a shortcut. With --local, take it out of .shortcuts.local,
                                             or hide a shared one from you
+  shortcut rm --namespace <ns> [-y]         Remove a global namespace and its scripts/<ns>/ folder
   shortcut promote <name> [--as NEW] [-y] [--force]
                                             Add an approved, exported project shortcut to your global
                                             shortcuts. It runs this checkout's files as they are, not a
                                             copy. --force takes one that isn't exported
   shortcut update [group] [-y]              Review changes to project shortcuts and namespaces, and approve them
-  shortcut init --global [SOURCE] [-y]      Review the exported shortcuts in a folder's or git URL's
+  shortcut init --global [SOURCE] [-y] [--replace]
+                                            Review the exported shortcuts in a folder's or git URL's
                                             .shortcuts and copy them into the global store. Later
-                                            changes to the source don't reach them
+                                            changes to the source don't reach them. Without a .shortcuts,
+                                            copy its <ns>.shortcut namespaces into imports/; --replace
+                                            puts them in place of installed ones
   shortcut completion bash|zsh|fish         Print a shell completion script
   shortcut help, -h, --help                 Show this help message
   shortcut --version                        Show version
@@ -2163,8 +2394,8 @@ FLAGS for new:
 
 Project shortcuts and namespaces don't run until approved with `shortcut update`,
 and must be approved again after any change to their definitions. Approval covers
-.shortcuts, .shortcuts.local, imports and the scripts they name, not the programs those
-call. A change shortcut makes to .shortcuts.local or a namespace keeps its approval.
+.shortcuts, .shortcuts.local, imports, the scripts they name and each namespace's
+scripts/<ns>/ folder, not the programs those call. A change shortcut makes to .shortcuts.local or a namespace keeps its approval.
 Global shortcuts have no approval step, so a global link target can change freely.
 Set SHORTCUT_SHOW_DIR=0 to hide the "→ <run directory>" line.
 """

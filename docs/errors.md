@@ -92,7 +92,7 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `<group> changed since you approved it; run: <command>` | |
 | `run directory does not exist: <dir>` | The entry's `cwd` is gone |
 | `script file not found: <path>` | |
-| `'<name>' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y <name>)` | A `confirm` entry run without a terminal |
+| `'<name>' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y <name> <args>)` | A `confirm` entry run without a terminal. The command is the one that was run, with `-y` |
 
 A shortcut that declares `args` checks them before it runs. These print `error: <message>`, then `usage: shortcut r <name> <args>`, then each argument and its `desc` if any argument has one, and exit 2.
 
@@ -144,6 +144,9 @@ A new local shortcut needs a project folder:
 | `'<name>' isn't in .shortcuts or .shortcuts.local here` | |
 | `'<name>' is a project shortcut, and shortcut doesn't change .shortcuts. Edit it by hand, or use: shortcut rm --local <name>` | |
 | `<file error>. Inside this project rm only takes --local until it's fixed; for your own: shortcut rm --global <name>` | |
+| `--namespace takes the namespace alone: shortcut rm --namespace <ns>` | |
+| `no namespace named '<ns>' in your global store (<store>/imports)` | `rm --namespace` removes only global namespaces |
+| `remove namespace '<ns>' in a terminal, or pass -y` | |
 | `remove '<name>' in a terminal, or pass -y` | No terminal to ask in. `rm --local` says `<verb> '<name>' ...` with what it would do |
 
 ## promote
@@ -175,5 +178,6 @@ These print `error: cannot approve <group>: <reason>`, where the reason is a sto
 | `a project's .shortcuts is a file you write by hand, starting from: {"version": 2, "shortcuts": {}}. For your own shortcuts, use new --local.` | |
 | `failed to clone git repository from <url>: <git error>` | |
 | `source directory does not exist: <dir>` | |
-| `no .shortcuts found in <dir>` | `init --global` copies only from a source's `.shortcuts` |
+| `no .shortcuts or <ns>.shortcut found in <dir>` | `init --global` copies a source's `.shortcuts` exported entries, or its namespace files |
 | `import <source> in a terminal, or pass -y` | |
+| `--replace is for a folder of namespaces, and <dir> has a .shortcuts` | A project's entries aren't replaced |

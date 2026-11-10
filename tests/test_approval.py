@@ -160,6 +160,36 @@ class TestApproval(ShortcutTestCase):
         self.assertEqual(res.returncode, 1)
         self.assertIn("changed since you approved it", res.stderr)
 
+    def test_a_namespace_approval_covers_its_whole_scripts_folder(self):
+        folder = self.shortcuts_home / "imports" / "scripts" / "dk"
+        self.write_import(self.shortcuts_home, "dk", {"version": 2, "shortcuts": {"ps": {"script": "scripts/dk/ps.sh"}}})
+        self.write_file(folder / "ps.sh", '#!/usr/bin/env bash\n. "$(dirname "$0")/lib/say"\nsay ps\n', 0o755)
+        say = self.write_file(folder / "lib" / "say", 'say() { echo "$1"; }\n')
+        self.run_cli(["update", "-y", "dk"])
+        self.assertEqual(self.run_cli(["r", "dk", "ps"]).stdout, "ps\n")
+
+        def changed() -> None:
+            res = self.run_cli(["r", "dk", "ps"])
+            self.assertEqual(res.returncode, 1)
+            self.assertIn("dk changed since you approved it", res.stderr)
+            update = self.run_cli(["update", "-y", "dk"])
+            self.assertEqual(update.returncode, 0, update.stderr)
+            self.assertEqual(self.run_cli(["r", "dk", "ps"]).returncode, 0)
+
+        say.write_text('say() { echo "changed $1"; }\n', encoding="utf-8")
+        changed()
+        self.write_file(folder / "new-helper", "anything\n")
+        changed()
+        elsewhere = self.folder("elsewhere")
+        os.symlink(elsewhere, folder / "more")
+        changed()
+        os.remove(folder / "more")
+        os.symlink(self.folder("other"), folder / "more")
+        changed()
+        # A folder that isn't the namespace's is not
+        self.write_file(self.shortcuts_home / "imports" / "scripts" / "other" / "x", "x\n")
+        self.assertEqual(self.run_cli(["r", "dk", "ps"]).returncode, 0)
+
     def test_approving_says_what_it_covers(self):
         proj = self.project(GO)
         res = self.run_cli(["update", "-y"], cwd=str(proj))

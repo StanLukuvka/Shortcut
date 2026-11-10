@@ -23,6 +23,19 @@ class TestRunning(ShortcutTestCase):
         self.assertEqual(res_run.returncode, 0)
         self.assertEqual(res_run.stdout.strip(), "name=echo first=-v all=-v --option arg1 arg2")
 
+    def test_the_environment_says_what_runs_and_from_where(self):
+        show = 'echo "$SHORTCUT_NAME|$SHORTCUT_NAMESPACE|$SHORTCUT_CALLER_CWD|${SC_ARG_OLD-unset}|${SC_ARG_X-unset}"'
+        self.write_import(self.shortcuts_home, "dk", {"version": 2, "shortcuts": {
+            "env": {"inline": show, "args": [{"name": "x", "default": "d"}]}}})
+        self.run_cli(["update", "-y", "dk"])
+        self.run_cli(["new", "env", "--", show])
+        caller = self.folder("caller")
+        outer = {"SC_ARG_OLD": "outer", "SC_ARG_X": "outer", "SHORTCUT_NAMESPACE": "outer"}
+        res = self.run_cli(["r", "dk", "env"], cwd=str(caller), env=outer)
+        self.assertEqual(res.stdout, f"dk env|dk|{caller}|unset|d\n", res.stderr)
+        res = self.run_cli(["r", "env"], cwd=str(caller), env=outer)
+        self.assertEqual(res.stdout, f"env||{caller}|unset|unset\n", res.stderr)
+
     def test_a_name_alone_never_runs_a_shortcut(self):
         self.run_cli(["new", "hello", "--", "echo hello"])
         for argv in (["hello"], ["nano", "hello"]):
@@ -163,6 +176,15 @@ class TestRunning(ShortcutTestCase):
         self.assertEqual(rc, 0)
         self.assertIn("Wipes the cache", out)
         self.assertEqual((self.tmp_path / "out.txt").read_text(), "ran\n")
+
+        # The question names the arguments, and the hint is the same run with -y
+        self.run_cli(["new", "drop", "--confirm", "--", 'echo "dropped $*"'])
+        prompt = f"run 'drop' with -f 'my db' in {work}? [y/N]".encode()
+        rc, out = self.run_in_terminal(["r", "drop", "-f", "my db"], cwd=str(work), keys=[(prompt, b"n\n")])
+        self.assertEqual(rc, 1, out)
+        res = self.run_cli(["r", "--global", "drop", "-f", "my db"], cwd=str(work))
+        self.assertIn("pass -y (shortcut r -y --global drop -f 'my db')\n", res.stderr)
+        self.assertEqual(self.run_cli(["r", "-y", "--global", "drop", "-f", "my db"], cwd=str(work)).stdout, "dropped -f my db\n")
 
         # After the name, -y belongs to the script
         self.run_cli(["new", "echoes", "--", 'echo "$@"'])
