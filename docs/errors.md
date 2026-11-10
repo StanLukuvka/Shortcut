@@ -144,6 +144,9 @@ A new local shortcut needs a project folder:
 | `'<name>' isn't in .shortcuts or .shortcuts.local here` | |
 | `'<name>' is a project shortcut, and shortcut doesn't change .shortcuts. Edit it by hand, or use: shortcut rm --local <name>` | |
 | `<file error>. Inside this project rm only takes --local until it's fixed; for your own: shortcut rm --global <name>` | |
+| `--namespace takes the namespace alone: shortcut rm --namespace <ns>` | |
+| `no namespace named '<ns>' in your global store (<store>/imports)` | `rm --namespace` removes only global namespaces |
+| `remove namespace '<ns>' in a terminal, or pass -y` | |
 | `remove '<name>' in a terminal, or pass -y` | No terminal to ask in. `rm --local` says `<verb> '<name>' ...` with what it would do |
 
 ## promote
@@ -177,3 +180,4 @@ These print `error: cannot approve <group>: <reason>`, where the reason is a sto
 | `source directory does not exist: <dir>` | |
 | `no .shortcuts or <ns>.shortcut found in <dir>` | `init --global` copies a source's `.shortcuts` exported entries, or its namespace files |
 | `import <source> in a terminal, or pass -y` | |
+| `--replace is for a folder of namespaces, and <dir> has a .shortcuts` | A project's entries aren't replaced |

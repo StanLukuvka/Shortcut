@@ -64,6 +64,8 @@ shortcut location <name>              script path
 
 shortcut rm <name> [-y]               remove a global or namespace shortcut; says what goes, with -y too
 shortcut rm --local <name>            undo your override, or hide a shared entry. Never changes .shortcuts
+shortcut rm --namespace <ns> [-y]     remove a global namespace and its scripts/<ns>/ folder; one imported
+                                      from elsewhere is only no longer imported
 
 shortcut promote <name> [-y]          make an approved, exported project shortcut one of your global ones
 shortcut promote <name> --as NEW      the same, under another global name
@@ -72,6 +74,8 @@ shortcut promote <name> --force       one that isn't exported
 shortcut update [ns|.] [-y]           review and approve
 shortcut init --global <src> [-y]     copy the exported entries in a folder's or git URL's .shortcuts
                                       or, with no .shortcuts, its <ns>.shortcut namespaces into imports/
+shortcut init --global <src> --replace
+                                      the same, in place of installed namespaces of those names
 shortcut completion bash|zsh|fish
 shortcut --version
 ```
@@ -118,7 +122,7 @@ SC_ARG_<NAME>          each declared argument, upper case with - as _. A rest ar
 A namespace is a file named `<ns>.shortcut`: `{"version": 2, "shortcuts": {...}}`, with entries as in `shortcuts.json`. [docs/shortcut.schema.json](docs/shortcut.schema.json) describes them. Relative `script` and `cwd` paths resolve from the file's folder.
 
 - `~/.shortcuts/imports/<ns>.shortcut` is found by its name.
-- `shortcut init --global <dir|git URL>` copies a folder's `<ns>.shortcut` files there, each with its `scripts/<ns>/` folder, after showing them. Every script an entry names has to be in that folder.
+- `shortcut init --global <dir|git URL>` copies a folder's `<ns>.shortcut` files there, each with its `scripts/<ns>/` folder, after showing them. Every script an entry names has to be in that folder. `--replace` puts a newer copy in place of the installed one, showing what changed.
 - A file anywhere else is listed in `shortcuts.json`, or in a project's `.shortcuts`: `"imports": {"<ns>": "path/to/<ns>.shortcut"}`. The path is relative to the file that lists it, and can start with `~`.
 - It runs only after `shortcut update <ns>`, and again after each change to its file, a script it names, or anything in its `scripts/<ns>/` folder.
 - `shortcut new --namespace <ns> <name> ...` adds an entry, and keeps an approved namespace approved.

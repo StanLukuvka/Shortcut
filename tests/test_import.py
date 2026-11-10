@@ -223,7 +223,7 @@ class TestImport(ShortcutTestCase):
         self.run_cli(["update", "-y", "dk"])
         self.assertEqual(self.run_cli(["r", "dk", "ps"]).stdout, "ps\n")
         again = self.run_cli(["init", "--global", "-y", str(src)])
-        self.assertIn("dk (already a namespace)", again.stdout)
+        self.assertIn("dk (already a namespace; --replace puts this one in its place)", again.stdout)
 
     def test_a_namespace_comes_whole_or_not_at_all(self):
         outside = self.script("out.sh", "#!/usr/bin/env bash\n")
@@ -246,6 +246,39 @@ class TestImport(ShortcutTestCase):
         self.write_file(bad / "f.shortcut", json.dumps({"version": 2, "shortcuts": {}, "imports": {}}))
         self.assertIn("namespaces don't nest", self.run_cli(["init", "--global", "-y", str(bad)]).stdout)
         self.assertFalse((self.shortcuts_home / "imports").exists())
+
+
+    def test_replace_puts_a_namespace_in_place_of_the_installed_one(self):
+        src = self.namespace_source("dk", {"ps": {"script": "scripts/dk/ps.sh"}},
+                                    {"scripts/dk/ps.sh": "#!/usr/bin/env bash\necho ps\n", "scripts/dk/old": "old\n"})
+        self.run_cli(["init", "--global", "-y", str(src)])
+        self.run_cli(["update", "-y", "dk"])
+        same = self.run_cli(["init", "--global", "--replace", str(src)])
+        self.assertEqual(same.returncode, 0, same.stderr)
+        self.assertIn("dk (the same as what's installed)", same.stdout)
+        (src / "scripts" / "dk" / "ps.sh").write_text("#!/usr/bin/env bash\necho new\n", encoding="utf-8")
+        os.remove(src / "scripts" / "dk" / "old")
+        res = self.run_cli(["init", "--global", "--replace", "-y", str(src)])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("Changes from", res.stdout)
+        self.assertIn("-echo ps\n+echo new", res.stdout)
+        folder = self.shortcuts_home / "imports" / "scripts" / "dk"
+        self.assertEqual(sorted(p.name for p in folder.iterdir()), ["ps.sh"])
+        self.assertIn("dk changed since you approved it", self.run_cli(["r", "dk", "ps"]).stderr)
+        self.run_cli(["update", "-y", "dk"])
+        self.assertEqual(self.run_cli(["r", "dk", "ps"]).stdout, "new\n")
+
+    def test_replace_leaves_an_import_from_elsewhere_and_a_project_source(self):
+        elsewhere = self.write_file(self.tmp_path / "mine" / "dk.shortcut", json.dumps({"version": 2, "shortcuts": HI}))
+        self.write_store(self.shortcuts_home, {}, imports={"dk": str(elsewhere)})
+        src = self.namespace_source("dk", {"x": {"inline": "true"}})
+        res = self.run_cli(["init", "--global", "--replace", "-y", str(src)])
+        self.assertIn(f"dk (imported from {elsewhere}, so it isn't replaced)", res.stdout)
+        self.assertIn('"hi"', elsewhere.read_text(encoding="utf-8"))
+        project = self.collection(HI)
+        res = self.run_cli(["init", "--global", "--replace", "-y", str(project)])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn(f"--replace is for a folder of namespaces, and {project} has a .shortcuts", res.stderr)
 
 
 if __name__ == "__main__":

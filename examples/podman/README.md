@@ -13,6 +13,8 @@ shortcut update podman
 
 That copies `podman.shortcut` and `scripts/podman/` into `~/.shortcuts/imports/`. After changing either there, run `shortcut update podman` again.
 
+To install a newer copy over it, add `--replace` to `init`. `shortcut rm --namespace podman` removes it.
+
 ## Picking a container
 
 Each terminal can pick one container. `logs`, `sh`, `restart`, `ports`, `exec` and `stop` act on it when you don't name one.

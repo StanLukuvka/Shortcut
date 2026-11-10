@@ -6,7 +6,7 @@ import os
 import sys
 import unittest
 
-from fixtures import DOCKER_PS, OWN, shortcut_mod, ShortcutTestCase
+from fixtures import DOCKER_PS, HI, OWN, shortcut_mod, ShortcutTestCase
 
 
 class TestStores(ShortcutTestCase):
@@ -491,6 +491,51 @@ class TestEntries(ShortcutTestCase):
         self.assertEqual(self.run_cli(["r", "mine"]).stdout, "mine\n")
         self.run_cli(["update", "-y", "dk"])
         self.assertEqual(self.run_cli(["r", "dk", "ps"]).stdout, "ps\n")
+
+    def test_rm_namespace_removes_it_with_its_scripts_folder_and_approval(self):
+        imports = self.shortcuts_home / "imports"
+        self.write_import(self.shortcuts_home, "dk", {"version": 2, "shortcuts": {"ps": {"script": "scripts/dk/ps.sh"}}})
+        self.write_file(imports / "scripts" / "dk" / "ps.sh", "#!/usr/bin/env bash\necho ps\n", 0o755)
+        self.write_file(imports / "scripts" / "dk" / "lib" / "helper", "x\n")
+        self.write_import(self.shortcuts_home, "keep", {"version": 2, "shortcuts": HI})
+        self.run_cli(["update", "-y", "dk"])
+        approvals = self.shortcuts_home / "approvals"
+        self.assertEqual(len(list(approvals.iterdir())), 1)
+        rc, out = self.run_in_terminal(["rm", "--namespace", "dk"], keys=[(b"[y/N]", b"n\n")])
+        self.assertEqual(rc, 1, out)
+        self.assertIn(f"Removes namespace 'dk' (1 shortcuts): {imports / 'dk.shortcut'}", out)
+        self.assertIn(f"Deletes its scripts folder: {imports / 'scripts' / 'dk'}", out)
+        self.assertEqual(self.run_cli(["r", "dk", "ps"]).stdout, "ps\n")
+        res = self.run_cli(["rm", "--namespace", "dk"])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("remove namespace 'dk' in a terminal, or pass -y", res.stderr)
+        res = self.run_cli(["rm", "-y", "--namespace", "dk"])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("Removed namespace 'dk'.", res.stdout)
+        self.assertFalse((imports / "dk.shortcut").exists())
+        self.assertFalse((imports / "scripts" / "dk").exists())
+        self.assertEqual(list(approvals.iterdir()), [])
+        self.assertTrue((imports / "keep.shortcut").exists())
+        res = self.run_cli(["rm", "-y", "--namespace", "dk"])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn(f"no namespace named 'dk' in your global store ({imports})", res.stderr)
+        for argv in (["rm", "--namespace", "keep", "hi"], ["rm", "--local", "--namespace", "keep"]):
+            res = self.run_cli(argv)
+            self.assertEqual(res.returncode, 1)
+            self.assertIn("--namespace takes the namespace alone: shortcut rm --namespace keep", res.stderr)
+        self.assertEqual(self.run_cli(["rm"]).returncode, 2)
+
+    def test_rm_namespace_imported_from_elsewhere_keeps_its_files(self):
+        elsewhere = self.write_file(self.tmp_path / "mine" / "tools.shortcut", json.dumps({"version": 2, "shortcuts": HI}))
+        self.write_file(self.tmp_path / "mine" / "scripts" / "tools" / "x", "x\n")
+        self.write_store(self.shortcuts_home, {}, imports={"tools": str(elsewhere)})
+        res = self.run_cli(["rm", "-y", "--namespace", "tools"])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn(f"Stops importing 'tools' in {self.shortcuts_home / 'shortcuts.json'}", res.stdout)
+        self.assertIn(f"Keeps its file: {elsewhere}", res.stdout)
+        self.assertTrue(elsewhere.exists())
+        self.assertTrue((self.tmp_path / "mine" / "scripts" / "tools" / "x").exists())
+        self.assertNotIn("imports", json.loads((self.shortcuts_home / "shortcuts.json").read_text(encoding="utf-8")))
 
     def test_rm_y_still_says_what_it_removed(self):
         source = self.script("src.sh", "#!/usr/bin/env bash\n")
