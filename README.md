@@ -127,7 +127,8 @@ PAGER                 pages long update and init --global diffs
 ## More
 
 - [AGENT.md](AGENT.md): for coding agents.
-- [docs/](docs/): diagrams and the JSON Schema for shortcut files.
+- [docs/](docs/): diagrams, the JSON Schema for shortcut files, and every error message.
+- [examples/podman](examples/podman/): a namespace for podman containers.
 - Tests: `python3 -m unittest discover -s tests`.
 
 ## License

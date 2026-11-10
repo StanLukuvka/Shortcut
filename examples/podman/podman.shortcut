@@ -1,0 +1,164 @@
+{
+  "version": 2,
+  "shortcuts": {
+    "ps": {
+      "description": "All containers, with status, image and ports. Flags pass to podman ps",
+      "inline": "podman ps -a --format \"table {{.Names}}\\t{{.Status}}\\t{{.Image}}\\t{{.Ports}}\" \"$@\"",
+      "created": "2026-11-10"
+    },
+    "images": {
+      "description": "Images, newest first.",
+      "inline": "podman images --sort created \"$@\"",
+      "created": "2026-11-10"
+    },
+    "stats": {
+      "description": "CPU and memory of running containers, once",
+      "inline": "podman stats --no-stream \"$@\"",
+      "created": "2026-11-10"
+    },
+    "logs": {
+      "description": "Follow a container's logs (the picked one by default)",
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r podman current \"$SC_ARG_CONTAINER\") && podman logs -f --tail \"$SC_ARG_LINES\" \"$c\"",
+      "created": "2026-11-10",
+      "args": [
+        {
+          "name": "container",
+          "default": "",
+          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
+        },
+        {
+          "name": "lines",
+          "default": "100",
+          "desc": "How many lines to show before following"
+        }
+      ]
+    },
+    "sh": {
+      "description": "Shell in a container (the picked one by default)",
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r podman current \"$SC_ARG_CONTAINER\") && podman exec -it \"$c\" sh -c \"command -v bash >/dev/null && exec bash || exec sh\"",
+      "created": "2026-11-10",
+      "args": [
+        {
+          "name": "container",
+          "default": "",
+          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
+        }
+      ]
+    },
+    "restart": {
+      "description": "Restart a container (the picked one by default)",
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r podman current \"$SC_ARG_CONTAINER\") && podman restart \"$c\"",
+      "created": "2026-11-10",
+      "args": [
+        {
+          "name": "container",
+          "default": "",
+          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
+        }
+      ]
+    },
+    "ports": {
+      "description": "Port mappings of a container (the picked one by default)",
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r podman current \"$SC_ARG_CONTAINER\") && podman port \"$c\"",
+      "created": "2026-11-10",
+      "args": [
+        {
+          "name": "container",
+          "default": "",
+          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
+        }
+      ]
+    },
+    "up": {
+      "description": "podman compose up -d in this folder",
+      "inline": "podman compose up -d \"$@\"",
+      "created": "2026-11-10"
+    },
+    "down": {
+      "description": "podman compose down in this folder",
+      "inline": "podman compose down \"$@\"",
+      "created": "2026-11-10"
+    },
+    "clogs": {
+      "description": "Follow the logs of this folder's compose project",
+      "inline": "podman compose logs -f --tail 100 \"$@\"",
+      "created": "2026-11-10"
+    },
+    "prune": {
+      "description": "Remove stopped containers, unused networks and dangling images. Keeps your images",
+      "inline": "podman system prune -f",
+      "created": "2026-11-10",
+      "confirm": true
+    },
+    "nuke": {
+      "description": "Remove every stopped container and every unused image and volume",
+      "inline": "podman system prune -af --volumes",
+      "created": "2026-11-10",
+      "confirm": true
+    },
+    "list": {
+      "description": "Numbered list of all containers; * marks the one picked in this terminal",
+      "script": "scripts/podman/list.sh",
+      "created": "2026-11-10"
+    },
+    "use": {
+      "description": "Pick a container for this terminal by number from list, or by name. No argument: show the pick's row. none: clear it",
+      "script": "scripts/podman/use.sh",
+      "created": "2026-11-10",
+      "args": [
+        {
+          "name": "target",
+          "default": "",
+          "desc": "A number from list, a name, or none to clear"
+        }
+      ]
+    },
+    "current": {
+      "description": "Print the container a number, a name or this terminal's pick refers to: its list row on a terminal, its name when captured",
+      "script": "scripts/podman/current.sh",
+      "created": "2026-11-10",
+      "args": [
+        {
+          "name": "target",
+          "default": "",
+          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
+        }
+      ]
+    },
+    "exec": {
+      "description": "Run a command in this terminal's picked container: shortcut r podman exec -- ls -la",
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r podman current) || exit; t=; [ -t 0 ] && t=-t; podman exec -i $t \"$c\" \"$@\"",
+      "created": "2026-11-10",
+      "args": [
+        {
+          "name": "cmd",
+          "rest": true,
+          "required": true,
+          "desc": "The command and its arguments"
+        }
+      ]
+    },
+    "stop": {
+      "description": "Stop containers by name, or this terminal's pick when none are given",
+      "inline": "if [ $# -eq 0 ]; then c=$(SHORTCUT_SHOW_DIR=0 shortcut r podman current) || exit; set -- \"$c\"; fi; podman stop \"$@\"",
+      "created": "2026-11-10",
+      "args": [
+        {
+          "name": "containers",
+          "rest": true,
+          "desc": "Container names"
+        }
+      ]
+    },
+    "pods": {
+      "description": "Pods and their containers",
+      "inline": "podman pod ps \"$@\"",
+      "created": "2026-11-10"
+    },
+    "health": {
+      "description": "Health check status of each running container",
+      "script": "scripts/podman/health.sh",
+      "created": "2026-11-10"
+    }
+  }
+}
