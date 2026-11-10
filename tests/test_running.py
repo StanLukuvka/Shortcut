@@ -139,6 +139,31 @@ class TestRunning(ShortcutTestCase):
         self.assertEqual(rc, 1)
         self.assertNotIn("ran\r\n", out)
 
+        # The description shows above the question, and not with -y
+        self.run_cli(["new", "wipe", "--confirm", "--desc", "Wipes the cache", "--", "echo ran"])
+        prompt = f"run 'wipe' in {work}? [y/N]".encode()
+        rc, out = self.run_in_terminal(["r", "wipe"], cwd=str(work), keys=[(prompt, b"n\n")])
+        self.assertEqual(rc, 1)
+        self.assertIn("Wipes the cache\r\n", out)
+        self.assertLess(out.index("Wipes the cache"), out.index("run 'wipe'"))
+        self.assertNotIn("Wipes the cache", self.run_cli(["r", "-y", "wipe"], cwd=str(work)).stdout)
+        # No description given: nothing above the question, not a placeholder or the command
+        self.run_cli(["new", "plain", "--confirm", "--", "echo ran"])
+        self.write_store(self.shortcuts_home, {**self.load_global(),
+                                               "noted": {"script": "scripts/none.sh", "description": "(no description)", "confirm": True}})
+        for name in ("plain", "noted"):
+            prompt = f"run '{name}' in {work}? [y/N]".encode()
+            rc, out = self.run_in_terminal(["r", name], cwd=str(work), keys=[(prompt, b"n\n")])
+            self.assertEqual(rc, 1)
+            self.assertNotIn("echo ran", out)
+            self.assertNotIn("(no description)", out)
+        # The description and question go to the terminal even when stdout is a file
+        rc, out = self.run_in_terminal(["r", "wipe"], cwd=str(work), stdout_file=self.tmp_path / "out.txt",
+                                       keys=[(b"[y/N]", b"y\n")])
+        self.assertEqual(rc, 0)
+        self.assertIn("Wipes the cache", out)
+        self.assertEqual((self.tmp_path / "out.txt").read_text(), "ran\n")
+
         # After the name, -y belongs to the script
         self.run_cli(["new", "echoes", "--", 'echo "$@"'])
         self.assertEqual(self.run_cli(["r", "echoes", "-y"]).stdout, "-y\n")
@@ -209,7 +234,10 @@ class TestRunning(ShortcutTestCase):
         for word in ("nano", "activate", "version"):
             res = self.run_cli([word, "x"])
             self.assertEqual(res.returncode, 2)
-            self.assertEqual(res.stderr, f"unknown command '{word}' (to run a shortcut: shortcut run {word})\n")
+            self.assertEqual(res.stderr, f"error: unknown command '{word}' (to run a shortcut: shortcut run {word})\n")
+        res = self.run_cli(["--bogus"])
+        self.assertEqual(res.returncode, 2)
+        self.assertTrue(res.stderr.startswith("error: unrecognized option '--bogus'\n"), res.stderr)
         self.assertEqual(self.run_cli(["init", "-g"]).returncode, 2)
 
 
@@ -313,6 +341,10 @@ class TestArguments(ShortcutTestCase):
         self.assertEqual(res.returncode, 2)
         self.assertIn("missing <container>", res.stderr)
         self.assertIn("usage: shortcut r kill <container> [signal] [extra...]", res.stderr)
+        # With a desc on any argument, the error lists them all
+        self.assertIn("  container  required       Which one\n", res.stderr)
+        self.assertIn("  signal     default: TERM\n", res.stderr)
+        self.assertIn("  extra...   optional\n", res.stderr)
 
         out = self.run_cli(["r", "kill", "web"]).stdout.splitlines()
         self.assertEqual(out, ["[web][TERM]", "c=web s=TERM e="])
@@ -330,6 +362,7 @@ class TestArguments(ShortcutTestCase):
         self.assertEqual(res.returncode, 2)
         self.assertIn("too many arguments", res.stderr)
         self.assertIn("usage: shortcut r one [only]", res.stderr)
+        self.assertNotIn("  only", res.stderr)  # no desc anywhere, no list
 
         # After --, every word is a value, even one starting with a dash; the -- itself is dropped
         self.assertIn("missing <container>", self.run_cli(["r", "kill", "-5"]).stderr)
@@ -340,7 +373,10 @@ class TestArguments(ShortcutTestCase):
         # No `args` key: no checking, and -- passes through
         self.assertEqual(self.run_cli(["r", "free", "1", "2", "3"]).stdout, "3\n")
         self.assertEqual(self.run_cli(["r", "free", "--", "x"]).stdout, "2\n")
-        self.assertIn("Usage:       shortcut r kill <container> [signal] [extra...]", self.run_cli(["show", "kill"]).stdout)
+        shown = self.run_cli(["show", "kill"]).stdout
+        self.assertIn("Usage:       shortcut r kill <container> [signal] [extra...]\n", shown)
+        self.assertIn("Arguments:\n  container  required       Which one\n  signal     default: TERM\n  extra...   optional\n", shown)
+        self.assertNotIn("Arguments:", self.run_cli(["show", "free"]).stdout)
 
     def test_new_declares_args(self):
         res = self.run_cli(["new", "greet", "--arg", "who", "--arg", "greeting=hello", "--", 'echo "$2 $1"'])
@@ -355,6 +391,45 @@ class TestArguments(ShortcutTestCase):
         self.assertEqual(res.returncode, 1)
         self.assertIn("'bad' is not a valid entry", res.stderr)
 
+    def test_new_declares_rest_args_and_descs(self):
+        res = self.run_cli(["new", "ex", "--arg", "container", "--arg", "cmd...", "--arg-desc", "container=Which one",
+                            "--arg-desc", "cmd=What to run", "--", 'echo "$SC_ARG_CONTAINER|$SC_ARG_CMD"'])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertEqual(self.load_global()["ex"]["args"], [
+            {"name": "container", "required": True, "desc": "Which one"},
+            {"name": "cmd", "rest": True, "required": True, "desc": "What to run"},
+        ])
+        self.assertEqual(self.run_cli(["r", "ex", "web", "ls", "/tmp"]).stdout, "web|ls /tmp\n")
+        res = self.run_cli(["r", "ex", "web"])
+        self.assertEqual(res.returncode, 2)
+        self.assertIn("missing <cmd>", res.stderr)
+        self.assertIn("What to run", res.stderr)
+
+        # NAME...= is optional, with no default; NAME...=x has one
+        self.run_cli(["new", "opt", "--arg", "rest...=", "--", 'echo "$#"'])
+        self.assertEqual(self.load_global()["opt"]["args"], [{"name": "rest", "rest": True}])
+        self.assertEqual(self.run_cli(["r", "opt"]).stdout, "0\n")
+        self.run_cli(["new", "dflt", "--arg", "rest...=x", "--", 'echo "$*"'])
+        self.assertEqual(self.load_global()["dflt"]["args"], [{"name": "rest", "rest": True, "default": "x"}])
+
+        # --arg-desc takes the name with or without its ...; a newline shows as \\n
+        self.run_cli(["new", "dots", "--arg", "files...", "--arg-desc", "files...=Two\nlines", "--", 'echo "$@"'])
+        self.assertEqual(self.load_global()["dots"]["args"][0]["desc"], "Two\nlines")
+        self.assertIn("  files...  required  Two\\nlines\n", self.run_cli(["show", "dots"]).stdout)
+
+        for flags, message in (
+            (["--arg", "a...", "--arg", "b"], "only the last entry in 'args' can be 'rest'"),
+            (["--arg", "a", "--arg", "a"], "arg 'a' is declared twice"),
+            (["--arg", "a", "--arg-desc", "a=one", "--arg-desc", "a=two"], "--arg-desc a=two: 'a' already has a desc"),
+            (["--arg", "a", "--arg-desc", "b=Nope"], "--arg-desc b=Nope: needs NAME=TEXT, with NAME declared by --arg"),
+            (["--arg", "a", "--arg-desc", "a"], "--arg-desc a: needs NAME=TEXT"),
+            (["--arg-desc", "a=No args"], "--arg-desc a=No args: needs NAME=TEXT"),
+        ):
+            res = self.run_cli(["new", "bad", *flags, "--", 'echo "$@"'])
+            self.assertEqual(res.returncode, 1, flags)
+            self.assertIn(message, res.stderr)
+            self.assertNotIn("bad", self.load_global())
+
     def test_invalid_args_declaration_is_an_error(self):
         self.write_store(self.shortcuts_home, {
             "bad": {"inline": "true", "args": [{"name": "a", "rest": True}, {"name": "b"}]},
@@ -362,6 +437,12 @@ class TestArguments(ShortcutTestCase):
         res = self.run_cli(["r", "bad"])
         self.assertEqual(res.returncode, 1)
         self.assertIn("only the last entry in 'args' can be 'rest'", res.stderr)
+        self.write_store(self.shortcuts_home, {
+            "both": {"inline": "true", "args": [{"name": "a", "required": True, "default": "x"}]},
+        })
+        res = self.run_cli(["r", "both"])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("arg 'a' can't be both 'required' and have a 'default'", res.stderr)
 
     def test_new_says_when_a_command_ignores_arguments(self):
         hint = "won't see any arguments"

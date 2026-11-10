@@ -101,14 +101,16 @@
       "type": "object",
       "required": ["name"],
       "additionalProperties": false,
+      "if": { "required": ["required"], "properties": { "required": { "const": true } } },
+      "then": { "not": { "required": ["default"] } },
       "properties": {
         "name": {
-          "description": "Argument name.",
+          "description": "Argument name. Unique within an entry.",
           "type": "string",
           "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
         },
         "required": {
-          "description": "Refuse to run when this argument is missing and has no default.",
+          "description": "Refuse to run when this argument is missing. Can't be used with default.",
           "type": "boolean"
         },
         "default": {
@@ -116,7 +118,7 @@
           "type": "string"
         },
         "desc": {
-          "description": "A note for people reading the file. Nothing prints it.",
+          "description": "What the argument is. Shown by show and by usage errors.",
           "type": "string"
         },
         "rest": {

@@ -45,6 +45,7 @@ class TestSchema(ShortcutTestCase):
         del entry["script"]
         arg = {k: SAMPLES[v["type"]] for k, v in SCHEMA["$defs"]["arg"]["properties"].items()}
         arg["name"] = "x"
+        arg["required"] = False  # required can't go with a default
         entry["args"] = [arg]
         self.write_import(self.shortcuts_home, "ns", {"version": 2, "description": "x", "shortcuts": {"go": entry}})
         res = self.run_cli(["update", "ns", "-y"])

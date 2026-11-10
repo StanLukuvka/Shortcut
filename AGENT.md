@@ -18,7 +18,7 @@ Agents use the same commands as people. In a project, `--local` writes to `.shor
    - A script that already exists: `--script PATH` uses it where it is, `--copy FILE` copies it into the global store. With `--local`, only `--script`.
    - A new script: `shortcut new <name>` without `-- CMD` creates one from a template and prints `Edit it at: <path>`. Write to that file. Not with `--local`.
 
-3. **Single-quote the command.** Read arguments with `$1` or `"$@"`. A shortcut doesn't append them. `--arg NAME` declares a required argument and `--arg NAME=DEFAULT` an optional one.
+3. **Single-quote the command.** Read arguments with `$1` or `"$@"`. A shortcut doesn't append them. `--arg NAME` declares a required argument and `--arg NAME=DEFAULT` an optional one. `--arg NAME...` takes the rest of the arguments, and `--arg-desc NAME=TEXT` describes one.
 
 4. **Leave approval to the user.** Anything in `.shortcuts` doesn't run until the user has run `shortcut update`. A change made with `--namespace` keeps an approved namespace approved, and a new namespace, or one changed by hand, needs `shortcut update` too. A change made with `--local` keeps an approved `.shortcuts.local` approved, and in a project that isn't approved yet it needs `shortcut update` too. When it needs approving, `new` prints the exact command. Don't approve on their behalf with `-y`. You can suggest `shortcut promote <name>` to make a project shortcut one of theirs, but never run it with `-y`.
 

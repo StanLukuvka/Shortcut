@@ -62,6 +62,10 @@ def validate_args(name: str, args: Any) -> None:
                 bad(f"args '{field}' must be a boolean")
         if arg.get("rest") and i != len(args) - 1:
             bad("only the last entry in 'args' can be 'rest'")
+        if arg.get("required") and arg.get("default") is not None:
+            bad(f"arg '{arg['name']}' can't be both 'required' and have a 'default'")
+        if any(other.get("name") == arg["name"] for other in args[:i]):
+            bad(f"arg '{arg['name']}' is declared twice")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -706,7 +710,18 @@ def find_entry(
             if rest[0] not in group.shortcuts:
                 raise KeyError(f"'{rest[0]}' not found in namespace '{first}'. It has: {members}")
             return group, rest[0], group.shortcuts[rest[0]], rest[1:], False
-    raise KeyError(" ".join([f"shortcut '{first}' not found.", *([home.main.error] if home.main.error else [])]))
+    if rest:  # `first` may be meant as a namespace
+        missing = (f"shortcut or namespace '{first}' not found. A global namespace is the file "
+                   f"{os.path.join(home.main.store_dir, 'imports', first + '.shortcut')}.")
+    else:
+        missing = f"shortcut '{first}' not found."
+    notes = [missing, *([home.main.error] if home.main.error else [])]
+    root = find_project_root(caller_cwd) if skip_local else None
+    if root:
+        project = load_store(root)
+        if first in project.main.shortcuts or first in project.namespaces:
+            notes.append(f"The project in {root} has its own '{first}': leave out --global to use it.")
+    raise KeyError(" ".join(notes))
 
 
 def resolve_run_dir(cwd: Optional[str], group: Group, caller_cwd: str) -> str:
@@ -754,8 +769,11 @@ def exec_child(cmd: List[str], cwd: str, env: Dict[str, str]) -> int:
 
 
 def ask(prompt: str, accept: Tuple[str, ...] = ("y", "yes")) -> bool:
+    """The prompt goes to stderr, so it reaches the terminal when stdout is redirected."""
     try:
-        return input(safe(prompt)).strip().lower() in accept
+        sys.stderr.write(safe(prompt))
+        sys.stderr.flush()
+        return input().strip().lower() in accept
     except (EOFError, KeyboardInterrupt):
         print()
         return False
@@ -769,14 +787,17 @@ class Confirm:
     no_terminal: str
     message: str = ""
     accept: Tuple[str, ...] = ("y", "yes")  # anything else means the answer has to be typed out
+    tell_on_yes: bool = False  # show message with -y too, for a change that can't be taken back
 
     def granted(self, assume_yes: bool) -> bool:
         if assume_yes:
+            if self.tell_on_yes and self.message:
+                print(self.message)
             return True
         if not sys.stdin.isatty():
             die(self.no_terminal)
         if self.message:
-            print(self.message)
+            print(self.message, file=sys.stderr)
         suffix = " [y/N] " if self.accept == Confirm.accept else " "
         if ask(self.question + suffix, self.accept):
             return True
@@ -796,12 +817,35 @@ def usage_line(display: str, spec: List[Dict[str, Any]]) -> str:
     return " ".join(["shortcut r", display, *parts])
 
 
+def one_line(text: str) -> str:
+    return text.replace("\n", "\\n")
+
+
+def arg_lines(spec: List[Dict[str, Any]]) -> List[str]:
+    """One line per declared argument: its name, whether it's needed or its default, and its desc."""
+    rows = []
+    for arg in spec:
+        label = arg["name"] + ("..." if arg.get("rest") else "")
+        if arg.get("required"):
+            need = "required"
+        elif arg.get("default") is not None:
+            need = f"default: {one_line(shlex.quote(arg['default']))}"
+        else:
+            need = "optional"
+        rows.append((label, need, one_line(arg.get("desc") or "")))
+    width = max(len(label) for label, _, _ in rows)
+    need_width = max(len(need) for _, need, _ in rows)
+    return [f"  {label:<{width}}  {need:<{need_width}}  {desc}".rstrip() for label, need, desc in rows]
+
+
 def bind_args(display: str, spec: List[Dict[str, Any]], argv: List[str]) -> Tuple[List[str], Dict[str, str]]:
     """Check presence and count against declared args, fill defaults. Returns (argv, SC_ARG_* env).
     --flags are never parsed: they don't count, and stay where they are in argv. A first -- is dropped,
     and every word after it counts, so a value can start with a dash."""
     def fail(msg: str) -> NoReturn:
         print(f"error: {msg}\nusage: {usage_line(display, spec)}", file=sys.stderr)
+        if any(arg.get("desc") for arg in spec):
+            print("\n".join(arg_lines(spec)), file=sys.stderr)
         sys.exit(2)
 
     end = argv.index("--") if "--" in argv else len(argv)
@@ -845,6 +889,7 @@ def run_shortcut(words: List[str], skip_local: bool = False, assume_yes: bool = 
     if entry.confirm and not Confirm(
         f"run '{name}' in {os.path.realpath(resolved.run_cwd)}?",
         f"'{name}' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y {name})",
+        "" if entry.description in ("(no description)", entry.inline) else one_line(entry.description),
     ).granted(assume_yes):
         return 1
     if sys.stderr and os.environ.get("SHORTCUT_SHOW_DIR", "1") != "0":
@@ -1058,7 +1103,10 @@ def add_entry_flags(parser: argparse.ArgumentParser) -> None:
                         help="Put it in this namespace, creating imports/NAME.shortcut if needed")
     parser.add_argument("--by", default=None, help="Creator identifier")
     parser.add_argument("--arg", action="append", default=[], metavar="NAME[=DEFAULT]",
-                        help="Declare an argument: required, or optional with a default. Repeatable")
+                        help="Declare an argument: required, or optional with a default. NAME... takes the "
+                             "rest of the arguments; NAME...= makes that optional. Repeatable")
+    parser.add_argument("--arg-desc", action="append", default=[], metavar="NAME=TEXT",
+                        help="Describe a declared argument, for show and usage errors. Repeatable")
     parser.add_argument("--confirm", action="store_true", help="Ask before running it")
 
 
@@ -1068,8 +1116,23 @@ def entry_fields(name: str, parsed: argparse.Namespace, group: Group) -> Dict[st
         args = []
         for flag in parsed.arg:
             arg_name, has_default, default = flag.partition("=")
-            args.append({"name": arg_name, "default": default} if has_default else {"name": arg_name, "required": True})
+            arg: Dict[str, Any] = {"name": arg_name.removesuffix("...")}
+            if arg_name.endswith("..."):
+                arg["rest"] = True
+            if not has_default:
+                arg["required"] = True
+            elif default or not arg.get("rest"):  # NAME...= is optional with nothing in its place
+                arg["default"] = default
+            args.append(arg)
         validate_args(name, args)
+    for flag in parsed.arg_desc:
+        arg_name, has_text, text = flag.partition("=")
+        match = [arg for arg in args or [] if arg["name"] == arg_name.removesuffix("...")]
+        if not has_text or not match:
+            die(f"--arg-desc {flag}: needs NAME=TEXT, with NAME declared by --arg")
+        if "desc" in match[0]:
+            die(f"--arg-desc {flag}: '{match[0]['name']}' already has a desc")
+        match[0]["desc"] = text
     return {
         "cwd": stored_cwd(parsed.cwd, group),
         "created_by": parsed.by,
@@ -1315,6 +1378,8 @@ def cmd_show(args: List[str]) -> int:
     print(f"Description: {entry.description}")
     if entry.args is not None:
         print(f"Usage:       {usage_line(resolved.display, entry.args)}")
+        if entry.args:
+            print("Arguments:\n" + "\n".join(arg_lines(entry.args)))
     if entry.confirm:
         print("Confirm:     True")
     if entry.export:
@@ -1460,7 +1525,7 @@ def rm_local(parsed: argparse.Namespace) -> int:
         die(f"'{name}' isn't in {PROJECT_FILE} or {LOCAL_FILE} here")
     verb = "remove" if name in group.local_shortcuts else "hide"
     if not Confirm(f"{verb} '{name}'?", f"{verb} '{name}' in a terminal, or pass -y",
-                   rm_local_message(group, name, unreadable)).granted(parsed.yes):
+                   rm_local_message(group, name, unreadable), tell_on_yes=True).granted(parsed.yes):
         return 1
 
     def change(shortcuts: Dict[str, Any]) -> None:
@@ -1506,7 +1571,7 @@ def cmd_rm(args: List[str]) -> int:
 
     copy = stored_copy(group, raw_entry)
     if not Confirm(f"remove '{display}'?", f"remove '{display}' in a terminal, or pass -y",
-                   rm_message(group, display, raw_entry, copy)).granted(parsed.yes):
+                   rm_message(group, display, raw_entry, copy), tell_on_yes=True).granted(parsed.yes):
         return 1
 
     keep: Optional[Dict[str, str]] = None
@@ -2088,7 +2153,9 @@ FLAGS for new:
   --copy FILE|-             Copy this file, or stdin, into the store
   --desc D                  Description
   --cwd caller|DIR          Where it runs (default: caller, your current directory)
-  --arg NAME[=DEFAULT]      Declare a required argument, or an optional one with a default
+  --arg NAME[=DEFAULT]      Declare a required argument, or an optional one with a default.
+                            NAME... takes the rest of the arguments; NAME...= makes it optional
+  --arg-desc NAME=TEXT      Describe a declared argument, for show and usage errors
   --confirm                 Ask before running it
   --local                   Store it in .shortcuts.local in this directory (default: the global store)
   --namespace NAME          Put it in namespace NAME in the global store, creating it if needed
@@ -2145,10 +2212,10 @@ def main(argv: Optional[List[str]] = None) -> NoReturn:
             die(err_msg)
 
     if first.startswith("-"):
-        print(f"shortcut: unrecognized option '{first}'\nTry 'shortcut --help' for more information.", file=sys.stderr)
+        print(f"error: unrecognized option '{first}'\nTry 'shortcut --help' for more information.", file=sys.stderr)
         sys.exit(2)
 
-    print(f"unknown command '{first}' (to run a shortcut: shortcut run {first})", file=sys.stderr)
+    print(f"error: unknown command '{first}' (to run a shortcut: shortcut run {first})", file=sys.stderr)
     sys.exit(2)
 
 

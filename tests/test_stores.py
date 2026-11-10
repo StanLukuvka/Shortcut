@@ -234,9 +234,16 @@ class TestStores(ShortcutTestCase):
         self.assertEqual(self.run_cli(["rm", "build", "--global", "-y"], cwd=str(proj)).returncode, 0)
         self.assertNotIn("build", self.load_global())
         self.assertEqual(self.run_cli(["r", "build"], cwd=str(proj)).stdout, "project\n")
-        res = self.run_cli(["show", "--global", "build"], cwd=str(proj))
-        self.assertEqual(res.returncode, 1)
-        self.assertIn("not found", res.stderr)
+        # The project still has one: every --global command says so
+        hint = f"The project in {proj.resolve()} has its own 'build': leave out --global to use it."
+        for args in (["show", "--global", "build"], ["r", "--global", "build"], ["location", "--global", "build"],
+                     ["rm", "--global", "-y", "build"], ["show", "--json", "--global", "build"]):
+            res = self.run_cli(args, cwd=str(proj))
+            self.assertEqual(res.returncode, 1, args)
+            self.assertIn("shortcut 'build' not found.", res.stderr)
+            self.assertIn(hint, res.stderr)
+        self.assertNotIn("has its own", self.run_cli(["show", "--global", "nothing"], cwd=str(proj)).stderr)
+        self.assertNotIn("has its own", self.run_cli(["show", "build"], cwd=str(self.tmp_path)).stderr)
 
     def test_concurrent_new_keeps_every_entry(self):
         procs = [self.popen_cli(["new", f"n{i}", "--", f"echo {i}"]) for i in range(16)]
@@ -465,6 +472,15 @@ class TestEntries(ShortcutTestCase):
         self.assertTrue(source.is_file())
         self.assertNotIn("linked", self.load_global())
 
+    def test_rm_y_still_says_what_it_removed(self):
+        source = self.script("src.sh", "#!/usr/bin/env bash\n")
+        self.run_cli(["new", "copied", "--copy", str(source)])
+        res = self.run_cli(["rm", "-y", "copied"])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn(f"Removes 'copied' from your global shortcuts: {self.shortcuts_home / 'shortcuts.json'}", res.stdout)
+        self.assertIn(f"Deletes its script copy: {self.shortcuts_home / 'scripts' / 'copied.sh'}", res.stdout)
+        self.assertNotIn("copied", self.load_global())
+
     def test_declining_rm_exits_1(self):
         self.run_cli(["new", "keep", "--", "true"])
         rc, out = self.run_in_terminal(["rm", "keep"], keys=[(b"[y/N]", b"n\n")])
@@ -578,6 +594,12 @@ class TestNamespaces(ShortcutTestCase):
         self.assertIn("'docker' is a namespace; run one of its shortcuts: delete, where", res.stderr)
         res = self.run_cli(["r", "docker", "nope"])
         self.assertIn("'nope' not found in namespace 'docker'", res.stderr)
+        # A name with words after it may be meant as a namespace: say where one would be
+        res = self.run_cli(["r", "podman", "list"])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn(f"shortcut or namespace 'podman' not found. A global namespace is the file "
+                      f"{self.shortcuts_home.resolve() / 'imports' / 'podman.shortcut'}.", res.stderr)
+        self.assertIn("shortcut 'podman' not found.", self.run_cli(["r", "podman"]).stderr)
 
     def test_namespace_from_imports_key(self):
         self.write_file(
