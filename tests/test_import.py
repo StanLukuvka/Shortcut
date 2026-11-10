@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Importing a project's exported shortcuts with `init --global`: reviewed first, and copied as reviewed."""
 
+import json
 import os
+import pathlib
 import shlex
 import unittest
+from typing import Optional
 
 from fixtures import CLI_SHELL, HI, shortcut_mod, ShortcutTestCase
 
@@ -182,7 +185,7 @@ class TestImport(ShortcutTestCase):
         self.write_store(src, HI)  # a shortcuts.json, as in a copy of a global store
         res = self.run_cli(["init", "--global", str(src), "-y"])
         self.assertEqual(res.returncode, 1)
-        self.assertIn(f"no .shortcuts found in {src}", res.stderr)
+        self.assertIn(f"no .shortcuts or <ns>.shortcut found in {src}", res.stderr)
         self.assertFalse((self.shortcuts_home / "shortcuts.json").exists())
 
     def test_import_with_nothing_new_asks_nothing(self):
@@ -191,6 +194,58 @@ class TestImport(ShortcutTestCase):
         res = self.run_cli(["init", "--global", str(src)])
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertIn("already exists", res.stdout)
+
+
+    def namespace_source(self, name: str, shortcuts: dict, files: Optional[dict] = None) -> pathlib.Path:
+        src = self.folder(f"{name}-src")
+        self.write_file(src / f"{name}.shortcut", json.dumps({"version": 2, "shortcuts": shortcuts}))
+        self.write_files(src, files, 0o755)
+        return src
+
+    def test_a_folder_of_namespaces_is_copied_into_imports_and_needs_approving(self):
+        src = self.namespace_source("dk", {
+            "ps": {"script": "scripts/dk/ps.sh"},
+            "hi": {"inline": "echo hi"},
+        }, {"scripts/dk/ps.sh": "#!/usr/bin/env bash\n. \"$(dirname \"$0\")/lib/say\"\nsay ps\n",
+            "scripts/dk/lib/say": "say() { echo \"$1\"; }\n"})
+        self.write_file(src / "README.md", "not copied")
+        res = self.run_cli(["init", "--global", str(src)])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("+++ b/imports/scripts/dk/lib/say", res.stdout)
+        self.assertFalse((self.shortcuts_home / "imports").exists())
+        res = self.run_cli(["init", "--global", "-y", str(src)])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("shortcut update dk", res.stdout)
+        imports = self.shortcuts_home / "imports"
+        self.assertEqual(sorted(str(p.relative_to(imports)) for p in imports.rglob("*") if p.is_file()),
+                         ["dk.shortcut", "scripts/dk/lib/say", "scripts/dk/ps.sh"])
+        self.assertIn("isn't approved yet", self.run_cli(["r", "dk", "hi"]).stderr)
+        self.run_cli(["update", "-y", "dk"])
+        self.assertEqual(self.run_cli(["r", "dk", "ps"]).stdout, "ps\n")
+        again = self.run_cli(["init", "--global", "-y", str(src)])
+        self.assertIn("dk (already a namespace)", again.stdout)
+
+    def test_a_namespace_comes_whole_or_not_at_all(self):
+        outside = self.script("out.sh", "#!/usr/bin/env bash\n")
+        cases = {
+            "a": ({"x": {"script": "x.sh"}}, {"x.sh": "true\n"}, "'x' has its script outside scripts/a/: x.sh"),
+            "b": ({"x": {"script": str(outside)}}, None, f"'x' has its script outside scripts/b/: {outside}"),
+            "c": ({"x": {"script": "scripts/c/../../x.sh"}}, {"x.sh": "true\n"}, "'x' has its script outside scripts/c/"),
+            "d": ({"x": {"script": "scripts/d/x.sh"}}, None, "'x' has a missing script: scripts/d/x.sh"),
+        }
+        for ns, (shortcuts, files, reason) in cases.items():
+            src = self.namespace_source(ns, {"ok": {"inline": "true"}, **shortcuts}, files)
+            res = self.run_cli(["init", "--global", "-y", str(src)])
+            self.assertEqual(res.returncode, 0, res.stderr)
+            self.assertIn(f"{ns} ({reason}", res.stdout)
+            self.assertFalse((self.shortcuts_home / "imports" / f"{ns}.shortcut").exists())
+        src = self.namespace_source("e", {"x": {"script": "scripts/e/x.sh"}}, {"scripts/e/real.sh": "true\n"})
+        os.symlink(src / "scripts" / "e" / "real.sh", src / "scripts" / "e" / "x.sh")
+        self.assertIn("e (symlink in source: scripts/e/x.sh)", self.run_cli(["init", "--global", "-y", str(src)]).stdout)
+        bad = self.namespace_source("f", {})
+        self.write_file(bad / "f.shortcut", json.dumps({"version": 2, "shortcuts": {}, "imports": {}}))
+        self.assertIn("namespaces don't nest", self.run_cli(["init", "--global", "-y", str(bad)]).stdout)
+        self.assertFalse((self.shortcuts_home / "imports").exists())
 
 
 if __name__ == "__main__":

@@ -1897,10 +1897,107 @@ def apply_import(store_dir: str, entries: Dict[str, Any], scripts: Dict[str, byt
 
 
 
+def plan_namespaces(source_root: str, dest_store_dir: str) -> Tuple[Dict[str, Dict[str, Tuple[bytes, bool]]], List[str]]:
+    """What a folder of namespace files would add to the global store's imports/, changing nothing:
+    ({namespace: {path under imports/: (its bytes, executable)}}, skipped). A namespace comes whole, as
+    <ns>.shortcut and its scripts/<ns>/ folder, the layout it has in imports/, or not at all."""
+    plans: Dict[str, Dict[str, Tuple[bytes, bool]]] = {}
+    skipped: List[str] = []
+    dest = load_store(dest_store_dir)
+    imports_dir = os.path.join(dest_store_dir, "imports")
+    for filename in sorted(os.listdir(source_root)):
+        if not filename.endswith(IMPORT_SUFFIX):
+            continue
+        ns = filename[:-len(IMPORT_SUFFIX)]
+        path = os.path.join(source_root, filename)
+        folder = os.path.join("scripts", ns)
+        try:
+            validate_name(ns)  # untrusted source
+        except ValueError as e:
+            skipped.append(f"{filename} ({e})")
+            continue
+        if os.path.islink(path) or not os.path.isfile(path):
+            skipped.append(f"{ns} (not a regular file: {filename})")
+        elif ns in dest.namespaces or os.path.lexists(os.path.join(imports_dir, filename)):
+            skipped.append(f"{ns} (already a namespace)")
+        elif ns in dest.main.shortcuts:
+            skipped.append(f"{ns} (already a shortcut)")
+        elif os.path.lexists(os.path.join(imports_dir, folder)):
+            skipped.append(f"{ns} (would replace imports/{folder})")
+        elif (group := load_group(path, source_root, ns)).error:
+            skipped.append(f"{ns} ({group.error})")
+        elif problem := namespace_folder_problem(group, source_root, folder):
+            skipped.append(f"{ns} ({problem})")
+        else:
+            files = {filename: (pathlib.Path(path).read_bytes(), False)}
+            for dirpath, _, names in os.walk(os.path.join(source_root, folder)):
+                for name in names:
+                    file = os.path.join(dirpath, name)
+                    files[os.path.relpath(file, source_root)] = (pathlib.Path(file).read_bytes(), os.access(file, os.X_OK))
+            plans[ns] = files
+    return plans, skipped
+
+
+def namespace_folder_problem(group: Group, source_root: str, folder: str) -> Optional[str]:
+    """Why a namespace in a source can't be copied as it is: a script outside its scripts folder or
+    missing, or a symlink, which would copy something else."""
+    for name, data in group.shared_shortcuts.items():
+        script = data.get("script") if isinstance(data, dict) else None
+        if not isinstance(script, str):
+            continue
+        if not os.path.normpath(script).startswith(folder + os.sep):
+            return f"'{name}' has its script outside {folder}/: {script}"
+        if not os.path.isfile(os.path.join(source_root, script)):
+            return f"'{name}' has a missing script: {script}"
+    parts = [os.path.join(source_root, "scripts"), os.path.join(source_root, folder)]
+    for dirpath, dirs, names in os.walk(os.path.join(source_root, folder)):
+        parts += [os.path.join(dirpath, name) for name in dirs + names]
+    links = [os.path.relpath(p, source_root) for p in parts if os.path.islink(p)]
+    if links:
+        return f"symlink in source: {links[0]}"
+    return None
+
+
+def apply_namespaces(store_dir: str, plans: Dict[str, Dict[str, Tuple[bytes, bool]]]) -> None:
+    init_store(store_dir)
+    imports_dir = os.path.join(store_dir, "imports")
+    with registry_lock(store_dir):
+        for files in plans.values():
+            for rel, (raw, executable) in files.items():
+                path = os.path.join(imports_dir, rel)
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "xb") as f:  # never over a file that appeared since the review
+                    f.write(raw)
+                if executable:
+                    os.chmod(path, os.stat(path).st_mode | 0o111)
+
+
+def init_namespaces(source_str: str, source_root: str, dest_store_dir: str, assume_yes: bool) -> int:
+    """init --global from a folder of <ns>.shortcut files: copy each into imports/. Like any namespace,
+    it runs once shortcut update approves it."""
+    plans, skipped = plan_namespaces(source_root, dest_store_dir)
+    if skipped:
+        print(f"Skipped ({len(skipped)}):")
+        for s in skipped:
+            print(f"  {s}")
+    if not plans:
+        return 0
+    files = {os.path.join("imports", rel): reviewable(raw) for plan in plans.values() for rel, (raw, _) in plan.items()}
+    print(f"New from {source_str}:")
+    show_diff(diff_files({}, files))
+    if not confirm_review("import", {}, files, f"import {source_str} in a terminal, or pass -y").granted(assume_yes):
+        return 1
+    apply_namespaces(dest_store_dir, plans)
+    print(f"Imported ({len(plans)}), to approve before they run:")
+    for ns in plans:
+        print(f"  shortcut update {ns}")
+    return 0
+
+
 def cmd_init(args: List[str]) -> int:
     parser = Parser(
         prog="shortcut init",
-        description="With --global, create the global store, or review a project's exported shortcuts and copy them there",
+        description="With --global, create the global store, or review a project's exported shortcuts, or a folder of namespaces, and copy them there",
     )
     parser.add_argument("source", nargs="?", default=None, help="Local path or git URL to import from (needs --global)")
     parser.add_argument("--global", dest="is_global", action="store_true", help="Import into global store")
@@ -1948,10 +2045,13 @@ def cmd_init(args: List[str]) -> int:
             if not os.path.isdir(source_root):
                 die(f"source directory does not exist: {source_root}")
 
-        # A source is a project: a .shortcuts at its root, whose relative script paths resolve from there
+        # A source is a project: a .shortcuts at its root, whose relative script paths resolve from there.
+        # Without one, it's a folder of namespaces laid out as in imports/.
         source_file = os.path.join(source_root, PROJECT_FILE)
         if not os.path.isfile(source_file):
-            die(f"no {PROJECT_FILE} found in {source_root}")
+            if any(name.endswith(IMPORT_SUFFIX) for name in os.listdir(source_root)):
+                return init_namespaces(source_str, source_root, dest_store_dir, parsed.yes)
+            die(f"no {PROJECT_FILE} or <ns>{IMPORT_SUFFIX} found in {source_root}")
 
         entries, scripts, skipped = plan_import(
             source_base=source_root,

@@ -175,5 +175,5 @@ These print `error: cannot approve <group>: <reason>`, where the reason is a sto
 | `a project's .shortcuts is a file you write by hand, starting from: {"version": 2, "shortcuts": {}}. For your own shortcuts, use new --local.` | |
 | `failed to clone git repository from <url>: <git error>` | |
 | `source directory does not exist: <dir>` | |
-| `no .shortcuts found in <dir>` | `init --global` copies only from a source's `.shortcuts` |
+| `no .shortcuts or <ns>.shortcut found in <dir>` | `init --global` copies a source's `.shortcuts` exported entries, or its namespace files |
 | `import <source> in a terminal, or pass -y` | |

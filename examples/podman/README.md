@@ -7,12 +7,11 @@ Shortcuts for podman containers, run as `shortcut r podman <name>`. `docker` wor
 From a clone:
 
 ```bash
-mkdir -p ~/.shortcuts/imports
-cp -r examples/podman/podman.shortcut examples/podman/scripts ~/.shortcuts/imports/
+shortcut init --global examples/podman
 shortcut update podman
 ```
 
-`podman.shortcut` names its scripts relative to itself, so `scripts/podman/` goes next to it. After changing either, run `shortcut update podman` again.
+That copies `podman.shortcut` and `scripts/podman/` into `~/.shortcuts/imports/`. After changing either there, run `shortcut update podman` again.
 
 ## Picking a container
 
