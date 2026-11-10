@@ -6,7 +6,7 @@ import os
 import sys
 import unittest
 
-from fixtures import DOCKER_PS, HI, OWN, shortcut_mod, ShortcutTestCase
+from fixtures import cli, DOCKER_PS, helpers, HI, OWN, ShortcutTestCase
 
 
 class TestStores(ShortcutTestCase):
@@ -17,19 +17,19 @@ class TestStores(ShortcutTestCase):
                 "test": {"description": "test", "inline": "echo 1"}
             }
         }
-        shortcut_mod.save_registry_atomic(str(self.shortcuts_home), data)
-        loaded = shortcut_mod.load_registry(str(self.shortcuts_home))
+        helpers.save_registry_atomic(str(self.shortcuts_home), data)
+        loaded = helpers.load_registry(str(self.shortcuts_home))
         self.assertEqual(loaded, data)
 
         # Corrupt JSON file protection
         reg_file = self.write_file(self.shortcuts_home / "shortcuts.json", '{"version": 1, corrupt json!')
 
         with self.assertRaises(ValueError) as ctx:
-            shortcut_mod.load_registry(str(self.shortcuts_home))
+            helpers.load_registry(str(self.shortcuts_home))
         self.assertIn("corrupt registry", str(ctx.exception))
 
         with self.assertRaises(ValueError) as ctx2:
-            shortcut_mod.save_registry_atomic(str(self.shortcuts_home), data)
+            helpers.save_registry_atomic(str(self.shortcuts_home), data)
         self.assertIn("cannot overwrite corrupt registry", str(ctx2.exception))
 
         # Verify the corrupt file was not replaced or overwritten
@@ -37,16 +37,16 @@ class TestStores(ShortcutTestCase):
 
     def test_store_discovery_skips_global_root(self):
         # Write shortcuts.json in global store
-        shortcut_mod.save_registry_atomic(str(self.shortcuts_home), {"version": 1, "shortcuts": {}})
+        helpers.save_registry_atomic(str(self.shortcuts_home), {"version": 1, "shortcuts": {}})
 
         # Walking up from home or subdirectory must skip ~/.shortcuts
-        self.assertIsNone(shortcut_mod.find_project_root(str(self.home_dir)))
+        self.assertIsNone(helpers.find_project_root(str(self.home_dir)))
         deep_dir = self.home_dir / "a" / "b" / "c"
         deep_dir.mkdir(parents=True)
-        self.assertIsNone(shortcut_mod.find_project_root(str(deep_dir)))
+        self.assertIsNone(helpers.find_project_root(str(deep_dir)))
 
         # Walking up from inside ~/.shortcuts itself must return None
-        self.assertIsNone(shortcut_mod.find_project_root(str(self.shortcuts_home)))
+        self.assertIsNone(helpers.find_project_root(str(self.shortcuts_home)))
 
         # A real local store in a project must be found
         proj_dir = self.home_dir / "my_project"
@@ -54,10 +54,10 @@ class TestStores(ShortcutTestCase):
 
         sub_dir = proj_dir / "src" / "pkg"
         sub_dir.mkdir(parents=True)
-        self.assertEqual(shortcut_mod.find_project_root(str(sub_dir)), str(proj_dir.resolve()))
+        self.assertEqual(helpers.find_project_root(str(sub_dir)), str(proj_dir.resolve()))
 
     def test_scope_resolution_order(self):
-        shortcut_mod.save_registry_atomic(
+        helpers.save_registry_atomic(
             str(self.shortcuts_home),
             {"version": 2, "shortcuts": {"build": {"description": "Global build", "inline": "echo global_build"}}},
         )
@@ -65,7 +65,7 @@ class TestStores(ShortcutTestCase):
         self.write_store(proj_dir / ".shortcuts", {"build": {"description": "Local project build", "inline": "echo local_build"}})
 
         # Inside a project: project precedence
-        res_local, _ = shortcut_mod.resolve_shortcut(["build"], caller_cwd=str(proj_dir))
+        res_local, _ = cli.resolve_shortcut(["build"], caller_cwd=str(proj_dir))
         self.assertEqual(res_local.group.store_dir, str(proj_dir.resolve()))
         self.assertEqual(res_local.entry.description, "Local project build")
         self.assertTrue(res_local.hides_global)
@@ -77,7 +77,7 @@ class TestStores(ShortcutTestCase):
         self.assertEqual(self.run_cli(["run", "--global", "build"], cwd=str(proj_dir)).stdout, "global_build\n")
 
         # Outside the project: the global one
-        res_global, _ = shortcut_mod.resolve_shortcut(["build"], caller_cwd=str(self.home_dir))
+        res_global, _ = cli.resolve_shortcut(["build"], caller_cwd=str(self.home_dir))
         self.assertEqual(res_global.group.store_dir, str(self.shortcuts_home.resolve()))
         self.assertEqual(res_global.entry.description, "Global build")
 
@@ -265,7 +265,7 @@ class TestStores(ShortcutTestCase):
         proj_dir = self.home_dir / "list_proj"
         proj_dir.mkdir()
         self.write_store(proj_dir / ".shortcuts", {"local_cmd": {"description": "echo local", "inline": "echo local", "cwd": "."}})
-        shortcut_mod.save_registry_atomic(
+        helpers.save_registry_atomic(
             str(self.shortcuts_home),
             {
                 "version": 2,
@@ -374,12 +374,12 @@ class TestEntries(ShortcutTestCase):
         self.assertEqual(res_link.returncode, 0)
         self.assertFalse((self.shortcuts_home / "scripts" / "linked.sh").exists())
 
-        reg = shortcut_mod.load_registry(str(self.shortcuts_home))
+        reg = helpers.load_registry(str(self.shortcuts_home))
         self.assertEqual(reg["shortcuts"]["linked"]["script"], str(ext_file.resolve()))
 
         # 4. Path containment check
         with self.assertRaises(ValueError) as ctx:
-            shortcut_mod.resolve_script_path(str(self.shortcuts_home), "../../../etc/passwd")
+            helpers.resolve_script_path(str(self.shortcuts_home), "../../../etc/passwd")
         self.assertIn("path traversal detected", str(ctx.exception))
 
     def test_rm_interactive_and_force(self):
@@ -397,20 +397,20 @@ class TestEntries(ShortcutTestCase):
         self.assertNotEqual(res_no_y.returncode, 0)
         self.assertIn("in a terminal, or pass -y", res_no_y.stderr)
         self.assertTrue(stored_path.is_file())
-        reg = shortcut_mod.load_registry(str(self.shortcuts_home))
+        reg = helpers.load_registry(str(self.shortcuts_home))
         self.assertIn("stored", reg["shortcuts"])
 
         # 2. With -y, stored copy and registry entry are deleted
         res_y = self.run_cli(["rm", "stored", "-y"])
         self.assertEqual(res_y.returncode, 0)
         self.assertFalse(stored_path.is_file())
-        reg = shortcut_mod.load_registry(str(self.shortcuts_home))
+        reg = helpers.load_registry(str(self.shortcuts_home))
         self.assertNotIn("stored", reg["shortcuts"])
 
         # 3. Linked file is preserved when shortcut is removed with -y
         res_link_rm = self.run_cli(["rm", "linked", "-y"])
         self.assertEqual(res_link_rm.returncode, 0)
-        reg = shortcut_mod.load_registry(str(self.shortcuts_home))
+        reg = helpers.load_registry(str(self.shortcuts_home))
         self.assertNotIn("linked", reg["shortcuts"])
         self.assertTrue(ext_file.is_file(), "Linked external script must never be deleted!")
 
@@ -426,7 +426,7 @@ class TestEntries(ShortcutTestCase):
         # Inline oneliner: description defaults to command
         res1 = self.run_cli(["new", "hello", "--", "echo", "hello", "world"])
         self.assertEqual(res1.returncode, 0)
-        reg = shortcut_mod.load_registry(str(self.shortcuts_home))
+        reg = helpers.load_registry(str(self.shortcuts_home))
         self.assertEqual(reg["shortcuts"]["hello"]["inline"], "echo hello world")
         self.assertEqual(reg["shortcuts"]["hello"]["description"], "echo hello world")
 
@@ -439,7 +439,7 @@ class TestEntries(ShortcutTestCase):
         content = script_file.read_text(encoding="utf-8")
         self.assertEqual(content, "#!/usr/bin/env bash\nset -euo pipefail\n\n")
 
-        reg2 = shortcut_mod.load_registry(str(self.shortcuts_home))
+        reg2 = helpers.load_registry(str(self.shortcuts_home))
         self.assertEqual(reg2["shortcuts"]["template"]["description"], "(no description)")
 
     def test_new_opens_no_editor_and_prints_the_script_path(self):
@@ -455,7 +455,7 @@ class TestEntries(ShortcutTestCase):
         self.write_registry(self.shortcuts_home, reg)
         res = self.run_cli(["rm", "bad_entry", "-y"])
         self.assertEqual(res.returncode, 0)
-        after = shortcut_mod.load_registry(str(self.shortcuts_home))
+        after = helpers.load_registry(str(self.shortcuts_home))
         self.assertNotIn("bad_entry", after.get("shortcuts", {}))
 
     def test_rm_says_what_it_removes_and_what_happens_to_the_script(self):

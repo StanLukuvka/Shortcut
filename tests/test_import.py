@@ -8,7 +8,7 @@ import shlex
 import unittest
 from typing import Optional
 
-from fixtures import CLI_SHELL, HI, shortcut_mod, ShortcutTestCase
+from fixtures import cli, CLI_SHELL, helpers, HI, ShortcutTestCase
 
 
 class TestImport(ShortcutTestCase):
@@ -115,7 +115,7 @@ class TestImport(ShortcutTestCase):
         self.assertIn("script_not_str (invalid entry", res.stdout)
         self.assertIn("valid_entry", res.stdout)
 
-        reg = shortcut_mod.load_registry(str(self.shortcuts_home))
+        reg = helpers.load_registry(str(self.shortcuts_home))
         self.assertIn("valid_entry", reg["shortcuts"])
         self.assertNotIn("not_a_dict", reg["shortcuts"])
         self.assertNotIn("neither_cmd", reg["shortcuts"])
@@ -152,11 +152,11 @@ class TestImport(ShortcutTestCase):
         )
         self.run_cli(["init", "--global"])
         store = str(self.shortcuts_home)
-        entries, scripts, _ = shortcut_mod.plan_import(
-            str(src), store, shortcut_mod.load_registry(store), shortcut_mod.load_registry_file(str(src / ".shortcuts"))
+        entries, scripts, _ = cli.plan_import(
+            str(src), store, helpers.load_registry(store), helpers.load_registry_file(str(src / ".shortcuts"))
         )
         (src / "bin" / "tool.sh").write_text("echo swapped\n", encoding="utf-8")
-        shortcut_mod.apply_import(store, entries, scripts)
+        helpers.apply_import(store, entries, scripts)
         self.assertEqual(self.run_cli(["r", "tool"]).stdout, "reviewed\n")
 
     def test_declining_an_import_writes_nothing_at_all(self):

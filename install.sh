@@ -9,8 +9,15 @@ COMPL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions"
 mkdir -p "$BIN_DIR"
 mkdir -p "$COMPL_DIR"
 
-cp "$SCRIPT_DIR/shortcut.py" "$BIN_DIR/shortcut"
-chmod +x "$BIN_DIR/shortcut"
+# One executable file: a zipapp of src/__main__.py and src/shortcut/*.py, nothing else from the folder
+STAGE="$(mktemp -d "$BIN_DIR/.shortcut-install.XXXXXX")"
+trap 'rm -rf "$STAGE"' EXIT
+mkdir "$STAGE/app" "$STAGE/app/shortcut"
+cp "$SCRIPT_DIR/src/__main__.py" "$STAGE/app/"
+cp "$SCRIPT_DIR"/src/shortcut/*.py "$STAGE/app/shortcut/"
+python3 -m zipapp "$STAGE/app" -p "/usr/bin/env python3" -o "$STAGE/shortcut"
+chmod +x "$STAGE/shortcut"
+mv -f "$STAGE/shortcut" "$BIN_DIR/shortcut"
 
 "$BIN_DIR/shortcut" completion bash > "$COMPL_DIR/shortcut"
 

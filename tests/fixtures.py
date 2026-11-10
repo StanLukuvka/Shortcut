@@ -20,8 +20,6 @@ Run everything, one spoke, or one test:
 """
 
 import fcntl
-import importlib.machinery
-import importlib.util
 import json
 import os
 import pathlib
@@ -39,18 +37,16 @@ import unittest.mock
 from typing import Any, Mapping, Optional, Sequence, Union
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-SHORTCUT = REPO / "shortcut.py"
+SRC = REPO / "src"
+PACKAGE = SRC / "shortcut"
+SOURCES = sorted(PACKAGE.glob("*.py"))  # the code, for the tests that read it
 TEMPLATES = REPO / "templates"
-CLI = [sys.executable, str(SHORTCUT)]
+# Run as `python3 src`: src/ goes first on sys.path, not the child's cwd, which may hold a project's json.py
+CLI = [sys.executable, str(SRC)]
 CLI_SHELL = shlex.join(CLI)
 
-loader = importlib.machinery.SourceFileLoader("shortcut_mod", str(SHORTCUT))
-spec = importlib.util.spec_from_loader("shortcut_mod", loader)
-if spec is None or spec.loader is None:
-    raise ImportError(f"Cannot load {SHORTCUT}")
-shortcut_mod = importlib.util.module_from_spec(spec)
-sys.modules["shortcut_mod"] = shortcut_mod
-loader.exec_module(shortcut_mod)
+sys.path.insert(0, str(SRC))
+from shortcut import cli, helpers  # noqa: E402  (for the tests that call it in-process)
 
 # Shortcuts for a store. Writers only read these, so spokes can share them.
 HI = {"hi": {"inline": "echo hi"}}
@@ -138,7 +134,7 @@ class ShortcutTestCase(unittest.TestCase):
         """cwd and env for a child, after refusing any that leave the sandbox. Every child starts here."""
         run_env = {**self.env, **(env or {})}
         run_cwd = cwd or str(self.home_dir)
-        # os.environ too: what the spoke calls in-process in shortcut_mod reads it
+        # os.environ too: what the spoke calls in-process in cli and helpers reads it
         for checked in (run_env, os.environ):
             refuse_unless_sandboxed(self.tmp_path, checked, run_cwd)
         return {"cwd": run_cwd, "env": run_env}
@@ -376,7 +372,7 @@ class ShortcutTestCase(unittest.TestCase):
     def install_bundled(self) -> None:
         """Import templates/ with a `shortcut` on PATH for them to call, as after a real install."""
         self.tool_bin = self.tmp_path / "bin"
-        self.write_file(self.tool_bin / "shortcut", f'#!/bin/sh\nexec "{sys.executable}" "{SHORTCUT}" "$@"\n', 0o755)
+        self.write_file(self.tool_bin / "shortcut", f'#!/bin/sh\nexec "{sys.executable}" "{SRC}" "$@"\n', 0o755)
         self.env["PATH"] = f"{self.tool_bin}{os.pathsep}{self.env['PATH']}"
         res = self.run_cli(["init", "--global", str(TEMPLATES), "-y"])
         self.assertEqual(res.returncode, 0, res.stderr)
