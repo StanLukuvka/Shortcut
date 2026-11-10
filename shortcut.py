@@ -1227,15 +1227,18 @@ def cmd_new(args: List[str]) -> int:
 
 
 def new_from_script(parsed: argparse.Namespace, group: Group, fields: Dict[str, Any]) -> int:
-    """new --script: the entry names the file where it is. In .shortcuts.local a file inside the project is kept relative."""
+    """new --script: the entry names the file where it is. A file inside the folder its paths resolve from
+    (the project, the namespace file's folder, the global store) is kept relative, so the folder can move.
+    One in the scripts folder stays absolute: a relative path there is a copy, which rm deletes."""
     path = parsed.script
     abs_path = os.path.abspath(os.path.expanduser(path))
     if path == "-" or not os.path.isfile(abs_path):
         die(f"script file not found: {path}")
-    script = abs_path
-    if parsed.local:
-        relative = os.path.relpath(os.path.realpath(abs_path), group.store_dir)
-        script = abs_path if relative.startswith("..") else relative
+    base = os.path.realpath(group.script_base)
+    real = os.path.realpath(abs_path)
+    copies = os.path.realpath(scripts_dir(group))
+    inside = pathlib.Path(real).is_relative_to(base) and not pathlib.Path(real).is_relative_to(copies)
+    script = os.path.relpath(real, base) if inside else abs_path
     entry = ShortcutEntry(name=parsed.name, description=parsed.desc or "(no description)", script=script, **fields)
     _register(group, entry)
     print(f"Created shortcut '{parsed.name}' using {abs_path}.")
@@ -1461,7 +1464,7 @@ def cmd_location(args: List[str]) -> int:
 
 def stored_copy(group: Group, raw_entry: Any) -> Optional[str]:
     """The copy shortcut keeps of an entry's script, which rm deletes with it: a relative path inside the
-    group's scripts folder. A --script file is recorded as an absolute path, so it's never one."""
+    group's scripts folder. new --script never records one there as relative, so it's never one."""
     script = raw_entry.get("script") if isinstance(raw_entry, dict) else None
     if not isinstance(script, str) or not script or os.path.isabs(script):
         return None

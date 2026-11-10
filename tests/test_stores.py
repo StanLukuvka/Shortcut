@@ -472,6 +472,26 @@ class TestEntries(ShortcutTestCase):
         self.assertTrue(source.is_file())
         self.assertNotIn("linked", self.load_global())
 
+    def test_new_script_inside_the_store_is_kept_relative(self):
+        imports = self.shortcuts_home / "imports"
+        inside = self.write_file(imports / "dk" / "ps.sh", "#!/usr/bin/env bash\necho ps\n", 0o755)
+        copies = self.write_file(imports / "scripts" / "dk" / "kept.sh", "#!/usr/bin/env bash\n", 0o755)
+        outside = self.script("out.sh", "#!/usr/bin/env bash\necho out\n")
+        mine = self.write_file(self.shortcuts_home / "tools" / "mine.sh", "#!/usr/bin/env bash\necho mine\n", 0o755)
+        for argv in (["--namespace", "dk", "ps", "--script", str(inside)],
+                     ["--namespace", "dk", "out", "--script", str(outside)],
+                     ["--namespace", "dk", "kept", "--script", str(copies)],
+                     ["mine", "--script", str(mine)]):
+            self.assertEqual(self.run_cli(["new", *argv]).returncode, 0, argv)
+        dk = json.loads((imports / "dk.shortcut").read_text(encoding="utf-8"))["shortcuts"]
+        self.assertEqual(dk["ps"]["script"], "dk/ps.sh")
+        self.assertEqual(dk["kept"]["script"], str(copies.resolve()))
+        self.assertEqual(dk["out"]["script"], str(outside.resolve()))
+        self.assertEqual(self.load_global()["mine"]["script"], "tools/mine.sh")
+        self.assertEqual(self.run_cli(["r", "mine"]).stdout, "mine\n")
+        self.run_cli(["update", "-y", "dk"])
+        self.assertEqual(self.run_cli(["r", "dk", "ps"]).stdout, "ps\n")
+
     def test_rm_y_still_says_what_it_removed(self):
         source = self.script("src.sh", "#!/usr/bin/env bash\n")
         self.run_cli(["new", "copied", "--copy", str(source)])

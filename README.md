@@ -54,7 +54,7 @@ shortcut r <name> -- -5               after --, a declared argument can start wi
 shortcut new <name> -- CMD            inline shortcut
 shortcut new <name>                   script from a template; prints its path
 shortcut new <name> --copy FILE|-     copy a script in
-shortcut new <name> --script PATH     use a script where it is
+shortcut new <name> --script PATH     use a script where it is; a path inside the store is kept relative
 
 shortcut list                         everything visible; warns about invalid entries and missing scripts
 shortcut list --names [ns]            bare names
