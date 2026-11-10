@@ -234,7 +234,10 @@ class TestRunning(ShortcutTestCase):
         for word in ("nano", "activate", "version"):
             res = self.run_cli([word, "x"])
             self.assertEqual(res.returncode, 2)
-            self.assertEqual(res.stderr, f"unknown command '{word}' (to run a shortcut: shortcut run {word})\n")
+            self.assertEqual(res.stderr, f"error: unknown command '{word}' (to run a shortcut: shortcut run {word})\n")
+        res = self.run_cli(["--bogus"])
+        self.assertEqual(res.returncode, 2)
+        self.assertTrue(res.stderr.startswith("error: unrecognized option '--bogus'\n"), res.stderr)
         self.assertEqual(self.run_cli(["init", "-g"]).returncode, 2)
 
 

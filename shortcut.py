@@ -2212,10 +2212,10 @@ def main(argv: Optional[List[str]] = None) -> NoReturn:
             die(err_msg)
 
     if first.startswith("-"):
-        print(f"shortcut: unrecognized option '{first}'\nTry 'shortcut --help' for more information.", file=sys.stderr)
+        print(f"error: unrecognized option '{first}'\nTry 'shortcut --help' for more information.", file=sys.stderr)
         sys.exit(2)
 
-    print(f"unknown command '{first}' (to run a shortcut: shortcut run {first})", file=sys.stderr)
+    print(f"error: unknown command '{first}' (to run a shortcut: shortcut run {first})", file=sys.stderr)
     sys.exit(2)
 
 

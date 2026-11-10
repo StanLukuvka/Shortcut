@@ -14,13 +14,14 @@ In the tables, `<word>` stands for a value filled in when the error happens. A m
 | 130 | Ctrl-C while shortcut itself was waiting (Windows runs only) |
 | anything else | `run` passes the shortcut's own exit code through, and a signal that kills it |
 
-Usage errors that don't start with `error: `:
+Usage errors, which exit 2:
 
 | Message | Meaning |
 |---|---|
 | `unknown command '<word>' (to run a shortcut: shortcut run <word>)` | The first word isn't a command. Shortcuts run with `shortcut r <name>` |
-| `shortcut: unrecognized option '<option>'` | An option before the command that shortcut doesn't have |
-| `usage: shortcut <command> ...` (from a command's own flags) | A flag the command doesn't take, or a missing value |
+| `unrecognized option '<option>'` | An option before the command that shortcut doesn't have. A second line points to `shortcut --help` |
+
+A flag a command doesn't take, or one missing its value, prints the command's `usage:` line and then `shortcut <command>: error: <message>`.
 
 ## Store files
 
