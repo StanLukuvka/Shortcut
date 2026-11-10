@@ -92,7 +92,7 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `<group> changed since you approved it; run: <command>` | |
 | `run directory does not exist: <dir>` | The entry's `cwd` is gone |
 | `script file not found: <path>` | |
-| `'<name>' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y <name>)` | A `confirm` entry run without a terminal |
+| `'<name>' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y <name> <args>)` | A `confirm` entry run without a terminal. The command is the one that was run, with `-y` |
 
 A shortcut that declares `args` checks them before it runs. These print `error: <message>`, then `usage: shortcut r <name> <args>`, then each argument and its `desc` if any argument has one, and exit 2.
 

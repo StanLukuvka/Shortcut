@@ -84,7 +84,7 @@ Flags for `new`:
 --arg NAME            required argument; NAME=DEFAULT for optional
 --arg NAME...         the rest of the arguments; NAME...= for optional, NAME...=W for a one-word default
 --arg-desc NAME=T     describe an argument, shown by show and usage errors
---confirm             ask before running, showing the description
+--confirm             ask before running, showing the description and the arguments given
 --local               write to .shortcuts.local here
 --namespace NS        write to a global namespace
 --by C                creator

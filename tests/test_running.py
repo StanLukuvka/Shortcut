@@ -177,6 +177,15 @@ class TestRunning(ShortcutTestCase):
         self.assertIn("Wipes the cache", out)
         self.assertEqual((self.tmp_path / "out.txt").read_text(), "ran\n")
 
+        # The question names the arguments, and the hint is the same run with -y
+        self.run_cli(["new", "drop", "--confirm", "--", 'echo "dropped $*"'])
+        prompt = f"run 'drop' with -f 'my db' in {work}? [y/N]".encode()
+        rc, out = self.run_in_terminal(["r", "drop", "-f", "my db"], cwd=str(work), keys=[(prompt, b"n\n")])
+        self.assertEqual(rc, 1, out)
+        res = self.run_cli(["r", "--global", "drop", "-f", "my db"], cwd=str(work))
+        self.assertIn("pass -y (shortcut r -y --global drop -f 'my db')\n", res.stderr)
+        self.assertEqual(self.run_cli(["r", "-y", "--global", "drop", "-f", "my db"], cwd=str(work)).stdout, "dropped -f my db\n")
+
         # After the name, -y belongs to the script
         self.run_cli(["new", "echoes", "--", 'echo "$@"'])
         self.assertEqual(self.run_cli(["r", "echoes", "-y"]).stdout, "-y\n")

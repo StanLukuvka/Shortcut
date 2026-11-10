@@ -881,14 +881,17 @@ def run_shortcut(words: List[str], skip_local: bool = False, assume_yes: bool = 
     resolved, args = resolve_shortcut(words, caller_cwd, skip_local=skip_local, strict=True)
     require_approved(resolved.group)
     entry, name = resolved.entry, resolved.display
+    typed = args  # as given, for the question and the command that answers it
     arg_env: Dict[str, str] = {}
     if entry.args is not None:
         args, arg_env = bind_args(name, entry.args, args)
     if not os.path.isdir(resolved.run_cwd):
         raise FileNotFoundError(f"run directory does not exist: {resolved.run_cwd}")
+    with_args = f" with {one_line(shlex.join(typed))}" if typed else ""
+    again = shlex.join(["shortcut", "r", "-y", *(["--global"] if skip_local else []), *name.split(), *typed])
     if entry.confirm and not Confirm(
-        f"run '{name}' in {os.path.realpath(resolved.run_cwd)}?",
-        f"'{name}' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y {name})",
+        f"run '{name}'{with_args} in {os.path.realpath(resolved.run_cwd)}?",
+        f"'{name}' asks for confirmation: run it in a terminal, or pass -y ({one_line(again)})",
         "" if entry.description in ("(no description)", entry.inline) else one_line(entry.description),
     ).granted(assume_yes):
         return 1
