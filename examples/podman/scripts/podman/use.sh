@@ -9,14 +9,14 @@ pick_file=$state/pick.$key
 case ${SC_ARG_TARGET:-} in
     "")
         [ -f "$pick_file" ] || { echo "Nothing picked in this terminal. Pick one with: shortcut r podman use N"; exit 0; }
-        SHORTCUT_SHOW_DIR=0 exec shortcut r podman current ;;
+        SHORTCUT_SHOW_DIR=0 exec shortcut r "$SHORTCUT_NAMESPACE" current ;;
     none)
         rm -f "$pick_file"
         echo "Cleared the pick for this terminal."
         exit 0 ;;
 esac
 
-name=$(SHORTCUT_SHOW_DIR=0 shortcut r podman current "$SC_ARG_TARGET")
+name=$(SHORTCUT_SHOW_DIR=0 shortcut r "$SHORTCUT_NAMESPACE" current "$SC_ARG_TARGET")
 mkdir -p "$state"
 # Drop picks and lists of terminal sessions that have closed
 for f in "$state"/pick.* "$state"/list.*; do

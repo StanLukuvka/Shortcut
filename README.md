@@ -95,6 +95,36 @@ Flags for `new`:
 
 `promote` copies the entry, not its script. A relative `script` or `cwd` becomes its absolute path in this checkout, and `from` records the project and the original name. It runs the checkout's files as they are now. If the checkout moves or is deleted, it fails with script not found or run directory does not exist.
 
+## What a shortcut runs with
+
+- An inline shortcut runs as `bash -c CMD <name> ARGS...`, so `$0` is its name. A script runs by its shebang, or with bash.
+- It runs in its `cwd`, the caller's directory by default.
+- Every word after the name reaches it as `$1`, `$2`..., flags included. A first `--` is dropped.
+- With `args` declared, a missing optional argument is filled with its default, or with an empty word if a later one has a default.
+- Its exit code is shortcut's.
+
+```
+SHORTCUT_NAME          what ran: <name>, or <ns> <name>
+SHORTCUT_NAMESPACE     its namespace, or empty
+SHORTCUT_CALLER_CWD    the directory shortcut was run from
+SC_ARG_<NAME>          each declared argument, upper case with - as _. A rest argument's words are
+                       shell-quoted and joined, so read "$@" for them. SC_ARG_ variables from the
+                       caller's environment are removed first.
+```
+
+## Writing a namespace
+
+A namespace is a file named `<ns>.shortcut`: `{"version": 2, "shortcuts": {...}}`, with entries as in `shortcuts.json`. [docs/shortcut.schema.json](docs/shortcut.schema.json) describes them. Relative `script` and `cwd` paths resolve from the file's folder.
+
+- `~/.shortcuts/imports/<ns>.shortcut` is found by its name.
+- A file anywhere else is listed in `shortcuts.json`, or in a project's `.shortcuts`: `"imports": {"<ns>": "path/to/<ns>.shortcut"}`. The path is relative to the file that lists it, and can start with `~`.
+- It runs only after `shortcut update <ns>`, and again after each change.
+- `shortcut new --namespace <ns> <name> ...` adds an entry, and keeps an approved namespace approved.
+- `imports/scripts/<ns>/` is where shortcut keeps a namespace's copied scripts. `rm` deletes an entry's script there with the entry.
+- A script runs a sibling with `shortcut r "$SHORTCUT_NAMESPACE" <name>`. `SHORTCUT_SHOW_DIR=0` keeps the `→ dir` line out when capturing it.
+
+[examples/podman](examples/podman/) is one, with scripts.
+
 ## Bundled shortcuts
 
 From a clone: `shortcut init --global templates`.

@@ -925,8 +925,10 @@ def run_shortcut(words: List[str], skip_local: bool = False, assume_yes: bool = 
         else:
             cmd = ["bash", script_path, *args]
 
-    env = os.environ.copy()
+    # A shortcut run from another one gets its own SC_ARG_ variables, not the caller's
+    env = {key: value for key, value in os.environ.items() if not key.startswith("SC_ARG_")}
     env["SHORTCUT_NAME"] = name
+    env["SHORTCUT_NAMESPACE"] = resolved.group.name
     env["SHORTCUT_CALLER_CWD"] = caller_cwd
     env.update(arg_env)
 

@@ -18,7 +18,7 @@
     },
     "logs": {
       "description": "Follow a container's logs (the picked one by default)",
-      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r podman current \"$SC_ARG_CONTAINER\") && podman logs -f --tail \"$SC_ARG_LINES\" \"$c\"",
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman logs -f --tail \"$SC_ARG_LINES\" \"$c\"",
       "created": "2026-11-10",
       "args": [
         {
@@ -35,7 +35,7 @@
     },
     "sh": {
       "description": "Shell in a container (the picked one by default)",
-      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r podman current \"$SC_ARG_CONTAINER\") && podman exec -it \"$c\" sh -c \"command -v bash >/dev/null && exec bash || exec sh\"",
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman exec -it \"$c\" sh -c \"command -v bash >/dev/null && exec bash || exec sh\"",
       "created": "2026-11-10",
       "args": [
         {
@@ -47,7 +47,7 @@
     },
     "restart": {
       "description": "Restart a container (the picked one by default)",
-      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r podman current \"$SC_ARG_CONTAINER\") && podman restart \"$c\"",
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman restart \"$c\"",
       "created": "2026-11-10",
       "args": [
         {
@@ -59,7 +59,7 @@
     },
     "ports": {
       "description": "Port mappings of a container (the picked one by default)",
-      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r podman current \"$SC_ARG_CONTAINER\") && podman port \"$c\"",
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman port \"$c\"",
       "created": "2026-11-10",
       "args": [
         {
@@ -127,7 +127,7 @@
     },
     "exec": {
       "description": "Run a command in this terminal's picked container: shortcut r podman exec -- ls -la",
-      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r podman current) || exit; t=; [ -t 0 ] && t=-t; podman exec -i $t \"$c\" \"$@\"",
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current) || exit; t=; [ -t 0 ] && t=-t; podman exec -i $t \"$c\" \"$@\"",
       "created": "2026-11-10",
       "args": [
         {
@@ -140,7 +140,7 @@
     },
     "stop": {
       "description": "Stop containers by name, or this terminal's pick when none are given",
-      "inline": "if [ $# -eq 0 ]; then c=$(SHORTCUT_SHOW_DIR=0 shortcut r podman current) || exit; set -- \"$c\"; fi; podman stop \"$@\"",
+      "inline": "if [ $# -eq 0 ]; then c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current) || exit; set -- \"$c\"; fi; podman stop \"$@\"",
       "created": "2026-11-10",
       "args": [
         {
