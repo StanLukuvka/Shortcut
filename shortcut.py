@@ -715,7 +715,13 @@ def find_entry(
                    f"{os.path.join(home.main.store_dir, 'imports', first + '.shortcut')}.")
     else:
         missing = f"shortcut '{first}' not found."
-    raise KeyError(" ".join([missing, *([home.main.error] if home.main.error else [])]))
+    notes = [missing, *([home.main.error] if home.main.error else [])]
+    root = find_project_root(caller_cwd) if skip_local else None
+    if root:
+        project = load_store(root)
+        if first in project.main.shortcuts or first in project.namespaces:
+            notes.append(f"The project in {root} has its own '{first}': leave out --global to use it.")
+    raise KeyError(" ".join(notes))
 
 
 def resolve_run_dir(cwd: Optional[str], group: Group, caller_cwd: str) -> str:

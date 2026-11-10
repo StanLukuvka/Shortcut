@@ -234,9 +234,16 @@ class TestStores(ShortcutTestCase):
         self.assertEqual(self.run_cli(["rm", "build", "--global", "-y"], cwd=str(proj)).returncode, 0)
         self.assertNotIn("build", self.load_global())
         self.assertEqual(self.run_cli(["r", "build"], cwd=str(proj)).stdout, "project\n")
-        res = self.run_cli(["show", "--global", "build"], cwd=str(proj))
-        self.assertEqual(res.returncode, 1)
-        self.assertIn("not found", res.stderr)
+        # The project still has one: every --global command says so
+        hint = f"The project in {proj.resolve()} has its own 'build': leave out --global to use it."
+        for args in (["show", "--global", "build"], ["r", "--global", "build"], ["location", "--global", "build"],
+                     ["rm", "--global", "-y", "build"], ["show", "--json", "--global", "build"]):
+            res = self.run_cli(args, cwd=str(proj))
+            self.assertEqual(res.returncode, 1, args)
+            self.assertIn("shortcut 'build' not found.", res.stderr)
+            self.assertIn(hint, res.stderr)
+        self.assertNotIn("has its own", self.run_cli(["show", "--global", "nothing"], cwd=str(proj)).stderr)
+        self.assertNotIn("has its own", self.run_cli(["show", "build"], cwd=str(self.tmp_path)).stderr)
 
     def test_concurrent_new_keeps_every_entry(self):
         procs = [self.popen_cli(["new", f"n{i}", "--", f"echo {i}"]) for i in range(16)]
