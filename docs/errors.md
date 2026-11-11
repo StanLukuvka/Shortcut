@@ -2,7 +2,7 @@
 
 Every error is one line on stderr that starts with `error: `, and shortcut exits 1. The exceptions are in [Exit codes](#exit-codes).
 
-In the tables, `<word>` stands for a value filled in when the error happens. A message is listed as the code writes it; `tests/test_errors.py` fails when a message in `shortcut.py` isn't here.
+In the tables, `<word>` stands for a value filled in when the error happens. A message is listed as the code writes it; `tests/test_errors.py` fails when a message in `src/shortcut/` isn't here.
 
 ## Exit codes
 
