@@ -8,7 +8,7 @@ import shlex
 import unittest
 from typing import Optional
 
-from fixtures import cli, CLI_SHELL, helpers, HI, ShortcutTestCase
+from fixtures import CLI_SHELL, helpers, HI, importing, ShortcutTestCase
 
 
 class TestImport(ShortcutTestCase):
@@ -152,7 +152,7 @@ class TestImport(ShortcutTestCase):
         )
         self.run_cli(["init", "--global"])
         store = str(self.shortcuts_home)
-        entries, scripts, _ = cli.plan_import(
+        entries, scripts, _ = importing.plan_import(
             str(src), store, helpers.load_registry(store), helpers.load_registry_file(str(src / ".shortcuts"))
         )
         (src / "bin" / "tool.sh").write_text("echo swapped\n", encoding="utf-8")

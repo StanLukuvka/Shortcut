@@ -6,7 +6,7 @@ import os
 import sys
 import unittest
 
-from fixtures import cli, DOCKER_PS, helpers, HI, OWN, ShortcutTestCase
+from fixtures import DOCKER_PS, helpers, HI, lookup, OWN, ShortcutTestCase
 
 
 class TestStores(ShortcutTestCase):
@@ -65,7 +65,7 @@ class TestStores(ShortcutTestCase):
         self.write_store(proj_dir / ".shortcuts", {"build": {"description": "Local project build", "inline": "echo local_build"}})
 
         # Inside a project: project precedence
-        res_local, _ = cli.resolve_shortcut(["build"], caller_cwd=str(proj_dir))
+        res_local, _ = lookup.resolve_shortcut(["build"], caller_cwd=str(proj_dir))
         self.assertEqual(res_local.group.store_dir, str(proj_dir.resolve()))
         self.assertEqual(res_local.entry.description, "Local project build")
         self.assertTrue(res_local.hides_global)
@@ -77,7 +77,7 @@ class TestStores(ShortcutTestCase):
         self.assertEqual(self.run_cli(["run", "--global", "build"], cwd=str(proj_dir)).stdout, "global_build\n")
 
         # Outside the project: the global one
-        res_global, _ = cli.resolve_shortcut(["build"], caller_cwd=str(self.home_dir))
+        res_global, _ = lookup.resolve_shortcut(["build"], caller_cwd=str(self.home_dir))
         self.assertEqual(res_global.group.store_dir, str(self.shortcuts_home.resolve()))
         self.assertEqual(res_global.entry.description, "Global build")
 
