@@ -2,7 +2,7 @@
 
 # shortcut
 
-Names shell commands and scripts, and runs them from any directory. One Python file, no dependencies.
+Names shell commands and scripts, and runs them from any directory. Python 3.10+, no dependencies.
 
 ## Install
 
