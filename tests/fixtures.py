@@ -46,7 +46,7 @@ CLI = [sys.executable, str(SRC)]
 CLI_SHELL = shlex.join(CLI)
 
 sys.path.insert(0, str(SRC))
-from shortcut import cli, helpers  # noqa: E402  (for the tests that call it in-process)
+from shortcut import helpers, importing, lookup, stores  # noqa: E402,F401  (for the tests that call it in-process)
 
 # Shortcuts for a store. Writers only read these, so spokes can share them.
 HI = {"hi": {"inline": "echo hi"}}
@@ -134,7 +134,7 @@ class ShortcutTestCase(unittest.TestCase):
         """cwd and env for a child, after refusing any that leave the sandbox. Every child starts here."""
         run_env = {**self.env, **(env or {})}
         run_cwd = cwd or str(self.home_dir)
-        # os.environ too: what the spoke calls in-process in cli and helpers reads it
+        # os.environ too: what the spoke calls in-process in the package reads it
         for checked in (run_env, os.environ):
             refuse_unless_sandboxed(self.tmp_path, checked, run_cwd)
         return {"cwd": run_cwd, "env": run_env}

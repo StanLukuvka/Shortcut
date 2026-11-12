@@ -5,7 +5,7 @@ import json
 import os
 import unittest
 
-from fixtures import BIN_TOOL, cli, DOCKER_PS, GO, helpers, HI, KUBE_GET, OWN, ShortcutTestCase
+from fixtures import BIN_TOOL, DOCKER_PS, GO, helpers, HI, KUBE_GET, OWN, ShortcutTestCase, stores
 
 
 class TestApproval(ShortcutTestCase):
@@ -147,7 +147,7 @@ class TestApproval(ShortcutTestCase):
             files={"cwd of go": "x"},
         )
         (proj / "work").symlink_to(proj / "safe")
-        store = cli.load_store(str(proj))
+        store = stores.load_store(str(proj))
         files = helpers.shared_files(store.main)
         self.assertEqual(files["cwd of go"], "x")
         self.assertEqual(files["./cwd of go"], f"{os.path.realpath(proj / 'safe')}\n")
