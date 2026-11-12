@@ -13,7 +13,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from typing import Any, Dict, List, NoReturn, Optional
+from typing import Any, Dict, List, NoReturn, Optional, Union
 
 from .helpers import (
     _stored_script_field, add_entry_flags, add_global_flag, apply_import, approval_path, approval_state, arg_lines,
@@ -308,6 +308,7 @@ def cmd_show(args: List[str]) -> int:
     if entry.inline is not None:
         print(f"\nInline command:\n  {entry.inline}")
     else:
+        assert entry.script is not None  # an entry has exactly one of inline and script
         script_path = resolve_script_path(resolved.group.script_base, entry.script)
         print(f"\nScript ({script_path}):")
         if os.path.isfile(script_path):
@@ -364,6 +365,7 @@ def cmd_location(args: List[str]) -> int:
     entry = resolved.entry
     if entry.inline is not None:
         die(f"'{resolved.display}' is an inline shortcut, so it has no file. Change it in the file `shortcut show` names.")
+    assert entry.script is not None
     print(os.path.abspath(resolve_script_path(resolved.group.script_base, entry.script)))
     return 0
 
@@ -792,6 +794,7 @@ def dispatch(args: List[str]) -> int:
 def main(argv: Optional[List[str]] = None) -> NoReturn:
     args = sys.argv[1:] if argv is None else argv
     sys.stdout, sys.stderr = (SafeOutput(stream) if stream else None for stream in (sys.stdout, sys.stderr))
+    rc: Union[int, str, None]
     try:
         try:
             rc = dispatch(args)

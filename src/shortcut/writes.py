@@ -65,7 +65,7 @@ def _register(group: Group, entry: ShortcutEntry, write_script: Optional[Any] = 
     with registry_lock(store_dir):
         is_new_file = bool(group.name) and not os.path.exists(group.file)
         approved = namespace_is_approved(group)
-        reg = {"version": REGISTRY_VERSION, "shortcuts": {}} if is_new_file else load_registry_file(group.file)
+        reg: Dict[str, Any] = {"version": REGISTRY_VERSION, "shortcuts": {}} if is_new_file else load_registry_file(group.file)
         shortcuts = reg.setdefault("shortcuts", {})
         if entry.name in shortcuts:
             die(f"shortcut '{entry.name}' already exists in {group.file}")

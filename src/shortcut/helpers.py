@@ -85,7 +85,7 @@ def arg_var(name: str) -> str:
 
 def is_relative_cwd(cwd: Optional[str]) -> bool:
     """A cwd that means a folder next to the file defining it, so it's only right in that checkout."""
-    return bool(cwd) and cwd != CALLER and not os.path.isabs(os.path.expanduser(cwd))
+    return cwd is not None and cwd not in ("", CALLER) and not os.path.isabs(os.path.expanduser(cwd))
 
 
 def placement_error(entry: ShortcutEntry, in_project: bool, in_global: bool) -> Optional[str]:
@@ -653,10 +653,13 @@ def entry_fields(name: str, parsed: argparse.Namespace, group: Group) -> Dict[st
 def join_command(words: List[str]) -> str:
     """`-- cmd word word` as one inline command: each word stays one word, as typed, and only
     the shortcut's own arguments stay live, because $1 is why someone quoted it past their shell."""
+    def escape(match: re.Match[str]) -> str:
+        return "\\" + match.group()
+
     def quote(word: str) -> str:
         if not re.search(POSITIONAL, word):
             return shlex.quote(word)
-        return '"' + re.sub(rf'["\\`]|(?!{POSITIONAL})\$', lambda m: "\\" + m.group(), word) + '"'
+        return '"' + re.sub(rf'["\\`]|(?!{POSITIONAL})\$', escape, word) + '"'
 
     return words[0] if len(words) == 1 else " ".join(quote(word) for word in words)
 

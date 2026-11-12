@@ -49,6 +49,7 @@ def run_shortcut(words: List[str], skip_local: bool = False, assume_yes: bool = 
     if entry.inline is not None:
         cmd = ["bash", "-c", entry.inline, name, *args]
     else:
+        assert entry.script is not None  # an entry has exactly one of inline and script
         script_path = resolve_script_path(resolved.group.script_base, entry.script)
         if not os.path.exists(script_path):
             raise FileNotFoundError(f"script file not found: {script_path}")
