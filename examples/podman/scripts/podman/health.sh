@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Health check status of each running container.
 set -euo pipefail
-mapfile -t ids < <(podman ps -q)
+ids=()
+while IFS= read -r id; do ids+=("$id"); done < <(podman ps -q)  # not mapfile: macOS has bash 3.2
 if [ ${#ids[@]} -eq 0 ]; then
     echo "No running containers."
     exit 0

@@ -3,11 +3,13 @@ set -euo pipefail
 
 remove=0
 if [ "${1-}" = "--remove" ]; then remove=1; shift; fi
-name="${1-}"
-case "$name" in ""|*/*) echo "usage: shortcut r desktop [--remove] <shortcut>" >&2; exit 2;; esac
+usage() { echo "usage: shortcut r desktop [--remove] [namespace] <shortcut>" >&2; exit 2; }
+case $# in 1|2) ;; *) usage;; esac
+for word in "$@"; do case "$word" in ""|*[!A-Za-z0-9_-]*) usage;; esac; done
+name="$*"  # a namespace member is "<ns> <name>"
 
 apps_dir="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
-desktop_file="$apps_dir/shortcut-$name.desktop"
+desktop_file="$apps_dir/shortcut-${name// /.}.desktop"  # . is in no name, so this is never another's
 marker="X-Shortcut-Name=$name"
 
 if [ "$remove" = 1 ]; then
@@ -22,7 +24,7 @@ if [ "$remove" = 1 ]; then
 fi
 
 # A launcher runs outside any project, so it needs a global shortcut; show fails if there is none.
-info="$(shortcut show --global --json "$name")"
+info="$(shortcut show --global --json "$@")"
 field() {
     python3 -I -c '
 import json, sys

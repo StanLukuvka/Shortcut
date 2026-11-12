@@ -24,7 +24,8 @@ def confirm_review(verb: str, old: Dict[str, str], new: Dict[str, str], no_termi
 
 
 def approve_group(group: Group, assume_yes: bool, global_names: Set[str]) -> int:
-    """Show what changed since the last approval and ask. What is shown is what gets hashed."""
+    """Show what changed since the last approval and ask. What is shown is what gets hashed. global_names
+    are your global shortcuts and namespaces, which a project's names hide inside it."""
     if group.error:
         print(f"error: cannot approve {group.label}: {group.error}", file=sys.stderr)
         return 1
@@ -45,8 +46,8 @@ def approve_group(group: Group, assume_yes: bool, global_names: Set[str]) -> int
     show_diff(diff_files(old, files))
     for name in sorted(set(group.shared_shortcuts) & set(group.local_shortcuts)):
         print(f"'{name}' in {PROJECT_FILE} is {group.source(name)} by {LOCAL_FILE} for you.")
-    if not group.name:
-        for name in sorted(set(group.shortcuts) & global_names):
+    if group.is_project:
+        for name in sorted(({group.name} if group.name else set(group.shortcuts)) & global_names):
             print(f"Inside this project, '{name}' hides your global '{name}'.")
     for name, data in sorted(group.shortcuts.items()):
         if data.get("export") and is_relative_cwd(data.get("cwd")):

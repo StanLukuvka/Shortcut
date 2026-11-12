@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import os
+import pathlib
 import shlex
 from typing import Any, List, Optional, Tuple
 
-from .helpers import die, find_project_root, resolve_run_dir
+from .helpers import die, find_project_root, never_a_project, PROJECT_FILE, resolve_run_dir
 from .group import Group
+from .store import Store
 from .resolved_shortcut import ResolvedShortcut
 from .stores import load_entry, load_store, visible_stores
 
@@ -37,8 +39,9 @@ def find_entry(
         named = first in store.main.shortcuts or first in store.namespaces or (isinstance(imports, dict) and first in imports)
         if strict and problems and named:
             raise ValueError("; ".join(problems))
+        # A project's name, shortcut or namespace, hides a global one of either kind
+        hides = store is not home and (first in home.main.shortcuts or first in home.namespaces)
         if first in store.main.shortcuts and (not rest or first not in store.namespaces):
-            hides = store is not home and first in home.main.shortcuts
             return store.main, first, store.main.shortcuts[first], rest, hides
         if first in store.namespaces:
             group = store.namespaces[first]
@@ -48,20 +51,45 @@ def find_entry(
             if not rest:
                 raise ValueError(f"'{first}' is a namespace; run one of its shortcuts: {members}")
             if rest[0] not in group.shortcuts:
-                raise KeyError(f"'{rest[0]}' not found in namespace '{first}'. It has: {members}")
-            return group, rest[0], group.shortcuts[rest[0]], rest[1:], False
+                yours = home.namespaces.get(first) if hides else None
+                note = (f". Your global '{first}' has it: shortcut r --global {first} {rest[0]}"
+                        if yours is not None and rest[0] in yours.shortcuts else "")
+                raise KeyError(f"'{rest[0]}' not found in namespace '{first}'. It has: {members}{note}")
+            return group, rest[0], group.shortcuts[rest[0]], rest[1:], hides
     if rest:  # `first` may be meant as a namespace
         missing = (f"shortcut or namespace '{first}' not found. A global namespace is the file "
                    f"{os.path.join(home.main.store_dir, 'imports', first + '.shortcut')}.")
     else:
         missing = f"shortcut '{first}' not found."
     notes = [missing, *([home.main.error] if home.main.error else [])]
-    root = find_project_root(caller_cwd) if skip_local else None
-    if root:
-        project = load_store(root)
-        if first in project.main.shortcuts or first in project.namespaces:
+    root = find_project_root(caller_cwd)
+    if root and skip_local:
+        if has_name(load_store(root), first):
             notes.append(f"The project in {root} has its own '{first}': leave out --global to use it.")
+    elif root:
+        outer = find_project_root(os.path.dirname(root))
+        if outer and outer != root and has_name(load_store(outer), first):
+            notes.append(f"The project in {outer} has a '{first}', but only the nearest project, {root}, is used here.")
+    else:
+        old = old_project_folder(caller_cwd)
+        if old:
+            notes.append(f"{old} is a folder, which is how shortcut 1.x kept a project. This version reads a "
+                         f"{PROJECT_FILE} file, so nothing in that folder is used.")
     raise KeyError(" ".join(notes))
+
+
+def has_name(store: Store, name: str) -> bool:
+    return name in store.main.shortcuts or name in store.namespaces
+
+
+def old_project_folder(caller_cwd: Optional[str]) -> Optional[str]:
+    """The nearest .shortcuts folder above the caller that isn't the global store."""
+    curr = pathlib.Path(caller_cwd or os.getcwd()).resolve()
+    for folder in [curr, *curr.parents]:
+        path = folder / PROJECT_FILE
+        if path.is_dir() and path.resolve() not in never_a_project():
+            return str(path)
+    return None
 
 
 def resolve_shortcut(

@@ -7,7 +7,9 @@ import shlex
 import sys
 from typing import Dict, List
 
-from .helpers import bind_args, exec_child, one_line, require_approved, resolve_script_path, safe, write_styled
+from .helpers import (
+    bind_args, exec_child, one_line, require_approved, resolve_script_path, safe, validate_name, write_styled,
+)
 from .confirm import Confirm
 from .lookup import resolve_shortcut
 
@@ -17,6 +19,7 @@ def run_shortcut(words: List[str], skip_local: bool = False, assume_yes: bool = 
     resolved, args = resolve_shortcut(words, caller_cwd, skip_local=skip_local, strict=True)
     require_approved(resolved.group)
     entry, name = resolved.entry, resolved.display
+    validate_name(entry.name)  # list warns about a hand-written one; run refuses it
     typed = args  # as given, for the question and the command that answers it
     arg_env: Dict[str, str] = {}
     if entry.args is not None:
@@ -25,17 +28,20 @@ def run_shortcut(words: List[str], skip_local: bool = False, assume_yes: bool = 
         raise FileNotFoundError(f"run directory does not exist: {resolved.run_cwd}")
     with_args = f" with {one_line(shlex.join(typed))}" if typed else ""
     again = shlex.join(["shortcut", "r", "-y", *(["--global"] if skip_local else []), *name.split(), *typed])
+    if resolved.hides_global and sys.stderr:  # before any question, and also with SHORTCUT_SHOW_DIR=0
+        first = name.split()[0]
+        print(f"note: '{first}' here is this project's; your global '{first}' runs with: "
+              f"shortcut run --global {name}", file=sys.stderr)
     if entry.confirm and not Confirm(
         f"run '{name}'{with_args} in {os.path.realpath(resolved.run_cwd)}?",
         f"'{name}' asks for confirmation: run it in a terminal, or pass -y ({one_line(again)})",
         "" if entry.description in ("(no description)", entry.inline) else one_line(entry.description),
     ).granted(assume_yes):
         return 1
+    if entry.confirm:
+        require_approved(resolved.group)  # again: the files could change while the question waited
     if sys.stderr and os.environ.get("SHORTCUT_SHOW_DIR", "1") != "0":
-        line = f"→ {os.path.realpath(resolved.run_cwd)}"
-        if resolved.hides_global:
-            line += f"  (project shortcut; your global '{name}' is hidden here: shortcut run --global {name})"
-        line = safe(line)
+        line = safe(f"→ {os.path.realpath(resolved.run_cwd)}")
         write_styled(sys.stderr, f"\033[2m{line}\033[0m\n" if sys.stderr.isatty() else f"{line}\n")
         sys.stderr.flush()
 
@@ -55,6 +61,9 @@ def run_shortcut(words: List[str], skip_local: bool = False, assume_yes: bool = 
             pass
         is_elf = header.startswith(b"\x7fELF")
         has_shebang = header.startswith(b"#!")
+        if has_shebang and header.split(b"\n", 1)[0].endswith(b"\r"):
+            raise ValueError(f"{script_path} has Windows line endings, so its #! line can't start it. "
+                             f"Convert it: sed -i 's/\\r$//' {shlex.quote(script_path)}")
         if is_exec and (has_shebang or is_elf):
             cmd = [script_path, *args]
         elif has_shebang:

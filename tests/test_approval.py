@@ -273,5 +273,19 @@ class TestDiffs(ShortcutTestCase):
         self.assertIn("+echo hi", lines)
 
 
+class TestApprovalAtRun(ShortcutTestCase):
+    def test_a_script_changed_while_confirm_waits_doesnt_run(self):
+        proj = self.project({"d": {"description": "d", "script": "d.sh", "confirm": True}},
+                            files={"d.sh": "#!/usr/bin/env bash\necho approved\n"}, approved=True)
+
+        def swap() -> None:
+            (proj / "d.sh").write_text("#!/usr/bin/env bash\necho swapped\n", encoding="utf-8")
+
+        code, output = self.run_in_terminal(["r", "d"], cwd=str(proj), keys=[(b"[y/N]", swap), (b"[y/N]", b"y\n")])
+        self.assertEqual(code, 1, output)
+        self.assertIn("changed since you approved it", output)
+        self.assertNotIn("swapped", output)
+
+
 if __name__ == "__main__":
     unittest.main()

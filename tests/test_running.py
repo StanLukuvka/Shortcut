@@ -3,11 +3,12 @@
 
 import json
 import signal
+import sys
 import time
 import unittest
 import unittest.mock
 
-from fixtures import CLI_SHELL, helpers, ShortcutTestCase
+from fixtures import CLI_SHELL, helpers, ShortcutTestCase, SRC
 
 
 class TestRunning(ShortcutTestCase):
@@ -495,6 +496,62 @@ class TestArguments(ShortcutTestCase):
         self.assertEqual(self.run_cli(["r", "cmd1", "a b", "c"]).stdout, "[a b][c]")
         self.assertEqual(self.run_cli(["r", "cmd3"]).stdout, "$HOME\n")
         self.assertEqual(self.run_cli(["r", "cmd5", "x"]).stdout, "$(id) `id` \\ x\n")
+
+
+class TestRefusals(ShortcutTestCase):
+    def test_a_closed_pipe_stops_quietly(self):
+        # More than a pipe holds, so shortcut is still writing when the reader goes
+        self.write_store(self.shortcuts_home, {f"s{i}": {"inline": "true", "description": "x" * 60} for i in range(2000)})
+        res = self.run_cmd(["bash", "-c", f"set -o pipefail; {CLI_SHELL} list | true"])
+        self.assertEqual(res.returncode, 141)
+        self.assertEqual(res.stderr, "")
+
+    def test_an_empty_word_doesnt_fill_a_required_argument(self):
+        self.run_cli(["new", "wipe", "--arg", "target", "--", 'echo "gone: /$1"'])
+        res = self.run_cli(["r", "wipe", ""])
+        self.assertEqual(res.returncode, 2)
+        self.assertIn("error: <target> can't be empty\n", res.stderr)
+        self.assertEqual(res.stdout, "")
+        self.run_cli(["new", "opt", "--arg", "x=", "--", 'echo "[$1]"'])
+        self.assertEqual(self.run_cli(["r", "opt", ""]).stdout, "[]\n")
+
+    def test_args_that_would_share_a_variable_are_refused(self):
+        res = self.run_cli(["new", "two", "--arg", "a-b", "--arg", "a_b", "--", "true"])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("args 'a-b' and 'a_b' would both be SC_ARG_A_B", res.stderr)
+
+    def test_a_script_with_windows_line_endings_says_so(self):
+        script = self.script("crlf.sh", "#!/usr/bin/env bash\r\necho hi\r\n")
+        self.run_cli(["new", "crlf", "--script", str(script)])
+        res = self.run_cli(["r", "crlf"])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn(f"error: {script} has Windows line endings", res.stderr)
+
+    def test_a_hand_written_invalid_name_doesnt_run(self):
+        self.write_store(self.shortcuts_home, {"a b": {"inline": "echo ran"}})
+        res = self.run_cli(["r", "a b"])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("invalid shortcut name 'a b'", res.stderr)
+        self.assertEqual(res.stdout, "")
+
+    def test_run_without_a_name_is_an_error(self):
+        res = self.run_cli(["run"])
+        self.assertEqual(res.returncode, 2)
+        self.assertTrue(res.stderr.startswith("error: missing shortcut name\nusage: shortcut run"), res.stderr)
+
+    def test_help_names_a_command(self):
+        res = self.run_cli(["help", "new"])
+        self.assertEqual(res.returncode, 0)
+        self.assertIn("usage: shortcut new", res.stdout)
+        self.assertIn("usage: shortcut run", self.run_cli(["help", "run"]).stdout)
+
+    def test_an_old_python_is_told_what_it_needs(self):
+        main = str(SRC / "__main__.py")
+        code = (f"import sys; sys.version_info = (3, 9, 6); sys.version = '3.9.6 (old)'; "
+                f"exec(compile(open({main!r}).read(), {main!r}, 'exec'))")
+        res = self.run_cmd([sys.executable, "-I", "-c", code])
+        self.assertEqual(res.returncode, 1)
+        self.assertEqual(res.stderr, "error: shortcut needs Python 3.10 or newer, and this is 3.9.6\n")
 
 
 if __name__ == "__main__":

@@ -51,7 +51,7 @@ def cmd_run(args: List[str]) -> int:
         assume_yes = assume_yes or args[0] != "--global"
         args = args[1:]
     if not args:
-        print(f"shortcut run: missing shortcut name\n{RUN_USAGE}", file=sys.stderr)
+        print(f"error: missing shortcut name\n{RUN_USAGE}", file=sys.stderr)
         return 2
     return run_shortcut(args, skip_local=skip_local, assume_yes=assume_yes)
 
@@ -207,7 +207,7 @@ def cmd_list(args: List[str]) -> int:
             print(name)
         return 0
 
-    global_names = set(stores[-1].main.shortcuts)
+    global_names = set(stores[-1].main.shortcuts) | set(stores[-1].namespaces)
     local_names = set(stores[0].main.shortcuts) if len(stores) > 1 and approval_state(stores[0].main) == "ok" else set()
 
     for store in stores:
@@ -252,7 +252,10 @@ def cmd_list(args: List[str]) -> int:
             section("Global shortcuts", store.main)
         for name, group in store.namespaces.items():
             if not group.error:
-                section(f"Namespace {name} ({group.file})", group, f"{name} ")
+                hides = "  [hides global]" if group.is_project and name in global_names else ""
+                section(f"Namespace {name} ({group.file}){hides}", group, f"{name} ")
+    if not sections:
+        print("No shortcuts yet. Make one with: shortcut new hi -- 'echo hello \"$1\"'", file=sys.stderr)
     return 0
 
 
@@ -275,7 +278,7 @@ def cmd_show(args: List[str]) -> int:
 
     scope = "namespace" if group.name else ("project" if group.needs_approval else "global")
     print(f"Name:        {resolved.display}")
-    print(f"Scope:       {scope}" + ("  (hides a global shortcut of the same name)" if resolved.hides_global else ""))
+    print(f"Scope:       {scope}" + (f"  (hides your global '{resolved.display.split()[0]}')" if resolved.hides_global else ""))
     print(f"Defined in:  {group.defining_file(entry.name)}")
     if group.local_file:
         print(f"Source:      {group.source(entry.name)}")
@@ -575,7 +578,7 @@ def cmd_update(args: List[str]) -> int:
         if not groups:
             print("Nothing to approve here.")
             return 0
-    global_names = set(stores[-1].main.shortcuts)
+    global_names = set(stores[-1].main.shortcuts) | set(stores[-1].namespaces)
     return max(approve_group(g, parsed.yes, global_names) for g in groups)
 
 
@@ -641,12 +644,19 @@ def cmd_init(args: List[str]) -> int:
         if parsed.replace:
             die(f"--replace is for a folder of namespaces, and {source_root} has a {PROJECT_FILE}")
 
+        source_registry = load_registry_file(source_file)
         entries, scripts, skipped = plan_import(
             source_base=source_root,
             dest_store_dir=dest_store_dir,
             dest_registry=load_registry(dest_store_dir) if registry_exists(dest_store_dir) else {},
-            source_registry=load_registry_file(source_file),
+            source_registry=source_registry,
         )
+        # A source with a .shortcuts brings its exported entries alone
+        skipped += [f"{name} (a namespace file: a source with a {PROJECT_FILE} brings only its exported shortcuts)"
+                    for name in sorted(os.listdir(source_root)) if name.endswith(IMPORT_SUFFIX) and name != IMPORT_SUFFIX]
+        listed = source_registry.get("imports")
+        if isinstance(listed, dict) and listed:
+            skipped.append(f"imports: {', '.join(sorted(listed))} (namespaces a {PROJECT_FILE} imports aren't copied)")
         if skipped:
             print(f"Skipped ({len(skipped)}):")
             for s in skipped:
@@ -688,9 +698,9 @@ Usage:
   shortcut run [--global] [-y] <name> [args...]
                                             Run a shortcut, or `<namespace> <name>`; r is short for run.
                                             --global skips project shortcuts, -y answers a confirm prompt
-  shortcut new <name> [FLAGS] [-- CMD...]   Create a shortcut: an inline command after --, a script
-                                            from a template at the path it prints, or a file with
-                                            --script or --copy
+  shortcut new <name> [FLAGS] [-- CMD...]   Create a shortcut: an inline command after --, a new
+                                            script with a bash header at the path it prints, or a
+                                            file with --script or --copy
   shortcut list [--names [NAMESPACE]]       List visible shortcuts, with where each runs
   shortcut show [--global] [--json] <name>  Show shortcut metadata and script contents, or the entry as JSON
   shortcut location [--global] <name>       Print the path of its script (fails for inline)
@@ -710,7 +720,7 @@ Usage:
                                             copy its <ns>.shortcut namespaces into imports/; --replace
                                             puts them in place of installed ones
   shortcut completion bash|zsh|fish         Print a shell completion script
-  shortcut help, -h, --help                 Show this help message
+  shortcut help [command], -h, --help       Show this help message, or a command's
   shortcut --version                        Show version
 
 FLAGS for new:
@@ -736,49 +746,62 @@ Set SHORTCUT_SHOW_DIR=0 to hide the "→ <run directory>" line.
     print(usage_text, end="")
 
 
-def main(argv: Optional[List[str]] = None) -> NoReturn:
-    args = sys.argv[1:] if argv is None else argv
-    sys.stdout, sys.stderr = (SafeOutput(stream) if stream else None for stream in (sys.stdout, sys.stderr))
+HANDLERS = {
+    "run": cmd_run,
+    "r": cmd_run,
+    "new": cmd_new,
+    "list": cmd_list,
+    "show": cmd_show,
+    "location": cmd_location,
+    "rm": cmd_rm,
+    "promote": cmd_promote,
+    "update": cmd_update,
+    "init": cmd_init,
+    "completion": cmd_completion,
+}
 
+
+def dispatch(args: List[str]) -> int:
     if not args:
         print_usage()
-        sys.exit(0)
-
+        return 0
     first = args[0]
-
+    if first == "help" and len(args) > 1 and args[1] in HANDLERS:
+        return HANDLERS[args[1]](["--help"])
     if first in ("--help", "-h", "help"):
         print_usage()
-        sys.exit(0)
-
+        return 0
     if first == "--version":
         print(f"shortcut {VERSION}")
-        sys.exit(0)
-
-    handlers = {
-        "run": cmd_run,
-        "r": cmd_run,
-        "new": cmd_new,
-        "list": cmd_list,
-        "show": cmd_show,
-        "location": cmd_location,
-        "rm": cmd_rm,
-        "promote": cmd_promote,
-        "update": cmd_update,
-        "init": cmd_init,
-        "completion": cmd_completion,
-    }
-
-    if first in handlers:
+        return 0
+    if first in HANDLERS:
         try:
-            rc = handlers[first](args[1:])
-            sys.exit(rc)
+            return HANDLERS[first](args[1:])
+        except BrokenPipeError:
+            raise
         except (KeyError, ValueError, OSError, RuntimeError) as e:
             err_msg = e.args[0] if (isinstance(e, KeyError) and e.args) else str(e)
             die(err_msg)
-
     if first.startswith("-"):
         print(f"error: unrecognized option '{first}'\nTry 'shortcut --help' for more information.", file=sys.stderr)
-        sys.exit(2)
-
+        return 2
     print(f"error: unknown command '{first}' (to run a shortcut: shortcut run {first})", file=sys.stderr)
-    sys.exit(2)
+    return 2
+
+
+def main(argv: Optional[List[str]] = None) -> NoReturn:
+    args = sys.argv[1:] if argv is None else argv
+    sys.stdout, sys.stderr = (SafeOutput(stream) if stream else None for stream in (sys.stdout, sys.stderr))
+    try:
+        try:
+            rc = dispatch(args)
+        except SystemExit as e:  # die, and argparse
+            rc = e.code
+        if sys.stdout:
+            sys.stdout.flush()  # here, not at exit, so a closed pipe is caught below
+    except BrokenPipeError:
+        # Whatever read the output stopped (shortcut list | head): stop quietly, as a program SIGPIPE ends.
+        # stdout points at devnull so the flush at exit doesn't fail again.
+        os.dup2(os.open(os.devnull, os.O_WRONLY), 1)
+        rc = 128 + 13
+    sys.exit(rc)

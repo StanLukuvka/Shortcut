@@ -15,6 +15,7 @@ import re
 import shlex
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -72,6 +73,14 @@ def validate_args(name: str, args: Any) -> None:
             bad(f"arg '{arg['name']}' can't be both 'required' and have a 'default'")
         if any(other.get("name") == arg["name"] for other in args[:i]):
             bad(f"arg '{arg['name']}' is declared twice")
+        clash = [other["name"] for other in args[:i] if arg_var(other["name"]) == arg_var(arg["name"])]
+        if clash:
+            bad(f"args '{clash[0]}' and '{arg['name']}' would both be {arg_var(arg['name'])}")
+
+
+def arg_var(name: str) -> str:
+    """The environment variable a declared argument is in."""
+    return "SC_ARG_" + name.upper().replace("-", "_")
 
 
 def is_relative_cwd(cwd: Optional[str]) -> bool:
@@ -189,6 +198,8 @@ def load_registry_file(path: str) -> Dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError(f"corrupt registry {path}: root must be a JSON object")
     version = data.get("version")
+    if "version" in data and (isinstance(version, bool) or not isinstance(version, int)):
+        raise ValueError(f"corrupt registry {path}: 'version' must be a whole number, such as {REGISTRY_VERSION}")
     if isinstance(version, int) and version > REGISTRY_VERSION:
         raise ValueError(f"{path} is format version {version}, newer than this shortcut reads; upgrade shortcut")
     return data
@@ -215,14 +226,31 @@ def save_registry_atomic(store_dir: str, registry_data: Dict[str, Any]) -> None:
 
 
 def write_json_atomic(path: str, data: Any) -> None:
-    temp_file = tempfile.NamedTemporaryFile("w", dir=os.path.dirname(path), delete=False, encoding="utf-8")
+    """Write a whole file or none of it. A symlinked file, such as a dotfiles checkout's shortcuts.json, is
+    written where the link leads, with the mode it had. The temporary file is hidden and named after it."""
+    path = os.path.realpath(path)
+    folder, base = os.path.split(path)
+    try:
+        mode: Optional[int] = stat.S_IMODE(os.stat(path).st_mode)
+    except FileNotFoundError:
+        mode = None
+    temp_file = tempfile.NamedTemporaryFile("w", dir=folder, prefix=f".{base}.", suffix=".tmp", delete=False,
+                                            encoding="utf-8")
     try:
         json.dump(data, temp_file, indent=2)
         temp_file.write("\n")
         temp_file.flush()
+        if mode is not None:
+            os.chmod(temp_file.name, mode)
         os.fsync(temp_file.fileno())
         temp_file.close()
         os.replace(temp_file.name, path)
+        if not WINDOWS:  # the rename itself survives a crash only once the folder is on disk
+            folder_fd = os.open(folder, os.O_RDONLY)
+            try:
+                os.fsync(folder_fd)
+            finally:
+                os.close(folder_fd)
     except Exception:
         if os.path.exists(temp_file.name):
             try:
@@ -512,8 +540,9 @@ def bind_args(display: str, spec: List[Dict[str, Any]], argv: List[str]) -> Tupl
                 fail(f"missing <{arg['name']}>")
             else:
                 fill.append("")  # keeps a later default at its own position
-        var = "SC_ARG_" + arg["name"].upper().replace("-", "_")
-        env[var] = shlex.join(values) if is_rest else "".join(values)
+        elif arg.get("required") and not any(values):
+            fail(f"<{arg['name']}> can't be empty")
+        env[arg_var(arg["name"])] = shlex.join(values) if is_rest else "".join(values)
     while fill and not fill[-1]:
         fill.pop()
     last = max((i for i, c in enumerate(counts) if c), default=-1)
