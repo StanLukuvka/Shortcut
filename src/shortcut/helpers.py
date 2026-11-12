@@ -1,5 +1,18 @@
-"""Constants and the functions that need none of the classes: stores and registries, approvals, arguments,
-running a child."""
+"""Constants and the functions that need none of the classes. In file order:
+
+- constants, validate_args, arg_var, placement_error: what an entry may hold
+- safe, write_styled, die: output
+- get_global_store_dir to init_store: finding a store or project, and its lock
+- load_registry_file to write_json_atomic: reading and writing JSON files
+- validate_name to file_error: names, script paths, a file's own problems
+- display_path to require_approved: what approval hashes, approval records and their state
+- resolve_run_dir, exec_child, ask: running a child, asking a question
+- is_flag to bind_args: declared arguments and usage lines
+- stored_cwd to join_command: what new writes into an entry
+- stored_copy to remove_namespace_files: what rm removes and says
+- diff_files, show_diff: diffs for update and init --global
+- is_git_source to the end: what init --global copies in
+"""
 
 from __future__ import annotations
 
