@@ -101,6 +101,21 @@ class TestBundled(ShortcutTestCase):
         self.assertEqual(res.stdout, "")
         self.assertIn("not found", res.stderr)
 
+    def test_bundled_scripts_dont_import_from_the_callers_folder(self):
+        # python3 -c puts the current folder first on sys.path; a json.py there would run unapproved
+        self.install_bundled()
+        self.run_cli(["new", "job", "--", "true"])
+        here = self.tmp_path / "planted"
+        marker = self.tmp_path / "imported"
+        self.write_file(here / "json.py", f"open({str(marker)!r}, 'w').close()\n")
+        self.write_file(self.tool_bin / "opener", '#!/bin/sh\necho "opened $1"\n', mode=0o755)
+
+        res = self.run_cli(["r", "edit", "job"], cwd=str(here), env={"VISUAL": "opener"})
+        self.assertEqual(res.returncode, 0, res.stderr)
+        res = self.run_cli(["r", "desktop", "job"], cwd=str(here))
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertFalse(marker.exists())
+
     def test_bundled_desktop_refuses_a_project_shortcut(self):
         self.install_bundled()
         proj = self.project()

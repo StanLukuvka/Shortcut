@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shortcut r edit <name>
 # Opens a shortcut's script, or for an inline shortcut the file that defines it.
-path="$(shortcut show --json "$@" | python3 -c '
+path="$(shortcut show --json "$@" | python3 -I -c '
 import json, sys
 info = json.load(sys.stdin)
 print(info["script_path"] or info["defined_in"])

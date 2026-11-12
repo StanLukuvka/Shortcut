@@ -24,7 +24,7 @@ fi
 # A launcher runs outside any project, so it needs a global shortcut; show fails if there is none.
 info="$(shortcut show --global --json "$name")"
 field() {
-    python3 -c '
+    python3 -I -c '
 import json, sys
 value = json.loads(sys.argv[2])["entry"].get(sys.argv[1]) or ""
 print(" ".join(str(value).split()))
