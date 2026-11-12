@@ -7,7 +7,7 @@ import time
 import unittest
 import unittest.mock
 
-from fixtures import CLI_SHELL, ShortcutTestCase, shortcut_mod
+from fixtures import CLI_SHELL, helpers, ShortcutTestCase
 
 
 class TestRunning(ShortcutTestCase):
@@ -337,8 +337,8 @@ class TestSignalsAndTerminals(ShortcutTestCase):
 
     def test_on_windows_a_run_is_a_child_with_the_same_exit_code(self):
         cmd = ["sh", "-c", 'test "$PWD" = "$0" && exit 9', str(self.tmp_path)]
-        with unittest.mock.patch.object(shortcut_mod, "WINDOWS", True):
-            rc = shortcut_mod.exec_child(cmd, str(self.tmp_path), {"PATH": "/usr/bin:/bin"})
+        with unittest.mock.patch.object(helpers, "WINDOWS", True):
+            rc = helpers.exec_child(cmd, str(self.tmp_path), {"PATH": "/usr/bin:/bin"})
         self.assertEqual(rc, 9)
 
 class TestArguments(ShortcutTestCase):

@@ -5,7 +5,7 @@ import json
 import os
 import unittest
 
-from fixtures import BIN_TOOL, DOCKER_PS, GO, HI, KUBE_GET, OWN, shortcut_mod, ShortcutTestCase
+from fixtures import BIN_TOOL, cli, DOCKER_PS, GO, helpers, HI, KUBE_GET, OWN, ShortcutTestCase
 
 
 class TestApproval(ShortcutTestCase):
@@ -147,8 +147,8 @@ class TestApproval(ShortcutTestCase):
             files={"cwd of go": "x"},
         )
         (proj / "work").symlink_to(proj / "safe")
-        store = shortcut_mod.load_store(str(proj))
-        files = shortcut_mod.shared_files(store.main)
+        store = cli.load_store(str(proj))
+        files = helpers.shared_files(store.main)
         self.assertEqual(files["cwd of go"], "x")
         self.assertEqual(files["./cwd of go"], f"{os.path.realpath(proj / 'safe')}\n")
 
@@ -206,9 +206,9 @@ class TestApproval(ShortcutTestCase):
 
 class TestDiffs(ShortcutTestCase):
     def test_diff_details(self):
-        old = {"a.txt": "one\ntwo\n", "gone.txt": "bye\n", "same.txt": "x\n", "bin": shortcut_mod.BINARY_MARK + "aa"}
-        new = {"a.txt": "one\nthree\n", "added.txt": "hi\n", "same.txt": "x\n", "bin": shortcut_mod.BINARY_MARK + "bb"}
-        lines = shortcut_mod.diff_files(old, new)
+        old = {"a.txt": "one\ntwo\n", "gone.txt": "bye\n", "same.txt": "x\n", "bin": helpers.BINARY_MARK + "aa"}
+        new = {"a.txt": "one\nthree\n", "added.txt": "hi\n", "same.txt": "x\n", "bin": helpers.BINARY_MARK + "bb"}
+        lines = helpers.diff_files(old, new)
         self.assertIn("--- a/a.txt", lines)
         self.assertIn("+++ b/a.txt", lines)
         self.assertIn("-two", lines)
@@ -219,7 +219,7 @@ class TestDiffs(ShortcutTestCase):
         self.assertFalse([line for line in lines if "same.txt" in line])
 
         # A new empty file is still a difference you can see
-        self.assertTrue(shortcut_mod.diff_files({}, {"empty": ""}))
+        self.assertTrue(helpers.diff_files({}, {"empty": ""}))
 
     def test_non_utf8_script(self):
         proj = self.project(BIN_TOOL, files={"bin/tool": b"#!/bin/sh\n# \xff\xfe\necho one\n"}, approved=True)
@@ -240,17 +240,17 @@ class TestDiffs(ShortcutTestCase):
 
     def test_a_text_file_cannot_forge_either_mark(self):
         bad = b"a \xff\n"
-        shown = shortcut_mod.reviewable(bad)
-        self.assertNotEqual(shortcut_mod.reviewable(shown.encode()), shown)
-        forged = shortcut_mod.BINARY_MARK.encode() + b"echo hidden\n"
-        self.assertTrue(shortcut_mod.reviewable(forged).startswith(shortcut_mod.BINARY_MARK))
-        self.assertNotIn("echo hidden", shortcut_mod.reviewable(forged))
+        shown = helpers.reviewable(bad)
+        self.assertNotEqual(helpers.reviewable(shown.encode()), shown)
+        forged = helpers.BINARY_MARK.encode() + b"echo hidden\n"
+        self.assertTrue(helpers.reviewable(forged).startswith(helpers.BINARY_MARK))
+        self.assertNotIn("echo hidden", helpers.reviewable(forged))
 
     def test_invalid_utf8_and_its_escaped_text_are_different_files(self):
-        one = shortcut_mod.reviewable(b"a \xff\n")
-        two = shortcut_mod.reviewable(b"a \\xff\n")
+        one = helpers.reviewable(b"a \xff\n")
+        two = helpers.reviewable(b"a \\xff\n")
         self.assertNotEqual(one, two)
-        self.assertEqual(shortcut_mod.reviewable(b"plain\n"), "plain\n")
+        self.assertEqual(helpers.reviewable(b"plain\n"), "plain\n")
 
     def test_a_binary_needs_typing_out_at_the_prompt(self):
         proj = self.project(BIN_TOOL, files={"bin/tool": b"\x7fELF\0\0"})
@@ -267,9 +267,9 @@ class TestDiffs(ShortcutTestCase):
         self.assertEqual(code, 0, output)
 
     def test_a_binary_replacing_text_says_so_and_text_replacing_a_binary_shows(self):
-        lines = shortcut_mod.diff_files({"t": "echo hi\n"}, {"t": shortcut_mod.BINARY_MARK + "aa"})
+        lines = helpers.diff_files({"t": "echo hi\n"}, {"t": helpers.BINARY_MARK + "aa"})
         self.assertIn("Binary file t changed", lines)
-        lines = shortcut_mod.diff_files({"t": shortcut_mod.BINARY_MARK + "aa"}, {"t": "echo hi\n"})
+        lines = helpers.diff_files({"t": helpers.BINARY_MARK + "aa"}, {"t": "echo hi\n"})
         self.assertIn("+echo hi", lines)
 
 

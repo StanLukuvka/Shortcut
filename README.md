@@ -2,7 +2,7 @@
 
 # shortcut
 
-Names shell commands and scripts, and runs them from any directory. One Python file, no dependencies.
+Names shell commands and scripts, and runs them from any directory. Python 3.10+, no dependencies.
 
 ## Install
 
@@ -165,6 +165,7 @@ PAGER                 pages long update and init --global diffs
 - [AGENT.md](AGENT.md): for coding agents.
 - [docs/](docs/): diagrams, the JSON Schema for shortcut files, and every error message.
 - [examples/podman](examples/podman/): a namespace for podman containers.
+- Code: [src/shortcut/](src/shortcut/), one file per class plus `helpers.py` and `cli.py`. `python3 src` runs it from a clone.
 - Tests: `python3 -m unittest discover -s tests`.
 
 ## License

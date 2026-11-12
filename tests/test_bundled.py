@@ -3,8 +3,9 @@
 
 import os
 import unittest
+import zipfile
 
-from fixtures import REPO, ShortcutTestCase, TEMPLATES
+from fixtures import PACKAGE, REPO, ShortcutTestCase, TEMPLATES
 
 
 class TestBundled(ShortcutTestCase):
@@ -165,6 +166,11 @@ class TestBundled(ShortcutTestCase):
         self.assertEqual(res.returncode, 0, f"install.sh failed: {res.stderr}")
         self.assertTrue((bin_dir / "shortcut").is_file())
         self.assertTrue(os.access(bin_dir / "shortcut", os.X_OK))
+        # One file: a zipapp of the code and nothing else, with no staging folder left behind
+        with zipfile.ZipFile(bin_dir / "shortcut") as app:
+            names = {n for n in app.namelist() if not n.endswith("/")}
+        self.assertEqual(names, {"__main__.py", *(f"shortcut/{p.name}" for p in PACKAGE.glob("*.py"))})
+        self.assertEqual(sorted(p.name for p in bin_dir.iterdir()), ["shortcut"])
 
         compl_file = xdg_data / "bash-completion" / "completions" / "shortcut"
         self.assertTrue(compl_file.is_file())

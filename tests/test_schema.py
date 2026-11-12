@@ -1,32 +1,33 @@
 #!/usr/bin/env python3
-"""docs/shortcut.schema.json against shortcut.py."""
+"""docs/shortcut.schema.json against the code in src/shortcut/."""
 
 import ast
 import json
 import unittest
 
-from fixtures import REPO, SHORTCUT, ShortcutTestCase
+from fixtures import PACKAGE, REPO, SOURCES, ShortcutTestCase
 
 SCHEMA = json.loads((REPO / "docs" / "shortcut.schema.json").read_text(encoding="utf-8"))
-SOURCE = SHORTCUT.read_text(encoding="utf-8")
-TREE = ast.parse(SOURCE)
+SOURCE = "\n".join(path.read_text(encoding="utf-8") for path in SOURCES)
+TREES = [ast.parse(path.read_text(encoding="utf-8")) for path in SOURCES]
 SAMPLES = {"string": "x", "boolean": True, "array": []}
 RESTRICTED = {"export": "Only allowed in .shortcuts and .shortcuts.local", "from": "Only allowed in the global store's shortcuts.json"}
 
 
 def entry_fields() -> set[str]:
-    entry = next(n for n in ast.walk(TREE) if isinstance(n, ast.ClassDef) and n.name == "ShortcutEntry")
+    tree = ast.parse((PACKAGE / "shortcut_entry.py").read_text(encoding="utf-8"))
+    entry = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "ShortcutEntry")
     fields = {n.target.id for n in entry.body if isinstance(n, ast.AnnAssign)} - {"name"}
     return fields - {"origin"} | {"from"}  # origin is written "from" in JSON
 
 
 def arg_fields() -> set[str]:
-    for node in ast.walk(TREE):
+    for node in (node for tree in TREES for node in ast.walk(tree)):
         if isinstance(node, ast.Set):
             fields = {n.value for n in node.elts if isinstance(n, ast.Constant)}
             if "rest" in fields:
                 return fields
-    raise AssertionError("no set of args fields in shortcut.py")
+    raise AssertionError("no set of args fields in src/shortcut/")
 
 
 class TestSchema(ShortcutTestCase):

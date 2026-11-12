@@ -3,7 +3,7 @@
 
 import unittest
 
-from fixtures import GO, shortcut_mod, ShortcutTestCase
+from fixtures import GO, helpers, ShortcutTestCase
 
 
 class TestSymlinkSafety(ShortcutTestCase):
@@ -67,7 +67,7 @@ class TestSymlinkSafety(ShortcutTestCase):
         self.assertIn("sym_script (symlink in source)", res.stdout)
         self.assertIn("real_script", res.stdout)
 
-        reg = shortcut_mod.load_registry(str(self.shortcuts_home))
+        reg = helpers.load_registry(str(self.shortcuts_home))
         self.assertIn("real_script", reg["shortcuts"])
         self.assertNotIn("sym_script", reg["shortcuts"])
 

@@ -15,10 +15,10 @@ requires-python = ">=3.10"
 Homepage = "https://github.com/StanLukuvka/Shortcut"
 
 [project.scripts]
-shortcut = "shortcut:main"
+shortcut = "shortcut.cli:main"
 
-[tool.setuptools]
-py-modules = ["shortcut"]
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.setuptools.dynamic]
-version = { attr = "shortcut.VERSION" }
+version = { attr = "shortcut.helpers.VERSION" }
