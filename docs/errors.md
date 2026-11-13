@@ -125,6 +125,9 @@ A shortcut that declares `args` checks them before it runs. These print `error: 
 | `--copy can't be used with --local: .shortcuts.local is one file. Use --script` | |
 | `a local shortcut needs a command after '--', or --script PATH` | |
 | `script file not found: <path>` | The file given to `--script` or `--copy` |
+| `stdin is closed` | `new --copy -` with no standard input |
+| `stdin is not valid UTF-8` | `new --copy -` was given bytes that are not UTF-8 |
+| `'<src>' and '<dst>' are the same file` | `new --copy` of the file the store already holds under that name |
 | `--cwd directory does not exist: <dir>` | |
 | `--namespace can't be used with --local: .shortcuts.local is one file, and .shortcuts is yours to edit` | |
 | `--arg-desc <flag>: needs NAME=TEXT, with NAME declared by --arg` | |
