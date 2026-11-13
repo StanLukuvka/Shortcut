@@ -1,3 +1,4 @@
+// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (M4-fix). Don't hand-edit without checking the plan.
 package textio
 
 import (
@@ -83,5 +84,14 @@ func TestShowDiff_Pager(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// The pager gets the same escapes as a Writer: a non-UTF-8 byte (0x9b is CSI on an 8-bit terminal) never reaches it raw.
+func TestShowDiff_PagerGetsEscapedBytes(t *testing.T) {
+	e := testkit.New(t)
+	got := diffOn(t, e, true, "30", map[string]string{"PAGER": "cat", "TEXTIO_RAW": "1"})
+	if !strings.Contains(got, `a\udc9bb.sh`) || strings.Contains(got, "\x9b") {
+		t.Errorf("got %q", got)
 	}
 }

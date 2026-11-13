@@ -57,15 +57,17 @@ func (w *Writer) File() *os.File { return w.f }
 func (w *Writer) IsTerminal() bool { return w.tty }
 
 // Write is io.Writer through Safe. A reader that has gone ends the process with 141.
-func (w *Writer) Write(p []byte) (int, error) { return len(p), w.put(w.safe(string(p))) }
-
-// safe is Safe, then backslashreplace on both streams: Python decodes argv with surrogateescape, so a stray byte 0xNN is
+// After Safe, backslashreplace on both streams: Python decodes argv with surrogateescape, so a stray byte 0xNN is
 // U+DCNN there and stderr (errors='backslashreplace') prints \udcnn; a lone surrogate (kept as WTF-8 ED A0..BF xx) prints
 // \udxxx. Python's stdout is strict and would crash on such text; Go prints the same escapes there instead (deliberate
 // divergence, plan §4.7), so no raw byte such as 0x9b (CSI on an 8-bit terminal) reaches a terminal.
-func (w *Writer) safe(text string) string { return backslashReplace(Safe(text)) }
+func (w *Writer) Write(p []byte) (int, error) {
+	return len(p), w.put(backslashReplace(Safe(string(p))))
+}
 
-func (w *Writer) WriteString(text string) (int, error) { return len(text), w.put(w.safe(text)) }
+func (w *Writer) WriteString(text string) (int, error) {
+	return len(text), w.put(backslashReplace(Safe(text)))
+}
 
 // WriteStyled is write_styled: past Safe, but not past the escape. Everything from a file must already be Safe.
 func (w *Writer) WriteStyled(text string) error { return w.put(backslashReplace(text)) }

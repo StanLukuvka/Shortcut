@@ -1,3 +1,4 @@
+// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (M4-fix). Don't hand-edit without checking the plan.
 package textio
 
 import (
@@ -27,7 +28,7 @@ func ShowDiff(s *Streams, lines []string) {
 		}
 		shown[i] = line
 	}
-	text := strings.Join(shown, "\n") + "\n"
+	text := backslashReplace(strings.Join(shown, "\n") + "\n") // the pager gets the same escapes as a Writer, so no raw 0x9b reaches the terminal
 	if pager := os.Getenv("PAGER"); tty && pager != "" && len(shown) >= pyos.TerminalRows() {
 		if runPager(s, pager, text) {
 			return

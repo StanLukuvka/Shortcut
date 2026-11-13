@@ -55,6 +55,9 @@ func helper(job string) {
 		for i := 0; i < atoi(os.Getenv("TEXTIO_LINES")); i++ {
 			lines = append(lines, []string{"--- a/f", "+++ b/f", "@@ -1 +1 @@", "+added \x1b[2J", "-removed", " context"}[i%6])
 		}
+		if os.Getenv("TEXTIO_RAW") != "" {
+			lines[0] = "--- a/a\x9bb.sh"
+		}
 		ShowDiff(s, lines)
 		s.Flush()
 	}
