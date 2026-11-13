@@ -12,7 +12,7 @@ func cmdLocation(s *textio.Streams, args []string) error {
 	if err != nil {
 		return err
 	}
-	resolved, err := model.ResolveName(ns.List("name"), ns.Bool("skip_local"))
+	resolved, err := model.ResolveName(ns.List("name"), ns.Bool("skipLocal"))
 	if err != nil {
 		return err
 	}

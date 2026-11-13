@@ -208,7 +208,7 @@ func TestStores_NewTakesOneSource(t *testing.T) {
 		message string
 	}{
 		{[]string{"new", "x", "--script", source, "--", "true"}, "use one of"},
-		{[]string{"new", "x", "--script", source, "--copy", source}, "not allowed with"},
+		{[]string{"new", "x", "--script", source, "--copy", source}, "cannot be used together"},
 		{[]string{"new", "x", "--local", "--copy", source}, "Use --script"},
 		{[]string{"new", "x", "--script", "", "--", "true"}, "need a file name"},
 		{[]string{"new", "x", "--copy", ""}, "need a file name"},

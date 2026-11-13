@@ -22,7 +22,19 @@ Usage errors, which exit 2:
 | `unrecognized option '<option>'` | An option before the command that shortcut doesn't have. A second line points to `shortcut --help` |
 | `missing shortcut name` | `shortcut run` with no name. The usage lines follow |
 
-A flag a command doesn't take, or one missing its value, prints the command's `usage:` line and then `shortcut <command>: error: <message>`.
+A command's own arguments print `error: <message>` and a second line, `Try 'shortcut <command> -h' for more information.`, and exit 2:
+
+| Message | Meaning |
+|---|---|
+| `unrecognized option '<option>'` | The command has no such option. Options must be spelled in full, and short flags can't be combined (`-y -h`, not `-yh`) |
+| `option '<option>' needs a value` | The option needs a value and the next word is missing or starts with `-`. Write `--desc=-v` for a value that starts with a dash |
+| `option '<option>' takes no value` | A flag written as `--flag=value` |
+| `missing <name>` | A required argument is left out: `name`, `shell` |
+| `unexpected argument '<word>'` | More arguments than the command takes |
+| `invalid choice '<word>' (choose from <list>)` | `shortcut completion` takes `bash`, `fish` or `zsh` |
+| `--script and --copy cannot be used together` | `shortcut new` takes one source |
+
+A word that starts with `-` is an option. To pass one as a name or a value, put it after `--`.
 
 ## Store files
 

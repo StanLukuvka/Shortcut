@@ -1,4 +1,4 @@
-usage: shortcut completion [-h] [{bash,fish,zsh}]
+usage: shortcut completion [-h] {bash,fish,zsh}
 
 Generate shell completion script
 

@@ -30,12 +30,12 @@ func cmdInit(s *textio.Streams, args []string) error {
 		if source != "" {
 			return Die("--bundled takes no source")
 		}
-		if !ns.Bool("is_global") {
+		if !ns.Bool("global") {
 			return Die("--bundled copies the bundled shortcuts into your global store: add --global.")
 		}
 		return initBundled(s, model.GlobalStoreDir(), ns.Bool("yes"), ns.Bool("replace"))
 	}
-	if !ns.Bool("is_global") {
+	if !ns.Bool("global") {
 		if source != "" {
 			return Die("a project's " + model.ProjectFile + " is used in place, never copied: clone the project and run " +
 				"`shortcut update` there. To copy its exported shortcuts into your global store, add --global.")

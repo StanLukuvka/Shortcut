@@ -5,6 +5,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
 	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/pyjson"
 	"github.com/StanLukuvka/Shortcut/internal/pyos"
@@ -34,7 +35,7 @@ func cmdRm(s *textio.Streams, args []string) error {
 		return rmNamespace(s, ns.Str("namespace"), ns.Bool("yes"))
 	}
 	if len(names) == 0 {
-		return &ExitError{Code: 2, Stderr: usageOf("rm") + "shortcut rm: error: the following arguments are required: name\n"}
+		return argparse.UsageError("rm", "missing name")
 	}
 	if ns.Bool("local") {
 		return rmLocal(s, ns)
@@ -43,7 +44,7 @@ func cmdRm(s *textio.Streams, args []string) error {
 	// A project that can't be read might hide the name, so rm doesn't reach past it to a global one
 	cwd, _ := pyos.Getwd()
 	root := ""
-	if !ns.Bool("skip_local") {
+	if !ns.Bool("skipLocal") {
 		root = model.FindProjectRoot(cwd)
 	}
 	if root != "" {
@@ -54,7 +55,7 @@ func cmdRm(s *textio.Streams, args []string) error {
 	}
 
 	// Raw lookup: an entry that can't run must still be removable
-	found, err := model.FindEntry(names, cwd, ns.Bool("skip_local"), false)
+	found, err := model.FindEntry(names, cwd, ns.Bool("skipLocal"), false)
 	if err != nil {
 		return err
 	}
@@ -103,7 +104,7 @@ func cmdRm(s *textio.Streams, args []string) error {
 // rmLocal takes a name out of .shortcuts.local, which also undoes an override or a hide. A name only in
 // .shortcuts is hidden instead.
 func rmLocal(s *textio.Streams, ns Namespace) error {
-	if ns.Bool("skip_local") {
+	if ns.Bool("skipLocal") {
 		return Die("--local and --global can't be used together")
 	}
 	names := ns.List("name")

@@ -22,9 +22,9 @@ func cmdPromote(s *textio.Streams, args []string) error {
 	if model.FindProjectRoot(callerCwd) == "" {
 		return Die("promote runs inside a project: there's no " + model.ProjectFile + " or " + model.LocalFile + " here or above")
 	}
-	name, asGiven := ns.Str("name"), ns.Set("new_name")
+	name, asGiven := ns.Str("name"), ns.Set("newName")
 	newName := name
-	if v := ns.Str("new_name"); v != "" { // `parsed.new_name or parsed.name`: an empty --as is no --as
+	if v := ns.Str("newName"); v != "" { // `parsed.new_name or parsed.name`: an empty --as is no --as
 		newName = v
 	}
 	if err := model.ValidateName(newName); err != nil {
