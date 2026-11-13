@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -102,7 +103,7 @@ func runShortcut(s *textio.Streams, words []string, skipLocal, assumeYes bool) e
 		}
 	}
 
-	cmd, err := childCommand(resolved, entry, name, args)
+	plan, err := childCommand(resolved, entry, name, args)
 	if err != nil {
 		return err
 	}
@@ -129,21 +130,35 @@ func runShortcut(s *textio.Streams, words []string, skipLocal, assumeYes bool) e
 	for _, kv := range argEnv {
 		set(kv)
 	}
-	return pyos.ExecChild(cmd, resolved.RunCwd, env)
+	err = pyos.ExecChild(plan.argv, resolved.RunCwd, env)
+	if plan.direct && errors.Is(err, syscall.ENOEXEC) && !bytes.Contains(plan.header, []byte{0}) {
+		// An executable text file with no #!: exec says "exec format error", a shell would run it with itself.
+		return pyos.ExecChild(append([]string{"bash", plan.path}, args...), resolved.RunCwd, env)
+	}
+	return err
 }
 
-// childCommand is the argv of the child: bash -c for an inline command, else the script, run through its #! line,
-// or bash when it has none.
-func childCommand(resolved *model.ResolvedShortcut, entry *model.Entry, name string, args []string) ([]string, error) {
+// childPlan is what childCommand decides: the argv, and for an executable with no #! (direct) also the file and its
+// first bytes, which cmdRun needs if the kernel refuses to exec it.
+type childPlan struct {
+	argv   []string
+	direct bool
+	path   string
+	header []byte
+}
+
+// childCommand is the argv of the child: bash -c for an inline command, else the script, run through its #! line;
+// an executable with no #! is exec'd as it is, and a file that is not executable and has no #! runs through bash.
+func childCommand(resolved *model.ResolvedShortcut, entry *model.Entry, name string, args []string) (childPlan, error) {
 	if entry.Inline != nil {
-		return append([]string{"bash", "-c", *entry.Inline, name}, args...), nil
+		return childPlan{argv: append([]string{"bash", "-c", *entry.Inline, name}, args...)}, nil
 	}
 	path, err := model.ResolveScriptPath(resolved.Group.ScriptBase(), *entry.Script)
 	if err != nil {
-		return nil, err
+		return childPlan{}, err
 	}
 	if _, err := os.Stat(path); err != nil {
-		return nil, errors.New("script file not found: " + path)
+		return childPlan{}, errors.New("script file not found: " + path)
 	}
 	isExec := syscall.Access(path, 1) == nil
 	header := make([]byte, 1024)
@@ -153,16 +168,15 @@ func childCommand(resolved *model.ResolvedShortcut, entry *model.Entry, name str
 		f.Close()
 	}
 	header = header[:max(n, 0)]
-	isElf := strings.HasPrefix(string(header), "\x7fELF")
 	hasShebang := strings.HasPrefix(string(header), "#!")
 	firstLine, _, _ := strings.Cut(string(header), "\n")
 	if hasShebang && strings.HasSuffix(firstLine, "\r") {
-		return nil, fmt.Errorf("%s has Windows line endings, so its #! line can't start it. Convert it: sed -i 's/\\r$//' %s",
+		return childPlan{}, fmt.Errorf("%s has Windows line endings, so its #! line can't start it. Convert it: sed -i 's/\\r$//' %s",
 			path, pyos.ShellQuote(path))
 	}
 	switch {
-	case isExec && (hasShebang || isElf):
-		return append([]string{path}, args...), nil
+	case isExec && hasShebang:
+		return childPlan{argv: append([]string{path}, args...)}, nil // the kernel runs the #! line
 	case hasShebang:
 		// the kernel splits at the first blank: the interpreter, and the rest as one argument
 		line := strings.Trim(strings.ToValidUTF8(firstLine[2:], "\uFFFD"), " \t")
@@ -177,7 +191,9 @@ func childCommand(resolved *model.ResolvedShortcut, entry *model.Entry, name str
 				parts = append(parts, rest)
 			}
 		}
-		return append(append(parts, path), args...), nil
+		return childPlan{argv: append(append(parts, path), args...)}, nil
+	case isExec:
+		return childPlan{argv: append([]string{path}, args...), direct: true, path: path, header: header}, nil // ELF, Mach-O, anything
 	}
-	return append([]string{"bash", path}, args...), nil
+	return childPlan{argv: append([]string{"bash", path}, args...)}, nil // not executable: bash runs it
 }

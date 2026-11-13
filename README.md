@@ -156,7 +156,7 @@ Flags for `new`:
 
 ## What a shortcut runs with
 
-- An inline shortcut runs as `bash -c CMD <name> ARGS...`, so `$0` is its name. A script runs by its shebang, or with bash.
+- An inline shortcut runs as `bash -c CMD <name> ARGS...`, so `$0` is its name. A script runs by its shebang. An executable file with no shebang runs as it is (a binary, or a text file the kernel refuses, which bash then runs); a file that is not executable runs with bash.
 - It runs in its `cwd`, the caller's directory by default.
 - Every word after the name reaches it as `$1`, `$2`..., flags included. A first `--` is dropped only when the shortcut declares `args`.
 - With `args` declared, a missing optional argument is filled with its default, or with an empty word if a later one has a default. A required one can't be an empty word.

@@ -24,3 +24,4 @@
 - A failed `git clone` in `init --global` reports `git clone exited with status N`.
 - Unreadable-file errors use Go's wording, such as `open /p: permission denied`.
 - `list | head` ends shortcut by SIGPIPE (a shell shows 141). stdout is no longer buffered, so stdout and stderr keep their order.
+- An executable script with no `#!` is run directly, so a Mach-O or other binary works. Only an executable text file the kernel refuses is run with bash.
