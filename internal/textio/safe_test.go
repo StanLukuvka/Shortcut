@@ -1,3 +1,5 @@
+// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (M3-fix). Don't hand-edit without checking the plan.
+
 package textio
 
 import (
@@ -57,5 +59,21 @@ func TestSafe_Text(t *testing.T) {
 	}
 	if s := strings.Repeat("ordinary ", 1000); Safe(s) != s {
 		t.Error("long text changed")
+	}
+}
+
+func TestBackslashReplace(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"plain é日", "plain é日"},
+		{"a\xffb", "a\\udcffb"},
+		{"\x80\xc3", "\\udc80\\udcc3"},
+		{"\xed\xb3\xbf", "\\udcff"},    // WTF-8 U+DCFF
+		{"\xed\xa0\x80x", "\\ud800x"},  // lone high surrogate
+		{"\xed\x9f\xbf", "\ud7ff"},     // U+D7FF is a real character
+		{"\xed\xa0", "\\udced\\udca0"}, // truncated
+	} {
+		if got := backslashReplace(c.in); got != c.want {
+			t.Errorf("backslashReplace(%q) = %q, want %q", c.in, got, c.want)
+		}
 	}
 }

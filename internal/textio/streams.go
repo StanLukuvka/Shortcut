@@ -1,3 +1,5 @@
+// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (M3-fix). Don't hand-edit without checking the plan.
+
 package textio
 
 import (
@@ -29,7 +31,7 @@ func NewStreams(in, out, errw *os.File) *Streams {
 	s := &Streams{In: in}
 	s.Out = &Writer{s: s, f: out, tty: pyos.IsTerminal(int(out.Fd()))}
 	s.Out.direct = s.Out.tty // a terminal is written through (Python line-buffers it); a pipe or file is buffered
-	s.Err = &Writer{s: s, f: errw, tty: pyos.IsTerminal(int(errw.Fd())), direct: true}
+	s.Err = &Writer{s: s, f: errw, tty: pyos.IsTerminal(int(errw.Fd())), direct: true, escape: true}
 	return s
 }
 
@@ -46,6 +48,7 @@ type Writer struct {
 	f      *os.File
 	tty    bool
 	direct bool // written straight through, not buffered
+	escape bool // stderr: bytes that are not UTF-8 print as \udcNN (Python's backslashreplace over surrogateescape)
 	buf    []byte
 }
 
@@ -56,9 +59,20 @@ func (w *Writer) File() *os.File { return w.f }
 func (w *Writer) IsTerminal() bool { return w.tty }
 
 // Write is io.Writer through Safe. A reader that has gone ends the process with 141.
-func (w *Writer) Write(p []byte) (int, error) { return len(p), w.put(Safe(string(p))) }
+func (w *Writer) Write(p []byte) (int, error) { return len(p), w.put(w.safe(string(p))) }
 
-func (w *Writer) WriteString(text string) (int, error) { return len(text), w.put(Safe(text)) }
+// safe is Safe, and on stderr also backslashreplace: Python decodes argv with surrogateescape, so a stray byte 0xNN is
+// U+DCNN there and stderr (errors='backslashreplace') prints \udcnn; a lone surrogate (kept as WTF-8 ED A0..BF xx) prints \udxxx.
+// stdout stays raw: Python's is strict there, so no such text reaches it.
+func (w *Writer) safe(text string) string {
+	text = Safe(text)
+	if !w.escape {
+		return text
+	}
+	return backslashReplace(text)
+}
+
+func (w *Writer) WriteString(text string) (int, error) { return len(text), w.put(w.safe(text)) }
 
 // WriteStyled is write_styled: past Safe. Everything from a file must already be Safe.
 func (w *Writer) WriteStyled(text string) error { return w.put(text) }

@@ -127,7 +127,7 @@ func cloneTemp(source string) (string, func(), error) {
 	if err != nil {
 		return "", cleanup, err
 	}
-	cmd := exec.Command("git", "clone", "--depth", "1", source, dir)
+	cmd := exec.Command("git", "clone", "--depth", "1", "--", source, dir) // "--": a source such as --upload-pack=... must not be read as an option (Python lacks this; deliberate divergence)
 	var errText bytes.Buffer
 	cmd.Stderr = &errText
 	if err := cmd.Run(); err != nil {

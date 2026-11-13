@@ -100,7 +100,10 @@ func cmdNew(s *textio.Streams, args []string) error {
 	}
 	entry := *fields
 	entry.Script = &rel
-	entry.Description = descOr(ns, "(no description)")
+	entry.Description = "(no description)"
+	if ns.Set("desc") {
+		entry.Description = ns.Str("desc")
+	}
 	if err := register(s, group, &entry, writeScript); err != nil {
 		return err
 	}
@@ -263,7 +266,10 @@ func newFromCopy(s *textio.Streams, ns Namespace, group model.Group, fields *mod
 	}
 	entry := *fields
 	entry.Script = &rel
-	entry.Description = descOr(ns, "(no description)")
+	entry.Description = "(no description)"
+	if ns.Set("desc") {
+		entry.Description = ns.Str("desc")
+	}
 	if err := register(s, group, &entry, writeScript); err != nil {
 		return err
 	}
