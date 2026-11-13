@@ -1,5 +1,3 @@
-// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (P-1). Don't hand-edit without checking the plan.
-
 package cli
 
 // usageText is print_usage (cli.py), verbatim. A raw string cannot hold a backtick, so those are joined in.
