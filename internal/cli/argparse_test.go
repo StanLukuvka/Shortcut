@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// goldenCase is one case of argparse_errors.json or argparse_parses.json. The generator ran Python 3.14 at 80 columns.
+// goldenCase is one case of argparse_errors.json or argparse_parses.json. The data is frozen: generated once from the Python version (3.14, 80 columns) at the python-final commit.
 type goldenCase struct {
 	Command    string         `json:"command"`
 	Argv       []string       `json:"argv"`

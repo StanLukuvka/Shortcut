@@ -222,7 +222,7 @@ func buildTree(t *testing.T, env *testkit.Env, root string, tree []pyjson.Value)
 	}
 }
 
-// afterShortcut cuts a file error back to the part after the file's name, since the golden root is the generator's.
+// afterShortcut cuts a file error back to the part after the file's name, since the golden root belongs to the frozen data (generated once from the Python version at the python-final commit).
 func afterShortcut(s string) string {
 	if i := strings.Index(s, ".short"); i >= 0 {
 		return s[i:]

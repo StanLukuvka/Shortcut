@@ -9,10 +9,10 @@ body:
     validations:
       required: true
   - type: input
-    id: python
+    id: install
     attributes:
-      label: Python version
-      description: python3 --version
+      label: How you installed it
+      description: The install.sh command you ran, or how you built it
     validations:
       required: true
   - type: input
