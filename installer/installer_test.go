@@ -1,5 +1,3 @@
-// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (R-2/R-4). Don't hand-edit without checking the plan.
-
 package installer_test
 
 import (
