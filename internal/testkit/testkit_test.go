@@ -1,3 +1,5 @@
+// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (P-1). Don't hand-edit without checking the plan.
+
 package testkit
 
 // Tests of testkit itself (no Python counterpart). Real shortcut commands don't exist yet, so the "binary" is an
@@ -19,8 +21,8 @@ func TestBinary_BuildsTheModuleOnce(t *testing.T) {
 	if a != b {
 		t.Errorf("built twice: %s, %s", a, b)
 	}
-	if res := e.Run(); res.Code != 0 || res.Stdout != "" || res.Stderr != "" {
-		t.Errorf("empty main: %+v", res)
+	if res := e.Run("--version"); res.Code != 0 || res.Stderr != "" {
+		t.Errorf("--version: %+v", res)
 	}
 }
 
