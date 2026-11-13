@@ -1,9 +1,9 @@
 package approval
 
 import (
+	"slices"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -18,7 +18,7 @@ func ConfirmReview(verb string, old, new map[string]string, noTerminal string) t
 	}
 	if len(unseen) > 0 {
 		return textio.Confirm{
-			Question:   "can't show " + strings.Join(pyjson.SortStrings(unseen), ", ") + ". Type binary to " + verb + " it unseen:",
+			Question:   "can't show " + strings.Join(slices.Sorted(slices.Values(unseen)), ", ") + ". Type binary to " + verb + " it unseen:",
 			NoTerminal: noTerminal, Accept: []string{"binary"},
 		}
 	}

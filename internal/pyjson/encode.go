@@ -1,143 +1,101 @@
 package pyjson
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"math/big"
-	"slices"
-	"strings"
+	"unicode/utf8"
 )
 
-// Opts mirrors json.dumps(indent=, sort_keys=) with ensure_ascii always on. Indent 0 is Python's indent=None (one line,
-// separators ", " and ": ").
-// lazy: Python's indent=0 (newlines without indentation) is not expressible; nothing in shortcut uses it.
-type Opts struct {
-	Indent   int
-	SortKeys bool
-}
-
-// DumpsCompact is json.dumps(v) with the default separators and ensure_ascii.
-func DumpsCompact(v Value) string { return Dumps(v, Opts{}) }
-
-// Dumps is json.dumps(v, ...) without a trailing newline. A Value of a type outside the model panics.
-func Dumps(v Value, o Opts) string {
-	var b strings.Builder
-	encode(&b, v, o, 0)
-	return b.String()
-}
-
-func encode(b *strings.Builder, v Value, o Opts, level int) {
-	switch x := v.(type) {
-	case nil:
-		b.WriteString("null")
-	case bool:
-		if x {
-			b.WriteString("true")
-		} else {
-			b.WriteString("false")
-		}
+// validate refuses a string, in a key or a value, that is not valid UTF-8: encoding/json would write U+FFFD for the
+// bad bytes, and two different names would become one.
+func validate(v Value) error {
+	switch t := v.(type) {
 	case string:
-		WriteString(b, x)
-	case *big.Int:
-		b.WriteString(x.String())
-	case float64:
-		b.WriteString(ReprFloat(x))
-	case []Value:
-		if len(x) == 0 {
-			b.WriteString("[]")
-			return
+		if !utf8.ValidString(t) {
+			return fmt.Errorf("%w: %q", ErrNotUTF8, t)
 		}
-		b.WriteByte('[')
-		for i, e := range x {
-			separator(b, o, level+1, i)
-			encode(b, e, o, level+1)
+	case []any:
+		for _, e := range t {
+			if err := validate(e); err != nil {
+				return err
+			}
 		}
-		closer(b, o, level, ']')
+	case map[string]any:
+		for k, e := range t {
+			if !utf8.ValidString(k) {
+				return fmt.Errorf("%w: key %q", ErrNotUTF8, k)
+			}
+			if err := validate(e); err != nil {
+				return err
+			}
+		}
 	case *Object:
-		if len(x.Keys) == 0 {
-			b.WriteString("{}")
-			return
+		for _, k := range t.Keys {
+			if !utf8.ValidString(k) {
+				return fmt.Errorf("%w: key %q", ErrNotUTF8, k)
+			}
+			if err := validate(t.Vals[k]); err != nil {
+				return err
+			}
 		}
-		keys := x.Keys
-		if o.SortKeys {
-			keys = SortStrings(slices.Clone(keys))
-		}
-		b.WriteByte('{')
-		for i, k := range keys {
-			separator(b, o, level+1, i)
-			WriteString(b, k)
-			b.WriteString(": ")
-			encode(b, x.Vals[k], o, level+1)
-		}
-		closer(b, o, level, '}')
-	default:
-		panic(fmt.Sprintf("pyjson: cannot encode %T", v))
 	}
+	return nil
 }
 
-func separator(b *strings.Builder, o Opts, level, i int) {
-	if i > 0 {
-		b.WriteByte(',')
-		if o.Indent == 0 {
-			b.WriteByte(' ')
+// MarshalJSON writes the object in key order. It validates first, so it is also safe through encoding/json.
+func (o *Object) MarshalJSON() ([]byte, error) {
+	if err := validate(o); err != nil {
+		return nil, err
+	}
+	var b bytes.Buffer
+	b.WriteByte('{')
+	for i, k := range o.Keys {
+		if i > 0 {
+			b.WriteByte(',')
 		}
-	}
-	if o.Indent > 0 {
-		b.WriteByte('\n')
-		b.WriteString(strings.Repeat(" ", o.Indent*level))
-	}
-}
-
-func closer(b *strings.Builder, o Opts, level int, c byte) {
-	if o.Indent > 0 {
-		b.WriteByte('\n')
-		b.WriteString(strings.Repeat(" ", o.Indent*level))
-	}
-	b.WriteByte(c)
-}
-
-const hexDigits = "0123456789abcdef"
-
-// WriteString writes s as a JSON string literal the way Python does. s is read as Python's str: UTF-8, a WTF-8
-// surrogate triple as that surrogate, any other invalid byte 0xNN as U+DC00+NN (see Compare). Every
-// code point outside space..~ except the escapes below becomes \uXXXX (lower hex, astral as a surrogate pair).
-func WriteString(b *strings.Builder, s string) {
-	b.WriteByte('"')
-	for i := 0; i < len(s); {
-		r, n := pyRune(s[i:])
-		switch {
-		case r == '"':
-			b.WriteString(`\"`)
-		case r == '\\':
-			b.WriteString(`\\`)
-		case r == '\b':
-			b.WriteString(`\b`)
-		case r == '\f':
-			b.WriteString(`\f`)
-		case r == '\n':
-			b.WriteString(`\n`)
-		case r == '\r':
-			b.WriteString(`\r`)
-		case r == '\t':
-			b.WriteString(`\t`)
-		case r < 0x20:
-			writeU(b, r)
-		case r >= 0x20 && r <= 0x7e:
-			b.WriteByte(byte(r))
-		case r >= 0x10000:
-			r -= 0x10000
-			writeU(b, 0xD800+(r>>10))
-			writeU(b, 0xDC00+(r&0x3FF))
-		default:
-			writeU(b, r)
+		kb, _ := encodeNoEscape(k)
+		b.Write(kb)
+		b.WriteByte(':')
+		vb, err := encodeNoEscape(o.Vals[k]) // a nested *Object comes back through MarshalJSON
+		if err != nil {
+			return nil, err
 		}
-		i += n
+		b.Write(vb)
 	}
-	b.WriteByte('"')
+	b.WriteByte('}')
+	return b.Bytes(), nil
 }
 
-func writeU(b *strings.Builder, r rune) {
-	b.WriteString(`\u`)
-	for shift := 12; shift >= 0; shift -= 4 {
-		b.WriteByte(hexDigits[(r>>uint(shift))&0xF])
+// encodeNoEscape is json.Marshal without the HTML escaping of < > &, which encoding/json does by default.
+func encodeNoEscape(v any) ([]byte, error) {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
 	}
+	return bytes.TrimSuffix(b.Bytes(), []byte("\n")), nil
+}
+
+// Marshal is v on one line. A json.Number is written as the text it was read with; non-ASCII is written as the
+// character, not \uXXXX; a string that is not valid UTF-8 is an error (ErrNotUTF8).
+func Marshal(v Value) ([]byte, error) {
+	if err := validate(v); err != nil {
+		return nil, err
+	}
+	return encodeNoEscape(v)
+}
+
+// MarshalIndent is Marshal with two-space indentation. It does not use json.MarshalIndent, which would escape < > & again.
+func MarshalIndent(v Value) ([]byte, error) {
+	raw, err := Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var out bytes.Buffer
+	if err := json.Indent(&out, raw, "", "  "); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
 }

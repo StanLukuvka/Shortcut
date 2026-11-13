@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/pyjson"
@@ -155,7 +156,7 @@ func LoadStore(storeDir string) Store {
 		for _, e := range entries {
 			names = append(names, e.Name())
 		}
-		for _, filename := range pyjson.SortStrings(names) {
+		for _, filename := range slices.Sorted(slices.Values(names)) {
 			if strings.HasSuffix(filename, ImportSuffix) {
 				sources[strings.TrimSuffix(filename, ImportSuffix)] = pyos.Join(importsDir, filename)
 			}
@@ -185,7 +186,7 @@ func LoadStore(storeDir string) Store {
 	}
 	var namespaces []NamedGroup
 	mainShortcuts := main.Shortcuts()
-	for _, name := range pyjson.SortStrings(names) {
+	for _, name := range slices.Sorted(slices.Values(names)) {
 		path := sources[name]
 		g := LoadGroup(path, storeDir, name)
 		if err := ValidateName(name); err != nil {

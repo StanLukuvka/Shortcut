@@ -59,7 +59,7 @@ func TestApproval_BlocksUntilApprovedAndAfterAnyChange(t *testing.T) {
 
 	// Reordered keys and reformatting change nothing
 	e.WriteRegistryRaw(registry, "{\n       \"shortcuts\": {\n       \"there\": {\"description\": \"There\", \"inline\": \"echo there\"},\n"+
-		"       \"hi\": {\"description\": \"Say hi\", \"script\": \"scripts/hi.sh\"}},\n       \"version\": 2}")
+		"       \"hi\": {\"description\": \"Say hi\", \"script\": \"scripts/hi.sh\"}},\n       \"version\": 1}")
 	if code := e.RunWith(o, "r", "hi").Code; code != 0 {
 		t.Errorf("reordered: exit %d", code)
 	}
@@ -135,7 +135,7 @@ func TestApproval_OneChangedGroupLeavesTheOthersRunning(t *testing.T) {
 	e.WriteImport(filepath.Join(proj, ".shortcuts"), "kube", testkit.KubeGet)
 	e.Approve(filepath.Join(proj, ".shortcuts"))
 
-	e.WriteFile(docker, `{"version": 2, "shortcuts": {"ps": {"inline": "echo evil"}}}`, 0)
+	e.WriteFile(docker, `{"version": 1, "shortcuts": {"ps": {"inline": "echo evil"}}}`, 0)
 	res := e.RunWith(in(proj), "r", "docker", "ps")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "docker", res.Stderr, "docker changed since you approved it; run: shortcut update docker")
@@ -291,7 +291,7 @@ func TestApproval_ANulCannotHideAScriptBashWouldRun(t *testing.T) {
 // and a reviewed namespace names the file.
 func TestUpdate_ShowsAGroupDescriptionAndItsFile(t *testing.T) {
 	e := testkit.New(t)
-	path := e.WriteImport(e.Store, "docker", map[string]any{"version": 2, "description": "Docker housekeeping",
+	path := e.WriteImport(e.Store, "docker", map[string]any{"version": 1, "description": "Docker housekeeping",
 		"shortcuts": map[string]any{"ps": testkit.Inline("echo ps")}})
 	out := runOK(t, e, testkit.Opts{}, "update", "docker", "-y").Stdout
 	testkit.Contains(t, "update docker", out, "Docker housekeeping")
@@ -321,24 +321,28 @@ func TestUpdate_Refusals(t *testing.T) {
 	}
 	// the exported-but-relative-cwd warning and the local-over-shared line
 	proj = e.Project(map[string]any{"x": map[string]any{"inline": "true", "cwd": "sub", "export": true}, "y": testkit.Inline("true")}, testkit.Name("p2"))
-	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 2, "shortcuts": {"y": {"inline": "false"}}}`, 0)
+	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"y": {"inline": "false"}}}`, 0)
 	res = e.RunWith(in(proj), "update", "-y")
 	testkit.Contains(t, "warning", res.Stderr, "warning: 'x' is exported, but its cwd 'sub' only exists in this checkout\n")
 	testkit.Contains(t, "local", res.Stdout, "'y' in .shortcuts is overridden by .shortcuts.local for you.\n")
 }
 
-// Q-3: a script path that is not UTF-8 prints escaped in the diff header on stdout, never as a raw 0x9b.
-func TestUpdate_NonUTF8PathIsEscapedOnStdout(t *testing.T) {
+// Q-3: a file name that is not valid UTF-8 cannot be approved, and the refusal shows it escaped, never as a raw 0x9b.
+func TestUpdate_NonUTF8PathIsRefusedAndShownEscaped(t *testing.T) {
 	e := testkit.New(t)
-	proj := e.Project(testkit.HI)
-	bad := "scripts/a\x9bb\xed\xa0\x80c.sh"
-	e.WriteFile(filepath.Join(proj, bad), "echo hi\n", 0)
-	e.WriteRegistryRaw(filepath.Join(proj, ".shortcuts"),
-		`{"version": 2, "shortcuts": {"hi": {"description": "d", "script": "scripts/a\udc9bb\ud800c.sh"}}}`)
-	out := runOK(t, e, in(proj), "update", "-y").Stdout
-	testkit.Contains(t, "update", out, "--- a/scripts/a\\udc9bb\\ud800c.sh")
-	if !utf8.ValidString(out) || strings.ContainsAny(out, "\u0080\u009b") {
-		t.Errorf("stdout holds raw bytes: %q", out)
+	e.WriteImport(e.Store, "docker", testkit.NS(map[string]any{"ps": testkit.Inline("echo ps")}))
+	bad := filepath.Join(e.Store, "imports", "scripts", "docker", "a\x9bb\xed\xa0\x80c.sh")
+	if err := os.MkdirAll(filepath.Dir(bad), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bad, []byte("echo hi\n"), 0o644); err != nil {
+		t.Skipf("this filesystem refuses non-UTF-8 names: %v", err)
+	}
+	res := e.Run("update", "docker", "-y")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "update", res.Stderr, `"scripts/docker/a\x9bb\xed\xa0\x80c.sh" is not valid UTF-8; rename it`)
+	if !utf8.ValidString(res.Stdout+res.Stderr) || strings.ContainsAny(res.Stdout+res.Stderr, "\u0080\u009b") {
+		t.Errorf("output holds raw bytes: %q %q", res.Stdout, res.Stderr)
 	}
 }
 
@@ -347,12 +351,20 @@ func TestStores_ShortcutFileNeedsTheCurrentVersion(t *testing.T) {
 	path := e.WriteImport(e.Store, "docker", map[string]any{"shortcuts": map[string]any{"ps": testkit.Inline("echo ps")}})
 	res := e.Run("update", "docker", "-y")
 	res.WantCode(t, 1)
-	testkit.Contains(t, "no version", res.Stderr, `needs "version": 2`)
+	testkit.Contains(t, "no version", res.Stderr, `needs "version": 1`)
 
 	e.WriteFile(path, `{"version": 3, "shortcuts": {"ps": {"inline": "echo ps"}}}`, 0)
 	res = e.Run("update", "docker", "-y")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "version 3", res.Stderr, "newer than this shortcut reads; upgrade shortcut")
+}
+
+func TestStores_AFileWrittenAsVersion2IsNewerThanThisFormat(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteRegistryRaw(e.Store, `{"version": 2, "shortcuts": {"v": {"inline": "echo ran"}}}`)
+	res := e.Run("list") // list warns about a store it cannot read and goes on
+	testkit.Contains(t, "list", res.Stderr, "is format version 2, newer than this shortcut reads; upgrade shortcut")
+	testkit.Contains(t, "list names the file", res.Stderr, "shortcuts.json")
 }
 
 func TestStores_AVersionThatIsntAWholeNumberIsRefused(t *testing.T) {
@@ -363,7 +375,7 @@ func TestStores_AVersionThatIsntAWholeNumberIsRefused(t *testing.T) {
 		if res.Code != 1 || res.Stdout != "" {
 			t.Errorf("%s: exit %d stdout %q", version, res.Code, res.Stdout)
 		}
-		testkit.Contains(t, version, res.Stderr, "'version' must be a whole number, such as 2")
+		testkit.Contains(t, version, res.Stderr, "'version' must be a whole number, such as 1")
 	}
 	proj := e.Project(testkit.GO, testkit.Extra(map[string]any{"version": "3"}))
 	res := e.RunWith(in(proj), "update", "-y")

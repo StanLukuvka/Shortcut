@@ -63,7 +63,7 @@ func FindEntry(words []string, callerCwd string, skipLocal, strict bool) (Found,
 				return Found{}, errors.New(*group.Error)
 			}
 			gs := group.Shortcuts()
-			members := strings.Join(pyjson.SortStrings(slices.Clone(gs.Keys)), ", ")
+			members := strings.Join(slices.Sorted(slices.Values(gs.Keys)), ", ")
 			if members == "" {
 				members = "(none)"
 			}

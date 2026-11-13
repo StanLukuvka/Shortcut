@@ -1,8 +1,12 @@
 package approval
 
 import (
+	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/pyjson"
@@ -81,13 +85,15 @@ func folderFiles(g model.Group) map[string]string {
 	return files
 }
 
-func jsonFile(g model.Group, path string, data *pyjson.Object) map[string]string {
+func jsonFile(g model.Group, path string, data *pyjson.Object) (map[string]string, error) {
 	if data == nil {
 		data = &pyjson.Object{}
 	}
-	return map[string]string{
-		displayPath(g, path): pyjson.Dumps(data, pyjson.Opts{Indent: 2, SortKeys: true}) + "\n",
+	text, err := pyjson.MarshalIndent(data.Sorted())
+	if err != nil {
+		return nil, fmt.Errorf("cannot approve: %q: %w", displayPath(g, path), err)
 	}
+	return map[string]string{displayPath(g, path): string(text) + "\n"}, nil
 }
 
 func merge(maps ...map[string]string) map[string]string {
@@ -101,18 +107,79 @@ func merge(maps ...map[string]string) map[string]string {
 }
 
 // SharedFiles is the group's own file and what it names, the JSON normalised, and for a namespace its scripts
-// folder: exactly what is hashed, snapshotted and diffed. A project may have no .shortcuts; then this is empty.
-func SharedFiles(g model.Group) map[string]string {
+// folder: exactly what is compared, snapshotted and diffed. A project may have no .shortcuts; then this is empty.
+func SharedFiles(g model.Group) (map[string]string, error) {
 	if g.LocalFile != "" && !pyos.Exists(g.File) {
-		return map[string]string{}
+		return map[string]string{}, nil
 	}
-	return merge(jsonFile(g, g.File, g.Data), folderFiles(g), entryFiles(g, g.SharedShortcuts(), ""))
+	own, err := jsonFile(g, g.File, g.Data)
+	if err != nil {
+		return nil, err
+	}
+	return merge(own, folderFiles(g), entryFiles(g, g.SharedShortcuts(), "")), nil
 }
 
 // LocalFiles is the same for .shortcuts.local.
-func LocalFiles(g model.Group) map[string]string {
+func LocalFiles(g model.Group) (map[string]string, error) {
 	if g.LocalFile == "" || !pyos.Exists(g.LocalFile) {
-		return map[string]string{}
+		return map[string]string{}, nil
 	}
-	return merge(jsonFile(g, g.LocalFile, g.LocalData), entryFiles(g, g.LocalShortcuts(), " in "+model.LocalFile))
+	own, err := jsonFile(g, g.LocalFile, g.LocalData)
+	if err != nil {
+		return nil, err
+	}
+	return merge(own, entryFiles(g, g.LocalShortcuts(), " in "+model.LocalFile)), nil
+}
+
+// checkPaths refuses a snapshot with text that is not valid UTF-8 in a path or a value: the record is JSON, and
+// JSON cannot hold it without merging two different names into one. The smallest offender is named.
+func checkPaths(files map[string]string) error {
+	for _, p := range slices.Sorted(maps.Keys(files)) {
+		if !utf8.ValidString(p) || !utf8.ValidString(files[p]) {
+			return fmt.Errorf("cannot approve: %q is not valid UTF-8; rename it", p)
+		}
+	}
+	return nil
+}
+
+// snapshot is SharedFiles and LocalFiles, or the error for text that cannot be approved. State, Save and Require
+// get the maps this way.
+func snapshot(g model.Group) (shared, local map[string]string, err error) {
+	if err = CheckKey(g); err != nil {
+		return nil, nil, err
+	}
+	if shared, err = SharedFiles(g); err != nil {
+		return nil, nil, err
+	}
+	if local, err = LocalFiles(g); err != nil {
+		return nil, nil, err
+	}
+	if err = checkPaths(shared); err == nil {
+		err = checkPaths(local)
+	}
+	return shared, local, err
+}
+
+// CheckKey refuses a group whose approval key would be built from a path that is not valid UTF-8: the store
+// folder, and for a namespace its file. Before any diff or prompt, so nothing is shown for a record that cannot be kept.
+func CheckKey(g model.Group) error {
+	if !g.NeedsApproval() {
+		return nil
+	}
+	parts := []string{pyos.Realpath(g.StoreDir)}
+	if g.Name != "" {
+		parts = append(parts, pyos.Realpath(g.File))
+	}
+	for _, p := range parts {
+		if !utf8.ValidString(p) {
+			return fmt.Errorf("cannot approve: %q is not valid UTF-8; rename it", p)
+		}
+	}
+	return nil
+}
+
+// Check is nil when the group's files can be approved, else the error that says why not.
+func Check(g model.Group) error {
+	_, _, err := snapshot(g)
+	return err
 }

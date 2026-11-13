@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 1,
   "shortcuts": {
     "search": {
       "description": "Search files under caller cwd matching pattern",

@@ -16,8 +16,8 @@ var (
 	BinTool = map[string]any{"tool": map[string]any{"script": "bin/tool"}}
 
 	// Whole .shortcut files, for WriteImport.
-	DockerPS = map[string]any{"version": 2, "shortcuts": map[string]any{"ps": map[string]any{"inline": "echo ps"}}}
-	KubeGet  = map[string]any{"version": 2, "shortcuts": map[string]any{"get": map[string]any{"inline": "echo get"}}}
+	DockerPS = map[string]any{"version": 1, "shortcuts": map[string]any{"ps": map[string]any{"inline": "echo ps"}}}
+	KubeGet  = map[string]any{"version": 1, "shortcuts": map[string]any{"get": map[string]any{"inline": "echo get"}}}
 )
 
 const brokenJSON = "{not json"
@@ -132,7 +132,7 @@ func (e *Env) WriteStore(storeDir string, shortcuts map[string]any, extra ...map
 	if shortcuts == nil {
 		shortcuts = map[string]any{}
 	}
-	data := map[string]any{"version": 2, "shortcuts": shortcuts}
+	data := map[string]any{"version": 1, "shortcuts": shortcuts}
 	for _, x := range extra {
 		for k, v := range x {
 			data[k] = v

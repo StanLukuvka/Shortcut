@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
@@ -208,7 +209,7 @@ func TestStores_NewTakesOneSource(t *testing.T) {
 		message string
 	}{
 		{[]string{"new", "x", "--script", source, "--", "true"}, "use one of"},
-		{[]string{"new", "x", "--script", source, "--copy", source}, "not allowed with"},
+		{[]string{"new", "x", "--script", source, "--copy", source}, "cannot be used together"},
 		{[]string{"new", "x", "--local", "--copy", source}, "Use --script"},
 		{[]string{"new", "x", "--script", "", "--", "true"}, "need a file name"},
 		{[]string{"new", "x", "--copy", ""}, "need a file name"},
@@ -314,7 +315,7 @@ func TestStores_NamespaceFlagCreatesANamespace(t *testing.T) {
 	res := runOK(t, e, testkit.Opts{}, "new", "delete", "--namespace", "docker", "--desc", "Remove one", "--", `echo "rm $1"`)
 	testkit.Contains(t, "stderr", res.Stderr, "needs approving before it runs: shortcut update docker")
 	doc := decodeObject(t, testkit.ReadFile(t, filepath.Join(e.Store, "imports", "docker.shortcut")))
-	testkit.Eq(t, "version", doc["version"], float64(2))
+	testkit.Eq(t, "version", doc["version"], float64(1))
 	testkit.Eq(t, "inline", doc["shortcuts"].(map[string]any)["delete"].(map[string]any)["inline"], `echo "rm $1"`)
 	if _, has := e.LoadGlobal()["delete"]; has {
 		t.Errorf("delete is global")
@@ -388,7 +389,7 @@ func TestStores_ConcurrentNewKeepsEveryEntry(t *testing.T) {
 func TestStores_ASymlinkedStoreFileIsWrittenWhereItLeads(t *testing.T) {
 	e := testkit.New(t)
 	dotfiles := e.Folder("dotfiles")
-	target := e.WriteFile(filepath.Join(dotfiles, "shortcuts.json"), `{"version": 2, "shortcuts": {}}`, 0o644)
+	target := e.WriteFile(filepath.Join(dotfiles, "shortcuts.json"), `{"version": 1, "shortcuts": {}}`, 0o644)
 	link := filepath.Join(e.Store, "shortcuts.json")
 	e.Symlink(target, link)
 	runOK(t, e, testkit.Opts{}, "new", "hi", "--", "echo hi")
@@ -414,7 +415,7 @@ func TestStores_UnknownFieldsAreErrors(t *testing.T) {
 		name, message string
 		data          map[string]any
 	}{
-		{"top", "unknown field: owner", map[string]any{"version": 2, "owner": "x", "shortcuts": map[string]any{}}},
+		{"top", "unknown field: owner", map[string]any{"version": 1, "owner": "x", "shortcuts": map[string]any{}}},
 		{"entry", "unknown field: sandbox", testkit.NS(map[string]any{
 			"a": map[string]any{"inline": "true", "sandbox": true}})},
 		{"arg", "unknown args field: secret", testkit.NS(map[string]any{
@@ -561,4 +562,34 @@ func TestNew_EmptyDescOnCopyIsReplaced(t *testing.T) {
 	script := e.Script("f.sh", "#!/bin/sh\necho hi\n")
 	runOK(t, e, testkit.Opts{}, "new", "x", "--copy", script, "--desc", "")
 	testkit.Eq(t, "desc", e.LoadGlobal()["x"].(map[string]any)["description"], "(no description)")
+}
+
+func TestNew_LocalInAFolderThatCannotBeApprovedWritesNothing(t *testing.T) {
+	e := testkit.New(t)
+	proj := filepath.Join(e.Tmp, "pr\xffoj")
+	if err := os.Mkdir(proj, 0o755); err != nil {
+		t.Skipf("this filesystem refuses non-UTF-8 names: %v", err)
+	}
+	res := e.RunWith(in(proj), "new", "t", "--local", "--", "echo hi")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "stderr", res.Stderr, "not valid UTF-8")
+	for _, out := range []string{res.Stdout, res.Stderr} {
+		if strings.ContainsRune(out, '\xff') || !utf8.ValidString(out) {
+			t.Errorf("raw bytes in the output: %q", out)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(proj, ".shortcuts.local")); err == nil {
+		t.Error(".shortcuts.local was written")
+	}
+}
+
+func TestList_NamesComeOutInByteOrder(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{
+		"B": testkit.Inline("true"), "a-1": testkit.Inline("true"), "a": testkit.Inline("true"), "10": testkit.Inline("true"),
+	})
+	got := strings.Fields(runOK(t, e, testkit.Opts{}, "list", "--names").Stdout)
+	if want := []string{"10", "B", "a", "a-1"}; !slices.Equal(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
 }

@@ -80,13 +80,26 @@ func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames 
 		s.Err.WriteString("error: cannot approve " + g.Label() + ": " + *g.Error + "\n")
 		return 1, nil
 	}
+	if err := approval.Check(g); err != nil {
+		s.Err.WriteString("error: " + err.Error() + "\n")
+		return 1, nil
+	}
 	if errs := model.EntryErrors(g); len(errs) > 0 {
 		for _, e := range errs {
 			s.Err.WriteString("error: cannot approve " + g.Label() + ": " + e + "\n")
 		}
 		return 1, nil
 	}
-	shared, local := approval.SharedFiles(g), approval.LocalFiles(g)
+	shared, err := approval.SharedFiles(g)
+	if err != nil {
+		s.Err.WriteString("error: " + err.Error() + "\n")
+		return 1, nil
+	}
+	local, err := approval.LocalFiles(g)
+	if err != nil {
+		s.Err.WriteString("error: " + err.Error() + "\n")
+		return 1, nil
+	}
 	files := maps.Clone(shared)
 	maps.Copy(files, local)
 	if approval.State(g) == "ok" {
@@ -109,7 +122,7 @@ func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames 
 	s.Out.WriteString(head + " " + g.Label() + where + "\n")
 	textio.ShowDiff(s, approval.DiffFiles(old, files))
 	local2 := g.LocalShortcuts()
-	for _, name := range pyjson.SortStrings(slices.Clone(g.SharedShortcuts().Keys)) {
+	for _, name := range slices.Sorted(slices.Values(g.SharedShortcuts().Keys)) {
 		if _, both := local2.Get(name); both {
 			s.Out.WriteString("'" + name + "' in " + model.ProjectFile + " is " + g.Source(name) + " by " + model.LocalFile + " for you.\n")
 		}
@@ -120,13 +133,13 @@ func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames 
 		if g.Name != "" {
 			hidden = []string{g.Name}
 		}
-		for _, name := range pyjson.SortStrings(slices.Clone(hidden)) {
+		for _, name := range slices.Sorted(slices.Values(hidden)) {
 			if globalNames[name] {
 				s.Out.WriteString("Inside this project, '" + name + "' hides your global '" + name + "'.\n")
 			}
 		}
 	}
-	for _, name := range pyjson.SortStrings(slices.Clone(shortcuts.Keys)) {
+	for _, name := range slices.Sorted(slices.Values(shortcuts.Keys)) {
 		data, ok := shortcuts.Vals[name].(*pyjson.Object)
 		if !ok {
 			continue

@@ -18,8 +18,6 @@ TestApproval_DiffDetails -> test_approval.py::test_diff_details
 TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles -> test_approval.py::test_invalid_utf8_and_its_escaped_text_are_different_files
 displayPath -> display_path
 entryFiles -> entry_files
-filesHash -> files_hash
-hashInput -> json.dumps(sorted(files.items()))
 
 [internal/cli]
 Die -> die()
@@ -299,18 +297,14 @@ writeExecutable -> open(path, "w") + chmod 0o755
 writeLocal -> write_local
 
 [internal/cli/argparse]
+# The parser is no longer a port: it is a small loop with no abbreviations or combined short flags.
+# These names only say where the Go code started.
 Exclusive -> add_mutually_exclusive_group
 Namespace -> argparse's Namespace
 New -> Parser(prog="shortcut <cmd>")
 Parse -> parse_args
+UsageError -> (new: "error: ..." and a Try line, no Python equivalent)
 PyRepr -> repr() of a str
-argError -> ArgumentError
-matchPartial -> _match_arguments_partial
-nargsPattern -> _get_nargs_pattern
-optTuple -> _parse_optional
-optionCount -> _match_argument
-optionTuples -> _get_option_tuples
-parseKnown -> _parse_known_args
 
 [internal/difflib]
 SplitLinesKeepEnds -> str.splitlines(keepends=True)
@@ -359,18 +353,7 @@ osErrText -> str(OSError)
 
 [internal/pyjson]
 Decode -> json.load
-Dumps -> json.dumps(v, ...) without a trailing newline
-DumpsCompact -> json.dumps(v) with the default separators and ensure_ascii
 Parse -> json.loads(s)
-ReprFloat -> repr(float)
-SyntaxError -> json.JSONDecodeError
-UTF8Error -> UnicodeDecodeError
-array -> _parse_array_unicode
-checkUTF8 -> bytes.decode("utf-8")
-number -> _match_number_unicode
-object -> _parse_object_unicode
-str -> scanstring_unicode
-value -> py_scanner's scan_once
 
 [internal/pyos]
 Abs -> os.path.abspath

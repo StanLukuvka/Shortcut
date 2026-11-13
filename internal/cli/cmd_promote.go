@@ -22,9 +22,9 @@ func cmdPromote(s *textio.Streams, args []string) error {
 	if model.FindProjectRoot(callerCwd) == "" {
 		return Die("promote runs inside a project: there's no " + model.ProjectFile + " or " + model.LocalFile + " here or above")
 	}
-	name, asGiven := ns.Str("name"), ns.Set("new_name")
+	name, asGiven := ns.Str("name"), ns.Set("newName")
 	newName := name
-	if v := ns.Str("new_name"); v != "" { // `parsed.new_name or parsed.name`: an empty --as is no --as
+	if v := ns.Str("newName"); v != "" { // `parsed.new_name or parsed.name`: an empty --as is no --as
 		newName = v
 	}
 	if err := model.ValidateName(newName); err != nil {
@@ -80,8 +80,12 @@ func cmdPromote(s *textio.Streams, args []string) error {
 
 	shown := &pyjson.Object{}
 	shown.Set(newName, fields)
+	text, err := pyjson.MarshalIndent(shown)
+	if err != nil {
+		return err
+	}
 	s.Out.WriteString("From " + group.DefiningFile(name) + ", as your global '" + newName + "':\n")
-	s.Out.WriteString(pyjson.Dumps(shown, pyjson.Opts{Indent: 2}) + "\n")
+	s.Out.WriteString(string(text) + "\n")
 	s.Out.WriteString("This runs the project's files as they are now, like typing the command there. " +
 		"It isn't reviewed again when they change.\n")
 	if err := confirmed(s, textio.Confirm{Question: "add '" + newName + "' to " + home.Main.File + "?",

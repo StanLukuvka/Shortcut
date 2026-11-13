@@ -83,7 +83,7 @@ func importFromRoot(s *textio.Streams, label, sourceRoot, destStoreDir string, a
 		}
 	}
 	if listed, ok := sourceRegistry.Vals["imports"].(*pyjson.Object); ok && len(listed.Keys) > 0 {
-		keys := slices.SortedFunc(slices.Values(listed.Keys), pyjson.Compare)
+		keys := slices.Sorted(slices.Values(listed.Keys))
 		skipped = append(skipped, "imports: "+strings.Join(keys, ", ")+" (namespaces a "+model.ProjectFile+" imports aren't copied)")
 	}
 	printSkipped(s, skipped)
@@ -92,7 +92,11 @@ func importFromRoot(s *textio.Streams, label, sourceRoot, destStoreDir string, a
 	}
 
 	// Global shortcuts have no approval step, so an import is reviewed here or never
-	files := map[string]string{"shortcuts.json": pyjson.Dumps(entries, pyjson.Opts{Indent: 2, SortKeys: true}) + "\n"}
+	text, err := pyjson.MarshalIndent(entries.Sorted())
+	if err != nil {
+		return err
+	}
+	files := map[string]string{"shortcuts.json": string(text) + "\n"}
 	for _, sc := range scripts {
 		files[pyos.Relpath(sc.path, destStoreDir)] = approval.Reviewable(sc.raw)
 	}
@@ -151,7 +155,7 @@ func listDir(dir string) ([]string, error) {
 	for i, e := range entries {
 		names[i] = e.Name()
 	}
-	slices.SortFunc(names, pyjson.Compare)
+	slices.Sort(names)
 	return names, nil
 }
 

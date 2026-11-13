@@ -973,10 +973,10 @@
     {
       "name": "json file change",
       "old": {
-        ".shortcuts": "{\n  \"shortcuts\": {\n    \"x\": {\n      \"inline\": \"echo a\"\n    }\n  },\n  \"version\": 2\n}\n"
+        ".shortcuts": "{\n  \"shortcuts\": {\n    \"x\": {\n      \"inline\": \"echo a\"\n    }\n  },\n  \"version\": 1\n}\n"
       },
       "new": {
-        ".shortcuts": "{\n  \"shortcuts\": {\n    \"x\": {\n      \"inline\": \"echo b\"\n    },\n    \"y\": {\n      \"inline\": \"echo c\"\n    }\n  },\n  \"version\": 2\n}\n"
+        ".shortcuts": "{\n  \"shortcuts\": {\n    \"x\": {\n      \"inline\": \"echo b\"\n    },\n    \"y\": {\n      \"inline\": \"echo c\"\n    }\n  },\n  \"version\": 1\n}\n"
       },
       "lines": [
         "--- a/.shortcuts",
@@ -992,7 +992,7 @@
         "+      \"inline\": \"echo c\"",
         "     }",
         "   },",
-        "   \"version\": 2"
+        "   \"version\": 1"
       ]
     },
     {

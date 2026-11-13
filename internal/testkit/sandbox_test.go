@@ -245,7 +245,7 @@ func TestFixtures_ProjectWritesWhatItIsGiven(t *testing.T) {
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatal(err)
 	}
-	want := decoded(t, map[string]any{"version": 2, "shortcuts": GO, "imports": imports})
+	want := decoded(t, map[string]any{"version": 1, "shortcuts": GO, "imports": imports})
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("store = %v, want %v", got, want)
 	}
@@ -284,7 +284,7 @@ func TestFixtures_CollectionImports(t *testing.T) {
 		t.Errorf("bin/a.sh not executable: %v", err)
 	}
 	raw, _ := os.ReadFile(filepath.Join(src, ".shortcuts"))
-	want := `{"shortcuts":{"hi":{"export":true,"inline":"echo hi"}},"version":2}`
+	want := `{"shortcuts":{"hi":{"export":true,"inline":"echo hi"}},"version":1}`
 	if strings.TrimSpace(string(raw)) != want {
 		t.Errorf("store = %s", raw)
 	}

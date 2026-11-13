@@ -1,11 +1,12 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -72,7 +73,7 @@ func targetGroup(ns Namespace, cwd string) (model.Group, error) {
 func loadForEdit(path string, isNew bool) (*pyjson.Object, *pyjson.Object, error) {
 	reg := &pyjson.Object{}
 	if isNew {
-		reg.Set("version", big.NewInt(model.RegistryVersion))
+		reg.Set("version", json.Number(strconv.Itoa(model.RegistryVersion)))
 		reg.Set("shortcuts", &pyjson.Object{})
 	} else {
 		var err error
@@ -116,7 +117,9 @@ func lockedGroupWrite(group model.Group, mutate func() error) error {
 			return err
 		}
 		if approved {
-			keep = approval.SharedFiles(model.ReloadGroup(group))
+			var err error
+			keep, err = approval.SharedFiles(model.ReloadGroup(group))
+			return err
 		}
 		return nil
 	})
@@ -201,6 +204,9 @@ func writeLocal(root string, change func(*pyjson.Object) error) (model.Group, er
 	var after model.Group
 	err := model.WithRegistryLock(root, func() error {
 		before := model.LoadProjectGroup(root)
+		if err := approval.CheckKey(before); err != nil { // before anything is written: the approval could not follow
+			return err
+		}
 		record := approval.Load(before)
 		approved := approval.LocalIsApproved(before, record)
 		path := before.LocalFile
@@ -224,7 +230,11 @@ func writeLocal(root string, change func(*pyjson.Object) error) (model.Group, er
 			if record != nil {
 				snapshot = record.Snapshot
 			}
-			return approval.Save(after, snapshot, approval.LocalFiles(after))
+			local, err := approval.LocalFiles(after)
+			if err != nil {
+				return err
+			}
+			return approval.Save(after, snapshot, local)
 		}
 		return nil
 	})

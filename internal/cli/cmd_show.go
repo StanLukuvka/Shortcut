@@ -35,9 +35,9 @@ func cmdShow(s *textio.Streams, args []string) error {
 		return err
 	}
 	if ns.Bool("json") {
-		return showJSON(s, ns.List("name"), ns.Bool("skip_local"))
+		return showJSON(s, ns.List("name"), ns.Bool("skipLocal"))
 	}
-	resolved, err := model.ResolveName(ns.List("name"), ns.Bool("skip_local"))
+	resolved, err := model.ResolveName(ns.List("name"), ns.Bool("skipLocal"))
 	if err != nil {
 		return err
 	}
@@ -162,6 +162,10 @@ func showJSON(s *textio.Streams, words []string, skipLocal bool) error {
 	if err != nil {
 		out.Set("error", err.Error())
 	}
-	s.Out.WriteString(pyjson.Dumps(out, pyjson.Opts{Indent: 2}) + "\n")
+	text, jerr := pyjson.MarshalIndent(out)
+	if jerr != nil {
+		return jerr
+	}
+	s.Out.WriteString(string(text) + "\n")
 	return nil
 }

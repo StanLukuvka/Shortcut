@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -75,6 +76,16 @@ func TestEntry_ValidateArgsMessages(t *testing.T) {
 	}
 }
 
+// compact is v on one line, as the JSON encoder writes it.
+func compact(t *testing.T, v pyjson.Value) string {
+	t.Helper()
+	b, err := pyjson.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
 func TestEntry_RoundTripKeepsArgsAndOrder(t *testing.T) {
 	src := `{"description": "d", "script": "s.sh", "cwd": "c", "confirm": true, "export": true,` +
 		` "args": [{"name": "a", "desc": "x", "required": true}, {"name": "b"}], "from": {"source": "/p", "name": "n"}}`
@@ -82,7 +93,7 @@ func TestEntry_RoundTripKeepsArgsAndOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := pyjson.DumpsCompact(e.ToObject()), pyjson.DumpsCompact(parse(t, src)); got != want {
+	if got, want := compact(t, e.ToObject()), compact(t, parse(t, src)); got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
 	}
 	if e.Inline != nil || *e.Script != "s.sh" || e.Origin.Name != "n" || !e.Confirm || len(e.Args) != 2 {
@@ -93,7 +104,7 @@ func TestEntry_RoundTripKeepsArgsAndOrder(t *testing.T) {
 	if err != nil || e.Inline == nil || e.Args == nil {
 		t.Fatalf("%+v %v", e, err)
 	}
-	if got := pyjson.DumpsCompact(e.ToObject()); got != `{"description": "", "inline": "", "args": []}` {
+	if got := compact(t, e.ToObject()); got != `{"description":"","inline":"","args":[]}` {
 		t.Error(got)
 	}
 }
@@ -130,15 +141,12 @@ func TestRegistry_LoadRegistryFile(t *testing.T) {
 	env := testkit.New(t)
 	p := filepath.Join(env.Tmp, "r.json")
 	cases := []struct{ file, want string }{
-		{`{not json`, "corrupt registry " + p + ": Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"},
 		{`[]`, "corrupt registry " + p + ": root must be a JSON object"},
-		{"\xef\xbb\xbf{}", "corrupt registry " + p + ": Unexpected UTF-8 BOM (decode using utf-8-sig): line 1 column 1 (char 0)"},
-		{"{\"a\": \"\xff\"}", "corrupt registry " + p + ": 'utf-8' codec can't decode byte 0xff in position 7: invalid start byte"},
-		{"{\r\n  \"a\": 1,\r\n}", "corrupt registry " + p + ": Illegal trailing comma before end of object: line 2 column 9 (char 10)"},
-		{`{"version": "2"}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 2"},
-		{`{"version": 2.0}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 2"},
-		{`{"version": null}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 2"},
-		{`{"version": true}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 2"},
+		{`{"version": "2"}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 1"},
+		{`{"version": 1.0}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 1"},
+		{`{"version": null}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 1"},
+		{`{"version": true}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 1"},
+		{`{"version": 2}`, p + " is format version 2, newer than this shortcut reads; upgrade shortcut"},
 		{`{"version": 3}`, p + " is format version 3, newer than this shortcut reads; upgrade shortcut"},
 		{`{"version": 99999999999999999999999}`, p + " is format version 99999999999999999999999, newer than this shortcut reads; upgrade shortcut"},
 	}
@@ -149,7 +157,26 @@ func TestRegistry_LoadRegistryFile(t *testing.T) {
 			t.Errorf("%q: got %v\nwant %s", c.file, err, c.want)
 		}
 	}
-	for _, ok := range []string{`{}`, `{"version": 0}`, `{"version": 1, "x": 1}`, `{"version": 2}`, `{"version": -5}`} {
+	// Go's wording after the path, and the file is named; text that is not valid UTF-8 says so
+	for _, c := range []struct{ file, want string }{
+		{`{not json`, "invalid character 'n' looking for beginning of object key string (at byte "},
+		{"\xef\xbb\xbf{}", "invalid character"},
+		{"{\r\n  \"a\": 1,\r\n}", "invalid character '}'"},
+		{`{"a": NaN}`, "invalid character 'N'"},
+		{"{\"a\": \"\xff\"}", "not valid UTF-8"},
+		{`{"a": "\udce9"}`, "not valid UTF-8"},
+	} {
+		env.WriteFile(p, c.file, 0)
+		_, err := LoadRegistryFile(p)
+		if err == nil || !strings.HasPrefix(err.Error(), "corrupt registry "+p+": ") || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%q: got %v, want it to name %s and say %q", c.file, err, p, c.want)
+		}
+	}
+	env.WriteFile(p, "{\r\n  \"version\": 1,\r\n  \"shortcuts\": {}\r\n}\r\n", 0) // CRLF line ends are plain white space
+	if _, err := LoadRegistryFile(p); err != nil {
+		t.Errorf("a CRLF registry: %v", err)
+	}
+	for _, ok := range []string{`{}`, `{"version": 0}`, `{"version": 1, "x": 1}`, `{"version": -5}`} {
 		env.WriteFile(p, ok, 0)
 		if _, err := LoadRegistryFile(p); err != nil {
 			t.Errorf("%s: %v", ok, err)
@@ -163,17 +190,17 @@ func TestRegistry_LoadRegistryFile(t *testing.T) {
 
 func TestRegistry_FileError(t *testing.T) {
 	cases := []struct{ file, name, want string }{
-		{`{"version": 2, "shortcuts": {}}`, "", ""},
-		{`{"version": 2, "shortcuts": {}, "imports": {}, "description": "d"}`, "", ""},
+		{`{"version": 1, "shortcuts": {}}`, "", ""},
+		{`{"version": 1, "shortcuts": {}, "imports": {}, "description": "d"}`, "", ""},
 		{`{"shortcuts": []}`, "", "corrupt registry P: 'shortcuts' must be an object"},
 		{`{"shortcuts": null}`, "", "corrupt registry P: 'shortcuts' must be an object"},
 		{`{"description": 1}`, "", "corrupt registry P: 'description' must be a string"},
 		{`{"zed": 1, "bar": 1, "shortcuts": {}}`, "", "P has an unknown field: bar, zed"},
-		{`{"version": 2, "shortcuts": {}}`, "ns", ""},
-		{`{"version": 2, "shortcuts": {}, "imports": {}}`, "ns", "P has its own 'imports', but namespaces don't nest"},
-		{`{"shortcuts": {}}`, "ns", `P needs "version": 2`},
-		{`{"version": 1, "shortcuts": {}}`, "ns", `P needs "version": 2`},
-		{`{"version": 2}`, "ns", "P needs 'shortcuts'"},
+		{`{"version": 1, "shortcuts": {}}`, "ns", ""},
+		{`{"version": 1, "shortcuts": {}, "imports": {}}`, "ns", "P has its own 'imports', but namespaces don't nest"},
+		{`{"shortcuts": {}}`, "ns", `P needs "version": 1`},
+		{`{"version": 2, "shortcuts": {}}`, "ns", `P needs "version": 1`},
+		{`{"version": 1}`, "ns", "P needs 'shortcuts'"},
 	}
 	for _, c := range cases {
 		got := fileError("P", obj(t, c.file), c.name)
@@ -213,8 +240,8 @@ func TestStores_AtomicRegistrySaveAndCorruptProtection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pyjson.DumpsCompact(loaded) != pyjson.DumpsCompact(data) {
-		t.Errorf("loaded %s", pyjson.DumpsCompact(loaded))
+	if compact(t, loaded) != compact(t, data) {
+		t.Errorf("loaded %s", compact(t, loaded))
 	}
 
 	// Corrupt JSON file protection
@@ -266,7 +293,7 @@ func TestStores_StoreDiscoverySkipsGlobalRoot(t *testing.T) {
 func TestStores_ProjectRootViaLocalFileOnlyAndNearest(t *testing.T) {
 	env := testkit.New(t)
 	outer := env.Project(nil, testkit.Name("outer"))
-	env.WriteFile(filepath.Join(outer, ".shortcuts.local"), `{"version": 2, "shortcuts": {}}`, 0)
+	env.WriteFile(filepath.Join(outer, ".shortcuts.local"), `{"version": 1, "shortcuts": {}}`, 0)
 	inner := filepath.Join(outer, "in")
 	env.WriteStore(filepath.Join(inner, ".shortcuts"), map[string]any{})
 	if got := FindProjectRoot(filepath.Join(inner, "x")); got != inner {
@@ -314,10 +341,10 @@ func TestStores_LocalProjectRoot(t *testing.T) {
 func TestStores_WriteJSONAtomic(t *testing.T) {
 	env := testkit.New(t)
 	dotfiles := env.Folder("dotfiles")
-	target := env.WriteFile(filepath.Join(dotfiles, "shortcuts.json"), `{"version": 2, "shortcuts": {}}`, 0o644)
+	target := env.WriteFile(filepath.Join(dotfiles, "shortcuts.json"), `{"version": 1, "shortcuts": {}}`, 0o644)
 	link := filepath.Join(env.Store, "shortcuts.json")
 	env.Symlink(target, link)
-	v := obj(t, `{"version": 2, "shortcuts": {"hi": {"description": "é", "n": 1.0}}}`)
+	v := obj(t, `{"version": 1, "shortcuts": {"hi": {"description": "é", "n": 1.0}}}`)
 	if err := WriteJSONAtomic(link, v); err != nil {
 		t.Fatal(err)
 	}
@@ -325,7 +352,7 @@ func TestStores_WriteJSONAtomic(t *testing.T) {
 		t.Error("the link was replaced")
 	}
 	got, _ := os.ReadFile(target)
-	want := "{\n  \"version\": 2,\n  \"shortcuts\": {\n    \"hi\": {\n      \"description\": \"\\u00e9\",\n      \"n\": 1.0\n    }\n  }\n}\n"
+	want := "{\n  \"version\": 1,\n  \"shortcuts\": {\n    \"hi\": {\n      \"description\": \"é\",\n      \"n\": 1.0\n    }\n  }\n}\n"
 	if string(got) != want {
 		t.Errorf("got %q", got)
 	}
@@ -396,7 +423,7 @@ func TestStores_InitStoreCreatesOnlyAMissingRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(filepath.Join(env.Store, "shortcuts.json"))
-	if string(b) != "{\n  \"version\": 2,\n  \"shortcuts\": {}\n}\n" {
+	if string(b) != "{\n  \"version\": 1,\n  \"shortcuts\": {}\n}\n" {
 		t.Errorf("got %q", b)
 	}
 	env.WriteStore(env.Store, map[string]any{"keep": map[string]any{"inline": "x"}})
@@ -417,7 +444,7 @@ func TestGroup_ShortcutsOverlaySourceAndHiding(t *testing.T) {
 	if got := strings.Join(g.Shortcuts().Keys, ","); got != "a,b,n,d" {
 		t.Errorf("keys %s", got)
 	}
-	if v, _ := g.Shortcuts().Get("b"); pyjson.DumpsCompact(v) != `{"inline": "B"}` {
+	if v, _ := g.Shortcuts().Get("b"); compact(t, v) != `{"inline":"B"}` {
 		t.Error("b not overridden")
 	}
 	for name, want := range map[string]string{"a": "shared", "b": "overridden", "c": "hidden", "d": "local", "z": "hidden"} {
@@ -495,7 +522,7 @@ func TestStores_LoadStoreImportProblems(t *testing.T) {
 	env := testkit.New(t)
 	proj := env.Project(nil)
 	file := filepath.Join(proj, ".shortcuts")
-	env.WriteRegistryRaw(file, `{"version": 2, "shortcuts": {}, "imports": {"num": 5, "plain": "x.json", "bare": "dir/.shortcut", "ok": "~/x.shortcut", "Bad Name": "w.shortcut"}}`)
+	env.WriteRegistryRaw(file, `{"version": 1, "shortcuts": {}, "imports": {"num": 5, "plain": "x.json", "bare": "dir/.shortcut", "ok": "~/x.shortcut", "Bad Name": "w.shortcut"}}`)
 	store := LoadStore(proj)
 	want := []string{
 		"import 'num' in " + file + " must be a path",
@@ -542,7 +569,7 @@ func TestStores_GlobalStoreImportsFolderAndTwice(t *testing.T) {
 func TestStores_LoadProjectGroupErrors(t *testing.T) {
 	env := testkit.New(t)
 	proj := env.Project(map[string]any{"a": map[string]any{"inline": "1"}})
-	env.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 2, "shortcuts": {}, "imports": {}}`, 0)
+	env.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {}, "imports": {}}`, 0)
 	g := LoadProjectGroup(proj)
 	if want := filepath.Join(proj, ".shortcuts.local") + " can't have 'imports': namespaces belong in .shortcuts"; g.Error == nil || *g.Error != want {
 		t.Errorf("%v", g.Error)
@@ -552,13 +579,13 @@ func TestStores_LoadProjectGroupErrors(t *testing.T) {
 		t.Errorf("%v", g.Error)
 	}
 	// the shared file's error comes first, and the shared data is whatever read
-	env.WriteFile(filepath.Join(proj, ".shortcuts"), `{"version": 2, "shortcuts": {}, "extra": 1}`, 0)
+	env.WriteFile(filepath.Join(proj, ".shortcuts"), `{"version": 1, "shortcuts": {}, "extra": 1}`, 0)
 	if g = LoadProjectGroup(proj); g.Error == nil || *g.Error != filepath.Join(proj, ".shortcuts")+" has an unknown field: extra" {
 		t.Errorf("%v", g.Error)
 	}
 	// an absent .shortcuts is just empty
 	only := env.Project(nil, testkit.Name("only"))
-	env.WriteFile(filepath.Join(only, ".shortcuts.local"), `{"version": 2, "shortcuts": {"m": {"inline": "x"}}}`, 0)
+	env.WriteFile(filepath.Join(only, ".shortcuts.local"), `{"version": 1, "shortcuts": {"m": {"inline": "x"}}}`, 0)
 	if g = LoadProjectGroup(only); g.Error != nil || len(g.Shortcuts().Keys) != 1 {
 		t.Errorf("%+v", g)
 	}
@@ -602,5 +629,65 @@ func TestStores_EntryErrors(t *testing.T) {
 	}
 	if strings.Contains(joined, "'ok'") || strings.Contains(joined, "'export'") {
 		t.Errorf("a valid entry was reported:\n%s", joined)
+	}
+}
+
+func TestKey_TellsNonUTF8NamesApart(t *testing.T) {
+	store := testkit.New(t).Tmp
+	keys := map[string]string{}
+	for _, file := range []string{"caf\xe9", "caf\xea", "café", `caf\udce9`, "\xed\xa0\x80", "\xed\xb2\x80", "\xed\x80\x80", "\xed\xc0\x80", "\xed\xff\xbf", "\xed\xbf\xbf", "\xed\xa0"} {
+		g := Group{Name: "ns", StoreDir: store, File: filepath.Join(store, file)}
+		k := g.Key()
+		if prev, dup := keys[k]; dup {
+			t.Errorf("%q and %q share the key %s", prev, file, k)
+		}
+		keys[k] = file
+		if RecordName(k) == "" {
+			t.Fatal("no record name")
+		}
+	}
+	names := map[string]bool{}
+	for k := range keys {
+		names[RecordName(k)] = true
+	}
+	if len(names) != len(keys) {
+		t.Errorf("%d record names for %d keys", len(names), len(keys))
+	}
+	// the key text itself is as Python wrote it: ASCII, \u escapes, lower hex
+	if got, want := keyJSON("a", "é😀\xff"), `["a", "\u00e9\ud83d\ude00\udcff"]`; got != want {
+		t.Errorf("got %s want %s", got, want)
+	}
+}
+
+func TestResolveScriptPath_NonUTF8DirectoriesStayApart(t *testing.T) {
+	base := testkit.New(t).Tmp
+	for _, d := range []string{"d\xe9", "d\xea"} {
+		if err := os.Mkdir(filepath.Join(base, d), 0o755); err != nil {
+			t.Skip("file system refuses non-UTF-8 names")
+		}
+	}
+	a, errA := ResolveScriptPath(base, "d\xe9/run.sh")
+	b, errB := ResolveScriptPath(base, "d\xea/run.sh")
+	if errA != nil || errB != nil || a == b || !strings.HasSuffix(a, "d\xe9/run.sh") || !strings.HasSuffix(b, "d\xea/run.sh") {
+		t.Errorf("%q %v / %q %v", a, errA, b, errB)
+	}
+}
+
+func TestWriteJSONAtomic_RefusesInvalidUTF8AndKeepsTheOldFile(t *testing.T) {
+	path := filepath.Join(testkit.New(t).Tmp, "s.json")
+	old := "{\n  \"version\": 1\n}\n"
+	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	o := &pyjson.Object{}
+	o.Set("name", "caf\xe9")
+	if err := WriteJSONAtomic(path, o); !errors.Is(err, pyjson.ErrNotUTF8) {
+		t.Fatalf("got %v", err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != old {
+		t.Errorf("file changed: %q", got)
+	}
+	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(path), ".*.tmp")); len(left) != 0 {
+		t.Errorf("temp files left: %v", left)
 	}
 }

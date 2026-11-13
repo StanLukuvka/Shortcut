@@ -45,7 +45,7 @@ func TestStores_ListAndNames(t *testing.T) {
 
 func TestStores_GroupDescriptionShowsOnceApproved(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteImport(e.Store, "docker", map[string]any{"version": 2, "description": "Docker housekeeping",
+	e.WriteImport(e.Store, "docker", map[string]any{"version": 1, "description": "Docker housekeeping",
 		"shortcuts": map[string]any{"ps": testkit.Inline("echo ps")}})
 	if out := e.Run("list").Stdout; strings.Contains(out, "Docker housekeeping") {
 		t.Errorf("an unapproved namespace shows its description:\n%s", out)
@@ -124,16 +124,16 @@ func TestList_HidingIsMarked(t *testing.T) {
 // so 'shared' has no description, and its row ends in the padding of the source column.
 func TestList_FullListingMatchesPython(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteRegistryRaw(e.Store, `{"version": 2, "description": "mine", "shortcuts": {
+	e.WriteRegistryRaw(e.Store, `{"version": 1, "description": "mine", "shortcuts": {
  "build": {"description": "Global build", "inline": "echo gb", "cwd": "/tmp"},
  "bad": {"inline": "x", "cwd": 5, "description": "bd"},
  "é": {"inline": "x", "description": "d"}}}`)
-	e.WriteImport(e.Store, "docker", map[string]any{"version": 2, "description": "Docker stuff", "shortcuts": map[string]any{
+	e.WriteImport(e.Store, "docker", map[string]any{"version": 1, "description": "Docker stuff", "shortcuts": map[string]any{
 		"ps": map[string]any{"inline": "docker ps", "description": "list"}}})
 	runOK(t, e, testkit.Opts{}, "update", "docker", "-y")
 	proj := e.Project(map[string]any{"build": map[string]any{"description": "Proj build", "inline": "echo pb", "cwd": "."},
 		"shared": map[string]any{"inline": "echo s", "description": "sh"}}, testkit.Extra(map[string]any{"description": "p"}))
-	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 2, "shortcuts": {"shared": {"inline": "echo local"}, "loc": {"inline": "l", "description": "mine"}, "build": null}}`, 0)
+	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"shared": {"inline": "echo local"}, "loc": {"inline": "l", "description": "mine"}, "build": null}}`, 0)
 	e.Approve(filepath.Join(proj, ".shortcuts"))
 	res := e.RunWith(testkit.Opts{Cwd: proj}, "list")
 	want := "Project shortcuts (" + proj + "):\n" +

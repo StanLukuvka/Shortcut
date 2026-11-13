@@ -56,11 +56,11 @@ CI also checks `gofmt` and runs `go vet ./...`.
 
 - `cmd/shortcut/`: the main package.
 - `internal/cli/`: dispatch and the commands. `dispatch.go` is the entry, `parsers.go` each command's arguments, `cmd_*.go` one file per command, `run_args.go` a shortcut's declared arguments and `store_write.go` and `store_import.go` what changes the stores; `usage.go` is the usage text, `help/` the per-command help, and `completion/` the bash, zsh and fish scripts.
-- `internal/cli/argparse/`: the argument parser, a port of Python's argparse. It imports nothing of the CLI.
+- `internal/cli/argparse/`: the argument parser. It imports nothing of the CLI.
 - `internal/model/`: store files, entries, groups and lookup. It never prints.
 - `internal/approval/`: what a project or namespace is approved for, the approval records, and the review diff.
 - `internal/textio/`: printed text, questions and the pager.
-- `internal/pyos/`, `internal/pyjson/`, `internal/difflib/`: the parts of the standard library's file, JSON and diff behaviour that shortcut's output depends on.
+- `internal/pyos/`, `internal/difflib/`: the parts of the standard library's file and diff behaviour that shortcut's output depends on. `internal/pyjson/`: ordered JSON on encoding/json; it refuses text that is not valid UTF-8.
 - `internal/testkit/`: the test sandbox and helpers. `internal/testdata/`: frozen golden data that the tests compare against.
 - `installer/`: `install.sh` and its tests.
 - `templates/`: the bundled shortcuts, embedded in the binary by [bundled.go](bundled.go). `examples/`: namespaces to copy from.
