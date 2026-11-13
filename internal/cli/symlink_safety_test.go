@@ -53,3 +53,15 @@ func TestSymlinkSafety_MovingASymlinkUnderARelativeCwdNeedsApproval(t *testing.T
 		t.Errorf("after update: exit %d", code)
 	}
 }
+
+// py: test_symlink_safety.py::test_local_never_writes_through_a_committed_symlink
+func TestSymlinkSafety_LocalNeverWritesThroughACommittedSymlink(t *testing.T) {
+	e := testkit.New(t)
+	victim := e.WriteFile(filepath.Join(e.Tmp, "victim"), "keep\n", 0)
+	proj := e.Project(map[string]any{})
+	e.Symlink(victim, filepath.Join(proj, ".shortcuts.local"))
+	res := e.RunWith(in(proj), "new", "build", "--local", "--", "true")
+	eq(t, "exit", res.Code, 1)
+	contains(t, "stderr", res.Stderr, "is a symlink")
+	eq(t, "victim", readFile(t, victim), "keep\n")
+}

@@ -46,17 +46,14 @@ func TestOutputSafety_ATerminalPromptCannotBeForged(t *testing.T) {
 }
 
 // py: test_output_safety.py::test_help_stays_plain_on_a_terminal
-// lazy: the Python test runs `new --help`, which is P-4's; `run --help` and `list --help` stand in until it lands.
 func TestOutputSafety_HelpStaysPlainOnATerminal(t *testing.T) {
 	e := testkit.New(t)
-	for _, cmd := range []string{"run", "list"} {
-		rc, out := e.InTerminal(testkit.Opts{}, nil, cmd, "--help")
-		if rc != 0 {
-			t.Errorf("%s: exit %d\n%s", cmd, rc, out)
-		}
-		if strings.Contains(out, "^[") || strings.Contains(out, "\x1b") {
-			t.Errorf("%s --help is not plain:\n%q", cmd, out)
-		}
+	rc, out := e.InTerminal(testkit.Opts{}, nil, "new", "--help")
+	if rc != 0 {
+		t.Errorf("new --help: exit %d\n%s", rc, out)
+	}
+	if strings.Contains(out, "^[") || strings.Contains(out, "\x1b") {
+		t.Errorf("new --help is not plain:\n%q", out)
 	}
 }
 
