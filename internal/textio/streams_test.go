@@ -1,3 +1,4 @@
+// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (Q-3). Don't hand-edit without checking the plan.
 package textio
 
 import (
@@ -171,5 +172,20 @@ func TestShowDiff_ABrokenPipeOnFlushEnds141(t *testing.T) {
 		`"$0" -test.run='^$' | true; exit ${PIPESTATUS[0]}`, os.Args[0])
 	if res.Code != 141 {
 		t.Errorf("exit %d, want 141; stderr %q", res.Code, res.Stderr)
+	}
+}
+
+// Q-3: stdout escapes bytes that are not UTF-8 and lone surrogates like stderr, in Write and in WriteStyled.
+func TestStreams_NonUTF8IsEscapedOnBothStreams(t *testing.T) {
+	e := testkit.New(t)
+	s, out, errs := capture(t, e, "")
+	const raw, want = "a\x9bb\xed\xa0\x80c\n", "a\\udc9bb\\ud800c\n"
+	s.Out.WriteString(raw)
+	s.Out.WriteStyled(raw)
+	fmt.Fprint(s.Out, raw)
+	s.Err.WriteString(raw)
+	s.Flush()
+	if out() != want+want+want || errs() != want {
+		t.Errorf("stdout %q, stderr %q, want %q", out(), errs(), want)
 	}
 }

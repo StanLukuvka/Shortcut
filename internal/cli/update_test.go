@@ -1,3 +1,4 @@
+// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (Q-3). Don't hand-edit without checking the plan.
 package cli
 
 import (
@@ -8,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
@@ -349,4 +351,19 @@ func TestUpdate_Refusals(t *testing.T) {
 	res = e.RunWith(in(proj), "update", "-y")
 	contains(t, "warning", res.Stderr, "warning: 'x' is exported, but its cwd 'sub' only exists in this checkout\n")
 	contains(t, "local", res.Stdout, "'y' in .shortcuts is overridden by .shortcuts.local for you.\n")
+}
+
+// Q-3: a script path that is not UTF-8 prints escaped in the diff header on stdout, never as a raw 0x9b.
+func TestUpdate_NonUTF8PathIsEscapedOnStdout(t *testing.T) {
+	e := testkit.New(t)
+	proj := e.Project(testkit.HI)
+	bad := "scripts/a\x9bb\xed\xa0\x80c.sh"
+	e.WriteFile(filepath.Join(proj, bad), "echo hi\n", 0)
+	e.WriteRegistryRaw(filepath.Join(proj, ".shortcuts"),
+		`{"version": 2, "shortcuts": {"hi": {"description": "d", "script": "scripts/a\udc9bb\ud800c.sh"}}}`)
+	out := runOK(t, e, in(proj), "update", "-y").Stdout
+	contains(t, "update", out, "--- a/scripts/a\\udc9bb\\ud800c.sh")
+	if !utf8.ValidString(out) || strings.ContainsAny(out, "\u0080\u009b") {
+		t.Errorf("stdout holds raw bytes: %q", out)
+	}
 }
