@@ -9,7 +9,7 @@ import (
 // entries (names, not paths). A symlink to a folder is listed in dirs and is not entered; a symlink to a file, a
 // broken link, a FIFO or a device is in files (os.DirEntry.is_dir follows links, DirEntry.Type does not, so
 // filepath.WalkDir classifies differently). A folder that cannot be read is skipped silently, as os.walk does.
-// Entries come sorted (Python's order is the filesystem's; every caller sorts).
+// Entries come sorted (every caller sorts).
 // lazy: no pruning of dirs from visit; add it when a caller needs it.
 func Walk(top string, visit func(dir string, dirs, files []string)) {
 	entries, err := os.ReadDir(top)

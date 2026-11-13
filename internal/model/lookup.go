@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -22,7 +23,7 @@ type Found struct {
 // FindEntry finds `name` or `namespace name` in the project, then the global store, without judging
 // the entry. words must not be empty. strict (for run) refuses every name inside a project whose file can't be used,
 // and a store's load errors for the name it has. Without it (show, location, rm) a broken file is looked in as far as
-// it reads, so you can still see and fix what's there. Python's KeyError and ValueError are both just errors here:
+// it reads, so you can still see and fix what's there. both lookup failures are just errors here:
 // main prints either as "error: <text>".
 func FindEntry(words []string, callerCwd string, skipLocal, strict bool) (Found, error) {
 	stores := VisibleStores(callerCwd, skipLocal)
@@ -100,7 +101,7 @@ func FindEntry(words []string, callerCwd string, skipLocal, strict bool) (Found,
 			notes = append(notes, fmt.Sprintf("The project in %s has its own '%s': leave out --global to use it.", root, first))
 		}
 	case root != "":
-		if outer := FindProjectRoot(pyos.Dirname(root)); outer != "" && outer != root && hasName(LoadStore(outer), first) {
+		if outer := FindProjectRoot(filepath.Dir(root)); outer != "" && outer != root && hasName(LoadStore(outer), first) {
 			notes = append(notes, fmt.Sprintf("The project in %s has a '%s', but only the nearest project, %s, is used here.", outer, first, root))
 		}
 	default:

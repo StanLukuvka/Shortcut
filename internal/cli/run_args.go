@@ -13,7 +13,7 @@ func oneLine(text string) string { return strings.ReplaceAll(text, "\n", "\\n") 
 
 func argLabel(a *pyjson.Object) string {
 	label, _ := a.Vals["name"].(string)
-	if pyTruthy(a.Vals["rest"]) {
+	if a.Vals["rest"] == true {
 		label += "..."
 	}
 	return label
@@ -23,7 +23,7 @@ func argLabel(a *pyjson.Object) string {
 func usageLine(display string, spec []*pyjson.Object) string {
 	parts := []string{"shortcut r", display}
 	for _, a := range spec {
-		if pyTruthy(a.Vals["required"]) {
+		if a.Vals["required"] == true {
 			parts = append(parts, "<"+argLabel(a)+">")
 		} else {
 			parts = append(parts, "["+argLabel(a)+"]")
@@ -39,7 +39,7 @@ func argLines(spec []*pyjson.Object) []string {
 	width, needWidth := 0, 0
 	for i, a := range spec {
 		need := "optional"
-		if pyTruthy(a.Vals["required"]) {
+		if a.Vals["required"] == true {
 			need = "required"
 		} else if d, ok := a.Vals["default"].(string); ok {
 			need = "default: " + oneLine(pyos.ShellQuote(d))
@@ -51,7 +51,7 @@ func argLines(spec []*pyjson.Object) []string {
 	}
 	lines := make([]string, len(rows))
 	for i, r := range rows {
-		lines[i] = pyRstrip("  " + padRight(r.label, width) + "  " + padRight(r.need, needWidth) + "  " + r.desc)
+		lines[i] = strings.TrimRight("  "+padRight(r.label, width)+"  "+padRight(r.need, needWidth)+"  "+r.desc, " \t\n")
 	}
 	return lines
 }
@@ -61,12 +61,12 @@ func isFlag(token string) bool { return len(token) > 1 && strings.HasPrefix(toke
 // bindArgs checks presence and count against the declared args, and fills defaults. It returns the words the
 // shortcut gets and its SC_ARG_* variables as "K=V". --flags are never parsed: they don't count and stay where they
 // are. A first -- is dropped, and every word after it counts, so a value can start with a dash. A failure is the
-// exit 2 of Python's fail(): the message, the usage line and, if any argument has a desc, the list.
+// exit 2 of fail(): the message, the usage line and, if any argument has a desc, the list.
 func bindArgs(display string, spec []*pyjson.Object, argv []string) ([]string, []string, error) {
 	fail := func(msg string) error {
 		text := "error: " + msg + "\nusage: " + usageLine(display, spec) + "\n"
 		for _, a := range spec {
-			if pyTruthy(a.Vals["desc"]) {
+			if d, _ := a.Vals["desc"].(string); d != "" {
 				text += strings.Join(argLines(spec), "\n") + "\n"
 				break
 			}
@@ -93,7 +93,7 @@ func bindArgs(display string, spec []*pyjson.Object, argv []string) ([]string, [
 			last = i
 		}
 	}
-	hasRest := len(spec) > 0 && pyTruthy(spec[len(spec)-1].Vals["rest"])
+	hasRest := len(spec) > 0 && spec[len(spec)-1].Vals["rest"] == true
 	if len(positional) > len(spec) && !hasRest {
 		return nil, nil, fail("too many arguments")
 	}
@@ -112,12 +112,12 @@ func bindArgs(display string, spec []*pyjson.Object, argv []string) ([]string, [
 			if d, ok := a.Vals["default"].(string); ok {
 				values = []string{d}
 				fill = append(fill, d)
-			} else if pyTruthy(a.Vals["required"]) {
+			} else if a.Vals["required"] == true {
 				return nil, nil, fail("missing <" + name + ">")
 			} else {
 				fill = append(fill, "") // keeps a later default at its own position
 			}
-		} else if pyTruthy(a.Vals["required"]) && strings.Join(values, "") == "" {
+		} else if a.Vals["required"] == true && strings.Join(values, "") == "" {
 			return nil, nil, fail("<" + name + "> can't be empty")
 		}
 		value := strings.Join(values, "")
@@ -136,8 +136,8 @@ func bindArgs(display string, spec []*pyjson.Object, argv []string) ([]string, [
 var positionalAt = regexp.MustCompile(`^\$(?:[1-9@*]|\{[1-9@*])`) // $1, $@, $*, ${1}: how a shell command reads its arguments
 
 // joinCommand turns `-- cmd word word` into one inline command. Each word stays one word, as typed, and
-// only the shortcut's own arguments stay live, because $1 is why someone quoted it past their shell. Python's
-// (?!POSITIONAL)\$ lookahead is a check at each $, since Go's regexp has none.
+// only the shortcut's own arguments stay live, because $1 is why someone quoted it past their shell. A lookahead
+// for POSITIONAL at each $ is a check in code, since Go's regexp has none.
 func joinCommand(words []string) string {
 	if len(words) == 1 {
 		return words[0]

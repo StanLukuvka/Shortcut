@@ -101,11 +101,11 @@ func cmdShow(s *textio.Streams, args []string) error {
 	if pyos.IsFile(path) {
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			return err // lazy: Python's "[Errno 13] ..." text is not reproduced
+			return err
 		}
 		// errors="replace" and universal newlines
-		text := strings.ReplaceAll(strings.ReplaceAll(replaceInvalidUTF8(raw), "\r\n", "\n"), "\r", "\n")
-		out(pyRstrip(text))
+		text := strings.ReplaceAll(strings.ReplaceAll(strings.ToValidUTF8(string(raw), "\uFFFD"), "\r\n", "\n"), "\r", "\n")
+		out(strings.TrimRight(text, " \t\n"))
 	} else {
 		out("  [file missing: " + path + "]")
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -35,7 +36,7 @@ func targetGroup(ns Namespace, cwd string) (model.Group, error) {
 	if err := model.ValidateName(ns.Str("name")); err != nil {
 		return model.Group{}, err
 	}
-	local, namespace := ns.Bool("local"), ns.Str("namespace") // "" is no namespace, as Python's falsy ""
+	local, namespace := ns.Bool("local"), ns.Str("namespace") // "" is no namespace
 	if local && namespace != "" {
 		return model.Group{}, Die("--namespace can't be used with --local: " + model.LocalFile + " is one file, and " +
 			model.ProjectFile + " is yours to edit")
@@ -69,7 +70,7 @@ func targetGroup(ns Namespace, cwd string) (model.Group, error) {
 }
 
 // loadForEdit is the registry at path, or a fresh one when isNew, with its "shortcuts" object. A "shortcuts" that is
-// not an object is refused (Python's next line would have raised).
+// not an object is refused.
 func loadForEdit(path string, isNew bool) (*pyjson.Object, *pyjson.Object, error) {
 	reg := &pyjson.Object{}
 	if isNew {
@@ -178,7 +179,7 @@ func register(s *textio.Streams, group model.Group, entry *model.Entry, writeScr
 			}
 		}
 		shortcuts.Set(entry.Name, entry.ToObject())
-		if err := os.MkdirAll(pyos.Dirname(group.File), 0o777); err != nil {
+		if err := os.MkdirAll(filepath.Dir(group.File), 0o777); err != nil {
 			return err
 		}
 		return model.SaveRegistryFile(group.File, reg)
@@ -242,7 +243,7 @@ func writeLocal(root string, change func(*pyjson.Object) error) (model.Group, er
 }
 
 // excludeFromGit keeps .shortcuts.local out of `git add`, without touching a file the project
-// commits. Any failure (no git, not a repository, a file that can't be written) is ignored, as Python's suppress(OSError).
+// commits. Any failure (no git, not a repository, a file that can't be written) is ignored.
 func excludeFromGit(root string) {
 	cmd := exec.Command("git", "rev-parse", "--git-path", "info/exclude")
 	cmd.Dir = root
@@ -250,8 +251,8 @@ func excludeFromGit(root string) {
 	if err != nil {
 		return
 	}
-	path := pyos.Join(root, strings.TrimSpace(string(out))) // Python's join keeps an absolute result as it is
-	if os.MkdirAll(pyos.Dirname(path), 0o777) != nil {
+	path := pyos.Join(root, strings.TrimSpace(string(out))) // an absolute result stays as it is
+	if os.MkdirAll(filepath.Dir(path), 0o777) != nil {
 		return
 	}
 	var text string
@@ -341,7 +342,7 @@ func prepareScriptDest(group model.Group, abs string) error {
 
 // unlinkFile removes a file or a link, and not one that is already gone; never a folder (os.Remove
 // would take an empty one), and a link only ever loses itself.
-// lazy: the error text is Go's, not Python's "[Errno 21] ..."; only a folder where a file should be reaches it.
+// lazy: the error text is Go's; only a folder where a file should be reaches it.
 func unlinkFile(path string) error {
 	if err := syscall.Unlink(path); err != nil && !errors.Is(err, syscall.ENOENT) {
 		return &os.PathError{Op: "unlink", Path: path, Err: err}

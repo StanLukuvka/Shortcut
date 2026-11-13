@@ -19,17 +19,17 @@ import (
 // Env is one test's sandbox. Everything a test touches is under Tmp.
 type Env struct {
 	T       *testing.T
-	Tmp     string            // filepath.EvalSymlinks(t.TempDir()): macOS /var is a link, and Python used .resolve()
+	Tmp     string            // filepath.EvalSymlinks(t.TempDir()): macOS /var is a link
 	Home    string            // Tmp/home
 	Store   string            // Home/.shortcuts, the value of SHORTCUTS_HOME
-	ToolBin string            // Tmp/bin: where a `shortcut` link goes (Shell, InstallBundled); = Python's tool_bin
+	ToolBin string            // Tmp/bin: where a `shortcut` link goes (Shell, InstallBundled)
 	Vars    map[string]string // HOME, SHORTCUTS_HOME, XDG_DATA_HOME, XDG_CONFIG_HOME, BIN_DIR over os.Environ()
 
 	fail func(error) // test seam: sandbox_test.go swaps t.Fatal for a panic to see a refusal
 }
 
 // What a run can write to besides HOME, and where it goes when the variable is unset or empty.
-// A var so sandbox_test.go can add an escaping entry (= the Python test's patch of SANDBOXED_PATHS).
+// A var so sandbox_test.go can add an escaping entry.
 var sandboxedPaths = []struct{ Name, Default string }{
 	{"SHORTCUTS_HOME", "~/.shortcuts"},
 	{"XDG_DATA_HOME", "~/.local/share"},
@@ -113,7 +113,7 @@ func (s SandboxEscape) Error() string {
 	return fmt.Sprintf("%s is %s, outside this test's temp dir %s", s.What, s.Path, s.Root)
 }
 
-// resolve is Python's Path.resolve() (non-strict): symlinks are followed as far as the path exists, the rest is
+// resolve is Path.resolve() (non-strict): symlinks are followed as far as the path exists, the rest is
 // taken as it stands, and ".." is applied after the link before it, not lexically.
 func resolve(p string) string {
 	if !filepath.IsAbs(p) {

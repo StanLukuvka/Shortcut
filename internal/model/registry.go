@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"math/big"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -68,7 +69,7 @@ func FindProjectRoot(start string) string {
 		if isProjectRoot(cur) {
 			return cur
 		}
-		parent := pyos.Dirname(cur)
+		parent := filepath.Dir(cur)
 		if parent == cur {
 			return ""
 		}
@@ -87,7 +88,7 @@ func oldProjectFolder(callerCwd string) string {
 		if pyos.IsDir(path) && !neverAProject(pyos.Realpath(path)) {
 			return path
 		}
-		parent := pyos.Dirname(cur)
+		parent := filepath.Dir(cur)
 		if parent == cur {
 			return ""
 		}
@@ -95,8 +96,8 @@ func oldProjectFolder(callerCwd string) string {
 	}
 }
 
-// LocalProjectRoot returns where --local writes, this folder and never a parent. Its errors are the
-// messages Python's die() printed.
+// LocalProjectRoot returns where --local writes, this folder and never a parent. Its errors are
+// the messages die prints.
 func LocalProjectRoot(cwd string) (string, error) {
 	here := pyos.Realpath(cwd)
 	if root := FindProjectRoot(here); root != "" && root != here {
@@ -115,7 +116,7 @@ func LocalProjectRoot(cwd string) (string, error) {
 }
 
 // lockPath is where the registry lock is: <store>/.lock for the global store; otherwise, to keep a repo's root clean,
-// <global>/locks/<sha256(realpath(store))>.lock. The same names as Python, so the two versions exclude each other.
+// <global>/locks/<sha256(realpath(store))>.lock. The same names as the older version, so the two exclude each other.
 func lockPath(storeDir string) string {
 	if IsGlobalStore(storeDir) {
 		return pyos.Join(storeDir, ".lock")
@@ -147,7 +148,7 @@ func emptyRegistry() *pyjson.Object {
 	return o
 }
 
-// LoadRegistryFile reads a registry file, with the messages of the Python version.
+// LoadRegistryFile reads a registry file, with fixed messages.
 func LoadRegistryFile(path string) (*pyjson.Object, error) {
 	if !pyos.IsFile(path) {
 		return nil, &RegistryNotFoundError{path}
@@ -157,7 +158,7 @@ func LoadRegistryFile(path string) (*pyjson.Object, error) {
 		if isJSONError(err) {
 			return nil, fmt.Errorf("corrupt registry %s: %s", path, err)
 		}
-		return nil, errors.New(osErrText(err))
+		return nil, err
 	}
 	data, ok := v.(*pyjson.Object)
 	if !ok {
@@ -184,11 +185,7 @@ func LoadRegistry(storeDir string) (*pyjson.Object, error) {
 func SaveRegistryFile(path string, data *pyjson.Object) error {
 	if pyos.IsFile(path) {
 		if _, err := ReadJSONFile(path); err != nil {
-			text := err.Error()
-			if !isJSONError(err) {
-				text = osErrText(err)
-			}
-			return fmt.Errorf("cannot overwrite corrupt registry %s: %s", path, text)
+			return fmt.Errorf("cannot overwrite corrupt registry %s: %s", path, err)
 		}
 	}
 	return WriteJSONAtomic(path, data)
@@ -203,7 +200,7 @@ func SaveRegistryAtomic(storeDir string, data *pyjson.Object) error {
 
 var namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`) // Go's $ is end of text: no trailing newline, as fullmatch
 
-// ValidateName checks a shortcut name, with the message of the Python version.
+// ValidateName checks a shortcut name, with a fixed message.
 func ValidateName(name string) error {
 	if !namePattern.MatchString(name) {
 		return fmt.Errorf("invalid shortcut name '%s'. Must match ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ "+

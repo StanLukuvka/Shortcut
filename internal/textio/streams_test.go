@@ -163,7 +163,7 @@ func TestStreams_ClosedStdFdsAreReopenedByTheRuntime(t *testing.T) {
 	res.WantCode(t, 0) // else the code's bits 0-2 say which of fd 0-2 was found closed, bit 3 that the write failed
 }
 
-// ShowDiff's flush (small diff, buffer not full) on a pipe nobody reads exits 141, as Python's flush() raising
+// ShowDiff's flush (small diff, buffer not full) on a pipe nobody reads exits 141, as a failed flush
 // BrokenPipeError does. `| true` is the reader that is gone before the child writes.
 func TestShowDiff_ABrokenPipeOnFlushEnds141(t *testing.T) {
 	e := testkit.New(t)
@@ -172,11 +172,11 @@ func TestShowDiff_ABrokenPipeOnFlushEnds141(t *testing.T) {
 	res.WantCode(t, 141)
 }
 
-// Q-3: stdout escapes bytes that are not UTF-8 and lone surrogates like stderr, in Write and in WriteStyled.
+// Q-3: stdout escapes bytes that are not UTF-8 like stderr, in Write and in WriteStyled.
 func TestStreams_NonUTF8IsEscapedOnBothStreams(t *testing.T) {
 	e := testkit.New(t)
 	s, out, errs := capture(t, e, "")
-	const raw, want = "a\x9bb\xed\xa0\x80c\n", "a\\udc9bb\\ud800c\n"
+	const raw, want = "a\x9bb\xed\xa0\x80c\n", "a\\x9bb\\xed\\xa0\\x80c\n"
 	s.Out.WriteString(raw)
 	s.Out.WriteStyled(raw)
 	s.Out.WriteString(raw)

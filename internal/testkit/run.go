@@ -28,7 +28,7 @@ type Opts struct {
 
 // Result of a finished process.
 type Result struct {
-	Code           int // a signal death is -signal, as Python's returncode
+	Code           int // a signal death is -signal
 	Stdout, Stderr string
 }
 
@@ -116,7 +116,7 @@ func (e *Env) RunCmd(o Opts, argv ...string) Result {
 	if cmd.ProcessState == nil {
 		e.dief("%q: %v", argv, err)
 	}
-	// lazy: no universal-newline translation (Python's text=True turned \r\n and \r into \n); tests see raw bytes.
+	// lazy: no universal-newline translation (text mode would turn \r\n and \r into \n); tests see raw bytes.
 	return Result{codeOf(cmd.ProcessState), out.String(), errb.String()}
 }
 

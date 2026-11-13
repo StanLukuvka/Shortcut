@@ -50,7 +50,7 @@ func Unified(a, b []string, from, to string) []string {
 	return out
 }
 
-// SplitLinesKeepEnds is Python's str.splitlines(keepends=True): it breaks after
+// SplitLinesKeepEnds is str.splitlines(keepends=True): it breaks after
 // \n, \r, \r\n, \v, \f, \x1c-\x1e, \x85, U+2028 and U+2029.
 func SplitLinesKeepEnds(s string) []string {
 	var out []string

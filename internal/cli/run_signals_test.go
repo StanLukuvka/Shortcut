@@ -49,7 +49,7 @@ func TestRunning_ExitCodeAndSignalsPassStraightThrough(t *testing.T) {
 	}
 }
 
-// Python piped the run into head by hand; bash does the same here and reports how the run ended (141 = SIGPIPE).
+// bash pipes the run into head and and reports how the run ended (141 = SIGPIPE).
 func TestRunning_AShortcutStartsWithSigpipeOn(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"seq": testkit.Inline("seq 1 1000000")})
@@ -62,7 +62,7 @@ func TestRunning_AShortcutStartsWithSigpipeOn(t *testing.T) {
 	}
 }
 
-// The signal dispositions a shortcut starts with: SIGPIPE and SIGXFSZ default (Python ignored them), nothing blocked.
+// The signal dispositions a shortcut starts with: SIGPIPE and SIGXFSZ default, nothing blocked.
 func TestRunning_ASignalMaskAndDispositionsAreTheDefaults(t *testing.T) {
 	if _, err := os.Stat("/proc/self/status"); err != nil {
 		t.Skip("no /proc")
@@ -101,8 +101,8 @@ func TestRunning_AClosedStdoutIsTheShortcutsProblem(t *testing.T) {
 	}
 }
 
-// With fds 0, 1 or 2 closed the Go runtime puts /dev/null in their place, so the commands exit as they do in
-// Python, print nothing anywhere visible and don't panic (a Go panic exits 2). What the child sees there is /dev/null.
+// With fds 0, 1 or 2 closed the Go runtime puts /dev/null in their place, so the commands exit as they would
+// with them open, print nothing anywhere visible and don't panic (a Go panic exits 2). What the child sees there is /dev/null.
 func TestRunning_ClosedStdFDsDoNotStopACommand(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"go": testkit.Inline("echo ran")})

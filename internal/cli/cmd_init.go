@@ -125,7 +125,7 @@ func cloneTemp(source string) (string, func(), error) {
 	if err != nil {
 		return "", cleanup, err
 	}
-	cmd := exec.Command("git", "clone", "--depth", "1", "--", source, dir) // "--": a source such as --upload-pack=... must not be read as an option (Python lacks this; deliberate divergence)
+	cmd := exec.Command("git", "clone", "--depth", "1", "--", source, dir) // "--": a source such as --upload-pack=... must not be read as an option
 	var errText bytes.Buffer
 	cmd.Stderr = &errText
 	if err := cmd.Run(); err != nil {
@@ -134,10 +134,9 @@ func cloneTemp(source string) (string, func(), error) {
 		switch {
 		case detail != "":
 		case errors.Is(err, exec.ErrNotFound):
-			detail = "git: not found in PATH" // Python's "[Errno 2] No such file or directory: 'git'"
+			detail = "git: not found in PATH"
 		case errors.As(err, &exit):
-			detail = "Command '['git', 'clone', '--depth', '1', " + pyRepr(source) + ", " + pyRepr(dir) + "]'" +
-				" returned non-zero exit status " + strconv.Itoa(exit.ExitCode()) + "."
+			detail = "git clone exited with status " + strconv.Itoa(exit.ExitCode())
 		default:
 			detail = err.Error()
 		}

@@ -52,13 +52,13 @@ func callName(e ast.Expr) string {
 	return ""
 }
 
-// raisers are the calls whose first argument is a user-facing message (Python's RAISERS, plus problems.append); the
-// calls of the argparse emulation (argError) are stdlib text and out of scope, as argparse is for Python.
+// raisers are the calls whose first argument is a user-facing message (plus problems.append); the
+// calls of the argparse emulation (argError) are stdlib text and out of scope.
 var raisers = map[string]bool{"Die": true, "fail": true, "bad": true, "errors.New": true, "fmt.Errorf": true,
 	"append": true}
 
 // goMessages: each message passed to a raiser, appended to problems, set as ExitError.Stderr, or returned by FileError,
-// in every non-test package under internal/ except testkit and testdata (Python scans all of src/shortcut).
+// in every non-test package under internal/ except testkit and testdata.
 func goMessages(t *testing.T) [][]string {
 	var found [][]string
 	err := filepath.WalkDir("..", func(path string, d fs.DirEntry, err error) error {

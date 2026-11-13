@@ -47,7 +47,7 @@ func diffFiles(old, new map[string]string) []string {
 	for p := range paths {
 		sorted = append(sorted, p)
 	}
-	sort.Strings(sorted) // lazy: byte order equals Python's code point order for UTF-8; fine for the corpus
+	sort.Strings(sorted) // lazy: byte order equals code point order for UTF-8; fine for the corpus
 	lines := []string{}
 	for _, path := range sorted {
 		before, inOld := old[path]

@@ -23,7 +23,7 @@ func TestStores_ScopeResolutionOrder(t *testing.T) {
 	if res.Group.StoreDir != pyos.Realpath(proj) || res.Entry.Description != "Local project build" || !res.HidesGlobal {
 		t.Errorf("inside the project: %+v %q", res.Group.StoreDir, res.Entry.Description)
 	}
-	// --global reaches the global one from there (Python also ran `run`, which refuses the unapproved project)
+	// --global reaches the global one from there
 	res, _, err = ResolveShortcut([]string{"build"}, proj, true, false)
 	if err != nil || res.Entry.Description != "Global build" || res.HidesGlobal {
 		t.Errorf("--global: %v", err)

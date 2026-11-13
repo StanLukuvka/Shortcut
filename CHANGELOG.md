@@ -18,3 +18,8 @@
 - Options must be spelled in full: `--des` is no longer short for `--desc`, and `-yh` is no longer `-y -h`. A word such as `-1` is an option, not a name.
 - A command's usage errors read `error: <message>` and a `Try 'shortcut <command> -h'` line, and exit 2. `shortcut completion` needs the shell named.
 - `--help=x` is an unknown option. `-h` after an unknown option reports the unknown option (exit 2) instead of printing help, as in `show --bogus -h`.
+- An empty or `.` PATH entry no longer finds commands in the current directory.
+- Bytes that are not valid UTF-8 print as `\xNN` instead of `\udcNN`.
+- `$PAGER` is split on blanks; quotes in it are not interpreted.
+- A failed `git clone` in `init --global` reports `git clone exited with status N`.
+- Unreadable-file errors use Go's wording, such as `open /p: permission denied`.

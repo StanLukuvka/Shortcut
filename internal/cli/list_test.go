@@ -50,7 +50,7 @@ func TestStores_GroupDescriptionShowsOnceApproved(t *testing.T) {
 	if out := e.Run("list").Stdout; strings.Contains(out, "Docker housekeeping") {
 		t.Errorf("an unapproved namespace shows its description:\n%s", out)
 	}
-	// Python's update-diff line (the description is part of what update shows) is asserted in update_test.go
+	// the update-diff line (the description is part of what update shows) is asserted in update_test.go
 	runOK(t, e, testkit.Opts{}, "update", "docker", "-y")
 	testkit.Contains(t, "list", e.Run("list").Stdout, "  Docker housekeeping\n")
 }
@@ -119,10 +119,9 @@ func TestList_HidingIsMarked(t *testing.T) {
 	testkit.Contains(t, "list", out, "Namespace docker ("+nsFile+")  [hides global]")
 }
 
-// The exact text of a list with a project, its .shortcuts.local, a namespace and a global store, as the Python
-// version printed it (checked against it by hand: the same bytes). The local entry replaces the shared one,
+// The exact text of a list with a project, its .shortcuts.local, a namespace and a global store. The local entry replaces the shared one,
 // so 'shared' has no description, and its row ends in the padding of the source column.
-func TestList_FullListingMatchesPython(t *testing.T) {
+func TestList_FullListing(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteRegistryRaw(e.Store, `{"version": 1, "description": "mine", "shortcuts": {
  "build": {"description": "Global build", "inline": "echo gb", "cwd": "/tmp"},
@@ -165,4 +164,18 @@ func TestList_NamespaceApprovalIsSingular(t *testing.T) {
 	e.WriteImport(e.Store, "docker", testkit.NS(map[string]any{
 		"ps": map[string]any{"inline": "docker ps -a", "description": "list"}}))
 	testkit.Contains(t, "changed", e.Run("list").Stdout, ") changed since you approved it. Review it with")
+}
+
+// A description that is not a string, in a project file (refused) or in a global entry (shown), never panics.
+func TestStores_ListSurvivesNonStringDescription(t *testing.T) {
+	e := testkit.New(t)
+	proj := filepath.Join(e.Home, "badlist")
+	e.WriteStore(filepath.Join(proj, ".shortcuts"), map[string]any{
+		"description": 5, "x": map[string]any{"inline": "true"}})
+	e.WriteStore(e.Store, map[string]any{"g": map[string]any{"inline": "true", "description": 5}})
+	res := e.RunWith(testkit.Opts{Cwd: proj}, "list")
+	if strings.Contains(res.Stderr, "panic") || strings.Contains(res.Stderr, "goroutine") {
+		t.Fatalf("list panicked:\n%s", res.Stderr)
+	}
+	testkit.Matches(t, res.Stdout, `g +caller +5`)
 }

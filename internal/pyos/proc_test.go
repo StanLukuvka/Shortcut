@@ -91,33 +91,72 @@ func TestExec_LookPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := bin + ":" + other
-	t.Chdir(e.Tmp) // an empty entry means the cwd
+	t.Chdir(e.Tmp) // an empty or "." entry would mean the cwd; it no longer matches
 	for _, c := range []struct{ file, path, want string }{
 		{"tool", path, bin + "/tool"},
 		{"plain", path, other + "/plain"}, // a non-executable file earlier in PATH is passed over
-		{"/abs/x", "", "/abs/x"},          // a / in the name: no search
-		{"./rel", "", "./rel"},
-		{"adir", bin, ""}, // a folder is not a program
+		{"adir", bin, ""},                 // a folder is not a program
 		{"none", path, ""},
-		{"here", "", "here"}, // PATH= : one empty entry, the cwd
-		{"here", bin + "::" + other, "here"},
+		{"here", "", ""}, // PATH= : one empty entry, no longer the cwd
+		{"here", ".", ""},
+		{"here", bin + "::" + other, ""},
+		{"here", bin + ":.:" + other, ""},
 	} {
-		got, err := lookPath(c.file, c.path)
+		got, err := lookPathIn(c.path, c.file)
 		if (err != nil) != (c.want == "") || got != c.want {
-			t.Errorf("lookPath(%q, %q) = %q, %v; want %q", c.file, c.path, got, err, c.want)
+			t.Errorf("lookPathIn(%q, %q) = %q, %v; want %q", c.path, c.file, got, err, c.want)
+		}
+		if err != nil && !errors.Is(err, syscall.ENOENT) {
+			t.Errorf("lookPathIn(%q, %q): %v, want ENOENT", c.path, c.file, err)
 		}
 	}
-	if _, err := lookPath("plain", bin); !errors.Is(err, syscall.EACCES) {
+	// a match in the cwd or a relative dir is passed over; the later absolute entry still answers
+	e.WriteFile(filepath.Join(e.Tmp, "tool"), "#!/bin/sh\n", 0o755)
+	for _, p := range []string{".:" + other, ":" + other, "bin:" + other} {
+		if got, err := lookPathIn(p, "tool"); err != nil || got != other+"/tool" {
+			t.Errorf("lookPathIn(%q, tool) = %q, %v; want %q", p, got, err, other+"/tool")
+		}
+	}
+	if _, err := lookPathIn("bin:.:", "tool"); !errors.Is(err, syscall.ENOENT) {
+		t.Errorf("only relative entries: %v", err)
+	}
+	if _, err := lookPathIn(bin, "plain"); !errors.Is(err, syscall.EACCES) {
 		t.Errorf("only a non-executable match: %v", err)
 	}
-	if _, err := lookPath("none", bin); !errors.Is(err, syscall.ENOENT) {
+	if _, err := lookPathIn(bin, "none"); !errors.Is(err, syscall.ENOENT) {
 		t.Errorf("no match: %v", err)
+	}
+	old := os.Getenv("PATH")
+	lookPathIn(bin, "tool")
+	if os.Getenv("PATH") != old {
+		t.Errorf("PATH not restored: %q", os.Getenv("PATH"))
 	}
 	if pathOf(nil) != "/bin:/usr/bin" {
 		t.Errorf("pathOf(nil) = %q", pathOf(nil))
 	}
 	if pathOf([]string{"A=1", "PATH=/x", "PATH=/y"}) != "/y" || pathOf([]string{"PATH="}) != "" {
 		t.Error("pathOf")
+	}
+}
+
+// The child's own PATH is searched, not this process's; an empty PATH in it does not reach the cwd.
+func TestExec_ChildPathOverrides(t *testing.T) {
+	e := testkit.New(t)
+	bin := e.Folder("bin2")
+	e.WriteFile(bin+"/tool", "#!/bin/sh\n", 0o755)
+	e.WriteFile(filepath.Join(e.Tmp, "here"), "#!/bin/sh\n", 0o755)
+	t.Chdir(e.Tmp)
+	if _, err := lookPathIn(os.Getenv("PATH"), "sh"); err != nil {
+		t.Skip("no sh on the process PATH")
+	}
+	if err := ExecChild([]string{"sh"}, e.Tmp, []string{"PATH=/nonexistent"}, func() {}); !errors.Is(err, syscall.ENOENT) {
+		t.Errorf("override ignored: %v", err)
+	}
+	if err := ExecChild([]string{"here"}, e.Tmp, []string{"PATH="}, func() {}); !errors.Is(err, syscall.ENOENT) {
+		t.Errorf("empty PATH found the cwd: %v", err)
+	}
+	if p, err := lookPathIn(pathOf([]string{"PATH=" + bin}), "tool"); err != nil || p != bin+"/tool" {
+		t.Errorf("child PATH: %q %v", p, err)
 	}
 }
 

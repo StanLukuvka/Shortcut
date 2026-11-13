@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/pyjson"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
 )
 
 // Record is approvals/<sha256(key)>.json, written by Python today and still readable and writable: the snapshot
@@ -88,7 +88,7 @@ func Save(g model.Group, shared, local map[string]string) error {
 	}
 	path := model.ApprovalPath(g)
 	return model.WithRegistryLock(model.GlobalStoreDir(), func() error {
-		if err := os.MkdirAll(pyos.Dirname(path), 0o777); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 			return err
 		}
 		rec := &pyjson.Object{}

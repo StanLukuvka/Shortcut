@@ -157,7 +157,7 @@ func TestDispatch_UsageVersionAndStubs(t *testing.T) {
 	}
 }
 
-// The raw bytes of control characters in an unknown word are made safe, as in Python (stderr is a SafeOutput).
+// The raw bytes of control characters in an unknown word are made safe (stderr is a SafeOutput).
 func TestDispatch_ErrorsAreSafe(t *testing.T) {
 	e := testkit.New(t)
 	res := e.Run("bad\x1b[31mword")
@@ -166,7 +166,7 @@ func TestDispatch_ErrorsAreSafe(t *testing.T) {
 	}
 }
 
-// Python decodes argv with surrogateescape and stderr prints with backslashreplace; expected text is from Python.
+// Bytes that are not valid UTF-8 print as \xNN.
 func TestStderr_NonUTF8ArgvPrintsAsEscapes(t *testing.T) {
 	e := testkit.New(t)
 	runOK(t, e, testkit.Opts{}, "new", "hi", "--", "echo hi")
@@ -175,11 +175,11 @@ func TestStderr_NonUTF8ArgvPrintsAsEscapes(t *testing.T) {
 		code int
 		want string
 	}{
-		{[]string{"show", "\xff"}, 1, "error: shortcut '\\udcff' not found.\n"},
-		{[]string{"--j\xff"}, 2, "error: unrecognized option '--j\\udcff'\nTry 'shortcut --help' for more information.\n"},
+		{[]string{"show", "\xff"}, 1, "error: shortcut '\\xff' not found.\n"},
+		{[]string{"--j\xff"}, 2, "error: unrecognized option '--j\\xff'\nTry 'shortcut --help' for more information.\n"},
 		{[]string{"list", "-", "\xff"}, 2, "error: unexpected argument '-'\nTry 'shortcut list -h' for more information.\n"},
-		{[]string{"list", "\xff"}, 2, "error: unexpected argument '\\udcff'\nTry 'shortcut list -h' for more information.\n"},
-		{[]string{"show", "hi", "\xff"}, 1, "error: too many names: hi '\\udcff'\n"},
+		{[]string{"list", "\xff"}, 2, "error: unexpected argument '\\xff'\nTry 'shortcut list -h' for more information.\n"},
+		{[]string{"show", "hi", "\xff"}, 1, "error: too many names: hi '\\xff'\n"},
 	} {
 		res := e.Run(c.args...)
 		if res.Code != c.code || res.Stdout != "" || res.Stderr != c.want {

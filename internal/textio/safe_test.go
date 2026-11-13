@@ -63,15 +63,22 @@ func TestSafe_Text(t *testing.T) {
 func TestBackslashReplace(t *testing.T) {
 	for _, c := range []struct{ in, want string }{
 		{"plain é日", "plain é日"},
-		{"a\xffb", "a\\udcffb"},
-		{"\x80\xc3", "\\udc80\\udcc3"},
-		{"\xed\xb3\xbf", "\\udcff"},    // WTF-8 U+DCFF
-		{"\xed\xa0\x80x", "\\ud800x"},  // lone high surrogate
-		{"\xed\x9f\xbf", "\ud7ff"},     // U+D7FF is a real character
-		{"\xed\xa0", "\\udced\\udca0"}, // truncated
+		{"a\xffb", "a\\xffb"},
+		{"\x80\xc3", "\\x80\\xc3"},
+		{"\xed\xa0\x80x", "\\xed\\xa0\\x80x"}, // a surrogate is not UTF-8
+		{"\xed\x9f\xbf", "\ud7ff"},            // U+D7FF is a real character
+		{"\x9b[31m", "\\x9b[31m"},             // never the raw byte
 	} {
 		if got := backslashReplace(c.in); got != c.want {
 			t.Errorf("backslashReplace(%q) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+// Terminal safety: a lone 0x9b (CSI on an 8-bit terminal) and an ESC never reach the output, only their text does.
+func TestSafeThenBackslashReplace_NoRawCSI(t *testing.T) {
+	got := backslashReplace(Safe("\x9b[31m\x1b[2K"))
+	if strings.IndexByte(got, 0x9b) >= 0 || strings.IndexByte(got, 0x1b) >= 0 || !strings.Contains(got, `\x9b[31m`) {
+		t.Errorf("got %q", got)
 	}
 }

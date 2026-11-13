@@ -38,7 +38,7 @@ func marshal(t *testing.T, v Value) string {
 
 func TestDecode_RefusesWhatIsNotValidUTF8(t *testing.T) {
 	for _, src := range []string{
-		`{"a": "\udce9"}`,   // what the Python version wrote for a file name caf<0xe9>
+		`{"a": "\udce9"}`,   // what the older version wrote for a file name caf<0xe9>
 		`["\ud800"]`,        // lone high surrogate
 		`["\ud800\u0041"]`,  // high surrogate followed by something that is not a low one
 		`["\ud800 \udc00"]`, // a pair needs the escapes side by side
@@ -74,7 +74,7 @@ func TestDecode_RefusesWhatIsNotValidUTF8(t *testing.T) {
 	}
 }
 
-func TestDecode_PythonWrittenStoreKeepsOrderAndNumberText(t *testing.T) {
+func TestDecode_OldStoreKeepsOrderAndNumberText(t *testing.T) {
 	src := `{"zed": 1, "version": 1, "n": [1.0, 12345678901234567890, 1e400, 0, -0, 2E2], "alpha": {}, "list": [], "a": {"k": 1, "b": [], "c": {}}}`
 	v, err := Parse(src)
 	if err != nil {
@@ -143,7 +143,7 @@ func TestEncode_RefusesInvalidUTF8(t *testing.T) {
 	}
 }
 
-func TestEncode_RoundTripsAPythonWrittenStore(t *testing.T) {
+func TestEncode_RoundTripsAnOldStore(t *testing.T) {
 	// indent 2, key order as written (not sorted), numbers as written, empty containers on one line
 	src := "{\n  \"zed\": 1,\n  \"version\": 1,\n  \"n\": [\n    1.0,\n    12345678901234567890,\n    1e400,\n    -0,\n    2E2\n  ],\n" +
 		"  \"alpha\": {},\n  \"list\": [],\n  \"a\": {\n    \"k\": null,\n    \"b\": [],\n    \"c\": {},\n    \"t\": true\n  }\n}"

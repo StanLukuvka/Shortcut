@@ -363,7 +363,7 @@ func TestStores_WriteJSONAtomic(t *testing.T) {
 	if len(entries) != 1 || entries[0].Name() != "shortcuts.json" {
 		t.Errorf("stray files: %v", entries)
 	}
-	// a new file is private, like Python's NamedTemporaryFile
+	// a new file is private, like any temporary file
 	fresh := filepath.Join(env.Tmp, "new.json")
 	if err := WriteJSONAtomic(fresh, v); err != nil {
 		t.Fatal(err)
@@ -393,7 +393,7 @@ func TestStores_LockPathsAndSymlinkedLock(t *testing.T) {
 		t.Error(got)
 	}
 	proj := env.Project(map[string]any{})
-	// sha256("<realpath>") from Python: hashlib.sha256(os.path.realpath(proj).encode()).hexdigest()
+	// sha256("<realpath>"), hex
 	got := lockPath(proj)
 	if !strings.HasPrefix(got, filepath.Join(env.Store, "locks")+"/") || !strings.HasSuffix(got, ".lock") || len(filepath.Base(got)) != 64+len(".lock") {
 		t.Error(got)
@@ -653,7 +653,7 @@ func TestKey_TellsNonUTF8NamesApart(t *testing.T) {
 	if len(names) != len(keys) {
 		t.Errorf("%d record names for %d keys", len(names), len(keys))
 	}
-	// the key text itself is as Python wrote it: ASCII, \u escapes, lower hex
+	// the key text itself is as the old store wrote it: ASCII, \u escapes, lower hex
 	if got, want := keyJSON("a", "é😀\xff"), `["a", "\u00e9\ud83d\ude00\udcff"]`; got != want {
 		t.Errorf("got %s want %s", got, want)
 	}

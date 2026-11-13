@@ -1,6 +1,6 @@
 package testkit
 
-// Tests of testkit itself (no Python counterpart). Real shortcut commands don't exist yet, so the "binary" is an
+// Tests of testkit itself (not tests of a command). Real shortcut commands don't exist yet, so the "binary" is an
 // `sh` script (useBinary) or a plain program.
 
 import (

@@ -44,7 +44,7 @@ var knownFields = map[string]bool{
 
 var textFields = []string{"inline", "script", "cwd", "icon", "created_by", "created"}
 
-// EntryFromValue builds an Entry from a decoded value, with the messages and check order of the Python version.
+// EntryFromValue builds an Entry from a decoded value, with fixed messages and check order.
 func EntryFromValue(name string, v pyjson.Value) (*Entry, error) {
 	bad := func(problem string) error { return fmt.Errorf("'%s' is not a valid entry: %s", name, problem) }
 	data, ok := v.(*pyjson.Object)
@@ -162,7 +162,7 @@ func ArgVar(name string) string {
 	return "SC_ARG_" + strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
 }
 
-// ValidateArgs checks a declared args list, with the messages and check order of the Python version.
+// ValidateArgs checks a declared args list, with fixed messages and check order.
 func ValidateArgs(name string, args pyjson.Value) error {
 	bad := func(msg string) error { return fmt.Errorf("'%s' is not a valid entry: %s", name, msg) }
 	list, ok := args.([]pyjson.Value)

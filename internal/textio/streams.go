@@ -9,7 +9,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/pyos"
 )
 
-// bufSize is Python's io.DEFAULT_BUFFER_SIZE: stdout is buffered this much when it is not a terminal.
+// bufSize is the buffer size: stdout is buffered this much when it is not a terminal.
 const bufSize = 8192
 
 // exit is a variable so a test can see Abort141 without ending the test binary.
@@ -28,7 +28,7 @@ type Streams struct {
 func NewStreams(in, out, errw *os.File) *Streams {
 	s := &Streams{In: in}
 	s.Out = &Writer{s: s, f: out, tty: pyos.IsTerminal(int(out.Fd()))}
-	s.Out.direct = s.Out.tty // a terminal is written through (Python line-buffers it); a pipe or file is buffered
+	s.Out.direct = s.Out.tty // a terminal is written through (not buffered); a pipe or file is buffered
 	s.Err = &Writer{s: s, f: errw, tty: pyos.IsTerminal(int(errw.Fd())), direct: true}
 	return s
 }
@@ -57,10 +57,7 @@ func (w *Writer) IsTerminal() bool { return w.tty }
 
 // WriteString writes text to the stream through Safe, then backslashReplace, and returns len(text). A write that fails
 // with EPIPE (a reader that has gone) ends the process with 141; any other error is returned.
-// The backslash escapes apply on both streams: Python decodes argv with surrogateescape, so a stray byte 0xNN is
-// U+DCNN there and stderr (errors='backslashreplace') prints \udcnn; a lone surrogate (kept as WTF-8 ED A0..BF xx) prints
-// \udxxx. Python's stdout is strict and would crash on such text; Go prints the same escapes there instead (deliberate
-// divergence), so no raw byte such as 0x9b (CSI on an 8-bit terminal) reaches a terminal.
+// A byte that is not UTF-8 prints as \xNN on both streams, so no raw byte such as 0x9b (CSI on an 8-bit terminal) reaches a terminal.
 func (w *Writer) WriteString(text string) (int, error) {
 	return len(text), w.put(backslashReplace(Safe(text)))
 }
@@ -92,7 +89,7 @@ func (w *Writer) fail(err error) error {
 	return err
 }
 
-// flushOrAbort is Flush where Python's sys.stdout.flush() raises BrokenPipeError (before a pager, a prompt, after a
+// flushOrAbort is Flush where a flush onto a closed pipe fails (before a pager, a prompt, after a
 // diff): an EPIPE ends the process with 141, as a failed buffered write does. Main's own last Flush stays the plain one.
 func (w *Writer) flushOrAbort() error { return w.fail(w.Flush()) }
 

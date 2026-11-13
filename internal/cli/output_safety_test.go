@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -68,4 +69,19 @@ func TestOutputSafety_AClosedStreamChangesNothing(t *testing.T) {
 			t.Errorf("%s: exit %d %s", script, res.Code, res.Stderr)
 		}
 	}
+}
+
+// A byte 0x9b in a script is CSI on an 8-bit terminal: show prints the replacement character, never the byte.
+func TestOutputSafety_ABadByteInAScriptNeverReachesTheTerminal(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"go": map[string]any{"script": "scripts/go.sh"}})
+	e.WriteFile(filepath.Join(e.Store, "scripts", "go.sh"), "echo \x9b[31mred\x1b[2K\n", 0)
+	res := e.Run("show", "go")
+	res.WantCode(t, 0)
+	for _, c := range []string{"\x9b", "\x1b"} {
+		if strings.Contains(res.Stdout+res.Stderr, c) {
+			t.Errorf("show: output has %q:\n%q", c, res.Stdout)
+		}
+	}
+	testkit.Contains(t, "show", res.Stdout, "echo \uFFFD[31mred^[[2K")
 }

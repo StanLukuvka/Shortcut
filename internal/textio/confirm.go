@@ -18,7 +18,7 @@ var yes = []string{"y", "yes"}
 // one line is read, and it counts when its trimmed lower case is in accept (nil: y, yes). End of input or Ctrl-C
 // prints a newline to stdout and answers no. Stdout is flushed first, as input() does. SIGINT is caught only while
 // waiting, elsewhere it keeps its default and kills the process.
-// lazy: a read error other than EOF counts as EOF (Python raises OSError); the reading goroutine is left behind on Ctrl-C.
+// lazy: a read error other than EOF counts as EOF (there is no error to report); the reading goroutine is left behind on Ctrl-C.
 func Ask(s *Streams, prompt string, accept []string) bool {
 	if accept == nil {
 		accept = yes

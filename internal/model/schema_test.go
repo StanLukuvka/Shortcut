@@ -63,7 +63,7 @@ func sortedKeys[V any](m map[string]V) []string {
 	return keys
 }
 
-// modelSource is the text of this package's non-test files (the Python test reads every file of src/shortcut/).
+// modelSource is the text of this package's non-test files.
 func modelSource(t *testing.T) string {
 	t.Helper()
 	files, _ := filepath.Glob("*.go")
@@ -80,8 +80,7 @@ func modelSource(t *testing.T) string {
 	return b.String()
 }
 
-// argFields finds the case list of ValidateArgs that holds "rest": the fields an arg may have (Python: the set literal
-// holding "rest").
+// argFields finds the case list of ValidateArgs that holds "rest": the fields an arg may have.
 func argFields(t *testing.T) []string {
 	t.Helper()
 	file, err := parser.ParseFile(token.NewFileSet(), "entry.go", nil, 0)
@@ -194,7 +193,7 @@ func TestSchema_RestrictedFieldsAreAcceptedWhereTheSchemaAllowsThem(t *testing.T
 		t.Errorf("from requires %v", from.Required)
 	}
 
-	// Python ran `r go` in each place; here what run starts with is checked: the name resolves to a
+	// what run starts with is checked: the name resolves to a
 	// usable entry, with the field in it
 	proj := e.Project(map[string]any{"go": map[string]any{"inline": "echo go", "export": true}})
 	res, _, err := ResolveShortcut([]string{"go"}, proj, false, false)
