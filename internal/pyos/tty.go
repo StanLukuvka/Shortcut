@@ -1,0 +1,39 @@
+// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (G1-2). Don't hand-edit without checking the plan.
+
+//go:build linux || darwin
+
+package pyos
+
+import (
+	"os"
+	"strconv"
+	"syscall"
+	"unsafe"
+)
+
+func ioctl(fd int, req uintptr, arg unsafe.Pointer) error {
+	if _, _, e := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), req, uintptr(arg)); e != 0 {
+		return e
+	}
+	return nil
+}
+
+// IsTerminal is isatty(fd): the terminal-attributes ioctl succeeds only on a terminal. Not the char-device bit,
+// which /dev/null has too (run uses it as a child's stdin).
+func IsTerminal(fd int) bool {
+	var t syscall.Termios
+	return ioctl(fd, getTermios, unsafe.Pointer(&t)) == nil
+}
+
+// TerminalRows is shutil.get_terminal_size().lines: $LINES if it is a positive integer, else the window of fd 1,
+// else 24.
+func TerminalRows() int {
+	if n, err := strconv.Atoi(os.Getenv("LINES")); err == nil && n > 0 {
+		return n
+	}
+	var ws struct{ Row, Col, X, Y uint16 }
+	if ioctl(1, syscall.TIOCGWINSZ, unsafe.Pointer(&ws)) == nil && ws.Row > 0 {
+		return int(ws.Row)
+	}
+	return 24
+}
