@@ -548,3 +548,30 @@ func TestNew_RefusesAScriptsFolderThatIsASymlink(t *testing.T) {
 	eq(t, "elsewhere", len(entries), 0)
 	notExist(t, filepath.Join(e.Store, "imports", "dk.shortcut"))
 }
+
+// A script file no entry registers is not overwritten, and nothing reaches the registry.
+func TestNew_RefusesAnExistingScriptFile(t *testing.T) {
+	e := testkit.New(t)
+	scripts := filepath.Join(e.Store, "scripts")
+	e.WriteFile(filepath.Join(scripts, "mine.sh"), "keep me\n", 0o755)
+	src := filepath.Join(e.Tmp, "src.sh")
+	e.WriteFile(src, "echo new\n", 0o755)
+	for _, argv := range [][]string{{"new", "mine"}, {"new", "mine", "--copy", src}} {
+		res := e.Run(argv...)
+		eq(t, strings.Join(argv, " "), res.Code, 1)
+		contains(t, strings.Join(argv, " "), res.Stderr, filepath.Join(scripts, "mine.sh")+" already exists; remove it or pick another name")
+		eq(t, "content", readFile(t, filepath.Join(scripts, "mine.sh")), "keep me\n")
+		if _, has := e.LoadGlobal()["mine"]; has {
+			t.Errorf("%v registered mine", argv)
+		}
+	}
+}
+
+// A namespace entry is named with its namespace, as rm names it.
+func TestNew_CreatedMessageNamesTheNamespace(t *testing.T) {
+	e := testkit.New(t)
+	res := runOK(t, e, testkit.Opts{}, "new", "ps", "--namespace", "docker", "--", "echo ps")
+	contains(t, "inline", res.Stdout, "Created inline shortcut 'docker ps'.")
+	res = runOK(t, e, testkit.Opts{}, "new", "up", "--namespace", "docker")
+	contains(t, "script", res.Stdout, "Created script shortcut 'docker up'.")
+}

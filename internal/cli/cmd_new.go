@@ -79,7 +79,7 @@ func cmdNew(s *textio.Streams, args []string) error {
 		if !positionalAnywhere.MatchString(text) && !strings.Contains(text, "SC_ARG_") {
 			s.Err.WriteString("note: '" + name + "' won't see any arguments you give it; add \"$@\" to pass them on\n")
 		}
-		_, err := s.Out.WriteString("Created inline shortcut '" + name + "'.\n")
+		_, err := s.Out.WriteString("Created inline shortcut '" + group.Display(name) + "'.\n")
 		return err
 	}
 
@@ -89,6 +89,9 @@ func cmdNew(s *textio.Streams, args []string) error {
 	rel, abs := storedScriptField(group, name+".sh")
 	writeScript := func() error {
 		if err := refuseSymlinks(group, abs); err != nil {
+			return err
+		}
+		if err := refuseExisting(abs); err != nil {
 			return err
 		}
 		if err := os.MkdirAll(group.ScriptsDir(), 0o777); err != nil {
@@ -105,7 +108,7 @@ func cmdNew(s *textio.Streams, args []string) error {
 	if err := register(s, group, &entry, writeScript); err != nil {
 		return err
 	}
-	_, err = s.Out.WriteString("Created script shortcut '" + name + "'.\nEdit it at: " + abs + "\n")
+	_, err = s.Out.WriteString("Created script shortcut '" + group.Display(name) + "'.\nEdit it at: " + abs + "\n")
 	return err
 }
 
@@ -115,6 +118,14 @@ func descOr(ns Namespace, def string) string {
 		return d
 	}
 	return def
+}
+
+// refuseExisting stops new from replacing a script file no entry registers (a link counts, dangling or not).
+func refuseExisting(path string) error {
+	if _, err := os.Lstat(path); err == nil {
+		return Die(path + " already exists; remove it or pick another name")
+	}
+	return nil
 }
 
 // writeExecutable is open(path, "w") + chmod 0o755: the file is written where it is, a link included.
@@ -208,7 +219,7 @@ func newFromScript(s *textio.Streams, ns Namespace, group model.Group, fields *m
 	if err := register(s, group, &entry, nil); err != nil {
 		return err
 	}
-	_, err := s.Out.WriteString("Created shortcut '" + entry.Name + "' using " + abs + ".\n")
+	_, err := s.Out.WriteString("Created shortcut '" + group.Display(entry.Name) + "' using " + abs + ".\n")
 	return err
 }
 
@@ -254,6 +265,9 @@ func newFromCopy(s *textio.Streams, ns Namespace, group model.Group, fields *mod
 		if err := refuseSymlinks(group, abs); err != nil {
 			return err
 		}
+		if err := refuseExisting(abs); err != nil {
+			return err
+		}
 		if err := os.MkdirAll(group.ScriptsDir(), 0o777); err != nil {
 			return err
 		}
@@ -268,7 +282,7 @@ func newFromCopy(s *textio.Streams, ns Namespace, group model.Group, fields *mod
 	if err := register(s, group, &entry, writeScript); err != nil {
 		return err
 	}
-	_, err := s.Out.WriteString("Created shortcut '" + name + "' with a copy at " + abs + ".\n")
+	_, err := s.Out.WriteString("Created shortcut '" + group.Display(name) + "' with a copy at " + abs + ".\n")
 	return err
 }
 

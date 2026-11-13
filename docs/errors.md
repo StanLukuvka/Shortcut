@@ -127,6 +127,7 @@ A shortcut that declares `args` checks them before it runs. These print `error: 
 | `--arg-desc <flag>: '<arg>' already has a desc` | |
 | `'<ns>' is a shortcut in store <store>, so it can't be a namespace` | |
 | `shortcut '<name>' already exists in <file>` | `new` never replaces an entry. Remove it first |
+| `<path> already exists; remove it or pick another name` | `new` (script or `--copy`) never overwrites a script file in the scripts folder, even one no entry uses |
 | `'<name>' is a namespace in store <store>` | |
 | `'<name>' is a namespace in <store>` | The same, for `--local` |
 
@@ -155,6 +156,7 @@ A new local shortcut needs a project folder:
 | `'<name>' is a project shortcut, and shortcut doesn't change .shortcuts. Edit it by hand, or use: shortcut rm --local <name>` | |
 | `<file error>. Inside this project rm only takes --local until it's fixed; for your own: shortcut rm --global <name>` | |
 | `--namespace takes the namespace alone: shortcut rm --namespace <ns>` | |
+| `--namespace takes the namespace alone: shortcut rm --namespace <ns>. To remove one entry: shortcut rm <ns> <name>` | A name was given too |
 | `no namespace named '<ns>' in your global store (<store>/imports)` | `rm --namespace` removes only global namespaces |
 | `remove namespace '<ns>' in a terminal, or pass -y` | |
 | `remove '<name>' in a terminal, or pass -y` | No terminal to ask in. `rm --local` says `<verb> '<name>' ...` with what it would do |

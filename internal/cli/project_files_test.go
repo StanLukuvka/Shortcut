@@ -355,3 +355,16 @@ func TestProjectFiles_ACliWriteKeepsTheApproval(t *testing.T) {
 	eq(t, "rm", e.RunWith(in(proj), "rm", "--local", "more", "-y").Code, 0)
 	eq(t, "keep again", e.RunWith(in(proj), "r", "keep").Stdout, "shared keep\n")
 }
+
+// An exclude file whose last line has no newline keeps that line intact.
+func TestProjectFiles_ExcludeWithoutTrailingNewline(t *testing.T) {
+	e := testkit.New(t)
+	proj := e.Project(map[string]any{})
+	e.RunCmd(testkit.Opts{}, "git", "init", "-q", proj)
+	path := filepath.Join(proj, ".git", "info", "exclude")
+	if err := os.WriteFile(path, []byte("build/"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.RunWith(in(proj), "new", "a", "--local", "--", "true")
+	eq(t, "exclude", readFile(t, path), "build/\n.shortcuts.local\n")
+}
