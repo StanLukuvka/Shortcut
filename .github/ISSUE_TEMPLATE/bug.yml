@@ -1,3 +1,4 @@
+# FLOW-PRODUCED: temporary; written under .lad/plans/20261113-0238-go-rewrite.md section 10, C-2. Remove when the cutover PR merges.
 name: Bug report
 description: Something shortcut does wrong
 labels: [bug]
@@ -9,10 +10,10 @@ body:
     validations:
       required: true
   - type: input
-    id: python
+    id: install
     attributes:
-      label: Python version
-      description: python3 --version
+      label: How you installed it
+      description: The install.sh command you ran, or how you built it
     validations:
       required: true
   - type: input

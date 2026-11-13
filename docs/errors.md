@@ -2,7 +2,7 @@
 
 Every error is one line on stderr that starts with `error: `, and shortcut exits 1. The exceptions are in [Exit codes](#exit-codes).
 
-In the tables, `<word>` stands for a value filled in when the error happens. A message is listed as the code writes it; `tests/test_errors.py` fails when a message in `src/shortcut/` isn't here.
+In the tables, `<word>` stands for a value filled in when the error happens. A message is listed as the code writes it; `internal/cli/errors_doc_test.go` fails when a message in the Go code under `internal/` isn't here.
 
 ## Exit codes
 
@@ -11,7 +11,6 @@ In the tables, `<word>` stands for a value filled in when the error happens. A m
 | 0 | Done |
 | 1 | Any error below, or no to a question; `Aborted.` is printed. Ctrl-C at a question counts as no |
 | 2 | A usage error: an unknown command or option, a bad flag for a command, or the wrong arguments for a shortcut that declares `args` |
-| 130 | Ctrl-C while shortcut itself was waiting (Windows runs only) |
 | 141 | What shortcut was printing to stopped reading, as in `shortcut list \| head -1`. Nothing more is printed |
 | anything else | `run` passes the shortcut's own exit code through, and a signal that kills it |
 
@@ -22,12 +21,6 @@ Usage errors, which exit 2:
 | `unknown command '<word>' (to run a shortcut: shortcut run <word>)` | The first word isn't a command. Shortcuts run with `shortcut r <name>` |
 | `unrecognized option '<option>'` | An option before the command that shortcut doesn't have. A second line points to `shortcut --help` |
 | `missing shortcut name` | `shortcut run` with no name. The usage lines follow |
-
-Before anything else, shortcut checks its Python:
-
-| Message | Meaning |
-|---|---|
-| `shortcut needs Python 3.10 or newer, and this is <version>` | `python3` is too old. `install.sh` checks the same, with `python3 --version` in place of the version |
 
 A flag a command doesn't take, or one missing its value, prints the command's `usage:` line and then `shortcut <command>: error: <message>`.
 

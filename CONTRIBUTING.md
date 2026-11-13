@@ -2,14 +2,13 @@
 
 ## Setup
 
-Python 3.10+, bash and git. Nothing to install:
+Go (the version in [go.mod](go.mod)), bash and git. Nothing else to install:
 
 ```bash
 git clone https://github.com/StanLukuvka/Shortcut.git && cd Shortcut
-python3 src --help
+go build -o bin/shortcut ./cmd/shortcut
+bin/shortcut --help
 ```
-
-`python3 src <command>` runs the code in the clone.
 
 To try it by hand without touching your own `~/.shortcuts`, give it a home of its own. Set `HOME` first and `SHORTCUTS_HOME` in a separate statement, so `$HOME` is already the new one:
 
@@ -22,61 +21,48 @@ export HOME SHORTCUTS_HOME
 ## Tests
 
 ```bash
-python3 -m unittest discover -s tests -t tests
+go test ./...
 ```
 
-One file, or the tests whose names match:
+One package, or the tests whose names match:
 
 ```bash
-python3 -m unittest discover -s tests -t tests -p test_import.py
+go test ./internal/cli -run TestName
 ```
 
-```bash
-python3 -m unittest discover -s tests -t tests -k test_confirm
-```
+CI also checks `gofmt` and runs `go vet ./...`.
 
-[tests/fixtures.py](tests/fixtures.py) is the hub: one sandbox and the fixtures every test builds from. Its docstring shows how. Each `test_*.py` covers one behaviour, and `tests/test_fixtures.py` checks that each one:
+[internal/testkit](internal/testkit/) is the hub. Each test gets its own sandbox from `testkit.New(t)`: a temp dir with `home/` as `HOME` and `home/.shortcuts` as `SHORTCUTS_HOME`. `XDG_DATA_HOME`, `XDG_CONFIG_HOME` and `BIN_DIR` are under the same home. Before any child process starts, `RefuseUnlessSandboxed` checks its environment and working directory, and refuses if they reach outside the temp dir. Tests start processes and make temp dirs only through testkit: `rules_test.go` fails a test file that imports `os/exec`, or calls `t.TempDir`, `t.Setenv`, `os.Setenv` or `os.MkdirTemp`.
 
-- subclasses `ShortcutTestCase`;
-- makes no temp dirs, doesn't change `os.environ` and doesn't import `subprocess`.
-
-Add a fixture to `fixtures.py` once a second test file needs it.
-
-CI also runs:
-
-```bash
-ruff check --select F,E9 .
-```
-
-```bash
-mypy --python-version 3.10 src/shortcut
-```
+The `// py:` comments name the Python test each Go test ports, as `file::test_name`. They are readable at the `python-final` commit recorded in the cutover PR, with `git show <python-final>:tests/<file>`.
 
 ## What a change updates
 
-- A new error or warning: a row in [docs/errors.md](docs/errors.md). `tests/test_errors.py` fails without one.
+- A new error or warning: a row in [docs/errors.md](docs/errors.md). `internal/cli/errors_doc_test.go` fails without one.
 - A new entry field: [docs/shortcut.schema.json](docs/shortcut.schema.json).
-- A new command or flag: the bash, zsh and fish scripts in `completion.py`, the README command list, `print_usage` in `cli.py`, and AGENT.md if agents use it.
+- A new command or flag: the bash, zsh and fish scripts in `internal/cli/completion/`, the README command list, `internal/cli/usage.go`, and AGENT.md if agents use it.
 - Anything a user would notice: a line under Unreleased in [CHANGELOG.md](CHANGELOG.md).
 
 ## What doesn't change
 
-- The standard library only.
+- The standard library only: `go.mod` has no `require`.
 - The README's Security model, statements 1–6, word for word.
 - Entries are immutable: no edit command. To change one, `rm` it and make it again.
 - shortcut never writes a project's `.shortcuts`.
-- Text from a file is printed through `safe()` or `SafeOutput`.
-- Every question goes through `Confirm`.
+- Text from a file is printed through `textio.Safe`.
+- Every question goes through `textio.Confirm`.
 
 ## Layout
 
-- `src/__main__.py` checks the Python version and starts `shortcut.cli`.
-- `src/shortcut/`:
-  - `cli.py`: the commands.
-  - A file per class: `shortcut_entry.py`, `group.py`, `store.py`, `resolved_shortcut.py`, `parser.py`, `confirm.py`, `safe_output.py`.
-  - A file per area: `stores.py`, `lookup.py`, `run.py`, `writes.py`, `approval.py`, `importing.py`, `completion.py`.
-  - `helpers.py`: constants and the functions that need none of the classes. Its docstring maps it.
-- `templates/`: the bundled shortcuts. `examples/`: namespaces to copy from.
+- `cmd/shortcut/`: the main package.
+- `internal/cli/`: dispatch, argument parsing and the commands. `cmd_*.go` is one file per command; `usage.go` is the usage text, `help/` the per-command help, and `completion/` the bash, zsh and fish scripts.
+- `internal/model/`: store files, entries, groups and lookup. It never prints.
+- `internal/approval/`: what a project or namespace is approved for, the approval records, and the review diff.
+- `internal/textio/`: printed text, questions and the pager.
+- `internal/pyos/`, `internal/pyjson/`, `internal/difflib/`: the parts of the standard library's file, JSON and diff behaviour that shortcut's output depends on.
+- `internal/testkit/`: the test sandbox and helpers. `internal/testdata/`: frozen golden data that the tests compare against.
+- `installer/`: `install.sh` and its tests.
+- `templates/`: the bundled shortcuts, embedded in the binary by [bundled.go](bundled.go). `examples/`: namespaces to copy from.
 - `docs/`: the diagrams, the schema and the error table.
 
 ## Docs and commits
@@ -91,6 +77,6 @@ mypy --python-version 3.10 src/shortcut
 
 ## Releasing
 
-1. Set `VERSION` in `src/shortcut/helpers.py`, and the version in the diagram titles if it changed there.
+1. Set `const Version` in [internal/cli/version.go](internal/cli/version.go) to the version without the `v`, such as `0.1.0`. The release workflow fails if `shortcut --version` doesn't match the tag.
 2. Move Unreleased in CHANGELOG.md under the new version and date.
-3. Tag `v<version>` on main and publish a GitHub release from it. The release workflow attaches the zipapp.
+3. Commit, then tag `v<version>` on main and push the tag. The release workflow runs `go vet` and `go test ./...`, builds the archives for linux and darwin on amd64 and arm64, and publishes the GitHub release with `checksums.txt`, `install.sh` and `VERSION`. A tag with a hyphen, such as `v0.1.0-rc.1`, is published as a prerelease.

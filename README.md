@@ -2,35 +2,46 @@
 
 # shortcut
 
-Names shell commands and scripts, and runs them from any directory. Python 3.10+, no dependencies.
+Names shell commands and scripts, and runs them from any directory. One binary, no dependencies.
 
 Unlike an alias or a file in `~/bin`, a shortcut can belong to a project and be committed with it, runs only after you've reviewed it, and can declare its arguments, the folder it runs in and a confirm prompt.
 
 ## Install
 
-Python 3.10+ and bash, on Linux or another POSIX system. `init --global <git URL>` also needs git. The bundled `edit` needs `$VISUAL`, `$EDITOR` or nano, and the bundled `desktop` is for Linux desktops.
-
-From a clone, with completion and the bundled shortcuts:
+For Linux and macOS, on x86_64 or arm64. On Windows, use WSL.
 
 ```bash
-git clone https://github.com/StanLukuvka/Shortcut.git && cd Shortcut && ./install.sh
+curl -fsSL https://github.com/StanLukuvka/Shortcut/releases/latest/download/install.sh | sh
 ```
 
-`install.sh` writes `~/.local/bin/shortcut` (or `$BIN_DIR/shortcut`), bash completion in `~/.local/share/bash-completion/completions/shortcut`, and, if fish is installed, fish completion in `~/.config/fish/completions/shortcut.fish`. `$XDG_DATA_HOME` and `$XDG_CONFIG_HOME` move the last two. To upgrade, `git pull` and run it again. To uninstall, delete those files. Your shortcuts in `~/.shortcuts` stay.
+The installer downloads the release archive for your system, checks it against `checksums.txt`, and writes:
 
-Or as a package:
+- the `shortcut` binary to `~/.local/bin/shortcut` (or `$BIN_DIR/shortcut`);
+- bash completion to `~/.local/share/bash-completion/completions/shortcut`;
+- fish completion to `~/.config/fish/completions/shortcut.fish`, if fish is installed;
+- zsh completion, if zsh is installed and used (your login shell is zsh, or `~/.zshrc` exists): the file `~/.local/share/shortcut/completion.zsh`, and one marked block in `~/.zshrc`, added once. `SHORTCUT_NO_RC=1` skips the zsh part.
+
+`$XDG_DATA_HOME` (default `~/.local/share`) and `$XDG_CONFIG_HOME` (default `~/.config`) move the completion files.
+
+At a terminal, the installer then offers the bundled shortcuts: you review and answer `shortcut init --global --bundled`, and the installer never answers for you. `SHORTCUT_NO_BUNDLED=1` skips the offer and prints the command instead. Without a terminal, it prints the command.
+
+To install a given version, set `SHORTCUT_VERSION`, with or without the `v`:
 
 ```bash
-uv tool install git+https://github.com/StanLukuvka/Shortcut
+curl -fsSL https://github.com/StanLukuvka/Shortcut/releases/latest/download/install.sh | SHORTCUT_VERSION=0.1.0 sh
 ```
 
-```bash
-pipx install git+https://github.com/StanLukuvka/Shortcut
-```
+To upgrade, run the install command again. It replaces the binary and rewrites the completion files.
 
-Upgrade with `uv tool upgrade shortcut` or `pipx upgrade shortcut`, and uninstall with `uv tool uninstall shortcut` or `pipx uninstall shortcut`. A package sets up no completion: add `source <(shortcut completion bash)` to `~/.bashrc`, or `source <(shortcut completion zsh)` to `~/.zshrc` after `compinit`, or run `shortcut completion fish > ~/.config/fish/completions/shortcut.fish`. For the bundled shortcuts, see [Bundled shortcuts](#bundled-shortcuts).
+To uninstall, delete `~/.local/bin/shortcut`, the completion files (`~/.local/share/bash-completion/completions/shortcut`, `~/.config/fish/completions/shortcut.fish` and the `~/.local/share/shortcut/` folder), and the lines from `# >>> shortcut completion >>>` to `# <<< shortcut completion <<<` in `~/.zshrc`. Your shortcuts in `~/.shortcuts` stay.
 
-Install one way, not both: both put `shortcut` in `~/.local/bin`. To switch, uninstall the one you have first.
+Requirements:
+
+- bash: inline shortcuts run with `bash -c`.
+- `curl` or `wget`, and `sha256sum` or `shasum`, for the installer.
+- git, for `init --global <git URL>`.
+- The bundled `edit` needs python3 and `$EDITOR` (`$VISUAL` first if set, nano if neither).
+- The bundled `desktop` is for Linux only.
 
 ## Quick start
 
@@ -212,7 +223,7 @@ PAGER                 pages long update and init --global diffs
 - [CHANGELOG.md](CHANGELOG.md): what changed in each version.
 - [docs/](docs/): diagrams, the JSON Schema for shortcut files, and every error message.
 - [examples/podman](examples/podman/): a namespace for podman containers.
-- Code: [src/shortcut/](src/shortcut/). `cli.py` has the commands; the rest is a file per class, a file per area (`stores.py`, `lookup.py`, `run.py`, `writes.py`, `approval.py`, `importing.py`, `completion.py`) and `helpers.py`. `python3 src` runs it from a clone.
+- Code, in Go: [cmd/shortcut](cmd/shortcut/) is the entry point. `internal/cli` has the commands, one `cmd_*.go` file each, with `usage.go` and the completion scripts in `completion/`. `internal/model` has the store files, entries and lookup; `internal/approval` the approval records and review; `internal/textio` terminal output and prompts. `internal/pyos`, `internal/pyjson` and `internal/difflib` reproduce the file, JSON and diff behaviour that shortcut's output depends on; `internal/testkit` is the test sandbox. [installer/](installer/) is the install script. [bundled.go](bundled.go) embeds [templates/](templates/) in the binary.
 
 ## License
 
