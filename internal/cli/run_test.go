@@ -83,12 +83,14 @@ func TestRunning_ScriptShebangWithoutExecAndElf(t *testing.T) {
 	e.WriteFile(filepath.Join(scripts, "py_script.sh"), "#!/usr/bin/env sh\necho \"py $((1 + 1))\"\n", 0o644)
 	e.WriteFile(filepath.Join(scripts, "no_shebang.sh"), "echo nonexec\n", 0o644)
 	e.WriteFile(filepath.Join(scripts, "exec.sh"), "#!/usr/bin/env bash\necho exec_shebang\n", 0o755)
+	e.WriteFile(filepath.Join(scripts, "blank.sh"), "#! \t \necho blank_shebang\n", 0o644)
 	e.WriteStore(e.Store, map[string]any{
+		"blank":     map[string]any{"script": "scripts/blank.sh"},
 		"py":        map[string]any{"script": "scripts/py_script.sh", "description": "python"},
 		"noshebang": map[string]any{"script": "scripts/no_shebang.sh", "description": "noshebang"},
 		"exec":      map[string]any{"script": "scripts/exec.sh", "description": "exec"},
 	})
-	for name, want := range map[string]string{"py": "py 2", "noshebang": "nonexec", "exec": "exec_shebang"} {
+	for name, want := range map[string]string{"blank": "blank_shebang", "py": "py 2", "noshebang": "nonexec", "exec": "exec_shebang"} {
 		res := e.Run("run", name)
 		if res.Code != 0 || !strings.Contains(res.Stdout, want) {
 			t.Errorf("%s: exit %d stdout %q stderr %q", name, res.Code, res.Stdout, res.Stderr)
@@ -349,7 +351,7 @@ func TestRunning_AClosedPipeStopsQuietly(t *testing.T) {
 	}
 }
 
-// The "-> cwd" line goes to stderr with a bad byte escaped (as \udcNN for now). A global shortcut needs no approval, so it
+// The "-> cwd" line goes to stderr with a bad byte escaped (as \xNN). A global shortcut needs no approval, so it
 // still runs from a folder whose name is not valid UTF-8 (a project there cannot be approved).
 func TestRun_CwdLineEscapesNonUTF8(t *testing.T) {
 	e := testkit.New(t)
@@ -360,5 +362,5 @@ func TestRun_CwdLineEscapesNonUTF8(t *testing.T) {
 	}
 	res := e.RunWith(testkit.Opts{Cwd: dir}, "run", "hello")
 	res.WantCode(t, 0)
-	testkit.Contains(t, "stderr", res.Stderr, "p\\udcffroj")
+	testkit.Contains(t, "stderr", res.Stderr, "p\\xffroj")
 }

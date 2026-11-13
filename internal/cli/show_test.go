@@ -207,14 +207,14 @@ Script (TMP/home/.shortcuts/scripts/none.sh):
 	}
 }
 
-// A script that is not UTF-8 is shown with U+FFFD for each bad byte or cut sequence, line ends as \n, trailing white space (U+2028 and
-// U+001F too) cut, and what could rewrite the screen made visible (Python: errors="replace", universal newlines, rstrip, safe).
+// A script that is not UTF-8 is shown with one U+FFFD for each run of bad bytes, line ends as \n, trailing spaces, tabs and
+// newlines cut, and what could rewrite the screen made visible.
 func TestShow_AScriptThatIsNotUTF8(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"inv": map[string]any{"script": "scripts/inv.sh"}})
 	e.WriteFile(filepath.Join(e.Store, "scripts", "inv.sh"), []byte("bad \xff\xfe utf \xe2\x82 end \x1b[31m\r\nx\ry \xe2\x80\xa8 \n\x1f \n"), 0)
 	res := e.Run("show", "inv")
-	want := "\nScript (" + filepath.Join(e.Store, "scripts", "inv.sh") + "):\nbad \uFFFD\uFFFD utf \uFFFD end ^[[31m\nx\ny"
+	want := "\nScript (" + filepath.Join(e.Store, "scripts", "inv.sh") + "):\nbad \uFFFD utf \uFFFD end ^[[31m\nx\ny \\u2028 \n^_"
 	if res.Code != 0 || !strings.Contains(res.Stdout, want+"\n") {
 		t.Errorf("exit %d: %q", res.Code, res.Stdout)
 	}

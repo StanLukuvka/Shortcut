@@ -57,10 +57,7 @@ func (w *Writer) IsTerminal() bool { return w.tty }
 
 // WriteString writes text to the stream through Safe, then backslashReplace, and returns len(text). A write that fails
 // with EPIPE (a reader that has gone) ends the process with 141; any other error is returned.
-// The backslash escapes apply on both streams: Python decodes argv with surrogateescape, so a stray byte 0xNN is
-// U+DCNN there and stderr (errors='backslashreplace') prints \udcnn; a lone surrogate (kept as WTF-8 ED A0..BF xx) prints
-// \udxxx. Python's stdout is strict and would crash on such text; Go prints the same escapes there instead (deliberate
-// divergence), so no raw byte such as 0x9b (CSI on an 8-bit terminal) reaches a terminal.
+// A byte that is not UTF-8 prints as \xNN on both streams, so no raw byte such as 0x9b (CSI on an 8-bit terminal) reaches a terminal.
 func (w *Writer) WriteString(text string) (int, error) {
 	return len(text), w.put(backslashReplace(Safe(text)))
 }

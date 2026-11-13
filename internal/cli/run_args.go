@@ -51,7 +51,7 @@ func argLines(spec []*pyjson.Object) []string {
 	}
 	lines := make([]string, len(rows))
 	for i, r := range rows {
-		lines[i] = pyRstrip("  " + padRight(r.label, width) + "  " + padRight(r.need, needWidth) + "  " + r.desc)
+		lines[i] = strings.TrimRight("  "+padRight(r.label, width)+"  "+padRight(r.need, needWidth)+"  "+r.desc, " \t\n")
 	}
 	return lines
 }

@@ -169,9 +169,18 @@ func childCommand(resolved *model.ResolvedShortcut, entry *model.Entry, name str
 	case isExec && (hasShebang || isElf):
 		return append([]string{path}, args...), nil
 	case hasShebang:
-		parts := splitOnce(strings.TrimFunc(replaceInvalidUTF8([]byte(firstLine[2:])), isPySpace))
-		if len(parts) == 0 {
-			parts = []string{"bash"}
+		// the kernel splits at the first blank: the interpreter, and the rest as one argument
+		line := strings.Trim(strings.ToValidUTF8(firstLine[2:], "\uFFFD"), " \t")
+		interp, rest := line, ""
+		if i := strings.IndexAny(line, " \t"); i >= 0 {
+			interp, rest = line[:i], strings.TrimLeft(line[i:], " \t")
+		}
+		parts := []string{"bash"}
+		if interp != "" {
+			parts = []string{interp}
+			if rest != "" {
+				parts = append(parts, rest)
+			}
 		}
 		return append(append(parts, path), args...), nil
 	}
