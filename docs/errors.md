@@ -12,6 +12,7 @@ In the tables, `<word>` stands for a value filled in when the error happens. A m
 | 1 | Any error below, or no to a question; `Aborted.` is printed. Ctrl-C at a question counts as no |
 | 2 | A usage error: an unknown command or option, a bad flag for a command, or the wrong arguments for a shortcut that declares `args` |
 | 130 | Ctrl-C while shortcut itself was waiting (Windows runs only) |
+| 141 | What shortcut was printing to stopped reading, as in `shortcut list \| head -1`. Nothing more is printed |
 | anything else | `run` passes the shortcut's own exit code through, and a signal that kills it |
 
 Usage errors, which exit 2:
@@ -20,6 +21,13 @@ Usage errors, which exit 2:
 |---|---|
 | `unknown command '<word>' (to run a shortcut: shortcut run <word>)` | The first word isn't a command. Shortcuts run with `shortcut r <name>` |
 | `unrecognized option '<option>'` | An option before the command that shortcut doesn't have. A second line points to `shortcut --help` |
+| `missing shortcut name` | `shortcut run` with no name. The usage lines follow |
+
+Before anything else, shortcut checks its Python:
+
+| Message | Meaning |
+|---|---|
+| `shortcut needs Python 3.10 or newer, and this is <version>` | `python3` is too old. `install.sh` checks the same, with `python3 --version` in place of the version |
 
 A flag a command doesn't take, or one missing its value, prints the command's `usage:` line and then `shortcut <command>: error: <message>`.
 
@@ -36,6 +44,7 @@ A flag a command doesn't take, or one missing its value, prints the command's `u
 | `corrupt registry <path>: 'description' must be a string` | |
 | `cannot overwrite corrupt registry <path>: <json error>` | shortcut won't write over a file it can't read. Fix or move it |
 | `<path> is format version <n>, newer than this shortcut reads; upgrade shortcut` | |
+| `corrupt registry <path>: 'version' must be a whole number, such as 2` | `"version"` is a string, a fraction, `null` or `true` |
 | `<path> needs "version": 2` | |
 | `<path> needs 'shortcuts'` | |
 | `<path> has an unknown field: <fields>` | |
@@ -70,6 +79,7 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `only the last entry in 'args' can be 'rest'` | |
 | `arg '<arg>' can't be both 'required' and have a 'default'` | |
 | `arg '<arg>' is declared twice` | |
+| `args '<arg>' and '<arg>' would both be SC_ARG_<NAME>` | Two names that differ only in case, or in `-` and `_` |
 
 | Message | Meaning |
 |---|---|
@@ -84,7 +94,9 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `shortcut '<name>' not found.` | Not in this project or your global store |
 | `shortcut or namespace '<name>' not found. A global namespace is the file <store>/imports/<name>.shortcut.` | The same, with words after the name, so it may be meant as a namespace |
 | `... The project in <dir> has its own '<name>': leave out --global to use it.` | Added to either one above when `--global` skipped a project entry by that name |
-| `'<name>' not found in namespace '<ns>'. It has: <names>` | |
+| `... The project in <outer> has a '<name>', but only the nearest project, <dir>, is used here.` | Added when a project holds another, and only the outer one has the name |
+| `... <dir>/.shortcuts is a folder, which is how shortcut 1.x kept a project. This version reads a .shortcuts file, so nothing in that folder is used.` | Added outside any project when a folder above has the 1.x layout |
+| `'<name>' not found in namespace '<ns>'. It has: <names>` | When the project's namespace hides a global one that has the name, `. Your global '<ns>' has it: shortcut r --global <ns> <name>` follows |
 | `'<ns>' is a namespace; run one of its shortcuts: <names>` | |
 | `too many names: <words>` | `show`, `location` and `rm` take a name, or a namespace and a name |
 | `<file error>. Nothing runs inside this project until it's fixed; for your own: shortcut r --global <name>` | The project's file is broken, so no name is looked up through it |
@@ -92,6 +104,7 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `<group> changed since you approved it; run: <command>` | |
 | `run directory does not exist: <dir>` | The entry's `cwd` is gone |
 | `script file not found: <path>` | |
+| `<path> has Windows line endings, so its #! line can't start it. Convert it: sed -i 's/\r$//' <path>` | The script's lines end in `\r\n` |
 | `'<name>' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y <name> <args>)` | A `confirm` entry run without a terminal. The command is the one that was run, with `-y` |
 
 A shortcut that declares `args` checks them before it runs. These print `error: <message>`, then `usage: shortcut r <name> <args>`, then each argument and its `desc` if any argument has one, and exit 2.
@@ -100,6 +113,7 @@ A shortcut that declares `args` checks them before it runs. These print `error: 
 |---|---|
 | `missing <<arg>>` | A required argument wasn't given |
 | `too many arguments` | More words than declared, and no `rest` argument |
+| `<<arg>> can't be empty` | A required argument was given as `""` |
 
 ## new
 

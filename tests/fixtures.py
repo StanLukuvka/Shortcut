@@ -25,7 +25,6 @@ import os
 import pathlib
 import select
 import shlex
-import signal
 import struct
 import subprocess
 import sys
@@ -193,7 +192,8 @@ class ShortcutTestCase(unittest.TestCase):
         stdout_file: Optional[pathlib.Path] = None,
     ) -> tuple[int, str]:
         """Run the CLI on a fresh 30x100 pseudo-terminal, as if typed into a real one.
-        keys: (wait until this appears in the output, then type these bytes, or send this signal) pairs.
+        keys: (wait until this appears in the output, then type these bytes, send this signal, or call this)
+        pairs.
         stdout_file: send stdout to this file instead, as `> file` would."""
         launch = self.launch_args(cwd, env)
         master, slave = os.openpty()
@@ -220,6 +220,8 @@ class ShortcutTestCase(unittest.TestCase):
                     action = pending.pop(0)[1]
                     if isinstance(action, bytes):
                         os.write(master, action)
+                    elif callable(action):
+                        action()
                     else:
                         proc.send_signal(action)
                 ready, _, _ = select.select([master], [], [], 0.1)

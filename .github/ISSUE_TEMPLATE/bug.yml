@@ -1,0 +1,36 @@
+name: Bug report
+description: Something shortcut does wrong
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: shortcut --version
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: python3 --version
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: OS and shell
+      placeholder: Fedora 44, bash 5.2
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: The command and its output
+      description: What you ran and everything it printed. Leave out anything private in your shortcuts.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead

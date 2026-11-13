@@ -56,7 +56,7 @@ class TestBundled(ShortcutTestCase):
 
         res = self.run_cli(["r", "desktop"])
         self.assertEqual(res.returncode, 2)
-        self.assertIn("usage: shortcut r desktop <shortcut>", res.stderr)
+        self.assertIn("usage: shortcut r desktop <shortcut...>", res.stderr)
 
     def test_bundled_desktop_entry_quoting(self):
         self.install_bundled()
@@ -180,6 +180,22 @@ class TestBundled(ShortcutTestCase):
         self.assertTrue(str(bin_dir).startswith(str(self.tmp_path)))
         self.assertTrue(str(compl_file).startswith(str(self.tmp_path)))
         self.assertTrue(str(shortcuts_home).startswith(str(self.tmp_path)))
+
+
+class TestBundledDesktop(ShortcutTestCase):
+    def test_bundled_desktop_takes_a_namespace_member(self):
+        self.install_bundled()
+        self.run_cli(["new", "--namespace", "ns", "job", "--desc", "NS job", "--", "echo", "ns_ok"])
+        res = self.run_cli(["r", "desktop", "ns", "job"])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        desktop_file = self.xdg_data_home / "applications" / "shortcut-ns.job.desktop"
+        lines = desktop_file.read_text(encoding="utf-8").splitlines()
+        self.assertIn("Name=NS job", lines)
+        self.assertIn("X-Shortcut-Name=ns job", lines)
+        self.assertIn("run --global ns job;", next(line for line in lines if line.startswith("Exec=")))
+        res = self.run_cli(["r", "desktop", "--remove", "ns", "job"])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertFalse(desktop_file.exists())
 
 
 if __name__ == "__main__":

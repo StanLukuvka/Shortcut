@@ -281,5 +281,17 @@ class TestImport(ShortcutTestCase):
         self.assertIn(f"--replace is for a folder of namespaces, and {project} has a .shortcuts", res.stderr)
 
 
+class TestImportSkips(ShortcutTestCase):
+    def test_a_source_with_a_shortcuts_file_says_what_it_leaves_out(self):
+        src = self.collection(HI, files={"extra.shortcut": json.dumps({"version": 2, "shortcuts": {}})},
+                              imports={"listed": "listed.shortcut"})
+        res = self.run_cli(["init", "--global", "-y", str(src)])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("extra.shortcut (a namespace file: a source with a .shortcuts brings only its exported shortcuts)",
+                      res.stdout)
+        self.assertIn("imports: listed (namespaces a .shortcuts imports aren't copied)", res.stdout)
+        self.assertIn("hi", self.load_global())
+
+
 if __name__ == "__main__":
     unittest.main()

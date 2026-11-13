@@ -3,10 +3,10 @@
 
 import json
 import os
-import sys
+import stat
 import unittest
 
-from fixtures import DOCKER_PS, helpers, HI, lookup, OWN, ShortcutTestCase
+from fixtures import DOCKER_PS, GO, helpers, HI, lookup, OWN, ShortcutTestCase
 
 
 class TestStores(ShortcutTestCase):
@@ -201,7 +201,8 @@ class TestStores(ShortcutTestCase):
 
         res = self.run_cli(["run", "penpot"], cwd=str(proj))
         self.assertEqual(res.stdout.strip(), "local")
-        self.assertIn(f"\u2192 {proj}  (project shortcut; your global 'penpot' is hidden here", res.stderr)
+        self.assertEqual(res.stderr, "note: 'penpot' here is this project's; your global 'penpot' runs with: "
+                                     f"shortcut run --global penpot\n\u2192 {proj}\n")
 
         res_global = self.run_cli(["run", "--global", "penpot"], cwd=str(proj))
         self.assertEqual(res_global.stdout.strip(), "global")
@@ -990,6 +991,81 @@ class TestBrokenStores(ShortcutTestCase):
             res = self.run_cli(cmd, cwd=str(proj), timeout=10)
             self.assertNotIn("Traceback", res.stderr, cmd)
         self.assertIn("script not found", self.run_cli(["list"], cwd=str(proj), timeout=10).stderr)
+
+
+class TestStoreChecks(ShortcutTestCase):
+    def test_a_version_that_isnt_a_whole_number_is_refused(self):
+        for version in ("3", 3.0, None, True):
+            self.write_registry(self.shortcuts_home, {"version": version, "shortcuts": {"v": {"inline": "echo ran"}}})
+            res = self.run_cli(["r", "v"])
+            self.assertEqual(res.returncode, 1, version)
+            self.assertIn("'version' must be a whole number, such as 2", res.stderr)
+            self.assertEqual(res.stdout, "")
+        proj = self.project(GO, version="3")
+        res = self.run_cli(["update", "-y"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("'version' must be a whole number", res.stderr)
+
+    def test_a_symlinked_store_file_is_written_where_it_leads(self):
+        dotfiles = self.folder("dotfiles")
+        target = self.write_file(dotfiles / "shortcuts.json", json.dumps({"version": 2, "shortcuts": {}}), mode=0o644)
+        link = self.shortcuts_home / "shortcuts.json"
+        link.symlink_to(target)
+        self.assertEqual(self.run_cli(["new", "hi", "--", "echo hi"]).returncode, 0)
+        self.assertTrue(link.is_symlink())
+        self.assertIn("hi", json.loads(target.read_text(encoding="utf-8"))["shortcuts"])
+        self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o644)
+        self.assertEqual([p.name for p in dotfiles.iterdir()], ["shortcuts.json"])
+
+    def test_an_empty_list_says_how_to_start(self):
+        res = self.run_cli(["list"])
+        self.assertEqual(res.returncode, 0)
+        self.assertEqual(res.stdout, "")
+        self.assertIn("No shortcuts yet. Make one with: shortcut new hi", res.stderr)
+
+
+class TestHidingAndNotFound(ShortcutTestCase):
+    def test_a_project_namespace_over_a_global_one_is_announced(self):
+        self.write_import(self.shortcuts_home, "docker", {"version": 2, "shortcuts": {
+            "ps": {"inline": "echo global-ps"}, "delete": {"inline": "echo global-delete"}}})
+        self.assertEqual(self.run_cli(["update", "docker", "-y"]).returncode, 0)
+        proj = self.project({})
+        self.write_import(proj / ".shortcuts", "docker", {"version": 2, "shortcuts": {"delete": {"inline": "echo project-delete"}}})
+
+        update = self.run_cli(["update", "-y"], cwd=str(proj))
+        self.assertIn("Inside this project, 'docker' hides your global 'docker'.", update.stdout)
+        res = self.run_cli(["r", "docker", "delete"], cwd=str(proj), env={"SHORTCUT_SHOW_DIR": "0"})
+        self.assertEqual(res.stdout, "project-delete\n")
+        self.assertEqual(res.stderr, "note: 'docker' here is this project's; your global 'docker' runs with: "
+                                     "shortcut run --global docker delete\n")
+        res = self.run_cli(["r", "docker", "ps"], cwd=str(proj))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("Your global 'docker' has it: shortcut r --global docker ps", res.stderr)
+        listing = self.run_cli(["list"], cwd=str(proj)).stdout
+        self.assertIn(f"Namespace docker ({proj / 'imports' / 'docker.shortcut'})  [hides global]", listing)
+
+    def test_a_project_shortcut_over_a_global_namespace_is_announced(self):
+        self.write_import(self.shortcuts_home, "docker", DOCKER_PS)
+        proj = self.project({"docker": {"inline": "echo project"}})
+        update = self.run_cli(["update", "-y"], cwd=str(proj))
+        self.assertIn("Inside this project, 'docker' hides your global 'docker'.", update.stdout)
+        res = self.run_cli(["r", "docker"], cwd=str(proj))
+        self.assertIn("note: 'docker' here is this project's", res.stderr)
+
+    def test_a_name_in_an_outer_project_is_pointed_at(self):
+        outer = self.project({"outer": {"inline": "echo outer"}}, name="outer")
+        inner = outer / "vendor"
+        self.write_store(inner / ".shortcuts", {})
+        res = self.run_cli(["r", "outer"], cwd=str(inner))
+        self.assertEqual(res.returncode, 1)
+        self.assertIn(f"The project in {outer} has a 'outer', but only the nearest project, {inner}, is used here.",
+                      res.stderr)
+
+    def test_a_1x_project_folder_is_named(self):
+        old = self.folder("old")
+        (old / ".shortcuts").mkdir()
+        res = self.run_cli(["r", "x"], cwd=str(old))
+        self.assertIn(f"{old / '.shortcuts'} is a folder, which is how shortcut 1.x kept a project.", res.stderr)
 
 
 if __name__ == "__main__":

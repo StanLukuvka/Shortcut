@@ -3,6 +3,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+if ! python3 -I -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null; then
+    echo "error: shortcut needs Python 3.10 or newer, and python3 is $(python3 --version 2>&1 || echo missing)" >&2
+    exit 1
+fi
+
 BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
 COMPL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions"
 
