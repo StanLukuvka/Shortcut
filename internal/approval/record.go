@@ -11,12 +11,12 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/pyos"
 )
 
-// Record is approvals/<sha256(key)>.json, written by Python today and still readable and writable: the hash and
-// snapshot last approved, and Local for .shortcuts.local on its own (a change the CLI makes there updates that half
-// alone). Records live in the global store, never next to what they approve.
+// Record is approvals/<sha256(key)>.json, written by Python today and still readable and writable: the snapshot
+// last approved, and Local for .shortcuts.local on its own (a change the CLI makes there updates that half alone).
+// Records live in the global store, never next to what they approve. Older records also hold a "hash" field; it is
+// ignored, since the snapshot is compared exactly.
 type Record struct {
 	Key      string
-	Hash     string            // filesHash of the shared files; "" if the file's hash isn't a string
 	Snapshot map[string]string // shared files: path -> reviewable text
 	Local    map[string]string // .shortcuts.local half; absent in old records = empty
 }
@@ -55,7 +55,6 @@ func Load(g model.Group) *Record {
 	}
 	r := &Record{Snapshot: snap, Local: map[string]string{}}
 	r.Key, _ = o.Vals["key"].(string)
-	r.Hash, _ = o.Vals["hash"].(string)
 	if l, present := o.Get("local"); present {
 		if r.Local, ok = stringMap(l); !ok {
 			return nil
@@ -81,11 +80,15 @@ func Save(g model.Group, shared, local map[string]string) error {
 		}
 		rec := &pyjson.Object{}
 		rec.Set("key", g.Key())
-		rec.Set("hash", filesHash(shared))
 		rec.Set("snapshot", sortedObject(shared))
 		rec.Set("local", sortedObject(local))
 		return model.WriteJSONAtomic(path, rec)
 	})
+}
+
+// matches: both halves equal what was recorded, exactly.
+func (r *Record) matches(shared, local map[string]string) bool {
+	return maps.Equal(r.Snapshot, shared) && maps.Equal(r.Local, local)
 }
 
 // LocalIsApproved: whether .shortcuts.local matches what the record holds for it.
@@ -94,7 +97,7 @@ func LocalIsApproved(g model.Group, r *Record) bool {
 	if r != nil {
 		held = r.Local
 	}
-	return filesHash(held) == filesHash(LocalFiles(g))
+	return maps.Equal(held, LocalFiles(g))
 }
 
 // State returns "ok", "new" (never approved) or "changed".
@@ -106,7 +109,7 @@ func State(g model.Group) string {
 	if r == nil {
 		return "new"
 	}
-	if r.Hash == filesHash(SharedFiles(g)) && LocalIsApproved(g, r) {
+	if r.matches(SharedFiles(g), LocalFiles(g)) {
 		return "ok"
 	}
 	if len(r.Snapshot) > 0 {

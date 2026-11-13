@@ -18,8 +18,6 @@ TestApproval_DiffDetails -> test_approval.py::test_diff_details
 TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles -> test_approval.py::test_invalid_utf8_and_its_escaped_text_are_different_files
 displayPath -> display_path
 entryFiles -> entry_files
-filesHash -> files_hash
-hashInput -> json.dumps(sorted(files.items()))
 
 [internal/cli]
 Die -> die()

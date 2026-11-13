@@ -101,7 +101,7 @@ func merge(maps ...map[string]string) map[string]string {
 }
 
 // SharedFiles is the group's own file and what it names, the JSON normalised, and for a namespace its scripts
-// folder: exactly what is hashed, snapshotted and diffed. A project may have no .shortcuts; then this is empty.
+// folder: exactly what is compared, snapshotted and diffed. A project may have no .shortcuts; then this is empty.
 func SharedFiles(g model.Group) map[string]string {
 	if g.LocalFile != "" && !pyos.Exists(g.File) {
 		return map[string]string{}

@@ -6,208 +6,8 @@
   },
   "notes": [
     "Strings may hold lone surrogates (\\udXXX escapes): decode with pyjson, not encoding/json. A non-UTF-8 path byte 0xNN is U+DC00+NN.",
-    "tree_cases: build tree[] under a temp root, load each group, compare shared_files/local_files/hashes; replace @ROOT@ with the root in key_template and record_template. Modes are octal strings; symlink targets are relative. content_hex replaces content when the bytes are not UTF-8.",
-    "plan_sample_hash_matches_plan: whether hash_cases[0].hash equals the hash written in plan section 4.1.",
+    "tree_cases: build tree[] under a temp root, load each group, compare shared_files/local_files; replace @ROOT@ with the root in key_template and record_template. Modes are octal strings; symlink targets are relative. content_hex replaces content when the bytes are not UTF-8.",
     "key_cases[].python_error: Python raises for a project path that is not valid UTF-8 (approval_path encodes the key); the Go port must not copy the crash."
-  ],
-  "plan_sample_hash_matches_plan": true,
-  "hash_cases": [
-    {
-      "name": "plan sample",
-      "files": {
-        "b.sh": "echo \u00e9 \ud83d\ude00\n",
-        ".shortcuts": "{\n  \"shortcuts\": {\n    \"x\": {\n      \"big\": 1e+30,\n      \"inline\": \"echo \\u00e9\",\n      \"n\": 1.0\n    }\n  },\n  \"version\": 2\n}\n",
-        "./cwd of x": "/tmp/x\n"
-      },
-      "json": "[[\"./cwd of x\", \"/tmp/x\\n\"], [\".shortcuts\", \"{\\n  \\\"shortcuts\\\": {\\n    \\\"x\\\": {\\n      \\\"big\\\": 1e+30,\\n      \\\"inline\\\": \\\"echo \\\\u00e9\\\",\\n      \\\"n\\\": 1.0\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"], [\"b.sh\", \"echo \\u00e9 \\ud83d\\ude00\\n\"]]",
-      "hash": "1a4f1b218e2fc8c36510309de93f45583a881826c19fbf2b451df5b99e1d6e8d"
-    },
-    {
-      "name": "empty map",
-      "files": {},
-      "json": "[]",
-      "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
-    },
-    {
-      "name": "one file",
-      "files": {
-        "a.sh": "echo hi\n"
-      },
-      "json": "[[\"a.sh\", \"echo hi\\n\"]]",
-      "hash": "ccacae6504c99b6ad1876b062fee1a128cc84995c8d8c8a3848d1c9a45f0ed0d"
-    },
-    {
-      "name": "empty value",
-      "files": {
-        "a.sh": ""
-      },
-      "json": "[[\"a.sh\", \"\"]]",
-      "hash": "ecbba7cca1d10afba4ff7ee28ec9240ffb934cf0ebe7fb7be463a2a9e8eb1167"
-    },
-    {
-      "name": "non-ASCII and astral text",
-      "files": {
-        "a.sh": "caf\u00e9 \u4e2d\u6587 \ud83d\ude00 \ud800\udc00 \u2028 \u007f \u0000\n"
-      },
-      "json": "[[\"a.sh\", \"caf\\u00e9 \\u4e2d\\u6587 \\ud83d\\ude00 \\ud800\\udc00 \\u2028 \\u007f \\u0000\\n\"]]",
-      "hash": "26dc3ccbb64428c37d8ec78820fee2caa24c1e12506ef57d3fa54b931c8b3906"
-    },
-    {
-      "name": "non-ASCII key",
-      "files": {
-        "caf\u00e9.sh": "x\n",
-        "\ud83d\ude00.sh": "y\n",
-        "z.sh": "z\n"
-      },
-      "json": "[[\"caf\\u00e9.sh\", \"x\\n\"], [\"z.sh\", \"z\\n\"], [\"\\ud83d\\ude00.sh\", \"y\\n\"]]",
-      "hash": "7f778c09cf0591451e7fb810209fec4fc4d21b8143c57b03d76158a51246834e"
-    },
-    {
-      "name": "lone surrogates in value",
-      "files": {
-        "a.sh": "\ud800 \udc00 \udfff \ud83d\n",
-        "b.sh": "\ud83d\ude00 (pair as two escapes)\n"
-      },
-      "json": "[[\"a.sh\", \"\\ud800 \\udc00 \\udfff \\ud83d\\n\"], [\"b.sh\", \"\\ud83d\\ude00 (pair as two escapes)\\n\"]]",
-      "hash": "42c1cc08d69a04eae98bb103f920299866a2c63d6fb401b698b206a4c6d1deac"
-    },
-    {
-      "name": "lone surrogate key",
-      "files": {
-        "\ud800.sh": "x\n",
-        "a.sh": "y\n"
-      },
-      "json": "[[\"a.sh\", \"y\\n\"], [\"\\ud800.sh\", \"x\\n\"]]",
-      "hash": "8d7a1c81390c1152b924a74e915524713c46c93fa63b23eb3860d88929b4e541"
-    },
-    {
-      "name": "non-UTF-8 file name b'caf\\xe9.sh'",
-      "files": {
-        "caf\udce9.sh": "echo x\n"
-      },
-      "json": "[[\"caf\\udce9.sh\", \"echo x\\n\"]]",
-      "hash": "90e727ba7a1b71c3c304e55c0dbd4fcc8da9f282ae1fbdc015e6b98a617c0441"
-    },
-    {
-      "name": "non-UTF-8 name under scripts/ns",
-      "files": {
-        "scripts/ns/caf\udce9.sh": "echo x\n",
-        "scripts/ns/a.sh": "echo a\n"
-      },
-      "json": "[[\"scripts/ns/a.sh\", \"echo a\\n\"], [\"scripts/ns/caf\\udce9.sh\", \"echo x\\n\"]]",
-      "hash": "3f3524d0134ce8f99adaf64cfd5c52fdd4f46845fafbf8d7acfc6ccaa2ca29c7"
-    },
-    {
-      "name": "sort order: b'\\xff.sh' vs U+10000",
-      "files": {
-        "\udcff.sh": "a\n",
-        "\ud800\udc00.sh": "b\n"
-      },
-      "json": "[[\"\\udcff.sh\", \"a\\n\"], [\"\\ud800\\udc00.sh\", \"b\\n\"]]",
-      "hash": "fa767985a7cfc40e1042e79378b0af2b831cb7c932db644542db204aee29e12d"
-    },
-    {
-      "name": "sort order: U+FFFF, U+E000, U+10000, U+DCFF",
-      "files": {
-        "\ud800\udc00.sh": "1\n",
-        "\uffff.sh": "2\n",
-        "\ue000.sh": "3\n",
-        "\udcff.sh": "4\n"
-      },
-      "json": "[[\"\\udcff.sh\", \"4\\n\"], [\"\\ue000.sh\", \"3\\n\"], [\"\\uffff.sh\", \"2\\n\"], [\"\\ud800\\udc00.sh\", \"1\\n\"]]",
-      "hash": "4c0e5878756aa4a10d46b836077421392abb0dccfff3fdbc361c879caee75f80"
-    },
-    {
-      "name": "sort order: case and punctuation",
-      "files": {
-        "B.sh": "1\n",
-        "a.sh": "2\n",
-        "./cwd of a": "3\n",
-        ".shortcuts": "4\n",
-        ".shortcuts.local": "5\n",
-        "scripts/a.sh": "6\n",
-        "a b": "7\n",
-        "a-b": "8\n",
-        "a_b": "9\n"
-      },
-      "json": "[[\"./cwd of a\", \"3\\n\"], [\".shortcuts\", \"4\\n\"], [\".shortcuts.local\", \"5\\n\"], [\"B.sh\", \"1\\n\"], [\"a b\", \"7\\n\"], [\"a-b\", \"8\\n\"], [\"a.sh\", \"2\\n\"], [\"a_b\", \"9\\n\"], [\"scripts/a.sh\", \"6\\n\"]]",
-      "hash": "7cfda39a086cd214278d4a97960d334f617b8966adc812ed727a9e1c65d26c99"
-    },
-    {
-      "name": "sort order: prefix",
-      "files": {
-        "a": "1\n",
-        "a.sh": "2\n",
-        "": "3\n"
-      },
-      "json": "[[\"\", \"3\\n\"], [\"a\", \"1\\n\"], [\"a.sh\", \"2\\n\"]]",
-      "hash": "233b72c692cf3a338b37302f5af20c82eb08d58fdc5313bdee9a44110736c27b"
-    },
-    {
-      "name": "control characters in key",
-      "files": {
-        "a\tb": "1\n",
-        "a\u007fb": "2\n",
-        "a\u001fb": "3\n",
-        "a\"b\\c": "4\n"
-      },
-      "json": "[[\"a\\tb\", \"1\\n\"], [\"a\\u001fb\", \"3\\n\"], [\"a\\\"b\\\\c\", \"4\\n\"], [\"a\\u007fb\", \"2\\n\"]]",
-      "hash": "b316818f292a7f34a75be87b5f9416f456d1f7f5f8f1e13c8d0f3c9377cda577"
-    },
-    {
-      "name": "two keys, same value",
-      "files": {
-        "a": "same\n",
-        "b": "same\n"
-      },
-      "json": "[[\"a\", \"same\\n\"], [\"b\", \"same\\n\"]]",
-      "hash": "1cd16f68dbf8e90665adf9920abca5da2d63c2ddff5bf7aba11c546e7beca696"
-    },
-    {
-      "name": "binary and invalid marks",
-      "files": {
-        "a.bin": "\u0000binary:786d95ff4308ec8ee6ce17efdaa94531800558a865f1db5c979a86d4b651fd51",
-        "b.sh": "a \\xff\n\n\u0000not UTF-8, sha256 593556958570390666a95c849eaaee0a27455bbe3f9cda2b0a2ea551af93b9e9\n"
-      },
-      "json": "[[\"a.bin\", \"\\u0000binary:786d95ff4308ec8ee6ce17efdaa94531800558a865f1db5c979a86d4b651fd51\"], [\"b.sh\", \"a \\\\xff\\n\\n\\u0000not UTF-8, sha256 593556958570390666a95c849eaaee0a27455bbe3f9cda2b0a2ea551af93b9e9\\n\"]]",
-      "hash": "51d21f2afe752b1ee8879b3e825597bb6ee9928680c7aa911b35507105cb6d6d"
-    },
-    {
-      "name": "long value",
-      "files": {
-        "big.sh": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\n"
-      },
-      "json": "[[\"big.sh\", \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\\n\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\u00e9\\n\"]]",
-      "hash": "45f308b72913b98a1ac148e774891b119d0b51ec54a279c7100612ecc91e5d63"
-    }
-  ],
-  "literal_abs_cases": [
-    {
-      "name": "cwd entry (absolute value, literal map only)",
-      "files": {
-        ".shortcuts": "{}\n",
-        "./cwd of x": "/tmp/x\n"
-      },
-      "json": "[[\"./cwd of x\", \"/tmp/x\\n\"], [\".shortcuts\", \"{}\\n\"]]",
-      "hash": "7c98a09b9f5f3d37f158032747540771f85d0b76a00a3764823ef28d0e79c37d"
-    },
-    {
-      "name": "cwd entry in .shortcuts.local",
-      "files": {
-        "./cwd of x in .shortcuts.local": "/tmp/x\n"
-      },
-      "json": "[[\"./cwd of x in .shortcuts.local\", \"/tmp/x\\n\"]]",
-      "hash": "9aaaba10469042980758dfd14166115d7ad28dfea23394d4077b30eb060910b7"
-    },
-    {
-      "name": "absolute script key (display_path starts with ..)",
-      "files": {
-        "/tmp/outside/tool.sh": "echo\n",
-        ".shortcuts": "{}\n"
-      },
-      "json": "[[\".shortcuts\", \"{}\\n\"], [\"/tmp/outside/tool.sh\", \"echo\\n\"]]",
-      "hash": "fd2def8b619ed9b8b4f140b11eef540fc692863c8a395754826ae67f4f0be892"
-    }
   ],
   "reviewable_cases": [
     {
@@ -1106,12 +906,8 @@
           "local_files": {
             ".shortcuts.local": "{\n  \"shortcuts\": {\n    \"hi\": null,\n    \"mine\": {\n      \"inline\": \"echo mine\"\n    }\n  },\n  \"version\": 2\n}\n"
           },
-          "shared_json": "[[\".shortcuts\", \"{\\n  \\\"shortcuts\\\": {\\n    \\\"hi\\\": {\\n      \\\"script\\\": \\\"scripts/hi.sh\\\"\\n    },\\n    \\\"inline\\\": {\\n      \\\"inline\\\": \\\"echo \\\\u00e9\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"], [\"scripts/hi.sh\", \"#!/usr/bin/env bash\\necho hi\\n\"]]",
-          "shared_hash": "52644c56c456201efd995c085c55ae7daee857154857f0d57524cdfcb3013955",
-          "local_json": "[[\".shortcuts.local\", \"{\\n  \\\"shortcuts\\\": {\\n    \\\"hi\\\": null,\\n    \\\"mine\\\": {\\n      \\\"inline\\\": \\\"echo mine\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"]]",
-          "local_hash": "8c576839287ff434a5404f017208f8953c9eaca41194ea6720baced5e0806946",
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"hash\": \"52644c56c456201efd995c085c55ae7daee857154857f0d57524cdfcb3013955\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"hi\\\": {\\n      \\\"script\\\": \\\"scripts/hi.sh\\\"\\n    },\\n    \\\"inline\\\": {\\n      \\\"inline\\\": \\\"echo \\\\u00e9\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"scripts/hi.sh\": \"#!/usr/bin/env bash\\necho hi\\n\"\n  },\n  \"local\": {\n    \".shortcuts.local\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"hi\\\": null,\\n    \\\"mine\\\": {\\n      \\\"inline\\\": \\\"echo mine\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"\n  }\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"hi\\\": {\\n      \\\"script\\\": \\\"scripts/hi.sh\\\"\\n    },\\n    \\\"inline\\\": {\\n      \\\"inline\\\": \\\"echo \\\\u00e9\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"scripts/hi.sh\": \"#!/usr/bin/env bash\\necho hi\\n\"\n  },\n  \"local\": {\n    \".shortcuts.local\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"hi\\\": null,\\n    \\\"mine\\\": {\\n      \\\"inline\\\": \\\"echo mine\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"\n  }\n}\n"
         }
       ]
     },
@@ -1134,12 +930,8 @@
           "local_files": {
             ".shortcuts.local": "{\n  \"shortcuts\": {\n    \"mine\": {\n      \"inline\": \"echo mine\"\n    }\n  },\n  \"version\": 2\n}\n"
           },
-          "shared_json": "[]",
-          "shared_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-          "local_json": "[[\".shortcuts.local\", \"{\\n  \\\"shortcuts\\\": {\\n    \\\"mine\\\": {\\n      \\\"inline\\\": \\\"echo mine\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"]]",
-          "local_hash": "5f85e7b66659489e0ef158f839391e942480f45adf75f6e9a0176e308e4106bc",
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"hash\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\n  \"snapshot\": {},\n  \"local\": {\n    \".shortcuts.local\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"mine\\\": {\\n      \\\"inline\\\": \\\"echo mine\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"\n  }\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {},\n  \"local\": {\n    \".shortcuts.local\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"mine\\\": {\\n      \\\"inline\\\": \\\"echo mine\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"\n  }\n}\n"
         }
       ]
     },
@@ -1177,12 +969,8 @@
             ".shortcuts.local": "{\n  \"shortcuts\": {\n    \"b\": {\n      \"script\": \"tools/b.sh\"\n    }\n  },\n  \"version\": 2\n}\n",
             "tools/b.sh": "echo b\n"
           },
-          "shared_json": "[[\".shortcuts\", \"{\\n  \\\"shortcuts\\\": {\\n    \\\"a\\\": {\\n      \\\"inline\\\": \\\"true\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"]]",
-          "shared_hash": "c5b90ee9c48614d0f717e6bdc3f41f6be24d060a6bf6d00909fe64f99425cab9",
-          "local_json": "[[\".shortcuts.local\", \"{\\n  \\\"shortcuts\\\": {\\n    \\\"b\\\": {\\n      \\\"script\\\": \\\"tools/b.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"], [\"tools/b.sh\", \"echo b\\n\"]]",
-          "local_hash": "a665c06355a100d9e040038e925a4ac1948be3af4c665d7ae901fe57b5ae61d4",
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"hash\": \"c5b90ee9c48614d0f717e6bdc3f41f6be24d060a6bf6d00909fe64f99425cab9\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"a\\\": {\\n      \\\"inline\\\": \\\"true\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"\n  },\n  \"local\": {\n    \".shortcuts.local\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"b\\\": {\\n      \\\"script\\\": \\\"tools/b.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"tools/b.sh\": \"echo b\\n\"\n  }\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"a\\\": {\\n      \\\"inline\\\": \\\"true\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"\n  },\n  \"local\": {\n    \".shortcuts.local\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"b\\\": {\\n      \\\"script\\\": \\\"tools/b.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"tools/b.sh\": \"echo b\\n\"\n  }\n}\n"
         }
       ]
     },
@@ -1247,12 +1035,8 @@
             "caf\u00e9.sh": "echo \u00e9\n"
           },
           "local_files": {},
-          "shared_json": "[[\".shortcuts\", \"{\\n  \\\"shortcuts\\\": {\\n    \\\"bad\\\": {\\n      \\\"script\\\": \\\"bad.sh\\\"\\n    },\\n    \\\"crlf\\\": {\\n      \\\"script\\\": \\\"crlf.sh\\\"\\n    },\\n    \\\"elf\\\": {\\n      \\\"script\\\": \\\"bin/prog\\\"\\n    },\\n    \\\"empty\\\": {\\n      \\\"script\\\": \\\"empty.sh\\\"\\n    },\\n    \\\"marked\\\": {\\n      \\\"script\\\": \\\"marked.sh\\\"\\n    },\\n    \\\"uni\\\": {\\n      \\\"script\\\": \\\"caf\\\\u00e9.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"], [\"bad.sh\", \"echo \\\\xff\\\\xfe\\n\\n\\u0000not UTF-8, sha256 dd1284d090313958484127c39a687db402f3a7a8017f2616d9048ece12b6d516\\n\"], [\"bin/prog\", \"\\u0000binary:2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\"], [\"caf\\u00e9.sh\", \"echo \\u00e9\\n\"], [\"crlf.sh\", \"echo a\\r\\necho b\\r\\n\"], [\"empty.sh\", \"\"], [\"marked.sh\", \"\\u0000binary:c8e36cf1d96ddb4263536f924a0ac802350e56d0137c306103e01af45496415f\"]]",
-          "shared_hash": "25ef7abe1503e12f96837990c42b4934e71ef6af2a7261583493dd5149aebbdb",
-          "local_json": "[]",
-          "local_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"hash\": \"25ef7abe1503e12f96837990c42b4934e71ef6af2a7261583493dd5149aebbdb\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"bad\\\": {\\n      \\\"script\\\": \\\"bad.sh\\\"\\n    },\\n    \\\"crlf\\\": {\\n      \\\"script\\\": \\\"crlf.sh\\\"\\n    },\\n    \\\"elf\\\": {\\n      \\\"script\\\": \\\"bin/prog\\\"\\n    },\\n    \\\"empty\\\": {\\n      \\\"script\\\": \\\"empty.sh\\\"\\n    },\\n    \\\"marked\\\": {\\n      \\\"script\\\": \\\"marked.sh\\\"\\n    },\\n    \\\"uni\\\": {\\n      \\\"script\\\": \\\"caf\\\\u00e9.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"bad.sh\": \"echo \\\\xff\\\\xfe\\n\\n\\u0000not UTF-8, sha256 dd1284d090313958484127c39a687db402f3a7a8017f2616d9048ece12b6d516\\n\",\n    \"crlf.sh\": \"echo a\\r\\necho b\\r\\n\",\n    \"bin/prog\": \"\\u0000binary:2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\",\n    \"empty.sh\": \"\",\n    \"marked.sh\": \"\\u0000binary:c8e36cf1d96ddb4263536f924a0ac802350e56d0137c306103e01af45496415f\",\n    \"caf\\u00e9.sh\": \"echo \\u00e9\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"bad\\\": {\\n      \\\"script\\\": \\\"bad.sh\\\"\\n    },\\n    \\\"crlf\\\": {\\n      \\\"script\\\": \\\"crlf.sh\\\"\\n    },\\n    \\\"elf\\\": {\\n      \\\"script\\\": \\\"bin/prog\\\"\\n    },\\n    \\\"empty\\\": {\\n      \\\"script\\\": \\\"empty.sh\\\"\\n    },\\n    \\\"marked\\\": {\\n      \\\"script\\\": \\\"marked.sh\\\"\\n    },\\n    \\\"uni\\\": {\\n      \\\"script\\\": \\\"caf\\\\u00e9.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"bad.sh\": \"echo \\\\xff\\\\xfe\\n\\n\\u0000not UTF-8, sha256 dd1284d090313958484127c39a687db402f3a7a8017f2616d9048ece12b6d516\\n\",\n    \"crlf.sh\": \"echo a\\r\\necho b\\r\\n\",\n    \"bin/prog\": \"\\u0000binary:2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\",\n    \"empty.sh\": \"\",\n    \"marked.sh\": \"\\u0000binary:c8e36cf1d96ddb4263536f924a0ac802350e56d0137c306103e01af45496415f\",\n    \"caf\\u00e9.sh\": \"echo \\u00e9\\n\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     },
@@ -1275,12 +1059,8 @@
             ".shortcuts": "{\n  \"extra\": {\n    \"big\": 1e+30,\n    \"e\": 100.0,\n    \"huge\": Infinity,\n    \"int\": 12345678901234567890123,\n    \"n\": 1.0,\n    \"nan\": NaN,\n    \"neg\": -Infinity,\n    \"s\": \"\\ud800 \\u00e9 \\ud83d\\ude00\",\n    \"z\": 0,\n    \"zf\": -0.0\n  },\n  \"shortcuts\": {\n    \"x\": {\n      \"inline\": \"echo dup\"\n    },\n    \"y\": {\n      \"inline\": \"\\ud800\"\n    }\n  },\n  \"version\": 2\n}\n"
           },
           "local_files": {},
-          "shared_json": "[[\".shortcuts\", \"{\\n  \\\"extra\\\": {\\n    \\\"big\\\": 1e+30,\\n    \\\"e\\\": 100.0,\\n    \\\"huge\\\": Infinity,\\n    \\\"int\\\": 12345678901234567890123,\\n    \\\"n\\\": 1.0,\\n    \\\"nan\\\": NaN,\\n    \\\"neg\\\": -Infinity,\\n    \\\"s\\\": \\\"\\\\ud800 \\\\u00e9 \\\\ud83d\\\\ude00\\\",\\n    \\\"z\\\": 0,\\n    \\\"zf\\\": -0.0\\n  },\\n  \\\"shortcuts\\\": {\\n    \\\"x\\\": {\\n      \\\"inline\\\": \\\"echo dup\\\"\\n    },\\n    \\\"y\\\": {\\n      \\\"inline\\\": \\\"\\\\ud800\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"]]",
-          "shared_hash": "241a2963fd900c547ef87b5634d07811c261bbcc6daf46127901207eaafa17c3",
-          "local_json": "[]",
-          "local_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"hash\": \"241a2963fd900c547ef87b5634d07811c261bbcc6daf46127901207eaafa17c3\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"extra\\\": {\\n    \\\"big\\\": 1e+30,\\n    \\\"e\\\": 100.0,\\n    \\\"huge\\\": Infinity,\\n    \\\"int\\\": 12345678901234567890123,\\n    \\\"n\\\": 1.0,\\n    \\\"nan\\\": NaN,\\n    \\\"neg\\\": -Infinity,\\n    \\\"s\\\": \\\"\\\\ud800 \\\\u00e9 \\\\ud83d\\\\ude00\\\",\\n    \\\"z\\\": 0,\\n    \\\"zf\\\": -0.0\\n  },\\n  \\\"shortcuts\\\": {\\n    \\\"x\\\": {\\n      \\\"inline\\\": \\\"echo dup\\\"\\n    },\\n    \\\"y\\\": {\\n      \\\"inline\\\": \\\"\\\\ud800\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"extra\\\": {\\n    \\\"big\\\": 1e+30,\\n    \\\"e\\\": 100.0,\\n    \\\"huge\\\": Infinity,\\n    \\\"int\\\": 12345678901234567890123,\\n    \\\"n\\\": 1.0,\\n    \\\"nan\\\": NaN,\\n    \\\"neg\\\": -Infinity,\\n    \\\"s\\\": \\\"\\\\ud800 \\\\u00e9 \\\\ud83d\\\\ude00\\\",\\n    \\\"z\\\": 0,\\n    \\\"zf\\\": -0.0\\n  },\\n  \\\"shortcuts\\\": {\\n    \\\"x\\\": {\\n      \\\"inline\\\": \\\"echo dup\\\"\\n    },\\n    \\\"y\\\": {\\n      \\\"inline\\\": \\\"\\\\ud800\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     },
@@ -1315,12 +1095,8 @@
             "scripts/real.sh": "echo real\n"
           },
           "local_files": {},
-          "shared_json": "[[\".shortcuts\", \"{\\n  \\\"shortcuts\\\": {\\n    \\\"l\\\": {\\n      \\\"script\\\": \\\"scripts/link.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"], [\"scripts/real.sh\", \"echo real\\n\"]]",
-          "shared_hash": "9cf48158bbe726f87a24def9773306b189986b61340c45a4966a2358b19e5e7e",
-          "local_json": "[]",
-          "local_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"hash\": \"9cf48158bbe726f87a24def9773306b189986b61340c45a4966a2358b19e5e7e\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"l\\\": {\\n      \\\"script\\\": \\\"scripts/link.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"scripts/real.sh\": \"echo real\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"l\\\": {\\n      \\\"script\\\": \\\"scripts/link.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"scripts/real.sh\": \"echo real\\n\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     },
@@ -1350,12 +1126,8 @@
             "scripts/ok.sh": "echo ok\n"
           },
           "local_files": {},
-          "shared_json": "[[\".shortcuts\", \"{\\n  \\\"shortcuts\\\": {\\n    \\\"dir\\\": {\\n      \\\"script\\\": \\\"scripts\\\"\\n    },\\n    \\\"gone\\\": {\\n      \\\"script\\\": \\\"scripts/gone.sh\\\"\\n    },\\n    \\\"ok\\\": {\\n      \\\"script\\\": \\\"scripts/ok.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"], [\"scripts/ok.sh\", \"echo ok\\n\"]]",
-          "shared_hash": "7173d18661ccf8feedade971fa50cfa9ff7670d18bafec4657829ec7ca3a9ebb",
-          "local_json": "[]",
-          "local_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"hash\": \"7173d18661ccf8feedade971fa50cfa9ff7670d18bafec4657829ec7ca3a9ebb\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"dir\\\": {\\n      \\\"script\\\": \\\"scripts\\\"\\n    },\\n    \\\"gone\\\": {\\n      \\\"script\\\": \\\"scripts/gone.sh\\\"\\n    },\\n    \\\"ok\\\": {\\n      \\\"script\\\": \\\"scripts/ok.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"scripts/ok.sh\": \"echo ok\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"dir\\\": {\\n      \\\"script\\\": \\\"scripts\\\"\\n    },\\n    \\\"gone\\\": {\\n      \\\"script\\\": \\\"scripts/gone.sh\\\"\\n    },\\n    \\\"ok\\\": {\\n      \\\"script\\\": \\\"scripts/ok.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"scripts/ok.sh\": \"echo ok\\n\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     },
@@ -1430,12 +1202,8 @@
             ".shortcuts": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {\n    \"p\": {\n      \"inline\": \"echo p\"\n    }\n  },\n  \"version\": 2\n}\n"
           },
           "local_files": {},
-          "shared_json": "[[\".shortcuts\", \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {\\n    \\\"p\\\": {\\n      \\\"inline\\\": \\\"echo p\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"]]",
-          "shared_hash": "dfdde86ccbbea868e7f1bbc740c7222feb93a2600e4dfe2c33e6dd39521d0657",
-          "local_json": "[]",
-          "local_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"hash\": \"dfdde86ccbbea868e7f1bbc740c7222feb93a2600e4dfe2c33e6dd39521d0657\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {\\n    \\\"p\\\": {\\n      \\\"inline\\\": \\\"echo p\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {\\n    \\\"p\\\": {\\n      \\\"inline\\\": \\\"echo p\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
         },
         {
           "name": "ns",
@@ -1451,12 +1219,8 @@
             "scripts/ns/sub/deep.sh": "echo deep \u00e9\n"
           },
           "local_files": {},
-          "shared_json": "[[\"ns.shortcut\", \"{\\n  \\\"description\\\": \\\"ns\\\",\\n  \\\"shortcuts\\\": {\\n    \\\"go\\\": {\\n      \\\"script\\\": \\\"scripts/ns/go.sh\\\"\\n    },\\n    \\\"viaLink\\\": {\\n      \\\"script\\\": \\\"scripts/ns/link.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"], [\"scripts/ns/bad.txt\", \"x \\\\xe9\\n\\n\\u0000not UTF-8, sha256 7a4367375c389643ada40c26163239533285bf24eebc59e1db48d412ac663cfd\\n\"], [\"scripts/ns/blob\", \"\\u0000binary:2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\"], [\"scripts/ns/dirlink\", \"symlink to sub\\n\"], [\"scripts/ns/go.sh\", \"#!/bin/sh\\n. ./lib.sh\\n\"], [\"scripts/ns/lib.sh\", \"echo lib\\n\"], [\"scripts/ns/link.sh\", \"echo lib\\n\"], [\"scripts/ns/sub/deep.sh\", \"echo deep \\u00e9\\n\"]]",
-          "shared_hash": "3108cd9b66258fa35d2c1c59aacfae47e4586a369dda17efa425e716f6280c68",
-          "local_json": "[]",
-          "local_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
           "key_template": "[\"@ROOT@\", \"ns\", \"@ROOT@/ns.shortcut\"]",
-          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"hash\": \"3108cd9b66258fa35d2c1c59aacfae47e4586a369dda17efa425e716f6280c68\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"{\\n  \\\"description\\\": \\\"ns\\\",\\n  \\\"shortcuts\\\": {\\n    \\\"go\\\": {\\n      \\\"script\\\": \\\"scripts/ns/go.sh\\\"\\n    },\\n    \\\"viaLink\\\": {\\n      \\\"script\\\": \\\"scripts/ns/link.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"scripts/ns/dirlink\": \"symlink to sub\\n\",\n    \"scripts/ns/bad.txt\": \"x \\\\xe9\\n\\n\\u0000not UTF-8, sha256 7a4367375c389643ada40c26163239533285bf24eebc59e1db48d412ac663cfd\\n\",\n    \"scripts/ns/blob\": \"\\u0000binary:2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\",\n    \"scripts/ns/link.sh\": \"echo lib\\n\",\n    \"scripts/ns/lib.sh\": \"echo lib\\n\",\n    \"scripts/ns/go.sh\": \"#!/bin/sh\\n. ./lib.sh\\n\",\n    \"scripts/ns/sub/deep.sh\": \"echo deep \\u00e9\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"{\\n  \\\"description\\\": \\\"ns\\\",\\n  \\\"shortcuts\\\": {\\n    \\\"go\\\": {\\n      \\\"script\\\": \\\"scripts/ns/go.sh\\\"\\n    },\\n    \\\"viaLink\\\": {\\n      \\\"script\\\": \\\"scripts/ns/link.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"scripts/ns/dirlink\": \"symlink to sub\\n\",\n    \"scripts/ns/bad.txt\": \"x \\\\xe9\\n\\n\\u0000not UTF-8, sha256 7a4367375c389643ada40c26163239533285bf24eebc59e1db48d412ac663cfd\\n\",\n    \"scripts/ns/blob\": \"\\u0000binary:2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\",\n    \"scripts/ns/link.sh\": \"echo lib\\n\",\n    \"scripts/ns/lib.sh\": \"echo lib\\n\",\n    \"scripts/ns/go.sh\": \"#!/bin/sh\\n. ./lib.sh\\n\",\n    \"scripts/ns/sub/deep.sh\": \"echo deep \\u00e9\\n\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     },
@@ -1509,12 +1273,8 @@
             ".shortcuts": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {},\n  \"version\": 2\n}\n"
           },
           "local_files": {},
-          "shared_json": "[[\".shortcuts\", \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {},\\n  \\\"version\\\": 2\\n}\\n\"]]",
-          "shared_hash": "da152be62c011ee277116c6aa670b75da8c8eeba42b245cd04c686a2d680dad0",
-          "local_json": "[]",
-          "local_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"hash\": \"da152be62c011ee277116c6aa670b75da8c8eeba42b245cd04c686a2d680dad0\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {},\\n  \\\"version\\\": 2\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {},\\n  \\\"version\\\": 2\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
         },
         {
           "name": "ns",
@@ -1527,12 +1287,8 @@
             "scripts/ns/caf\udce9.sh": "echo x\n"
           },
           "local_files": {},
-          "shared_json": "[[\"ns.shortcut\", \"{\\n  \\\"shortcuts\\\": {\\n    \\\"go\\\": {\\n      \\\"script\\\": \\\"scripts/ns/caf\\\\udce9.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"], [\"scripts/ns/a.sh\", \"echo a\\n\"], [\"scripts/ns/caf\\udce9.sh\", \"echo x\\n\"], [\"scripts/ns/\\udcff.sh\", \"echo ff\\n\"], [\"scripts/ns/\\ud800\\udc00.sh\", \"echo astral\\n\"]]",
-          "shared_hash": "0031cabd60bcdeb19bb9040353373676f13c4161aacd313c530b1ce0064fc5c9",
-          "local_json": "[]",
-          "local_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
           "key_template": "[\"@ROOT@\", \"ns\", \"@ROOT@/ns.shortcut\"]",
-          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"hash\": \"0031cabd60bcdeb19bb9040353373676f13c4161aacd313c530b1ce0064fc5c9\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"go\\\": {\\n      \\\"script\\\": \\\"scripts/ns/caf\\\\udce9.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"scripts/ns/\\ud800\\udc00.sh\": \"echo astral\\n\",\n    \"scripts/ns/\\udcff.sh\": \"echo ff\\n\",\n    \"scripts/ns/a.sh\": \"echo a\\n\",\n    \"scripts/ns/caf\\udce9.sh\": \"echo x\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"go\\\": {\\n      \\\"script\\\": \\\"scripts/ns/caf\\\\udce9.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"scripts/ns/\\ud800\\udc00.sh\": \"echo astral\\n\",\n    \"scripts/ns/\\udcff.sh\": \"echo ff\\n\",\n    \"scripts/ns/a.sh\": \"echo a\\n\",\n    \"scripts/ns/caf\\udce9.sh\": \"echo x\\n\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     },
@@ -1576,12 +1332,8 @@
             ".shortcuts": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {},\n  \"version\": 2\n}\n"
           },
           "local_files": {},
-          "shared_json": "[[\".shortcuts\", \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {},\\n  \\\"version\\\": 2\\n}\\n\"]]",
-          "shared_hash": "da152be62c011ee277116c6aa670b75da8c8eeba42b245cd04c686a2d680dad0",
-          "local_json": "[]",
-          "local_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"hash\": \"da152be62c011ee277116c6aa670b75da8c8eeba42b245cd04c686a2d680dad0\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {},\\n  \\\"version\\\": 2\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {},\\n  \\\"version\\\": 2\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
         },
         {
           "name": "ns",
@@ -1591,12 +1343,8 @@
             "scripts/ns/ok.sh": "echo ok\n"
           },
           "local_files": {},
-          "shared_json": "[[\"ns.shortcut\", \"{\\n  \\\"shortcuts\\\": {\\n    \\\"a\\\": {\\n      \\\"inline\\\": \\\"true\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"], [\"scripts/ns/ok.sh\", \"echo ok\\n\"]]",
-          "shared_hash": "f7f32a19436b495d40896824a41f2c30b4a6232e54db499efb0c2abf9cbe3de8",
-          "local_json": "[]",
-          "local_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
           "key_template": "[\"@ROOT@\", \"ns\", \"@ROOT@/ns.shortcut\"]",
-          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"hash\": \"f7f32a19436b495d40896824a41f2c30b4a6232e54db499efb0c2abf9cbe3de8\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"a\\\": {\\n      \\\"inline\\\": \\\"true\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"scripts/ns/ok.sh\": \"echo ok\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"a\\\": {\\n      \\\"inline\\\": \\\"true\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"scripts/ns/ok.sh\": \"echo ok\\n\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     }

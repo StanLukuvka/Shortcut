@@ -1,12 +1,10 @@
 package pyjson
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 	"math/big"
-	"sort"
 	"strings"
 	"testing"
 )
@@ -127,45 +125,6 @@ func TestGolden_Dumps(t *testing.T) {
 			check("indent2_sorted", Opts{Indent: 2, SortKeys: true}, strings.TrimSuffix(str(c, "indent2_sorted"), "\n"))
 		}
 	}
-}
-
-// filesJSON is the approval hash input: json.dumps(sorted(files.items())), built with Compare and WriteString.
-func filesJSON(files *Object) string {
-	keys := append([]string(nil), files.Keys...)
-	sort.Slice(keys, func(i, j int) bool { return Compare(keys[i], keys[j]) < 0 })
-	var b strings.Builder
-	b.WriteByte('[')
-	for i, k := range keys {
-		if i > 0 {
-			b.WriteString(", ")
-		}
-		b.WriteByte('[')
-		WriteString(&b, k)
-		b.WriteString(", ")
-		WriteString(&b, files.Vals[k].(string))
-		b.WriteByte(']')
-	}
-	b.WriteByte(']')
-	return b.String()
-}
-
-func TestGolden_HashInput(t *testing.T) {
-	n := 0
-	for _, set := range []string{"hash_cases", "literal_abs_cases"} {
-		for _, c := range golden(t, set) {
-			n++
-			files, _ := c.Get("files")
-			text := filesJSON(files.(*Object))
-			if text != str(c, "json") {
-				t.Errorf("%s: json\n got %q\nwant %q", str(c, "name"), text, str(c, "json"))
-			}
-			sum := sha256.Sum256([]byte(text))
-			if got := hex.EncodeToString(sum[:]); got != str(c, "hash") {
-				t.Errorf("%s: hash %s, want %s", str(c, "name"), got, str(c, "hash"))
-			}
-		}
-	}
-	t.Logf("%d cases", n)
 }
 
 func TestGolden_KeyJSON(t *testing.T) {
