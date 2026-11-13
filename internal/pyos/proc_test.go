@@ -53,12 +53,6 @@ func TestTTY_StdinStdoutAndRows(t *testing.T) {
 	if res := e.RunCmd(opts(map[string]string{}), testkit.SelfArgs()...); res.Stdout != "false false 24\n" { // /dev/null is not a terminal
 		t.Errorf("no terminal: %q", res.Stdout)
 	}
-	if res := e.RunCmd(opts(map[string]string{"LINES": "7"}), testkit.SelfArgs()...); res.Stdout != "false false 7\n" {
-		t.Errorf("LINES: %q", res.Stdout)
-	}
-	if res := e.RunCmd(opts(map[string]string{"LINES": "0"}), testkit.SelfArgs()...); res.Stdout != "false false 24\n" {
-		t.Errorf("LINES=0: %q", res.Stdout)
-	}
 	code, out := e.InTerminalCmd(opts(map[string]string{}), nil, testkit.SelfArgs()...)
 	if code != 0 || out != "true true 30\r\n" { // testkit's pty is 30 rows
 		t.Errorf("terminal: %d %q", code, out)

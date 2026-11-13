@@ -3,8 +3,6 @@
 package pyos
 
 import (
-	"os"
-	"strconv"
 	"syscall"
 	"unsafe"
 )
@@ -23,12 +21,8 @@ func IsTerminal(fd int) bool {
 	return ioctl(fd, getTermios, unsafe.Pointer(&t)) == nil
 }
 
-// TerminalRows is shutil.get_terminal_size().lines: $LINES if it is a positive integer, else the window of fd 1,
-// else 24.
+// TerminalRows is the row count of the window of fd 1, else 24.
 func TerminalRows() int {
-	if n, err := strconv.Atoi(os.Getenv("LINES")); err == nil && n > 0 {
-		return n
-	}
 	var ws struct{ Row, Col, X, Y uint16 }
 	if ioctl(1, syscall.TIOCGWINSZ, unsafe.Pointer(&ws)) == nil && ws.Row > 0 {
 		return int(ws.Row)

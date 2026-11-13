@@ -10,8 +10,8 @@ import (
 
 // ShowDiff shows a diff: each line made Safe; on a terminal added lines green and removed red (the +++ and
 // --- headers and context stay plain); then the text goes to $PAGER when stdout is a terminal, PAGER is set and
-// there are at least as many lines as terminal rows, else straight to stdout. A pager that cannot start, a blank
-// PAGER value or a non-zero exit falls through to printing the text directly (so it can print twice).
+// there are at least as many lines as terminal rows, else straight to stdout. A pager that cannot start or a blank
+// PAGER value falls through to printing the text directly; a pager that ran has shown it, whatever its exit status.
 func ShowDiff(s *Streams, lines []string) {
 	tty := s.Out.IsTerminal()
 	shown := make([]string, len(lines))
@@ -48,5 +48,9 @@ func runPager(s *Streams, pager, text string) bool {
 	}
 	cmd.Stdin = strings.NewReader(text)
 	cmd.Stdout, cmd.Stderr = s.Out.File(), s.Err.File()
-	return cmd.Run() == nil
+	if err := cmd.Start(); err != nil {
+		return false // could not start: the caller prints the text itself
+	}
+	cmd.Wait() // a pager that ran has shown it; its exit status does not matter (a quit by signal is not a failure)
+	return true
 }

@@ -27,7 +27,7 @@ func diffOn(t *testing.T, e *testkit.Env, tty bool, lines string, env map[string
 
 func TestShowDiff_NoTerminalIsPlainSafeText(t *testing.T) {
 	e := testkit.New(t)
-	got := diffOn(t, e, false, "6", map[string]string{"PAGER": "echo pager ran", "LINES": "2"})
+	got := diffOn(t, e, false, "6", map[string]string{"PAGER": "echo pager ran"})
 	if want := "--- a/f\n+++ b/f\n@@ -1 +1 @@\n+added ^[[2J\n-removed\n context\n"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -60,10 +60,10 @@ func TestShowDiff_Pager(t *testing.T) {
 	}{
 		{"used", "30", map[string]string{"PAGER": ran}, true, false},
 		{"one line short", "29", map[string]string{"PAGER": ran}, false, true},
-		{"LINES decides the rows", "5", map[string]string{"PAGER": ran, "LINES": "5"}, true, false},
+		{"rows are the window's, not $LINES", "100", map[string]string{"PAGER": ran, "LINES": "500"}, true, false},
 		{"unset", "40", map[string]string{}, false, true},
 		{"empty", "40", map[string]string{"PAGER": ""}, false, true},
-		{"a failing pager falls through to printing", "40", map[string]string{"PAGER": fails}, true, true},
+		{"a failing pager has shown the text: it is not printed again", "40", map[string]string{"PAGER": fails}, true, false},
 		{"not found", "40", map[string]string{"PAGER": "no-such-pager-zz9"}, false, true},
 		{"split on blanks", "40", map[string]string{"PAGER": ran + "  -R"}, true, false},
 		{"blank", "40", map[string]string{"PAGER": "  "}, false, true},
