@@ -4,6 +4,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -42,6 +43,9 @@ func TestLayers_PackagesImportOnlyWhatTheTableAllows(t *testing.T) {
 		if d.IsDir() {
 			switch d.Name() {
 			case ".git", ".lad", "testdata":
+				return filepath.SkipDir
+			}
+			if isNestedRepo(root, p) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -97,4 +101,14 @@ func TestLayers_PackagesImportOnlyWhatTheTableAllows(t *testing.T) {
 	for _, b := range bad {
 		t.Error(b)
 	}
+}
+
+// isNestedRepo is true for a folder below root that holds its own .git (a file or a folder): another checkout, such as
+// a worktree under .claude/worktrees, is not this repository's code.
+func isNestedRepo(root, dir string) bool {
+	if dir == root {
+		return false
+	}
+	_, err := os.Lstat(filepath.Join(dir, ".git"))
+	return err == nil
 }

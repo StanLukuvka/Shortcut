@@ -6,7 +6,7 @@
   },
   "notes": [
     "A name or path that is not valid UTF-8 is given as hex of its raw bytes: store_hex, name_hex, file_hex, key_hex in key_cases, path_hex in tree_cases. The file holds no lone surrogate escape, so encoding/json-based decoding loads it.",
-    "tree_cases: build tree[] under a temp root, load each group, compare shared_files/local_files; replace @ROOT@ with the root in key_template and record_template. Modes are octal strings; symlink targets are relative. content_hex replaces content when the bytes are not UTF-8, path_hex replaces path. A group with error_contains must fail, either to load or when its snapshot is taken, with a message holding that text.",
+    "tree_cases: build tree[] under a temp root, load each group, compare shared_files/local_files; replace @ROOT@ with the root in key_template and record_template. Modes are octal strings; symlink targets are relative. content_hex replaces content when the bytes are not UTF-8, path_hex replaces path. A group with error_contains must fail, either to load or when its snapshot is taken, with a message holding that text (@ROOT@ is replaced with the root).",
     "key_cases[].python_error: Python raises for a project path that is not valid UTF-8 (approval_path encodes the key); the Go port must not copy the crash."
   ],
   "reviewable_cases": [
@@ -470,7 +470,7 @@
       "groups": [
         {
           "name": "",
-          "error_contains": "corrupt registry"
+          "error_contains": "corrupt registry @ROOT@/.shortcuts: "
         }
       ]
     },
@@ -488,7 +488,7 @@
       "groups": [
         {
           "name": "",
-          "error_contains": "corrupt registry"
+          "error_contains": "corrupt registry @ROOT@/.shortcuts: "
         }
       ]
     },

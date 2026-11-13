@@ -216,7 +216,7 @@ func writeU(b *strings.Builder, r rune) {
 func pyRune(s string) (rune, int) {
 	r, n := utf8.DecodeRuneInString(s)
 	if r == utf8.RuneError && n == 1 {
-		if len(s) >= 3 && s[0] == 0xED && s[1] >= 0xA0 && s[1] != 0xB2 && s[1] != 0xB3 && s[2]&0xC0 == 0x80 {
+		if len(s) >= 3 && s[0] == 0xED && s[1] >= 0xA0 && s[1] <= 0xBF && s[1] != 0xB2 && s[1] != 0xB3 && s[2]&0xC0 == 0x80 {
 			return 0xD000 | rune(s[1]&0x3F)<<6 | rune(s[2]&0x3F), 3
 		}
 		return 0xDC00 + rune(s[0]), 1
