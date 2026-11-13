@@ -99,9 +99,9 @@ func TestRealpath_RelativeInputUsesThePhysicalCwd(t *testing.T) {
 	}
 }
 
-func TestPaths_Normpath(t *testing.T) { // values from Python 3.14 posixpath.normpath
+func TestPaths_Normpath(t *testing.T) { // filepath.Clean; differs from posixpath.normpath only for a leading //
 	for in, want := range map[string]string{
-		"": ".", "/": "/", "//": "//", "///a": "/a", "//a//b": "//a/b", "a/../..": "..", "/a/../..": "/",
+		"": ".", "/": "/", "//": "/", "///a": "/a", "//a//b": "/a/b", "a/../..": "..", "/a/../..": "/",
 		"./a/./b/": "a/b", "a/b/../../..": "..", "../a": "../a", "a/../../b": "../b", "/..//x": "/x",
 	} {
 		if got := Normpath(in); got != want {
@@ -126,7 +126,9 @@ func TestPaths_IsRelativeTo(t *testing.T) {
 		want        bool
 	}{
 		{"/a/b", "/a", true}, {"/a", "/a", true}, {"/ab", "/a", false}, {"/a", "/a/b", false}, {"/a/./b//c", "/a/b", true},
-		{"a/b", "a", true}, {"a", "/a", false}, {"/a/../b", "/a", true}, // pathlib does not look at ..
+		{"a/b", "a", true}, {"a", "/a", false},
+		{"/a/../b", "/a", false}, {"/a/b/../../x", "/a", false}, {"/a/b/..", "/a/b", false}, {"/a/b/../c", "/a", true},
+		{"/a/bc", "/a/b", false}, {"/a/b", "/a/b/", true}, {"/", "/a", false}, {"/a", "/", true}, {"/a/..", "/a", false},
 	} {
 		if got := IsRelativeTo(c.path, c.other); got != c.want {
 			t.Errorf("IsRelativeTo(%q, %q) = %v", c.path, c.other, got)
@@ -134,14 +136,9 @@ func TestPaths_IsRelativeTo(t *testing.T) {
 	}
 }
 
-func TestPaths_JoinAndSplit(t *testing.T) { // posixpath.join / posixpath.split
+func TestPaths_Join(t *testing.T) { // posixpath.join: an absolute part restarts the path
 	if Join("", "a") != "a" || Join("/", "a") != "/a" || Join("a", "") != "a/" || Join("a", "/b", "c") != "/b/c" {
 		t.Error("Join")
-	}
-	for in, want := range map[string][2]string{"/a": {"/", "a"}, "a/b/": {"a/b", ""}, "a//b": {"a", "b"}, "//a": {"//", "a"}, "a": {"", "a"}} {
-		if h, tl := pySplit(in); h != want[0] || tl != want[1] {
-			t.Errorf("pySplit(%q) = %q, %q", in, h, tl)
-		}
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -355,7 +356,7 @@ func namespaceFolderProblem(group model.Group, sourceRoot, folder string) string
 		if !ok {
 			continue
 		}
-		if !strings.HasPrefix(pyos.Normpath(script), folder+"/") {
+		if !strings.HasPrefix(filepath.Clean(script), folder+"/") {
 			return "'" + name + "' has its script outside " + folder + "/: " + script
 		}
 		if !pyos.IsFile(pyos.Join(sourceRoot, script)) {
@@ -469,7 +470,7 @@ func planFiles(plan nsPlan) map[string]string {
 // does not follow a link at the end either). Executable adds the execute bits the file got from its umask.
 // lazy: an existing file is reported with Go's text ("file exists"), not Python's "[Errno 17] ...".
 func writeNew(path string, raw []byte, executable bool) error {
-	if err := os.MkdirAll(pyos.Dirname(path), 0o777); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 		return err
 	}
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o666)

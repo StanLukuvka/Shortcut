@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -178,7 +179,7 @@ func register(s *textio.Streams, group model.Group, entry *model.Entry, writeScr
 			}
 		}
 		shortcuts.Set(entry.Name, entry.ToObject())
-		if err := os.MkdirAll(pyos.Dirname(group.File), 0o777); err != nil {
+		if err := os.MkdirAll(filepath.Dir(group.File), 0o777); err != nil {
 			return err
 		}
 		return model.SaveRegistryFile(group.File, reg)
@@ -251,7 +252,7 @@ func excludeFromGit(root string) {
 		return
 	}
 	path := pyos.Join(root, strings.TrimSpace(string(out))) // Python's join keeps an absolute result as it is
-	if os.MkdirAll(pyos.Dirname(path), 0o777) != nil {
+	if os.MkdirAll(filepath.Dir(path), 0o777) != nil {
 		return
 	}
 	var text string

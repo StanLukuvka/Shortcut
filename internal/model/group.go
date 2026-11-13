@@ -3,6 +3,7 @@ package model
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
@@ -80,7 +81,7 @@ func (g Group) DefiningFile(name string) string {
 func (g Group) IsProject() bool { return !IsGlobalStore(g.StoreDir) }
 
 // Folder is where relative 'cwd' values resolve: the folder of the defining file.
-func (g Group) Folder() string { return pyos.Dirname(pyos.Abs(g.File)) }
+func (g Group) Folder() string { return filepath.Dir(pyos.Abs(g.File)) }
 
 // ScriptBase: relative paths resolve against a namespace's folder, a project's root, or the global store.
 func (g Group) ScriptBase() string {

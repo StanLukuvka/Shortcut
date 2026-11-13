@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -100,7 +101,7 @@ func FindEntry(words []string, callerCwd string, skipLocal, strict bool) (Found,
 			notes = append(notes, fmt.Sprintf("The project in %s has its own '%s': leave out --global to use it.", root, first))
 		}
 	case root != "":
-		if outer := FindProjectRoot(pyos.Dirname(root)); outer != "" && outer != root && hasName(LoadStore(outer), first) {
+		if outer := FindProjectRoot(filepath.Dir(root)); outer != "" && outer != root && hasName(LoadStore(outer), first) {
 			notes = append(notes, fmt.Sprintf("The project in %s has a '%s', but only the nearest project, %s, is used here.", outer, first, root))
 		}
 	default:

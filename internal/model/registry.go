@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"math/big"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -68,7 +69,7 @@ func FindProjectRoot(start string) string {
 		if isProjectRoot(cur) {
 			return cur
 		}
-		parent := pyos.Dirname(cur)
+		parent := filepath.Dir(cur)
 		if parent == cur {
 			return ""
 		}
@@ -87,7 +88,7 @@ func oldProjectFolder(callerCwd string) string {
 		if pyos.IsDir(path) && !neverAProject(pyos.Realpath(path)) {
 			return path
 		}
-		parent := pyos.Dirname(cur)
+		parent := filepath.Dir(cur)
 		if parent == cur {
 			return ""
 		}
