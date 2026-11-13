@@ -1,5 +1,5 @@
 // Package difflib is a port of the parts of CPython's Lib/difflib.py (3.14) that
-// unified_diff needs: SequenceMatcher(None, a, b) with autojunk on.
+// unified_diff needs: SequenceMatcher(None, a, b) with autojunk off.
 //
 // lazy: no isjunk, no ratio/quick_ratio, no context/ndiff; only what shortcut's
 // diff_files calls. Upgrade path: port the rest from the same file if needed.
@@ -21,19 +21,11 @@ type matcher struct {
 	b2j  map[string][]int
 }
 
-// newMatcher indexes b by line, with no junk function and autojunk on.
+// newMatcher indexes b by line, with no junk function and no autojunk.
 func newMatcher(a, b []string) *matcher {
 	m := &matcher{a: a, b: b, b2j: map[string][]int{}}
 	for i, s := range b {
 		m.b2j[s] = append(m.b2j[s], i)
-	}
-	if n := len(b); n >= 200 {
-		ntest := n/100 + 1
-		for s, idx := range m.b2j {
-			if len(idx) > ntest {
-				delete(m.b2j, s)
-			}
-		}
 	}
 	return m
 }

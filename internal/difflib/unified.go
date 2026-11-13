@@ -3,7 +3,7 @@ package difflib
 import (
 	"fmt"
 	"strconv"
-	"unicode/utf8"
+	"strings"
 )
 
 // formatRange formats a hunk's line range for its @@ header.
@@ -50,28 +50,15 @@ func Unified(a, b []string, from, to string) []string {
 	return out
 }
 
-// SplitLinesKeepEnds is str.splitlines(keepends=True): it breaks after
-// \n, \r, \r\n, \v, \f, \x1c-\x1e, \x85, U+2028 and U+2029.
+// SplitLinesKeepEnds splits after each \n; a last line without one is kept. A \r, form feed, U+2028 and so on stay inside
+// their line (textio.Safe makes them harmless when shown).
 func SplitLinesKeepEnds(s string) []string {
-	var out []string
-	start := 0
-	for i := 0; i < len(s); {
-		r, w := utf8.DecodeRuneInString(s[i:])
-		i += w
-		switch r {
-		case '\r':
-			if i < len(s) && s[i] == '\n' {
-				i++
-			}
-		case '\n', '\v', '\f', 0x1c, 0x1d, 0x1e, 0x85, 0x2028, 0x2029:
-		default:
-			continue
-		}
-		out = append(out, s[start:i])
-		start = i
+	if s == "" {
+		return nil
 	}
-	if start < len(s) {
-		out = append(out, s[start:])
+	lines := strings.SplitAfter(s, "\n")
+	if lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
 	}
-	return out
+	return lines
 }
