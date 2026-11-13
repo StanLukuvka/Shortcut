@@ -15,10 +15,11 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
-// pyRstrip is str.rstrip(): Python counts U+001C..U+001F as white space too.
-func pyRstrip(s string) string {
-	return strings.TrimRightFunc(s, func(r rune) bool { return unicode.IsSpace(r) || (r >= 0x1c && r <= 0x1f) })
-}
+// isPySpace is str.isspace() for one character: Python counts U+001C..U+001F as white space too.
+func isPySpace(r rune) bool { return unicode.IsSpace(r) || (r >= 0x1c && r <= 0x1f) }
+
+// pyRstrip is str.rstrip().
+func pyRstrip(s string) string { return strings.TrimRightFunc(s, isPySpace) }
 
 // replaceInvalidUTF8 is bytes.decode("utf-8", "replace"): one U+FFFD for each maximal invalid subpart, so a
 // truncated sequence is one and each stray byte is one (strings.ToValidUTF8 would merge a run into one).
@@ -60,53 +61,6 @@ func replaceInvalidUTF8(raw []byte) string {
 		i = j
 	}
 	return b.String()
-}
-
-func oneLine(text string) string { return strings.ReplaceAll(text, "\n", "\\n") }
-
-func argLabel(a *pyjson.Object) string {
-	label, _ := a.Vals["name"].(string)
-	if pyTruthy(a.Vals["rest"]) {
-		label += "..."
-	}
-	return label
-}
-
-// usageLine is usage_line: shortcut r <display> <args>.
-func usageLine(display string, spec []*pyjson.Object) string {
-	parts := []string{"shortcut r", display}
-	for _, a := range spec {
-		if pyTruthy(a.Vals["required"]) {
-			parts = append(parts, "<"+argLabel(a)+">")
-		} else {
-			parts = append(parts, "["+argLabel(a)+"]")
-		}
-	}
-	return strings.Join(parts, " ")
-}
-
-// argLines is arg_lines: one line per declared argument, its name, whether it's needed or its default, and its desc.
-func argLines(spec []*pyjson.Object) []string {
-	type row struct{ label, need, desc string }
-	rows := make([]row, len(spec))
-	width, needWidth := 0, 0
-	for i, a := range spec {
-		need := "optional"
-		if pyTruthy(a.Vals["required"]) {
-			need = "required"
-		} else if d, ok := a.Vals["default"].(string); ok {
-			need = "default: " + oneLine(pyos.ShellQuote(d))
-		}
-		desc, _ := a.Vals["desc"].(string)
-		rows[i] = row{argLabel(a), need, oneLine(desc)}
-		width = max(width, len([]rune(rows[i].label)))
-		needWidth = max(needWidth, len([]rune(need)))
-	}
-	lines := make([]string, len(rows))
-	for i, r := range rows {
-		lines[i] = pyRstrip("  " + padRight(r.label, width) + "  " + padRight(r.need, needWidth) + "  " + r.desc)
-	}
-	return lines
 }
 
 func scopeOf(g model.Group) string {

@@ -237,7 +237,7 @@ func TestShow_GlobalFlagReachesAHiddenShortcut(t *testing.T) {
 	e.WriteFile(filepath.Join(e.Store, "scripts", "tool.sh"), "#!/usr/bin/env bash\n", 0)
 	proj := e.Project(map[string]any{"build": inline("echo project"), "tool": map[string]any{"script": "tool.sh", "description": "d"}},
 		testkit.Files(map[string]any{"tool.sh": "#!/usr/bin/env bash\n"}))
-	approveProject(t, proj)
+	e.Approve(filepath.Join(proj, ".shortcuts"))
 	in := testkit.Opts{Cwd: proj}
 
 	contains(t, "show build", e.RunWith(in, "show", "build").Stdout, "echo project")

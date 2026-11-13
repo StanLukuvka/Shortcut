@@ -33,11 +33,10 @@ var handlers map[string]handler
 
 func init() {
 	handlers = map[string]handler{"run": cmdRun, "r": cmdRun, "completion": cmdCompletion,
-		"list": cmdList, "show": cmdShow, "location": cmdLocation}
+		"list": cmdList, "show": cmdShow, "location": cmdLocation, "update": cmdUpdate}
 	// lazy: these commands only parse their arguments (so -h and usage errors work) until the slice that ports each
-	// one replaces its entry: run's body in P-3, update in P-3, new in P-4, rm in P-5,
-	// promote in P-6, init in P-7.
-	for _, name := range []string{"new", "rm", "promote", "update", "init"} {
+	// one replaces its entry: new in P-4, rm in P-5, promote in P-6, init in P-7.
+	for _, name := range []string{"new", "rm", "promote", "init"} {
 		handlers[name] = func(s *textio.Streams, args []string) error {
 			if _, err := parsers[name].Parse(args); err != nil {
 				return err

@@ -75,7 +75,7 @@ func TestCompletion_BashPastFlagsAndIntoNamespaces(t *testing.T) {
 	e.WriteStore(e.Store, map[string]any{"other": map[string]any{"inline": "true"}})
 	e.WriteImport(e.Store, "docker", map[string]any{"version": 2, "shortcuts": map[string]any{
 		"delete": map[string]any{"inline": "true"}, "ps": map[string]any{"inline": "true"}}})
-	approveNamespace(t, e, "docker") // Python ran `update docker -y` (P-3); namespaces list once approved
+	runOK(t, e, testkit.Opts{}, "update", "docker", "-y") // namespaces list once approved
 	check := func(want []string, words ...string) {
 		t.Helper()
 		got := e.BashComplete(words...)

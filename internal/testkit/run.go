@@ -1,3 +1,5 @@
+// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (P-3). Don't hand-edit without checking the plan.
+
 package testkit
 
 import (
@@ -18,10 +20,11 @@ import (
 
 // Opts for starting a process.
 type Opts struct {
-	Cwd     string            // default Home
-	Env     map[string]string // overrides on top of Env.Vars
-	Input   *string           // nil = /dev/null as stdin
-	Timeout time.Duration     // default 60s (15s on a terminal)
+	Cwd      string            // default Home
+	Env      map[string]string // overrides on top of Env.Vars
+	Input    *string           // nil = /dev/null as stdin
+	Timeout  time.Duration     // default 60s (15s on a terminal)
+	CloseFDs []int             // of 0, 1, 2: RunCmd starts the program with these closed, as `sh -c 'cmd >&-'` does
 }
 
 // Result of a finished process.
@@ -85,6 +88,17 @@ func (e *Env) RunWith(o Opts, args ...string) Result {
 func (e *Env) RunCmd(o Opts, argv ...string) Result {
 	e.T.Helper()
 	cwd, env := e.launch(o)
+	if len(o.CloseFDs) > 0 {
+		// lazy: sh closes them and execs; os/exec can only hand a child /dev/null or a pipe. Upgrade: a pre-exec hook.
+		redirs := ""
+		for _, fd := range o.CloseFDs {
+			if fd < 0 || fd > 2 {
+				e.dief("CloseFDs: %d is not one of 0, 1, 2", fd)
+			}
+			redirs += fmt.Sprintf(" %d>&-", fd) // >&- closes input and output alike
+		}
+		argv = append([]string{"sh", "-c", `exec "$@"` + redirs, "sh"}, argv...)
+	}
 	d := e.timeout(o, 60*time.Second)
 	ctx, cancel := context.WithTimeout(context.Background(), d)
 	defer cancel()
@@ -177,6 +191,9 @@ func (e *Env) Start(o Opts, args ...string) *Proc {
 }
 
 func (p *Proc) Stdout() *bufio.Reader { return p.out }
+
+// Pid is the process id of the child.
+func (p *Proc) Pid() int { return p.cmd.Process.Pid }
 
 func (p *Proc) Signal(s os.Signal) {
 	p.e.T.Helper()

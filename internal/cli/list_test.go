@@ -9,34 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/StanLukuvka/Shortcut/internal/approval"
-	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
 func inline(text string) map[string]any { return map[string]any{"inline": text} }
-
-// approveProject approves a project's definitions as `shortcut update -y` there will (P-3); the test process shares
-// the test's sandbox, so the record lands in the test's global store.
-func approveProject(t *testing.T, proj string) {
-	t.Helper()
-	g := model.LoadProjectGroup(proj)
-	if err := approval.Save(g, approval.SharedFiles(g), approval.LocalFiles(g)); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// approveNamespace approves a global namespace.
-func approveNamespace(t *testing.T, e *testkit.Env, name string) {
-	t.Helper()
-	g, ok := model.LoadStore(e.Store).Namespace(name)
-	if !ok {
-		t.Fatalf("no namespace %s", name)
-	}
-	if err := approval.Save(g, approval.SharedFiles(g), approval.LocalFiles(g)); err != nil {
-		t.Fatal(err)
-	}
-}
 
 func matches(t *testing.T, text, pattern string) {
 	t.Helper()
@@ -73,7 +49,7 @@ func TestStores_ListAndNames(t *testing.T) {
 		t.Errorf("names: %v", got)
 	}
 
-	approveProject(t, proj)
+	e.Approve(filepath.Join(proj, ".shortcuts"))
 	res = e.RunWith(testkit.Opts{Cwd: proj}, "list")
 	if res.Code != 0 {
 		t.Errorf("exit %d", res.Code)
@@ -96,8 +72,8 @@ func TestStores_GroupDescriptionShowsOnceApproved(t *testing.T) {
 	if out := e.Run("list").Stdout; strings.Contains(out, "Docker housekeeping") {
 		t.Errorf("an unapproved namespace shows its description:\n%s", out)
 	}
-	// Python also checked that `update docker -y` shows it in its diff: that is update's, P-3
-	approveNamespace(t, e, "docker")
+	// Python's update-diff line (the description is part of what update shows) is asserted in update_test.go
+	runOK(t, e, testkit.Opts{}, "update", "docker", "-y")
 	contains(t, "list", e.Run("list").Stdout, "  Docker housekeeping\n")
 }
 
@@ -108,7 +84,7 @@ func TestStores_ListNamesOfANamespace(t *testing.T) {
 	if out := e.Run("list", "--names", "docker").Stdout; out != "" {
 		t.Errorf("unapproved: %q", out)
 	}
-	approveNamespace(t, e, "docker")
+	runOK(t, e, testkit.Opts{}, "update", "docker", "-y")
 	if out := e.Run("list", "--names", "docker").Stdout; out != "a\nb\n" {
 		t.Errorf("approved: %q", out)
 	}
@@ -117,7 +93,7 @@ func TestStores_ListNamesOfANamespace(t *testing.T) {
 	}
 	// A project shortcut of that name is what `r docker` runs, so its arguments aren't names
 	proj := e.Project(map[string]any{"docker": inline("true")})
-	approveProject(t, proj)
+	e.Approve(filepath.Join(proj, ".shortcuts"))
 	if out := e.RunWith(testkit.Opts{Cwd: proj}, "list", "--names", "docker").Stdout; out != "" {
 		t.Errorf("in the project: %q", out)
 	}
@@ -157,19 +133,15 @@ func TestStoreChecks_AnEmptyListSaysHowToStart(t *testing.T) {
 
 // A project's entry over a global one is marked in both lists; the namespace form too (py: the list lines of
 // test_local_shortcut_hiding_global_warns and test_a_project_namespace_over_a_global_one_is_announced, whose other
-// lines are `new`, `update` and `run`: P-3).
+// lines are `new` (P-4), `update` and `run`).
 func TestList_HidingIsMarked(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"penpot": inline("echo global")})
 	e.WriteImport(e.Store, "docker", map[string]any{"version": 2, "shortcuts": map[string]any{"ps": inline("x"), "delete": inline("x")}})
-	approveNamespace(t, e, "docker")
+	runOK(t, e, testkit.Opts{}, "update", "docker", "-y")
 	proj := e.Project(map[string]any{"penpot": map[string]any{"inline": "echo local", "cwd": "."}})
 	nsFile := e.WriteImport(filepath.Join(proj, ".shortcuts"), "docker", map[string]any{"version": 2, "shortcuts": map[string]any{"delete": inline("y")}})
-	approveProject(t, proj)
-	g, _ := model.LoadStore(proj).Namespace("docker")
-	if err := approval.Save(g, approval.SharedFiles(g), approval.LocalFiles(g)); err != nil {
-		t.Fatal(err)
-	}
+	e.Approve(filepath.Join(proj, ".shortcuts"))
 	out := e.RunWith(testkit.Opts{Cwd: proj}, "list").Stdout
 	contains(t, "list", out, "[hides global]")
 	contains(t, "list", out, "[hidden here by project]")
@@ -187,11 +159,11 @@ func TestList_FullListingMatchesPython(t *testing.T) {
  "é": {"inline": "x", "description": "d"}}}`)
 	e.WriteImport(e.Store, "docker", map[string]any{"version": 2, "description": "Docker stuff", "shortcuts": map[string]any{
 		"ps": map[string]any{"inline": "docker ps", "description": "list"}}})
-	approveNamespace(t, e, "docker")
+	runOK(t, e, testkit.Opts{}, "update", "docker", "-y")
 	proj := e.Project(map[string]any{"build": map[string]any{"description": "Proj build", "inline": "echo pb", "cwd": "."},
 		"shared": map[string]any{"inline": "echo s", "description": "sh"}}, testkit.Extra(map[string]any{"description": "p"}))
 	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 2, "shortcuts": {"shared": {"inline": "echo local"}, "loc": {"inline": "l", "description": "mine"}, "build": null}}`, 0)
-	approveProject(t, proj)
+	e.Approve(filepath.Join(proj, ".shortcuts"))
 	res := e.RunWith(testkit.Opts{Cwd: proj}, "list")
 	want := "Project shortcuts (" + proj + "):\n" +
 		"  p\n" +
