@@ -47,7 +47,7 @@ _shortcut() {
 
     case "$prev" in
         init)
-            COMPREPLY=( $(compgen -W "--global --replace -y" -- "$cur") )
+            COMPREPLY=( $(compgen -W "--global --bundled --replace -y" -- "$cur") )
             return 0
             ;;
         completion)

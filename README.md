@@ -103,6 +103,7 @@ shortcut init --global <src> [-y]     copy the exported entries in a folder's or
                                       or, with no .shortcuts, its <ns>.shortcut namespaces into imports/
 shortcut init --global <src> --replace
                                       the same, in place of installed namespaces of those names
+shortcut init --global --bundled [-y] the same for the shortcuts that come with shortcut
 shortcut completion bash|zsh|fish
 shortcut help [command]
 shortcut --version
@@ -176,7 +177,7 @@ A namespace is a file named `<ns>.shortcut`: `{"version": 2, "shortcuts": {...}}
 
 ## Bundled shortcuts
 
-From a clone: `shortcut init --global templates`. `init --global <repo URL>` doesn't reach them: they're in `templates/`, not at the repo's root.
+`shortcut init --global --bundled` installs them from the copy inside the program, with the same review as any `init --global`. From a clone, `shortcut init --global templates` does the same. `init --global <repo URL>` doesn't reach them: they're in `templates/`, not at the repo's root.
 
 ```
 shortcut r edit <name>       open its script, or the file defining an inline one

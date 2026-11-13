@@ -19,8 +19,8 @@ func TestBinary_BuildsTheModuleOnce(t *testing.T) {
 	if a != b {
 		t.Errorf("built twice: %s, %s", a, b)
 	}
-	if res := e.Run(); res.Code != 0 || res.Stdout != "" || res.Stderr != "" {
-		t.Errorf("empty main: %+v", res)
+	if res := e.Run("--version"); res.Code != 0 || res.Stderr != "" {
+		t.Errorf("--version: %+v", res)
 	}
 }
 
@@ -201,5 +201,21 @@ func TestNew_UnreadableDirsDontBreakCleanup(t *testing.T) {
 	e.WriteFile(filepath.Join(d, "f"), "x", 0)
 	if err := os.Chmod(d, 0); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A program started with CloseFDs finds those descriptors closed, not on /dev/null (sh reports the failed write).
+func TestRun_CloseFDsStartsTheChildWithThemClosed(t *testing.T) {
+	e := New(t)
+	script := `if echo hi 2>/dev/null; then echo open >&2; else echo closed >&2; fi; if [ -e /dev/fd/0 ]; then echo in-open >&2; else echo in-closed >&2; fi`
+	res := e.RunCmd(Opts{CloseFDs: []int{1}}, "sh", "-c", script)
+	if res.Stdout != "" || !strings.Contains(res.Stderr, "closed\n") {
+		t.Errorf("stdout closed: %+v", res)
+	}
+	if res := e.RunCmd(Opts{}, "sh", "-c", script); res.Stdout != "hi\n" || !strings.Contains(res.Stderr, "in-open") {
+		t.Errorf("nothing closed: %+v", res)
+	}
+	if res := e.RunCmd(Opts{CloseFDs: []int{0}}, "sh", "-c", script); !strings.Contains(res.Stderr, "in-closed") {
+		t.Errorf("stdin closed: %+v", res)
 	}
 }

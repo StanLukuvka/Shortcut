@@ -3,6 +3,7 @@
 package textio
 
 import (
+	"fmt"
 	"strings"
 	"unicode/utf8"
 )
@@ -60,4 +61,24 @@ func isControl(r rune) bool {
 		return true
 	}
 	return false
+}
+
+// backslashReplace prints each byte that is not UTF-8 as \udcNN and each lone surrogate (WTF-8 ED A0..BF 80..BF) as
+// \udXXX, the way Python's backslashreplace prints the surrogateescape'd str.
+func backslashReplace(text string) string {
+	var b strings.Builder
+	for i := 0; i < len(text); {
+		r, n := utf8.DecodeRuneInString(text[i:])
+		switch {
+		case r != utf8.RuneError || n != 1:
+			b.WriteString(text[i : i+n])
+		case i+2 < len(text) && text[i] == 0xed && text[i+1] >= 0xa0 && text[i+1] <= 0xbf && text[i+2]&0xc0 == 0x80:
+			fmt.Fprintf(&b, "\\u%04x", 0xd000|int(text[i+1]&0x3f)<<6|int(text[i+2]&0x3f))
+			n = 3
+		default:
+			fmt.Fprintf(&b, "\\udc%02x", text[i])
+		}
+		i += n
+	}
+	return b.String()
 }

@@ -26,7 +26,7 @@ _shortcut() {
             fi
             ;;
         init)
-            compadd -- --global --replace -y
+            compadd -- --global --bundled --replace -y
             _files -/
             ;;
         completion)
