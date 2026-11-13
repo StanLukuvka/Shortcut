@@ -1,4 +1,3 @@
-// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (M4-ci). Don't hand-edit without checking the plan.
 package testkit
 
 // Tests of testkit itself (no Python counterpart). Real shortcut commands don't exist yet, so the "binary" is an
