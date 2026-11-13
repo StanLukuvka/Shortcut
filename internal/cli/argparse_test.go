@@ -1,3 +1,4 @@
+// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (C-1). Don't hand-edit without checking the plan.
 package cli
 
 import (
@@ -8,7 +9,7 @@ import (
 	"testing"
 )
 
-// goldenCase is one case of argparse_errors.json or argparse_parses.json. The generator ran Python 3.14 at 80 columns.
+// goldenCase is one case of argparse_errors.json or argparse_parses.json. The data is frozen: generated once from the Python version (3.14, 80 columns) at the python-final commit.
 type goldenCase struct {
 	Command    string         `json:"command"`
 	Argv       []string       `json:"argv"`
