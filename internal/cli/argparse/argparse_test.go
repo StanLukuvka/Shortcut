@@ -28,6 +28,14 @@ func TestParse(t *testing.T) {
 		return New("t", help, append([]*Action{yes, Value("desc", "--desc"), Repeated("arg", "--arg"), Optional("names", "--names")}, extra...)...)
 	}
 	choice := Choice("shell", "bash", "bash", "fish", "zsh")
+	// base is the namespace of opts() with nothing given, with the key/value pairs of kv set over it.
+	base := func(kv ...any) Namespace {
+		ns := Namespace{"yes": false, "desc": nil, "arg": []string{}, "names": nil}
+		for i := 0; i < len(kv); i += 2 {
+			ns[kv[i].(string)] = kv[i+1]
+		}
+		return ns
+	}
 	const try = "\nTry 'shortcut t -h' for more information.\n"
 	for _, c := range []struct {
 		name string
@@ -36,27 +44,27 @@ func TestParse(t *testing.T) {
 		want Namespace // nil when an error is wanted
 		err  string    // stderr, or "help"
 	}{
-		{"nothing", opts(Positional("n", '*')), nil, Namespace{"yes": false, "desc": nil, "arg": []string{}, "names": nil, "n": []string{}}, ""},
-		{"value space", opts(), []string{"--desc", "v"}, Namespace{"yes": false, "desc": "v", "arg": []string{}, "names": nil}, ""},
-		{"value equals", opts(), []string{"--desc=v"}, Namespace{"yes": false, "desc": "v", "arg": []string{}, "names": nil}, ""},
-		{"empty value kept", opts(), []string{"--desc="}, Namespace{"yes": false, "desc": "", "arg": []string{}, "names": nil}, ""},
-		{"empty word value", opts(), []string{"--desc", ""}, Namespace{"yes": false, "desc": "", "arg": []string{}, "names": nil}, ""},
-		{"equals with dash", opts(), []string{"--desc=-v"}, Namespace{"yes": false, "desc": "-v", "arg": []string{}, "names": nil}, ""},
-		{"value is a lone dash", opts(), []string{"--desc", "-"}, Namespace{"yes": false, "desc": "-", "arg": []string{}, "names": nil}, ""},
-		{"short flag", opts(), []string{"-y"}, Namespace{"yes": true, "desc": nil, "arg": []string{}, "names": nil}, ""},
-		{"long flag", opts(), []string{"--yes"}, Namespace{"yes": true, "desc": nil, "arg": []string{}, "names": nil}, ""},
-		{"flag twice", opts(), []string{"-y", "-y"}, Namespace{"yes": true, "desc": nil, "arg": []string{}, "names": nil}, ""},
-		{"repeated twice", opts(), []string{"--arg", "a", "--arg=b"}, Namespace{"yes": false, "desc": nil, "arg": []string{"a", "b"}, "names": nil}, ""},
-		{"optional bare", opts(), []string{"--names"}, Namespace{"yes": false, "desc": nil, "arg": []string{}, "names": ""}, ""},
-		{"optional with value", opts(), []string{"--names", "ns"}, Namespace{"yes": false, "desc": nil, "arg": []string{}, "names": "ns"}, ""},
-		{"optional equals", opts(), []string{"--names=ns"}, Namespace{"yes": false, "desc": nil, "arg": []string{}, "names": "ns"}, ""},
-		{"optional before option", opts(), []string{"--names", "-y"}, Namespace{"yes": true, "desc": nil, "arg": []string{}, "names": ""}, ""},
-		{"optional before --", opts(), []string{"--names", "--"}, Namespace{"yes": false, "desc": nil, "arg": []string{}, "names": ""}, ""},
-		{"positional between", opts(Positional("n", '+')), []string{"a", "-y", "b"}, Namespace{"yes": true, "desc": nil, "arg": []string{}, "names": nil, "n": []string{"a", "b"}}, ""},
-		{"positional after option value", opts(Positional("n", '+')), []string{"--desc", "d", "a"}, Namespace{"yes": false, "desc": "d", "arg": []string{}, "names": nil, "n": []string{"a"}}, ""},
-		{"dash positional", opts(Positional("n", '+')), []string{"-"}, Namespace{"yes": false, "desc": nil, "arg": []string{}, "names": nil, "n": []string{"-"}}, ""},
-		{"-- ends options", opts(Positional("n", '+')), []string{"--", "-y", "--desc"}, Namespace{"yes": false, "desc": nil, "arg": []string{}, "names": nil, "n": []string{"-y", "--desc"}}, ""},
-		{"-- after positional", opts(Positional("n", '+')), []string{"a", "-y", "--", "-rf"}, Namespace{"yes": true, "desc": nil, "arg": []string{}, "names": nil, "n": []string{"a", "-rf"}}, ""},
+		{"nothing", opts(Positional("n", '*')), nil, base("n", []string{}), ""},
+		{"value space", opts(), []string{"--desc", "v"}, base("desc", "v"), ""},
+		{"value equals", opts(), []string{"--desc=v"}, base("desc", "v"), ""},
+		{"empty value kept", opts(), []string{"--desc="}, base("desc", ""), ""},
+		{"empty word value", opts(), []string{"--desc", ""}, base("desc", ""), ""},
+		{"equals with dash", opts(), []string{"--desc=-v"}, base("desc", "-v"), ""},
+		{"value is a lone dash", opts(), []string{"--desc", "-"}, base("desc", "-"), ""},
+		{"short flag", opts(), []string{"-y"}, base("yes", true), ""},
+		{"long flag", opts(), []string{"--yes"}, base("yes", true), ""},
+		{"flag twice", opts(), []string{"-y", "-y"}, base("yes", true), ""},
+		{"repeated twice", opts(), []string{"--arg", "a", "--arg=b"}, base("arg", []string{"a", "b"}), ""},
+		{"optional bare", opts(), []string{"--names"}, base("names", ""), ""},
+		{"optional with value", opts(), []string{"--names", "ns"}, base("names", "ns"), ""},
+		{"optional equals", opts(), []string{"--names=ns"}, base("names", "ns"), ""},
+		{"optional before option", opts(), []string{"--names", "-y"}, base("yes", true, "names", ""), ""},
+		{"optional before --", opts(), []string{"--names", "--"}, base("names", ""), ""},
+		{"positional between", opts(Positional("n", '+')), []string{"a", "-y", "b"}, base("yes", true, "n", []string{"a", "b"}), ""},
+		{"positional after option value", opts(Positional("n", '+')), []string{"--desc", "d", "a"}, base("desc", "d", "n", []string{"a"}), ""},
+		{"dash positional", opts(Positional("n", '+')), []string{"-"}, base("n", []string{"-"}), ""},
+		{"-- ends options", opts(Positional("n", '+')), []string{"--", "-y", "--desc"}, base("n", []string{"-y", "--desc"}), ""},
+		{"-- after positional", opts(Positional("n", '+')), []string{"a", "-y", "--", "-rf"}, base("yes", true, "n", []string{"a", "-rf"}), ""},
 		{"nargs 0 one", New("t", help, Positional("n", 0)), []string{"a"}, Namespace{"n": "a"}, ""},
 		{"nargs 0 none", New("t", help, Positional("n", 0)), nil, nil, "error: missing n" + try},
 		{"nargs 0 two", New("t", help, Positional("n", 0)), []string{"a", "b"}, nil, "error: unexpected argument 'b'" + try},
@@ -80,6 +88,8 @@ func TestParse(t *testing.T) {
 		{"value missing at end", opts(), []string{"--desc"}, nil, "error: option '--desc' needs a value" + try},
 		{"value looks like option", opts(), []string{"--desc", "-v"}, nil, "error: option '--desc' needs a value" + try},
 		{"value is --", opts(), []string{"--desc", "--"}, nil, "error: option '--desc' needs a value" + try},
+		{"--help with value", opts(), []string{"--help=x"}, nil, "error: unrecognized option '--help=x'" + try},
+		{"unknown option before -h", opts(), []string{"--bogus", "-h"}, nil, "error: unrecognized option '--bogus'" + try},
 		{"help", opts(), []string{"-y", "-h"}, nil, "help"},
 		{"long help", opts(), []string{"--help", "--nope"}, nil, "help"},
 	} {

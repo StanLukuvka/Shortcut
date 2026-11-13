@@ -141,7 +141,7 @@ func (p *Parser) Parse(argv []string) (Namespace, error) {
 			ns[a.dest] = nil
 		}
 	}
-	given := map[string]bool{}
+	given := map[string]string{} // dest -> the option string as written
 	var words []string
 	for i := 0; i < len(argv); i++ {
 		a := argv[i]
@@ -162,7 +162,7 @@ func (p *Parser) Parse(argv []string) (Namespace, error) {
 			if act == nil {
 				return nil, UsageError(p.cmd, "unrecognized option '"+a+"'")
 			}
-			given[act.dest] = true
+			given[act.dest] = name
 			switch act.kind {
 			case kTrue:
 				if hasVal {
@@ -197,8 +197,8 @@ func (p *Parser) Parse(argv []string) (Namespace, error) {
 	for _, group := range p.exclusive {
 		var set []string
 		for _, d := range group {
-			if given[d] {
-				set = append(set, p.longest(d))
+			if given[d] != "" {
+				set = append(set, given[d])
 			}
 		}
 		if len(set) > 1 {
@@ -206,16 +206,6 @@ func (p *Parser) Parse(argv []string) (Namespace, error) {
 		}
 	}
 	return ns, nil
-}
-
-// longest is the last option string of the option with this dest ("--yes" of -y, --yes).
-func (p *Parser) longest(dest string) string {
-	for _, a := range p.actions {
-		if a.dest == dest && a.flags != nil {
-			return a.flags[len(a.flags)-1]
-		}
-	}
-	return dest
 }
 
 // assign gives the positional words to the positional, by its nargs.

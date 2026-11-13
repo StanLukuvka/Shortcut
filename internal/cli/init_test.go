@@ -506,6 +506,7 @@ func TestInit_LeadingDashGitSourceIsNotAnOption(t *testing.T) {
 	marker := filepath.Join(e.Tmp, "pwned")
 	source := "--upload-pack=touch " + marker + ";x.git"
 	e.Run("init", "--global", source, "-y").WantCode(t, 2)
+	testkit.NotExist(t, marker)
 	res := e.Run("init", "--global", "-y", "--", source)
 	res.WantCode(t, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "error: failed to clone git repository from --upload-pack=")

@@ -17,3 +17,4 @@
 - A store, project file or approval tree with text that is not valid UTF-8 is refused, with a message that names it.
 - Options must be spelled in full: `--des` is no longer short for `--desc`, and `-yh` is no longer `-y -h`. A word such as `-1` is an option, not a name.
 - A command's usage errors read `error: <message>` and a `Try 'shortcut <command> -h'` line, and exit 2. `shortcut completion` needs the shell named.
+- `--help=x` is an unknown option. `-h` after an unknown option reports the unknown option (exit 2) instead of printing help, as in `show --bogus -h`.
