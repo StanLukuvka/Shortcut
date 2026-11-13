@@ -92,7 +92,11 @@ func importFromRoot(s *textio.Streams, label, sourceRoot, destStoreDir string, a
 	}
 
 	// Global shortcuts have no approval step, so an import is reviewed here or never
-	files := map[string]string{"shortcuts.json": pyjson.Dumps(entries, pyjson.Opts{Indent: 2, SortKeys: true}) + "\n"}
+	text, err := pyjson.MarshalIndent(entries.Sorted())
+	if err != nil {
+		return err
+	}
+	files := map[string]string{"shortcuts.json": string(text) + "\n"}
 	for _, sc := range scripts {
 		files[pyos.Relpath(sc.path, destStoreDir)] = approval.Reviewable(sc.raw)
 	}

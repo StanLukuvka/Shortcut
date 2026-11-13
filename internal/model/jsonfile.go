@@ -38,6 +38,10 @@ func osErrText(err error) string {
 // WriteJSONAtomic writes a whole file or none of it. A symlinked file is written
 // where the link leads, with the mode it had. The temporary file is hidden, named after it, and removed on error.
 func WriteJSONAtomic(path string, v pyjson.Value) error {
+	text, err := pyjson.MarshalIndent(v) // before anything is created: a refused write leaves the old file as it was
+	if err != nil {
+		return err
+	}
 	path = pyos.Realpath(path) // follow a symlinked file to where it lives
 	dir, base := filepath.Split(path)
 	dir = filepath.Clean(dir)
@@ -58,8 +62,7 @@ func WriteJSONAtomic(path string, v pyjson.Value) error {
 			os.Remove(tmp.Name())
 		}
 	}()
-	text := pyjson.Dumps(v, pyjson.Opts{Indent: 2}) + "\n"
-	if _, err = tmp.WriteString(text); err != nil {
+	if _, err = tmp.Write(append(text, '\n')); err != nil {
 		tmp.Close()
 		return err
 	}

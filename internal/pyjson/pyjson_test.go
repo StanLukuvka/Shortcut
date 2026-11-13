@@ -1,7 +1,6 @@
 package pyjson
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -35,19 +34,6 @@ func str(o *Object, k string) string {
 	return s
 }
 
-// text is the field k, or the bytes of k+"_hex" when the name is not valid UTF-8 and so is given as hex.
-func text(t *testing.T, o *Object, k string) string {
-	t.Helper()
-	if h, ok := o.Get(k + "_hex"); ok {
-		b, err := hex.DecodeString(h.(string))
-		if err != nil {
-			t.Fatal(err)
-		}
-		return string(b)
-	}
-	return str(o, k)
-}
-
 func TestGolden_Floats(t *testing.T) {
 	cases := golden(t, "float_cases")
 	t.Logf("%d cases", len(cases))
@@ -61,29 +47,10 @@ func TestGolden_Floats(t *testing.T) {
 		if !ok || string(n) != lit { // a number keeps the text it was written with
 			t.Errorf("%s: decoded as %T %v", lit, v, v)
 		}
-		if got := DumpsCompact(v); got != lit {
-			t.Errorf("%s: written back as %s", lit, got)
+		if got, err := Marshal(v); err != nil || string(got) != lit {
+			t.Errorf("%s: written back as %s, %v", lit, got, err)
 		}
 	}
-}
-
-func TestGolden_KeyJSON(t *testing.T) {
-	cases := golden(t, "key_cases")
-	n := 0
-	for _, c := range cases {
-		if str(c, "kind") != "namespace" {
-			continue
-		}
-		if _, bad := c.Get("python_error"); bad {
-			continue
-		}
-		n++
-		key := DumpsCompact([]Value{text(t, c, "store"), text(t, c, "name"), text(t, c, "file")})
-		if key != str(c, "key") {
-			t.Errorf("got %s, want %s", key, str(c, "key"))
-		}
-	}
-	t.Logf("%d of %d cases (namespace keys)", n, len(cases))
 }
 
 func TestObjectOrder(t *testing.T) {
@@ -92,18 +59,27 @@ func TestObjectOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	o := v.(*Object)
-	if strings.Join(o.Keys, ",") != "b,a" || DumpsCompact(o) != `{"b": 3, "a": 2}` {
-		t.Fatalf("keys %v, %s", o.Keys, DumpsCompact(o))
+	if got := marshal(t, o); strings.Join(o.Keys, ",") != "b,a" || got != `{"b":3,"a":2}` {
+		t.Fatalf("keys %v, %s", o.Keys, got)
 	}
 	o.Set("c", nil)
 	o.Delete("b")
 	o.Delete("zz")
-	if DumpsCompact(o) != `{"a": 2, "c": null}` {
-		t.Fatal(DumpsCompact(o))
+	if got := marshal(t, o); got != `{"a":2,"c":null}` {
+		t.Fatal(got)
 	}
 	if _, ok := o.Get("b"); ok {
 		t.Fatal("b not deleted")
 	}
+}
+
+func marshal(t *testing.T, v Value) string {
+	t.Helper()
+	b, err := Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }
 
 func TestCompareOrder(t *testing.T) {
@@ -212,5 +188,74 @@ func TestDecode_DuplicatesDepthAndWhatIsNotJSON(t *testing.T) {
 		if _, err := Parse(src); err == nil {
 			t.Errorf("%.30q loaded", src)
 		}
+	}
+}
+
+func TestEncode_RefusesInvalidUTF8(t *testing.T) {
+	bad := "caf\xe9"
+	obj := func(k string, v Value) *Object {
+		o := &Object{}
+		o.Set(k, v)
+		return o
+	}
+	for name, v := range map[string]Value{
+		"string":         bad,
+		"key":            obj(bad, "x"),
+		"value":          obj("k", bad),
+		"in an array":    []Value{"ok", bad},
+		"in an object":   obj("a", obj("b", []Value{obj("c", bad)})),
+		"two bad bytes":  "\xff\xfe",
+		"half a rune":    "\xe2\x82",
+		"a WTF-8 triple": "\xed\xa0\x80", // an encoded surrogate is not UTF-8 either
+	} {
+		for _, f := range []func(Value) ([]byte, error){Marshal, MarshalIndent} {
+			if out, err := f(v); !errors.Is(err, ErrNotUTF8) || out != nil {
+				t.Errorf("%s: got %q, %v", name, out, err)
+			}
+		}
+	}
+	if _, err := json.Marshal(obj("k", bad)); !errors.Is(err, ErrNotUTF8) { // straight through encoding/json too
+		t.Errorf("json.Marshal: %v", err)
+	}
+}
+
+func TestEncode_RoundTripsAPythonWrittenStore(t *testing.T) {
+	// indent 2, key order as written (not sorted), numbers as written, empty containers on one line
+	src := "{\n  \"zed\": 1,\n  \"version\": 1,\n  \"n\": [\n    1.0,\n    12345678901234567890,\n    1e400,\n    -0,\n    2E2\n  ],\n" +
+		"  \"alpha\": {},\n  \"list\": [],\n  \"a\": {\n    \"k\": null,\n    \"b\": [],\n    \"c\": {},\n    \"t\": true\n  }\n}"
+	v, err := Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := MarshalIndent(v)
+	if err != nil || string(got) != src {
+		t.Errorf("got %s, %v\nwant %s", got, err, src)
+	}
+}
+
+func TestEncode_WritesTextAsTheCharacters(t *testing.T) {
+	o := &Object{}
+	o.Set("html", "<a href=\"x\">&</a>")
+	o.Set("accent", "café 中文 😀")
+	o.Set("quote", "a\"b\\c\nd\te")
+	got := marshal(t, o)
+	want := `{"html":"<a href=\"x\">&</a>","accent":"café 中文 😀","quote":"a\"b\\c\nd\te"}`
+	if got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+	back, err := Parse(got)
+	if err != nil || back.(*Object).Vals["accent"] != "café 中文 😀" {
+		t.Errorf("did not round-trip: %v %v", back, err)
+	}
+}
+
+func TestSorted(t *testing.T) {
+	v, _ := Parse(`{"b": {"z": 1, "a": [{"y": 1, "x": 2}]}, "a": 1}`)
+	got := marshal(t, v.(*Object).Sorted())
+	if want := `{"a":1,"b":{"a":[{"x":2,"y":1}],"z":1}}`; got != want {
+		t.Errorf("got %s", got)
+	}
+	if first := marshal(t, v); first != `{"b":{"z":1,"a":[{"y":1,"x":2}]},"a":1}` {
+		t.Errorf("Sorted changed the original: %s", first)
 	}
 }

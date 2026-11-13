@@ -89,7 +89,9 @@ func sameJSON(a, b pyjson.Value) bool {
 		}
 		return true
 	}
-	return pyjson.DumpsCompact(a) == pyjson.DumpsCompact(b)
+	x, err1 := pyjson.Marshal(a)
+	y, err2 := pyjson.Marshal(b)
+	return err1 == nil && err2 == nil && string(x) == string(y)
 }
 
 func TestApproval_GoldenReviewable(t *testing.T) {

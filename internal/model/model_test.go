@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -75,6 +76,16 @@ func TestEntry_ValidateArgsMessages(t *testing.T) {
 	}
 }
 
+// compact is v on one line, as the JSON encoder writes it.
+func compact(t *testing.T, v pyjson.Value) string {
+	t.Helper()
+	b, err := pyjson.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
 func TestEntry_RoundTripKeepsArgsAndOrder(t *testing.T) {
 	src := `{"description": "d", "script": "s.sh", "cwd": "c", "confirm": true, "export": true,` +
 		` "args": [{"name": "a", "desc": "x", "required": true}, {"name": "b"}], "from": {"source": "/p", "name": "n"}}`
@@ -82,7 +93,7 @@ func TestEntry_RoundTripKeepsArgsAndOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := pyjson.DumpsCompact(e.ToObject()), pyjson.DumpsCompact(parse(t, src)); got != want {
+	if got, want := compact(t, e.ToObject()), compact(t, parse(t, src)); got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
 	}
 	if e.Inline != nil || *e.Script != "s.sh" || e.Origin.Name != "n" || !e.Confirm || len(e.Args) != 2 {
@@ -93,7 +104,7 @@ func TestEntry_RoundTripKeepsArgsAndOrder(t *testing.T) {
 	if err != nil || e.Inline == nil || e.Args == nil {
 		t.Fatalf("%+v %v", e, err)
 	}
-	if got := pyjson.DumpsCompact(e.ToObject()); got != `{"description": "", "inline": "", "args": []}` {
+	if got := compact(t, e.ToObject()); got != `{"description":"","inline":"","args":[]}` {
 		t.Error(got)
 	}
 }
@@ -229,8 +240,8 @@ func TestStores_AtomicRegistrySaveAndCorruptProtection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pyjson.DumpsCompact(loaded) != pyjson.DumpsCompact(data) {
-		t.Errorf("loaded %s", pyjson.DumpsCompact(loaded))
+	if compact(t, loaded) != compact(t, data) {
+		t.Errorf("loaded %s", compact(t, loaded))
 	}
 
 	// Corrupt JSON file protection
@@ -341,7 +352,7 @@ func TestStores_WriteJSONAtomic(t *testing.T) {
 		t.Error("the link was replaced")
 	}
 	got, _ := os.ReadFile(target)
-	want := "{\n  \"version\": 1,\n  \"shortcuts\": {\n    \"hi\": {\n      \"description\": \"\\u00e9\",\n      \"n\": 1.0\n    }\n  }\n}\n"
+	want := "{\n  \"version\": 1,\n  \"shortcuts\": {\n    \"hi\": {\n      \"description\": \"é\",\n      \"n\": 1.0\n    }\n  }\n}\n"
 	if string(got) != want {
 		t.Errorf("got %q", got)
 	}
@@ -433,7 +444,7 @@ func TestGroup_ShortcutsOverlaySourceAndHiding(t *testing.T) {
 	if got := strings.Join(g.Shortcuts().Keys, ","); got != "a,b,n,d" {
 		t.Errorf("keys %s", got)
 	}
-	if v, _ := g.Shortcuts().Get("b"); pyjson.DumpsCompact(v) != `{"inline": "B"}` {
+	if v, _ := g.Shortcuts().Get("b"); compact(t, v) != `{"inline":"B"}` {
 		t.Error("b not overridden")
 	}
 	for name, want := range map[string]string{"a": "shared", "b": "overridden", "c": "hidden", "d": "local", "z": "hidden"} {
@@ -618,5 +629,65 @@ func TestStores_EntryErrors(t *testing.T) {
 	}
 	if strings.Contains(joined, "'ok'") || strings.Contains(joined, "'export'") {
 		t.Errorf("a valid entry was reported:\n%s", joined)
+	}
+}
+
+func TestKey_TellsNonUTF8NamesApart(t *testing.T) {
+	store := testkit.New(t).Tmp
+	keys := map[string]string{}
+	for _, file := range []string{"caf\xe9", "caf\xea", "café", `caf\udce9`, "\xed\xa0\x80", "\xed\xb2\x80"} {
+		g := Group{Name: "ns", StoreDir: store, File: filepath.Join(store, file)}
+		k := g.Key()
+		if prev, dup := keys[k]; dup {
+			t.Errorf("%q and %q share the key %s", prev, file, k)
+		}
+		keys[k] = file
+		if RecordName(k) == "" {
+			t.Fatal("no record name")
+		}
+	}
+	names := map[string]bool{}
+	for k := range keys {
+		names[RecordName(k)] = true
+	}
+	if len(names) != len(keys) {
+		t.Errorf("%d record names for %d keys", len(names), len(keys))
+	}
+	// the key text itself is as Python wrote it: ASCII, \u escapes, lower hex
+	if got, want := keyJSON("a", "é😀\xff"), `["a", "\u00e9\ud83d\ude00\udcff"]`; got != want {
+		t.Errorf("got %s want %s", got, want)
+	}
+}
+
+func TestResolveScriptPath_NonUTF8DirectoriesStayApart(t *testing.T) {
+	base := testkit.New(t).Tmp
+	for _, d := range []string{"d\xe9", "d\xea"} {
+		if err := os.Mkdir(filepath.Join(base, d), 0o755); err != nil {
+			t.Skip("file system refuses non-UTF-8 names")
+		}
+	}
+	a, errA := ResolveScriptPath(base, "d\xe9/run.sh")
+	b, errB := ResolveScriptPath(base, "d\xea/run.sh")
+	if errA != nil || errB != nil || a == b || !strings.HasSuffix(a, "d\xe9/run.sh") || !strings.HasSuffix(b, "d\xea/run.sh") {
+		t.Errorf("%q %v / %q %v", a, errA, b, errB)
+	}
+}
+
+func TestWriteJSONAtomic_RefusesInvalidUTF8AndKeepsTheOldFile(t *testing.T) {
+	path := filepath.Join(testkit.New(t).Tmp, "s.json")
+	old := "{\n  \"version\": 1\n}\n"
+	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	o := &pyjson.Object{}
+	o.Set("name", "caf\xe9")
+	if err := WriteJSONAtomic(path, o); !errors.Is(err, pyjson.ErrNotUTF8) {
+		t.Fatalf("got %v", err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != old {
+		t.Errorf("file changed: %q", got)
+	}
+	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(path), ".*.tmp")); len(left) != 0 {
+		t.Errorf("temp files left: %v", left)
 	}
 }

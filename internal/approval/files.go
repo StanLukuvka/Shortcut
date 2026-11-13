@@ -89,9 +89,13 @@ func jsonFile(g model.Group, path string, data *pyjson.Object) map[string]string
 	if data == nil {
 		data = &pyjson.Object{}
 	}
-	return map[string]string{
-		displayPath(g, path): pyjson.Dumps(data, pyjson.Opts{Indent: 2, SortKeys: true}) + "\n",
+	text, err := pyjson.MarshalIndent(data.Sorted())
+	if err != nil {
+		// lazy: loaded data is valid UTF-8, so this does not happen. The bad byte in the value is what makes checkPaths
+		// refuse the snapshot, naming the file. Upgrade: return the error through SharedFiles and LocalFiles.
+		return map[string]string{displayPath(g, path): "\xff" + err.Error()}
 	}
+	return map[string]string{displayPath(g, path): string(text) + "\n"}
 }
 
 func merge(maps ...map[string]string) map[string]string {

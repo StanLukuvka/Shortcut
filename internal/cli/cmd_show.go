@@ -162,6 +162,10 @@ func showJSON(s *textio.Streams, words []string, skipLocal bool) error {
 	if err != nil {
 		out.Set("error", err.Error())
 	}
-	s.Out.WriteString(pyjson.Dumps(out, pyjson.Opts{Indent: 2}) + "\n")
+	text, jerr := pyjson.MarshalIndent(out)
+	if jerr != nil {
+		return jerr
+	}
+	s.Out.WriteString(string(text) + "\n")
 	return nil
 }

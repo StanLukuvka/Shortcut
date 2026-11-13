@@ -104,7 +104,7 @@ echo hi
   "script_path": "TMP/home/.shortcuts/scripts/tool.sh",
   "error": null,
   "entry": {
-    "description": "A tool: \u00e9",
+    "description": "A tool: é",
     "script": "scripts/tool.sh",
     "args": [
       {
