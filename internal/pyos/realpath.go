@@ -202,3 +202,12 @@ func pySplit(p string) (head, tail string) {
 	}
 	return head, tail
 }
+
+// Join is posixpath.join, for callers outside this package.
+func Join(a string, parts ...string) string { return pyJoin(a, parts...) }
+
+// Dirname is posixpath.dirname.
+func Dirname(p string) string { h, _ := pySplit(p); return h }
+
+// Basename is posixpath.basename.
+func Basename(p string) string { _, t := pySplit(p); return t }
