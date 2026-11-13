@@ -1,0 +1,11 @@
+usage: shortcut update [-h] [-y] [group]
+
+Review changes to project shortcuts and namespaces, and approve them
+
+positional arguments:
+  group       A namespace, or . for this project's own shortcuts (default: all
+              here)
+
+options:
+  -h, --help  show this help message and exit
+  -y, --yes   Approve without asking

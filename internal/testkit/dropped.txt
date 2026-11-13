@@ -1,0 +1,5 @@
+# Python tests with no Go counterpart: `file::test_name  reason`. ported.sh skips blank and # lines.
+# `deferred R-4: ...` is accepted by --strict and refused by --final; R-4 deletes that line.
+test_running.py::test_an_old_python_is_told_what_it_needs  dropped: a Python-version check; the Go binary has no interpreter
+test_running.py::test_on_windows_a_run_is_a_child_with_the_same_exit_code  dropped: patches the Python WINDOWS flag; Windows is out of v1 (G2)
+test_bundled.py::test_install_script_dry_run  deferred R-4: needs the Go installer; installer/installer_test.go replaces it (its zipapp file-list check is dropped with the zipapp)

@@ -1,0 +1,27 @@
+usage: shortcut new [-h] [--desc DESC] [--script PATH | --copy FILE]
+                    [--cwd CWD] [--local] [--namespace NAME] [--by BY]
+                    [--arg NAME[=DEFAULT]] [--arg-desc NAME=TEXT] [--confirm]
+                    name
+
+Create a new shortcut
+
+positional arguments:
+  name                  Shortcut name
+
+options:
+  -h, --help            show this help message and exit
+  --desc DESC           Shortcut description
+  --script PATH         Run this file where it is
+  --copy FILE           Copy this file, or - for stdin, into the store
+  --cwd CWD             Where it runs: caller (default) or a directory
+  --local               Store it in .shortcuts.local in this directory, not
+                        globally
+  --namespace NAME      Put it in this namespace, creating
+                        imports/NAME.shortcut if needed
+  --by BY               Creator identifier
+  --arg NAME[=DEFAULT]  Declare an argument: required, or optional with a
+                        default. NAME... takes the rest of the arguments;
+                        NAME...= makes that optional. Repeatable
+  --arg-desc NAME=TEXT  Describe a declared argument, for show and usage
+                        errors. Repeatable
+  --confirm             Ask before running it

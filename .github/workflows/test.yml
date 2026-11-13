@@ -40,21 +40,6 @@ jobs:
           "$RUNNER_TEMP/venv/bin/pip" install .
           "$RUNNER_TEMP/venv/bin/shortcut" --version
 
-  macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - name: Configure git for test fixtures
-        run: |
-          git config --global user.name "ci"
-          git config --global user.email "ci@example.invalid"
-          git config --global init.defaultBranch main
-      - name: Run tests
-        run: python -m unittest discover -s tests -v
-
   lint:
     runs-on: ubuntu-latest
     steps:

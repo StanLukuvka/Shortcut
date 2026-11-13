@@ -1,0 +1,165 @@
+package pyos
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"syscall"
+	"testing"
+
+	"github.com/StanLukuvka/Shortcut/internal/testkit"
+)
+
+// The test binary doubles as the program under test for what only a process can show: PYOS_HELPER names the job.
+func TestMain(m *testing.M) {
+	if job := os.Getenv("PYOS_HELPER"); job != "" {
+		helper(job)
+		os.Exit(0)
+	}
+	testkit.Main(m)
+}
+
+func helper(job string) {
+	switch job {
+	case "cwd":
+		logical, _ := os.Getwd()
+		physical, _ := Getwd()
+		fmt.Printf("%s\n%s\n", logical, physical)
+	case "tty":
+		fmt.Println(IsTerminal(0), IsTerminal(1), TerminalRows())
+	case "exec": // as cli.Main does: SIGPIPE is Notify'd, then the shortcut execs
+		signal.Notify(make(chan os.Signal, 1), syscall.SIGPIPE)
+		env := append(os.Environ(), "PATH="+os.Getenv("PYOS_PATH"))
+		err := ExecChild([]string{os.Getenv("PYOS_CMD"), "-c", `pwd; grep -E '^Sig(Blk|Ign)' /proc/$$/status`},
+			os.Getenv("PYOS_CWD"), env, func() { fmt.Println("flushed") })
+		fmt.Println("returned:", err)
+		os.Exit(7)
+	}
+}
+
+type helperRun struct{}
+
+func (helperRun) args() []string { return []string{os.Args[0], "-test.run=^$"} }
+
+// C29: with PWD naming a symlink to the cwd, os.Getwd gives the link and Getwd the physical folder.
+func TestGetwd_IsPhysical(t *testing.T) {
+	e := testkit.New(t)
+	real := e.Folder("real")
+	e.Symlink(real, filepath.Join(e.Tmp, "link"))
+	res := e.RunCmd(testkit.Opts{Cwd: filepath.Join(e.Tmp, "link"), Env: map[string]string{"PYOS_HELPER": "cwd", "PWD": filepath.Join(e.Tmp, "link")}}, helperRun{}.args()...)
+	if want := filepath.Join(e.Tmp, "link") + "\n" + real + "\n"; res.Stdout != want {
+		t.Errorf("stdout %q, want %q (os.Getwd then pyos.Getwd)", res.Stdout, want)
+	}
+}
+
+func TestTTY_StdinStdoutAndRows(t *testing.T) {
+	e := testkit.New(t)
+	opts := func(env map[string]string) testkit.Opts {
+		env["PYOS_HELPER"] = "tty"
+		return testkit.Opts{Env: env}
+	}
+	if res := e.RunCmd(opts(map[string]string{}), helperRun{}.args()...); res.Stdout != "false false 24\n" { // /dev/null is not a terminal
+		t.Errorf("no terminal: %q", res.Stdout)
+	}
+	if res := e.RunCmd(opts(map[string]string{"LINES": "7"}), helperRun{}.args()...); res.Stdout != "false false 7\n" {
+		t.Errorf("LINES: %q", res.Stdout)
+	}
+	if res := e.RunCmd(opts(map[string]string{"LINES": "0"}), helperRun{}.args()...); res.Stdout != "false false 24\n" {
+		t.Errorf("LINES=0: %q", res.Stdout)
+	}
+	code, out := e.InTerminalCmd(opts(map[string]string{}), nil, helperRun{}.args()...)
+	if code != 0 || out != "true true 30\r\n" { // testkit's pty is 30 rows
+		t.Errorf("terminal: %d %q", code, out)
+	}
+}
+
+func TestExec_FailureBeforeExecReturnsAnError(t *testing.T) {
+	e := testkit.New(t)
+	flushed := 0
+	cwd, _ := Getwd() // chdir to where we are: the test process's cwd does not move
+	if err := ExecChild([]string{"x"}, e.Tmp+"/missing", nil, func() { flushed++ }); err == nil || flushed != 1 {
+		t.Errorf("a missing cwd: err = %v, flushed = %d", err, flushed)
+	}
+	if err := ExecChild([]string{"no-such-command-zz9"}, cwd, []string{"PATH=" + e.Tmp}, func() {}); !strings.Contains(fmt.Sprint(err), "no-such-command-zz9") {
+		t.Errorf("not found: %v", err)
+	}
+}
+
+func TestExec_LookPath(t *testing.T) {
+	e := testkit.New(t)
+	bin, other := e.Folder("bin"), e.Folder("other")
+	e.WriteFile(bin+"/tool", "#!/bin/sh\n", 0o755)
+	e.WriteFile(bin+"/plain", "x", 0o644)
+	e.WriteFile(other+"/plain", "#!/bin/sh\n", 0o755)
+	e.WriteFile(other+"/tool", "#!/bin/sh\n", 0o755)
+	e.WriteFile(filepath.Join(e.Tmp, "here"), "#!/bin/sh\n", 0o755)
+	if err := os.Mkdir(bin+"/adir", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := bin + ":" + other
+	old, _ := Getwd()
+	t.Cleanup(func() { os.Chdir(old) })
+	os.Chdir(e.Tmp) // an empty entry means the cwd
+	for _, c := range []struct{ file, path, want string }{
+		{"tool", path, bin + "/tool"},
+		{"plain", path, other + "/plain"}, // a non-executable file earlier in PATH is passed over
+		{"/abs/x", "", "/abs/x"},          // a / in the name: no search
+		{"./rel", "", "./rel"},
+		{"adir", bin, ""}, // a folder is not a program
+		{"none", path, ""},
+		{"here", "", "here"}, // PATH= : one empty entry, the cwd
+		{"here", bin + "::" + other, "here"},
+	} {
+		got, err := lookPath(c.file, c.path)
+		if (err != nil) != (c.want == "") || got != c.want {
+			t.Errorf("lookPath(%q, %q) = %q, %v; want %q", c.file, c.path, got, err, c.want)
+		}
+	}
+	if _, err := lookPath("plain", bin); !errors.Is(err, syscall.EACCES) {
+		t.Errorf("only a non-executable match: %v", err)
+	}
+	if _, err := lookPath("none", bin); !errors.Is(err, syscall.ENOENT) {
+		t.Errorf("no match: %v", err)
+	}
+	if pathOf(nil) != "/bin:/usr/bin" {
+		t.Errorf("pathOf(nil) = %q", pathOf(nil))
+	}
+	if pathOf([]string{"A=1", "PATH=/x", "PATH=/y"}) != "/y" || pathOf([]string{"PATH="}) != "" {
+		t.Error("pathOf")
+	}
+}
+
+// What a shortcut inherits: flush ran, cwd changed, SIGPIPE and SIGXFSZ default (bits 13 and 25 clear in SigIgn),
+// nothing blocked. Plan 4.6; the full check runs again against the binary in P-3.
+func TestExec_TheChildStartsClean(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("reads /proc")
+	}
+	e := testkit.New(t)
+	dir := e.Folder("run")
+	res := e.RunCmd(testkit.Opts{Env: map[string]string{"PYOS_HELPER": "exec", "PYOS_CMD": "sh", "PYOS_PATH": "/bin:/usr/bin", "PYOS_CWD": dir}}, helperRun{}.args()...)
+	if res.Code != 0 {
+		t.Fatalf("exit %d, stdout %q stderr %q", res.Code, res.Stdout, res.Stderr)
+	}
+	lines := strings.Split(strings.TrimSpace(res.Stdout), "\n")
+	if len(lines) != 4 || lines[0] != "flushed" || lines[1] != dir {
+		t.Fatalf("stdout %q", res.Stdout)
+	}
+	ign, blk := hexOf(t, lines[2]), hexOf(t, lines[3])
+	if ign&(1<<(syscall.SIGPIPE-1)) != 0 || ign&(1<<(syscall.SIGXFSZ-1)) != 0 || blk != 0 {
+		t.Errorf("%s / %s", lines[2], lines[3])
+	}
+}
+
+func hexOf(t *testing.T, line string) uint64 {
+	var name string
+	var v uint64
+	if _, err := fmt.Sscanf(line, "%s %x", &name, &v); err != nil {
+		t.Fatalf("%q: %v", line, err)
+	}
+	return v
+}
