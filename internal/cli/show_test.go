@@ -60,8 +60,8 @@ const toolRegistry = `{"version": 1, "shortcuts": {
  "nul": null,
  "build": {"description": "Global build", "inline": "echo gb", "cwd": "/tmp"}}}`
 
-// What the Python version printed for these, byte for byte (TMP is the test's temp dir).
-func TestShow_MatchesPython(t *testing.T) {
+// The exact text of show for these (TMP is the test's temp dir).
+func TestShow_FullOutput(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteRegistryRaw(e.Store, toolRegistry)
 	e.WriteFile(filepath.Join(e.Store, "scripts", "tool.sh"), "#!/bin/sh\r\necho hi\r\n\n\n   \n", 0)

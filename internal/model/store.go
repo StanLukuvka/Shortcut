@@ -139,7 +139,7 @@ func LoadProjectGroup(root string) Group {
 
 // LoadStore reads a store and its namespaces. It never fails on bad content: that is reported on the Group or the
 // Store, so list, show and rm still work on a broken store.
-// lazy: a folder that can't be listed counts as empty (Python's os.listdir would raise); no test reaches it.
+// lazy: a folder that can't be listed counts as empty; no test reaches it.
 func LoadStore(storeDir string) Store {
 	isGlobal := IsGlobalStore(storeDir)
 	var main Group

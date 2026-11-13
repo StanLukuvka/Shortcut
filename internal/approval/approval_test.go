@@ -128,7 +128,7 @@ func TestApproval_GoldenKeysAndRecordNames(t *testing.T) {
 			}
 			want := str(c, "record_name")
 			if _, python := c.Get("python_error"); python {
-				// Python's key.encode() raises here; Go names the record after the key's raw bytes (os.fsencode).
+				// the old version could not name a record for this key; Go names the record after the key's raw bytes (os.fsencode).
 				if utf8.ValidString(g.Key()) {
 					t.Fatal("python_error on a valid key")
 				}
@@ -197,7 +197,7 @@ func buildTree(t *testing.T, env *testkit.Env, root string, tree []pyjson.Value)
 	}
 }
 
-// afterShortcut cuts a file error back to the part after the file's name, since the golden root belongs to the frozen data (generated once from the Python version at the python-final commit).
+// afterShortcut cuts a file error back to the part after the file's name, since the golden root belongs to the frozen data (recorded once from the first version).
 func afterShortcut(s string) string {
 	if i := strings.Index(s, ".short"); i >= 0 {
 		return s[i:]
@@ -282,7 +282,7 @@ func equalMaps(a, b map[string]string) bool {
 	return true
 }
 
-// checkRecord: a record Python wrote reads as ok; one Go writes parses to the same object as Python's.
+// checkRecord: a record from the older version reads as ok; one written now parses to the same object.
 func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template string, shared, local map[string]string) {
 	t.Helper()
 	text := strings.ReplaceAll(template, "@ROOT@", root)
@@ -296,7 +296,7 @@ func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template s
 	}
 	env.WriteFile(path, text, 0)
 	if got := State(g); got != "ok" {
-		t.Errorf("a Python-written record: state %s, want ok", got)
+		t.Errorf("a record from the older version: state %s, want ok", got)
 	}
 	if r := Load(g); r == nil || !equalMaps(r.Snapshot, shared) || !equalMaps(r.Local, local) || r.Key != g.Key() {
 		t.Errorf("Load: %+v", r)
@@ -316,7 +316,7 @@ func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template s
 		t.Fatal(err)
 	}
 	if !sameJSON(got, want) {
-		t.Errorf("Go-written record\n%s\ndiffers from Python's\n%s", raw, text)
+		t.Errorf("written record\n%s\ndiffers from the template\n%s", raw, text)
 	}
 	if State(g) != "ok" {
 		t.Errorf("a Go-written record: state %s", State(g))
@@ -586,7 +586,7 @@ func TestApproval_ARecordHoldingALoneSurrogateIsNoRecord(t *testing.T) {
 	env := testkit.New(t)
 	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
 	g := model.LoadStore(proj).Main
-	// what the Python version wrote for a file named caf<0xe9>: a lone surrogate escape
+	// what the older version wrote for a file named caf<0xe9>: a lone surrogate escape
 	env.WriteFile(model.ApprovalPath(g), `{"snapshot": {"caf\udce9.sh": "x"}, "local": {}}`, 0)
 	if Load(g) != nil || State(g) != "new" {
 		t.Errorf("loaded as a record: %+v, state %s", Load(g), State(g))

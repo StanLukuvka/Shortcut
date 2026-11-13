@@ -251,7 +251,6 @@ initNamespaces -> init_namespaces
 installedFiles -> installed_files
 isGitSource -> is_git_source
 isListedImport -> is_listed_import
-isPySpace -> str.isspace() for one character
 joinCommand -> join_command
 keptScript -> kept_script
 listDir -> sorted(os.listdir(dir))
@@ -266,13 +265,9 @@ padRight -> f"{s:<n}"
 planImport -> plan_import
 planNamespaces -> plan_namespaces
 positionalAnywhere -> re.search(POSITIONAL, text)
-pyRstrip -> str.rstrip()
-pyStr -> str()
-pyTruthy -> bool()
 refuseSymlinks -> refuse_symlinks
 register -> _register
 removeNamespaceFiles -> remove_namespace_files
-replaceInvalidUTF8 -> bytes.decode("utf-8", "replace")
 review -> confirm_review(...).granted()
 rmLocal -> rm_local
 rmLocalMessage -> rm_local_message
@@ -283,7 +278,6 @@ runUsage -> RUN_USAGE (cli.py)
 scriptField -> raw_entry.get("script")
 sharedEntries -> SHARED of test_project_files.py
 showJSON -> show_json
-splitOnce -> str.split(None, 1)
 storedCopy -> stored_copy
 storedCwd -> stored_cwd
 storedScriptField -> _stored_script_field
@@ -304,7 +298,6 @@ Namespace -> argparse's Namespace
 New -> Parser(prog="shortcut <cmd>")
 Parse -> parse_args
 UsageError -> (new: "error: ..." and a Try line, no Python equivalent)
-PyRepr -> repr() of a str
 
 [internal/difflib]
 SplitLinesKeepEnds -> str.splitlines(keepends=True)
@@ -349,7 +342,6 @@ WriteJSONAtomic -> write_json_atomic (helpers.py:241-273)
 fileError -> file_error
 lockPath -> registry_lock
 oldProjectFolder -> old_project_folder (lookup.py)
-osErrText -> str(OSError)
 
 [internal/pyjson]
 Decode -> json.load
@@ -357,8 +349,6 @@ Parse -> json.loads(s)
 
 [internal/pyos]
 Abs -> os.path.abspath
-Basename -> posixpath.basename
-Dirname -> posixpath.dirname
 ExecChild -> exec_child (os.execvpe)
 Exists -> os.path.exists
 ExpandUser -> posixpath.expanduser
@@ -378,8 +368,6 @@ Suffix -> pathlib.PurePath(p).suffix as Python 3.14 has it
 TerminalRows -> shutil.get_terminal_size().lines
 TestLock_ASymlinkedLockIsRefused -> test_symlink_safety.py::test_a_store_never_writes_through_a_symlink (the .lock half)
 Walk -> os.walk(top) top-down without followlinks
-lookPath -> os._execvpe's search
-pySplit -> posixpath.split
 
 [internal/testkit]
 Proc -> popen_cli

@@ -230,7 +230,7 @@ func newFromCopy(s *textio.Streams, ns Namespace, group model.Group, fields *mod
 		if content, err = io.ReadAll(s.In); err != nil {
 			return err
 		}
-		if !utf8.Valid(content) { // Python decodes stdin as UTF-8 and stops on anything else
+		if !utf8.Valid(content) { // stdin must be UTF-8
 			return errors.New("stdin is not valid UTF-8")
 		}
 		ext = ".sh"
@@ -264,7 +264,7 @@ func newFromCopy(s *textio.Streams, ns Namespace, group model.Group, fields *mod
 
 // copyScript is shutil.copy2 + chmod(mode | 0o111): the content, the source's mode and modification time, made
 // executable. The destination is written where it is, a link included.
-// lazy: the access time is set to the modification time (Python keeps both); nothing reads it.
+// lazy: the access time is set to the modification time; nothing reads it.
 func copyScript(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {

@@ -105,7 +105,7 @@ func (e *Env) Symlink(target, link string) {
 	}
 }
 
-// Stores. Where Python took store_dir, so does storeDir here: a project's .shortcuts file, or a folder holding
+// Stores. storeDir is a project's .shortcuts file, or a folder holding
 // shortcuts.json (the global store included).
 
 // WriteRegistry writes exactly this data as a store's file, valid or not.
@@ -213,7 +213,7 @@ func Dirs(d ...string) ProjectOpt       { return func(c *projectCfg) { c.dirs = 
 func Files(f map[string]any) ProjectOpt { return func(c *projectCfg) { c.files = f } }
 func Approved() ProjectOpt              { return func(c *projectCfg) { c.approved = true } }
 func Extra(x map[string]any) ProjectOpt { return func(c *projectCfg) { c.extra = x } }
-func Mode(m os.FileMode) ProjectOpt     { return func(c *projectCfg) { c.mode = m } } // mode of the Files (Python's collection(mode=))
+func Mode(m os.FileMode) ProjectOpt     { return func(c *projectCfg) { c.mode = m } } // mode of the Files
 
 func cfgOf(name string, opts []ProjectOpt) *projectCfg {
 	c := &projectCfg{name: name}

@@ -97,7 +97,7 @@ func oldProjectFolder(callerCwd string) string {
 }
 
 // LocalProjectRoot returns where --local writes, this folder and never a parent. Its errors are the
-// messages Python's die() printed.
+// the messages die prints.
 func LocalProjectRoot(cwd string) (string, error) {
 	here := pyos.Realpath(cwd)
 	if root := FindProjectRoot(here); root != "" && root != here {
@@ -116,7 +116,7 @@ func LocalProjectRoot(cwd string) (string, error) {
 }
 
 // lockPath is where the registry lock is: <store>/.lock for the global store; otherwise, to keep a repo's root clean,
-// <global>/locks/<sha256(realpath(store))>.lock. The same names as Python, so the two versions exclude each other.
+// <global>/locks/<sha256(realpath(store))>.lock. The same names as the older version, so the two exclude each other.
 func lockPath(storeDir string) string {
 	if IsGlobalStore(storeDir) {
 		return pyos.Join(storeDir, ".lock")
@@ -148,7 +148,7 @@ func emptyRegistry() *pyjson.Object {
 	return o
 }
 
-// LoadRegistryFile reads a registry file, with the messages of the Python version.
+// LoadRegistryFile reads a registry file, with fixed messages.
 func LoadRegistryFile(path string) (*pyjson.Object, error) {
 	if !pyos.IsFile(path) {
 		return nil, &RegistryNotFoundError{path}
@@ -200,7 +200,7 @@ func SaveRegistryAtomic(storeDir string, data *pyjson.Object) error {
 
 var namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`) // Go's $ is end of text: no trailing newline, as fullmatch
 
-// ValidateName checks a shortcut name, with the message of the Python version.
+// ValidateName checks a shortcut name, with a fixed message.
 func ValidateName(name string) error {
 	if !namePattern.MatchString(name) {
 		return fmt.Errorf("invalid shortcut name '%s'. Must match ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ "+

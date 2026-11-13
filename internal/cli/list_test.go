@@ -50,7 +50,7 @@ func TestStores_GroupDescriptionShowsOnceApproved(t *testing.T) {
 	if out := e.Run("list").Stdout; strings.Contains(out, "Docker housekeeping") {
 		t.Errorf("an unapproved namespace shows its description:\n%s", out)
 	}
-	// Python's update-diff line (the description is part of what update shows) is asserted in update_test.go
+	// the update-diff line (the description is part of what update shows) is asserted in update_test.go
 	runOK(t, e, testkit.Opts{}, "update", "docker", "-y")
 	testkit.Contains(t, "list", e.Run("list").Stdout, "  Docker housekeeping\n")
 }
@@ -119,10 +119,9 @@ func TestList_HidingIsMarked(t *testing.T) {
 	testkit.Contains(t, "list", out, "Namespace docker ("+nsFile+")  [hides global]")
 }
 
-// The exact text of a list with a project, its .shortcuts.local, a namespace and a global store, as the Python
-// version printed it (checked against it by hand: the same bytes). The local entry replaces the shared one,
+// The exact text of a list with a project, its .shortcuts.local, a namespace and a global store. The local entry replaces the shared one,
 // so 'shared' has no description, and its row ends in the padding of the source column.
-func TestList_FullListingMatchesPython(t *testing.T) {
+func TestList_FullListing(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteRegistryRaw(e.Store, `{"version": 1, "description": "mine", "shortcuts": {
  "build": {"description": "Global build", "inline": "echo gb", "cwd": "/tmp"},

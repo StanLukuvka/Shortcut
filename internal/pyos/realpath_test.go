@@ -28,7 +28,7 @@ func tree(t *testing.T) *testkit.Env {
 	return e
 }
 
-// Expected values generated once by python3 -I (3.14.10) posixpath.realpath on the same tree, relative to its root.
+// Expected values are posixpath.realpath's (CPython 3.14.10) on the same tree, relative to its root.
 func TestRealpath_Vectors(t *testing.T) {
 	e := tree(t)
 	cases := []struct{ in, want string }{
@@ -110,7 +110,7 @@ func TestPaths_Normpath(t *testing.T) { // filepath.Clean; differs from posixpat
 	}
 }
 
-func TestPaths_Relpath(t *testing.T) { // values from Python 3.14 posixpath.relpath
+func TestPaths_Relpath(t *testing.T) { // values are posixpath.relpath's (CPython 3.14)
 	for _, c := range [][3]string{
 		{"/a/b", "/a", "b"}, {"/a", "/a/b", ".."}, {"/a/b/c", "/a/x/y", "../../b/c"}, {"/a", "/a", "."}, {"/a/b", "/", "a/b"},
 	} {

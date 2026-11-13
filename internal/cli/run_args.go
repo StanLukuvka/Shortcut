@@ -61,7 +61,7 @@ func isFlag(token string) bool { return len(token) > 1 && strings.HasPrefix(toke
 // bindArgs checks presence and count against the declared args, and fills defaults. It returns the words the
 // shortcut gets and its SC_ARG_* variables as "K=V". --flags are never parsed: they don't count and stay where they
 // are. A first -- is dropped, and every word after it counts, so a value can start with a dash. A failure is the
-// exit 2 of Python's fail(): the message, the usage line and, if any argument has a desc, the list.
+// exit 2 of fail(): the message, the usage line and, if any argument has a desc, the list.
 func bindArgs(display string, spec []*pyjson.Object, argv []string) ([]string, []string, error) {
 	fail := func(msg string) error {
 		text := "error: " + msg + "\nusage: " + usageLine(display, spec) + "\n"
@@ -136,8 +136,8 @@ func bindArgs(display string, spec []*pyjson.Object, argv []string) ([]string, [
 var positionalAt = regexp.MustCompile(`^\$(?:[1-9@*]|\{[1-9@*])`) // $1, $@, $*, ${1}: how a shell command reads its arguments
 
 // joinCommand turns `-- cmd word word` into one inline command. Each word stays one word, as typed, and
-// only the shortcut's own arguments stay live, because $1 is why someone quoted it past their shell. Python's
-// (?!POSITIONAL)\$ lookahead is a check at each $, since Go's regexp has none.
+// only the shortcut's own arguments stay live, because $1 is why someone quoted it past their shell. A lookahead
+// for POSITIONAL at each $ is a check in code, since Go's regexp has none.
 func joinCommand(words []string) string {
 	if len(words) == 1 {
 		return words[0]

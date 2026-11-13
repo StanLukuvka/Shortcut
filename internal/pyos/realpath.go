@@ -1,5 +1,5 @@
-// Package pyos is the part of Python's os, os.path, shlex and fcntl that shortcut's behaviour depends on, ported so
-// the answers match Python's byte for byte (path functions are lexical posixpath ones, not filepath's).
+// Package pyos is the part of os.path, shlex and fcntl behaviour that shortcut depends on, so the answers
+// are exact (path functions are lexical posixpath ones, not filepath's).
 package pyos
 
 import (

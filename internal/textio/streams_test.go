@@ -163,7 +163,7 @@ func TestStreams_ClosedStdFdsAreReopenedByTheRuntime(t *testing.T) {
 	res.WantCode(t, 0) // else the code's bits 0-2 say which of fd 0-2 was found closed, bit 3 that the write failed
 }
 
-// ShowDiff's flush (small diff, buffer not full) on a pipe nobody reads exits 141, as Python's flush() raising
+// ShowDiff's flush (small diff, buffer not full) on a pipe nobody reads exits 141, as a failed flush
 // BrokenPipeError does. `| true` is the reader that is gone before the child writes.
 func TestShowDiff_ABrokenPipeOnFlushEnds141(t *testing.T) {
 	e := testkit.New(t)

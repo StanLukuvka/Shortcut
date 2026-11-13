@@ -1,8 +1,7 @@
 package testkit
 
-// Ports of tests/test_fixtures.py. Nothing here points at the real home: the stand-in for it is a second temp dir,
-// so if the guard ever breaks these tests fail without reaching ~/.shortcuts. cmd/shortcut is an empty main until the
-// port lands, so the tests that Python ran against the real CLI run an `sh` stand-in (useBinary) and assert what
+// Tests of the sandbox. Nothing here points at the real home: the stand-in for it is a second temp dir,
+// so if the guard ever breaks these tests fail without reaching ~/.shortcuts. The tests run an `sh` stand-in (useBinary) instead of the real CLI and assert what
 // testkit did (what it launched, where, with what env); the end-to-end halves (`r go` printing "ran") belong to the
 // command tests.
 

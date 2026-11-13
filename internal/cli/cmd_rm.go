@@ -89,7 +89,7 @@ func cmdRm(s *textio.Streams, args []string) error {
 		}
 		// 2. Remove the stored copy, never a --script file
 		if cp != "" {
-			syscall.Unlink(cp) // Python's suppress(OSError)
+			syscall.Unlink(cp) // failure is ignored
 		}
 		return nil
 	})

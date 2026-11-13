@@ -75,7 +75,7 @@ func TestRunning_RIsShortForRun(t *testing.T) {
 	testkit.Contains(t, "r --help", e.Run("r", "--help").Stdout, "shortcut run|r [--global] [-y] <name>")
 }
 
-// The Python script was python3; the same branches (a #! line on a file that can't be executed, no #! line, a #! line
+// The same branches (a #! line on a file that can't be executed, no #! line, a #! line
 // on an executable) are run with sh and bash scripts.
 func TestRunning_ScriptShebangWithoutExecAndElf(t *testing.T) {
 	e := testkit.New(t)

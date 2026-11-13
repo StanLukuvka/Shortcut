@@ -19,7 +19,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
-// What init --global copies into the global store (as in the Python version): a project's exported shortcuts, or a
+// What init --global copies into the global store : a project's exported shortcuts, or a
 // folder of namespace files. Everything is planned from bytes read once, shown, and only then written, so what is
 // copied is what was reviewed. Declining writes nothing: no store, no folder, no script.
 
@@ -391,7 +391,7 @@ func installedFiles(group model.Group, importsDir string) map[string]string {
 		if !pyos.IsFile(path) {
 			continue
 		}
-		if raw, err := os.ReadFile(path); err == nil { // Python's suppress(OSError)
+		if raw, err := os.ReadFile(path); err == nil { // a read error counts as no file
 			files[pyos.Join("imports", pyos.Relpath(path, importsDir))] = approval.Reviewable(raw)
 		}
 	}
@@ -468,7 +468,7 @@ func planFiles(plan nsPlan) map[string]string {
 
 // writeNew creates path, and its folders, holding raw, and never over a file that is already there (O_EXCL, which
 // does not follow a link at the end either). Executable adds the execute bits the file got from its umask.
-// lazy: an existing file is reported with Go's text ("file exists"), not Python's "[Errno 17] ...".
+// lazy: an existing file is reported with Go's text ("file exists").
 func writeNew(path string, raw []byte, executable bool) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 		return err
@@ -495,7 +495,7 @@ func writeNew(path string, raw []byte, executable bool) error {
 }
 
 // applyImport writes the script copies (executable), then the entries, in the registry under its lock.
-// Python opens a script with "wb"; this refuses to write over one that appeared since the review, which is what the
+// This refuses to write over one that appeared since the review, which is what the
 // "would replace" check is for.
 func applyImport(storeDir string, entries *pyjson.Object, scripts []storedScript) error {
 	if err := model.InitStore(storeDir); err != nil {
