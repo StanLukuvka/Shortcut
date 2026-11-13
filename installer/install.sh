@@ -63,8 +63,12 @@ main() {
     if [ -n "${SHORTCUT_DOWNLOAD_BASE:-}" ]; then latest="$base"; else latest="$base/latest/download"; fi
     version="$(fetch "$latest/VERSION")" || die "could not find the latest release at $latest/VERSION (check the connection, or set SHORTCUT_VERSION)"
     version="$(printf '%s' "$version" | tr -d ' \r\n')"
-    [ -n "$version" ] || die "empty VERSION at $latest/VERSION"
   fi
+  # the version goes into URLs and file names
+  case "$version" in
+    '') die "empty version" ;;
+    *[!0-9A-Za-z.+-]*) die "invalid version (only letters, digits and . + - are allowed)" ;;
+  esac
   if [ -n "${SHORTCUT_DOWNLOAD_BASE:-}" ]; then down="$base"; else down="$base/download/v$version"; fi
   archive="shortcut_${version}_${os}_${arch}.tar.gz"
 
@@ -109,13 +113,20 @@ main() {
     mkdir -p "$data/shortcut"
     "$bin_dir/shortcut" completion zsh > "$data/shortcut/completion.zsh"
     if ! grep -q '# >>> shortcut completion >>>' "$HOME/.zshrc" 2>/dev/null; then
-      {
-        printf '\n# >>> shortcut completion >>>\n'
-        printf '(( $+functions[compdef] )) || { autoload -Uz compinit; compinit; }\n'
-        printf '[ -r "%s/shortcut/completion.zsh" ] && source "%s/shortcut/completion.zsh"\n' "$data" "$data"
-        printf '# <<< shortcut completion <<<\n'
-      } >> "$HOME/.zshrc"
-      say "Added a marked completion block to ~/.zshrc (open a new terminal)"
+      case "$data" in
+        *\'*|*\"*|*\$*|*\\*|*\`*)
+          # zsh would re-evaluate such a path at every startup, so it is not written
+          say "Notice: the data path contains a quote, \$, backtick or backslash, so ~/.zshrc is left alone."
+          say "  To enable zsh completion, add a line to ~/.zshrc that sources the file completion.zsh in the shortcut folder of that data path." ;;
+        *)
+          {
+            printf '\n# >>> shortcut completion >>>\n'
+            printf '(( $+functions[compdef] )) || { autoload -Uz compinit; compinit; }\n'
+            printf "[ -r '%s/shortcut/completion.zsh' ] && source '%s/shortcut/completion.zsh'\n" "$data" "$data"
+            printf '# <<< shortcut completion <<<\n'
+          } >> "$HOME/.zshrc"
+          say "Added a marked completion block to ~/.zshrc (open a new terminal)" ;;
+      esac
     fi
   fi
 

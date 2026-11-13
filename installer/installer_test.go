@@ -236,3 +236,62 @@ func TestCutOffDownloadRunsNothing(t *testing.T) {
 		t.Errorf("BIN_DIR exists after a cut-off script: %v", err)
 	}
 }
+
+// a data path zsh would re-evaluate at every startup gets no block, only a notice
+func TestUnsafeDataPathGetsNoZshBlock(t *testing.T) {
+	r := newRelease(t)
+	marker := filepath.Join(r.e.Tmp, "marker")
+	data := filepath.Join(r.e.Tmp, "da ta\"x$(touch "+marker+")")
+	res := r.install(map[string]string{"XDG_DATA_HOME": data})
+	if res.Code != 0 {
+		t.Fatalf("install failed (%d): %s", res.Code, res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, "Notice: the data path contains") {
+		t.Errorf("no notice printed: %q", res.Stdout)
+	}
+	if b, err := os.ReadFile(filepath.Join(r.e.Home, ".zshrc")); err == nil && strings.Contains(string(b), zshBlock) {
+		t.Errorf(".zshrc got a block for an unsafe path:\n%s", b)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Errorf("the marker command ran: %v", err)
+	}
+}
+
+// a data path with a space still gets a block that reads the path literally
+func TestDataPathWithSpaceGetsWorkingBlock(t *testing.T) {
+	r := newRelease(t)
+	data := filepath.Join(r.e.Tmp, "da ta")
+	if res := r.install(map[string]string{"XDG_DATA_HOME": data}); res.Code != 0 {
+		t.Fatalf("install failed (%d): %s", res.Code, res.Stderr)
+	}
+	rc := read(t, filepath.Join(r.e.Home, ".zshrc"))
+	if !strings.Contains(rc, zshBlock) {
+		t.Fatalf("no block in .zshrc:\n%s", rc)
+	}
+	var line string
+	for _, l := range strings.Split(rc, "\n") {
+		if strings.HasPrefix(l, "[ -r ") {
+			line = l
+		}
+	}
+	// run the line in sh with `source` swapped for a printf: the path must come through as one word
+	res := r.e.RunCmd(testkit.Opts{}, "sh", "-c", strings.Replace(line, "&& source ", "&& printf %s ", 1))
+	if want := filepath.Join(data, "shortcut", "completion.zsh"); res.Stdout != want {
+		t.Errorf("block sources %q, want %q (code %d, stderr %q)", res.Stdout, want, res.Code, res.Stderr)
+	}
+}
+
+func TestUnsafeVersionIsRefused(t *testing.T) {
+	for _, v := range []string{"../x", "1.0/../x"} {
+		t.Run(v, func(t *testing.T) {
+			r := newRelease(t)
+			res := r.install(map[string]string{"SHORTCUT_VERSION": v})
+			if res.Code != 1 || !strings.Contains(res.Stderr, "invalid version") {
+				t.Errorf("code %d, stderr %q; want exit 1 and an invalid version error", res.Code, res.Stderr)
+			}
+			if _, err := os.Stat(filepath.Join(r.bin(), "shortcut")); !os.IsNotExist(err) {
+				t.Errorf("a binary was installed: %v", err)
+			}
+		})
+	}
+}
