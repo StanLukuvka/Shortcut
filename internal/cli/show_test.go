@@ -229,8 +229,8 @@ func TestShow_AScriptThatIsNotUTF8(t *testing.T) {
 	}
 }
 
-// py: the show, location and --json lines of test_global_flag_reaches_a_hidden_shortcut; its rm and run lines are
-// P-5's and P-3's, so that test stays unclaimed until then.
+// The show, location and --json lines of test_global_flag_reaches_a_hidden_shortcut; the whole test is ported in
+// rm_test.go (TestStores_GlobalFlagReachesAHiddenShortcut).
 func TestShow_GlobalFlagReachesAHiddenShortcut(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"build": inline("echo global"), "tool": map[string]any{"script": "scripts/tool.sh", "description": "d"}})

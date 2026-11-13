@@ -228,7 +228,6 @@ func TestStores_AProjectShortcutOverAGlobalNamespaceIsAnnounced(t *testing.T) {
 }
 
 // py: test_stores.py::test_broken_project_stops_every_run_inside_it
-// The rm assertions (rm outside -y fails inside the broken project, rm --global outside -y works) wait for P-5.
 func TestStores_BrokenProjectStopsEveryRunInsideIt(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"outside": inline("echo outside")})
@@ -255,6 +254,15 @@ func TestStores_BrokenProjectStopsEveryRunInsideIt(t *testing.T) {
 	contains(t, "show", e.RunWith(in(proj), "show", "outside").Stdout, "Scope:       global")
 	contains(t, "show nothing", e.RunWith(in(proj), "show", "nothing").Stderr, "'nothing' not found")
 
+	// rm doesn't reach past the broken file either; --global does
+	eq(t, "rm", e.RunWith(in(proj), "rm", "outside", "-y").Code, 1)
+	if _, has := e.LoadGlobal()["outside"]; !has {
+		t.Error("rm reached past the broken project")
+	}
+	eq(t, "rm --global", e.RunWith(in(proj), "rm", "--global", "outside", "-y").Code, 0)
+	if _, has := e.LoadGlobal()["outside"]; has {
+		t.Error("rm --global left it")
+	}
 	contains(t, "list", e.RunWith(in(proj), "list").Stderr, "corrupt registry")
 	if code := e.RunWith(in(proj), "update").Code; code != 1 {
 		t.Errorf("update: exit %d", code)
@@ -299,7 +307,6 @@ func TestStores_BrokenProjectRefusesANamespaceItImported(t *testing.T) {
 }
 
 // py: test_stores.py::test_an_unknown_top_level_field_stops_the_project_too
-// The rm assertions (rm inside -y refused, rm --local mine -y works) wait for P-5.
 func TestStores_AnUnknownTopLevelFieldStopsTheProjectToo(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"outside": inline("echo outside")})
@@ -323,6 +330,15 @@ func TestStores_AnUnknownTopLevelFieldStopsTheProjectToo(t *testing.T) {
 	}
 	contains(t, "show", res.Stdout, "Scope:       project")
 	contains(t, "show", res.Stdout, "Approval:    changed")
+	// show and rm --local find its entries
+	eq(t, "rm inside", e.RunWith(in(proj), "rm", "inside", "-y").Code, 1) // a project entry, as ever
+	res = e.RunWith(in(proj), "rm", "--local", "mine", "-y")
+	if res.Code != 0 {
+		t.Errorf("rm --local: exit %d: %s", res.Code, res.Stderr)
+	}
+	if _, has := localData(t, proj)["mine"]; has {
+		t.Error("mine is still in .shortcuts.local")
+	}
 	contains(t, "registry", readFile(t, registry), `"bogus":1`)
 }
 

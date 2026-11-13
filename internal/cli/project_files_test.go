@@ -282,3 +282,78 @@ func TestProjectFiles_ShowNamesTheFileThatDefinesIt(t *testing.T) {
 	contains(t, "show", res.Stdout, "Defined in:  "+filepath.Join(proj, ".shortcuts.local"))
 	contains(t, "show", res.Stdout, "Source:      overridden")
 }
+
+// py: test_project_files.py::test_the_cli_never_writes_the_shared_file
+func TestProjectFiles_TheCliNeverWritesTheSharedFile(t *testing.T) {
+	e := testkit.New(t)
+	proj := overlaid(t, e)
+	before := readFile(t, filepath.Join(proj, ".shortcuts"))
+	source := e.Script("tool.sh", "#!/usr/bin/env bash\n")
+	for _, args := range [][]string{
+		{"new", "a", "--local", "--", "echo a"},
+		{"new", "b", "--script", source, "--desc", "d", "--local"},
+		{"rm", "--local", "keep", "-y"},
+		{"rm", "--local", "swap", "-y"},
+	} {
+		eq(t, strings.Join(args, " "), e.RunWith(in(proj), args...).Code, 0)
+	}
+	eq(t, "shared", readFile(t, filepath.Join(proj, ".shortcuts")), before)
+}
+
+// py: test_project_files.py::test_a_write_without_local_is_refused_for_a_project_entry
+func TestProjectFiles_AWriteWithoutLocalIsRefusedForAProjectEntry(t *testing.T) {
+	e := testkit.New(t)
+	proj := overlaid(t, e)
+	for _, args := range [][]string{{"rm", "keep", "-y"}, {"rm", "mine", "-y"}} {
+		res := e.RunWith(in(proj), args...)
+		eq(t, strings.Join(args, " "), res.Code, 1)
+		contains(t, strings.Join(args, " "), res.Stderr, "shortcut doesn't change .shortcuts")
+	}
+}
+
+// py: test_project_files.py::test_rm_local_hides_a_shared_entry_and_undoes_itself
+func TestProjectFiles_RmLocalHidesASharedEntryAndUndoesItself(t *testing.T) {
+	e := testkit.New(t)
+	proj := overlaid(t, e)
+	contains(t, "hide", e.RunWith(in(proj), "rm", "--local", "keep", "-y").Stdout, "Hid shortcut")
+	if v, has := localData(t, proj)["keep"]; !has || v != nil {
+		t.Errorf("keep = %v, want null", v)
+	}
+	eq(t, "hidden", e.RunWith(in(proj), "r", "keep").Code, 1)
+	contains(t, "undo", e.RunWith(in(proj), "rm", "--local", "keep", "-y").Stdout, "Removed 'keep'")
+	eq(t, "back", e.RunWith(in(proj), "r", "keep").Stdout, "shared keep\n")
+}
+
+// py: test_project_files.py::test_rm_local_of_an_override_brings_the_shared_entry_back
+func TestProjectFiles_RmLocalOfAnOverrideBringsTheSharedEntryBack(t *testing.T) {
+	e := testkit.New(t)
+	proj := overlaid(t, e)
+	eq(t, "rm", e.RunWith(in(proj), "rm", "--local", "swap", "-y").Code, 0)
+	eq(t, "run", e.RunWith(in(proj), "r", "-y", "swap").Stdout, "shared swap\n")
+}
+
+// py: test_project_files.py::test_rm_local_says_the_shared_entry_applies_again
+func TestProjectFiles_RmLocalSaysTheSharedEntryAppliesAgain(t *testing.T) {
+	e := testkit.New(t)
+	proj := overlaid(t, e)
+	rc, out := e.InTerminal(in(proj), []testkit.Key{{Wait: "[y/N]", Send: y("n\n")}}, "rm", "--local", "swap")
+	eq(t, "exit", rc, 1)
+	contains(t, "removes", out, "Removes your 'swap' from "+filepath.Join(proj, ".shortcuts.local")+".")
+	contains(t, "again", out, "The 'swap' in .shortcuts applies again.")
+	_, out = e.InTerminal(in(proj), []testkit.Key{{Wait: "[y/N]", Send: y("n\n")}}, "rm", "--local", "gone")
+	contains(t, "gone", out, "Stops hiding 'gone'")
+}
+
+// py: test_project_files.py::test_a_cli_write_keeps_the_approval
+func TestProjectFiles_ACliWriteKeepsTheApproval(t *testing.T) {
+	e := testkit.New(t)
+	proj := overlaid(t, e)
+	res := e.RunWith(in(proj), "new", "more", "--local", "--", "echo more")
+	if strings.Contains(res.Stderr, "needs approving") {
+		t.Errorf("new: %q", res.Stderr)
+	}
+	eq(t, "more", e.RunWith(in(proj), "r", "more").Stdout, "more\n")
+	eq(t, "keep", e.RunWith(in(proj), "r", "keep").Stdout, "shared keep\n")
+	eq(t, "rm", e.RunWith(in(proj), "rm", "--local", "more", "-y").Code, 0)
+	eq(t, "keep again", e.RunWith(in(proj), "r", "keep").Stdout, "shared keep\n")
+}
