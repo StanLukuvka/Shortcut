@@ -156,7 +156,7 @@ func entryFields(name string, ns Namespace, g model.Group) (*model.Entry, error)
 			return nil, err
 		}
 	}
-	for _, flag := range ns.List("arg_desc") {
+	for _, flag := range ns.List("argDesc") {
 		argName, text, hasText := strings.Cut(flag, "=")
 		var match *pyjson.Object
 		for _, a := range args {

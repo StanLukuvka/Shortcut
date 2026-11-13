@@ -44,12 +44,20 @@ func TestCompletion_Bash(t *testing.T) {
 			t.Errorf("bash script lacks %q", want)
 		}
 	}
-	if bash, _ := completionFiles.ReadFile("completion/bash.txt"); res.Stdout != string(bash) || e.Run("completion").Stdout != res.Stdout {
-		t.Error("bash is the script of `completion bash` and of `completion`")
+	if bash, _ := completionFiles.ReadFile("completion/bash.txt"); res.Stdout != string(bash) {
+		t.Error("bash is the script of `completion bash`")
 	}
-	// The shell is a choice; argparse's message and exit 2 come from the parser (argparse_test.go).
-	if r := e.Run("completion", "powershell"); r.Code != 2 || r.Stdout != "" {
-		t.Errorf("completion powershell: exit %d stdout %q", r.Code, r.Stdout)
+	// The shell is a required choice.
+	for _, c := range []struct {
+		argv []string
+		want string
+	}{
+		{[]string{"completion", "powershell"}, "error: invalid choice 'powershell' (choose from bash, fish, zsh)\nTry 'shortcut completion -h' for more information.\n"},
+		{[]string{"completion"}, "error: missing shell\nTry 'shortcut completion -h' for more information.\n"},
+	} {
+		if r := e.Run(c.argv...); r.Code != 2 || r.Stdout != "" || r.Stderr != c.want {
+			t.Errorf("%v: exit %d stdout %q stderr %q", c.argv, r.Code, r.Stdout, r.Stderr)
+		}
 	}
 }
 

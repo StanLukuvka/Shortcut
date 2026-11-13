@@ -499,11 +499,15 @@ func TestSymlinkSafety_InitSkipsSymlinkedSourceScript(t *testing.T) {
 	}
 }
 
-// A source that ends in .git but starts with a dash is a path for git, never an option (Python lacks the `--`; deliberate).
+// A source that ends in .git but starts with a dash is a path for git, never an option. Without `--` the parser
+// refuses it as an unknown option; after `--` it reaches git behind git's own `--`.
 func TestInit_LeadingDashGitSourceIsNotAnOption(t *testing.T) {
 	e := testkit.New(t)
 	marker := filepath.Join(e.Tmp, "pwned")
-	res := e.Run("init", "--global", "--upload-pack=touch "+marker+";x.git", "-y")
+	source := "--upload-pack=touch " + marker + ";x.git"
+	e.Run("init", "--global", source, "-y").WantCode(t, 2)
+	testkit.NotExist(t, marker)
+	res := e.Run("init", "--global", "-y", "--", source)
 	res.WantCode(t, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "error: failed to clone git repository from --upload-pack=")
 	testkit.NotExist(t, marker)

@@ -35,9 +35,9 @@ func cmdShow(s *textio.Streams, args []string) error {
 		return err
 	}
 	if ns.Bool("json") {
-		return showJSON(s, ns.List("name"), ns.Bool("skip_local"))
+		return showJSON(s, ns.List("name"), ns.Bool("skipLocal"))
 	}
-	resolved, err := model.ResolveName(ns.List("name"), ns.Bool("skip_local"))
+	resolved, err := model.ResolveName(ns.List("name"), ns.Bool("skipLocal"))
 	if err != nil {
 		return err
 	}

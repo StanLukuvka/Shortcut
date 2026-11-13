@@ -297,18 +297,14 @@ writeExecutable -> open(path, "w") + chmod 0o755
 writeLocal -> write_local
 
 [internal/cli/argparse]
+# The parser is no longer a port: it is a small loop with no abbreviations or combined short flags.
+# These names only say where the Go code started.
 Exclusive -> add_mutually_exclusive_group
 Namespace -> argparse's Namespace
 New -> Parser(prog="shortcut <cmd>")
 Parse -> parse_args
+UsageError -> (new: "error: ..." and a Try line, no Python equivalent)
 PyRepr -> repr() of a str
-argError -> ArgumentError
-matchPartial -> _match_arguments_partial
-nargsPattern -> _get_nargs_pattern
-optTuple -> _parse_optional
-optionCount -> _match_argument
-optionTuples -> _get_option_tuples
-parseKnown -> _parse_known_args
 
 [internal/difflib]
 SplitLinesKeepEnds -> str.splitlines(keepends=True)
