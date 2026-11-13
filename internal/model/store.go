@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -46,7 +47,7 @@ func ResolveRunDir(cwd *string, g Group, callerCwd string) string {
 	if cwd == nil || *cwd == "" || *cwd == Caller {
 		return callerCwd
 	}
-	return pyos.Normpath(pyos.Join(g.Folder(), pyos.ExpandUser(*cwd)))
+	return filepath.Clean(pyos.Join(g.Folder(), pyos.ExpandUser(*cwd)))
 }
 
 // LoadEntry is an entry as its group allows it: EntryFromValue, plus where 'export' and 'from' can be.
@@ -171,12 +172,12 @@ func LoadStore(storeDir string) Store {
 				problems = append(problems, fmt.Sprintf("import '%s' in %s must be a path", name, main.File))
 			case !strings.HasSuffix(path, ImportSuffix):
 				problems = append(problems, fmt.Sprintf("import '%s' in %s must be a %s file", name, main.File, ImportSuffix))
-			case pyos.Basename(path) == ImportSuffix:
+			case filepath.Base(path) == ImportSuffix:
 				problems = append(problems, fmt.Sprintf("import '%s' in %s: %s", name, main.File, bareImport))
 			case taken:
 				problems = append(problems, fmt.Sprintf("namespace '%s' is imported twice in %s", name, storeDir))
 			default:
-				sources[name] = pyos.Normpath(pyos.Join(main.Folder(), pyos.ExpandUser(path)))
+				sources[name] = filepath.Clean(pyos.Join(main.Folder(), pyos.ExpandUser(path)))
 			}
 		}
 	}

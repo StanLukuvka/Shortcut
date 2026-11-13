@@ -2,6 +2,7 @@ package pyos
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -35,17 +36,12 @@ func IsLink(path string) bool {
 	return err == nil && st.Mode()&os.ModeSymlink != 0
 }
 
-// Suffix is pathlib.PurePath(p).suffix as Python 3.14 has it: from the last dot of the file name (the last component
-// that is not empty or "."), unless that is its first character ('.bashrc' has none); 'a.' has '.'.
+// Suffix is pathlib.PurePath(p).suffix as Python 3.14 has it: from the last dot of the file name, unless that is
+// its first character ('.bashrc' has none); 'a.' has '.'.
 func Suffix(p string) string {
-	name := ""
-	for _, part := range strings.Split(p, "/") {
-		if part != "" && part != "." {
-			name = part
-		}
+	base := filepath.Base(filepath.Clean(p))
+	if base == ".." || (strings.HasPrefix(base, ".") && strings.Count(base, ".") == 1) {
+		return ""
 	}
-	if i := strings.LastIndexByte(name, '.'); i > 0 && name != ".." {
-		return name[i:]
-	}
-	return ""
+	return filepath.Ext(base)
 }

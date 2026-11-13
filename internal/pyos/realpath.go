@@ -108,16 +108,11 @@ func Abs(p string) string {
 			p = Join(cwd, p)
 		}
 	}
-	return Normpath(p)
-}
-
-// Normpath is posixpath.normpath: collapses //, /./ and a/../ lexically; "" is "."; a leading // is kept, /// is /.
-func Normpath(p string) string {
-	if strings.HasPrefix(p, "//") && !strings.HasPrefix(p, "///") {
-		return "/" + filepath.Clean(p)
-	}
 	return filepath.Clean(p)
 }
+
+// Normpath is filepath.Clean. lazy: kept only because Realpath's body stays unedited; callers use filepath.Clean.
+func Normpath(p string) string { return filepath.Clean(p) }
 
 // Relpath is posixpath.relpath(path, start): both made absolute, then the shortest ../ walk between them.
 // lazy: Python raises ValueError for an empty path; here it is the cwd. Callers pass real paths. A path pair Rel
@@ -130,36 +125,16 @@ func Relpath(path, start string) string {
 	return rel
 }
 
-// IsRelativeTo is pathlib.Path.is_relative_to: component-wise, so /ab is not under /a. Like pathlib it drops "."
-// and empty components but does not look at "..". lazy: a leading // (POSIX-special root) is treated as /.
+// IsRelativeTo reports whether path is other or lies below it, lexically and component-wise (/a/bc is not under
+// /a/b). filepath.Rel cleans both sides, so ".." components cannot climb out; a relative/absolute mix is an error.
 func IsRelativeTo(path, other string) bool {
-	if strings.HasPrefix(path, "/") != strings.HasPrefix(other, "/") {
-		return false
-	}
-	a, b := pathParts(path), pathParts(other)
-	if len(b) > len(a) {
-		return false
-	}
-	for i := range b {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
+	rel, err := filepath.Rel(other, path)
+	return err == nil && filepath.IsLocal(rel)
 }
 
-func pathParts(p string) []string {
-	var out []string
-	for _, c := range strings.Split(p, "/") {
-		if c != "" && c != "." {
-			out = append(out, c)
-		}
-	}
-	return out
-}
-
-// Join is posixpath.join: a part starting with / restarts the path; join("", "a") = "a"; join("/", "a") = "/a";
-// join("a", "") = "a/".
+// Join is posixpath.join, not filepath.Join: a part starting with / restarts the path; join("", "a") = "a"; join("/", "a") = "/a";
+// join("a", "") = "a/". store.go and store_write.go rely on the restart (an absolute script path stays as it
+// is); filepath.Join would glue it under the folder.
 func Join(a string, parts ...string) string {
 	path := a
 	for _, b := range parts {
@@ -174,20 +149,3 @@ func Join(a string, parts ...string) string {
 	}
 	return path
 }
-
-// pySplit is posixpath.split: split("/a") = ("/", "a"), split("a/b/") = ("a/b", ""); a head's trailing slashes are
-// stripped unless it is all slashes.
-func pySplit(p string) (head, tail string) {
-	i := strings.LastIndex(p, "/") + 1
-	head, tail = p[:i], p[i:]
-	if head != "" && strings.Trim(head, "/") != "" {
-		head = strings.TrimRight(head, "/")
-	}
-	return head, tail
-}
-
-// Dirname returns everything before the last slash, as posixpath.dirname does.
-func Dirname(p string) string { h, _ := pySplit(p); return h }
-
-// Basename returns everything after the last slash, as posixpath.basename does.
-func Basename(p string) string { _, t := pySplit(p); return t }
