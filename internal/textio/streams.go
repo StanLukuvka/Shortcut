@@ -63,7 +63,8 @@ func (w *Writer) Write(p []byte) (int, error) { return len(p), w.put(w.safe(stri
 
 // safe is Safe, and on stderr also backslashreplace: Python decodes argv with surrogateescape, so a stray byte 0xNN is
 // U+DCNN there and stderr (errors='backslashreplace') prints \udcnn; a lone surrogate (kept as WTF-8 ED A0..BF xx) prints \udxxx.
-// stdout stays raw: Python's is strict there, so no such text reaches it.
+// stdout stays raw: Python's is strict there, so a non-UTF-8 text would crash it; Go prints the bytes instead (accepted
+// divergence in the plan, e.g. the path in `update -y`'s "Approved <path>").
 func (w *Writer) safe(text string) string {
 	text = Safe(text)
 	if !w.escape {
@@ -74,8 +75,13 @@ func (w *Writer) safe(text string) string {
 
 func (w *Writer) WriteString(text string) (int, error) { return len(text), w.put(w.safe(text)) }
 
-// WriteStyled is write_styled: past Safe. Everything from a file must already be Safe.
-func (w *Writer) WriteStyled(text string) error { return w.put(text) }
+// WriteStyled is write_styled: past Safe, but not past the stderr escape. Everything from a file must already be Safe.
+func (w *Writer) WriteStyled(text string) error {
+	if w.escape {
+		text = backslashReplace(text)
+	}
+	return w.put(text)
+}
 
 func (w *Writer) put(text string) error {
 	if w.direct {

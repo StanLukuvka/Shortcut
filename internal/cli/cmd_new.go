@@ -266,10 +266,7 @@ func newFromCopy(s *textio.Streams, ns Namespace, group model.Group, fields *mod
 	}
 	entry := *fields
 	entry.Script = &rel
-	entry.Description = "(no description)"
-	if ns.Set("desc") {
-		entry.Description = ns.Str("desc")
-	}
+	entry.Description = descOr(ns, "(no description)")
 	if err := register(s, group, &entry, writeScript); err != nil {
 		return err
 	}

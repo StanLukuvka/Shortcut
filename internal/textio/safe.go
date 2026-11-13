@@ -67,15 +67,8 @@ func isControl(r rune) bool {
 // backslashReplace prints each byte that is not UTF-8 as \udcNN and each lone surrogate (WTF-8 ED A0..BF 80..BF) as
 // \udXXX, the way Python's backslashreplace prints the surrogateescape'd str.
 func backslashReplace(text string) string {
-	i := 0
-	for i < len(text) && text[i] < 0x80 {
-		i++
-	}
-	if i == len(text) {
-		return text
-	}
 	var b strings.Builder
-	for i = 0; i < len(text); {
+	for i := 0; i < len(text); {
 		r, n := utf8.DecodeRuneInString(text[i:])
 		switch {
 		case r != utf8.RuneError || n != 1:

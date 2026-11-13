@@ -19,8 +19,8 @@ func TestInit_LeadingDashGitSourceIsNotAnOption(t *testing.T) {
 	notExist(t, marker)
 }
 
-// py: no counterpart; Python stores "" for an explicit empty --desc on a script template too.
-func TestNew_EmptyDescOnScriptTemplateIsKept(t *testing.T) {
+// py: cli.py:100,122 keep an explicit empty --desc (`is not None`) on a plain new.
+func TestNew_EmptyDescOnPlainNewIsKept(t *testing.T) {
 	e := testkit.New(t)
 	runOK(t, e, testkit.Opts{}, "new", "plain", "--desc", "")
 	runOK(t, e, testkit.Opts{}, "new", "dflt")
@@ -48,4 +48,21 @@ func TestStderr_NonUTF8ArgvPrintsAsEscapes(t *testing.T) {
 			t.Errorf("%q: exit %d stdout %q stderr %q, want exit %d stderr %q", c.args, res.Code, res.Stdout, res.Stderr, c.code, c.want)
 		}
 	}
+}
+
+// py: cli.py:145,175 store `parsed.desc or "(no description)"`: an empty --desc on --copy counts as none.
+func TestNew_EmptyDescOnCopyIsReplaced(t *testing.T) {
+	e := testkit.New(t)
+	script := e.Script("f.sh", "#!/bin/sh\necho hi\n")
+	runOK(t, e, testkit.Opts{}, "new", "x", "--copy", script, "--desc", "")
+	eq(t, "desc", e.LoadGlobal()["x"].(map[string]any)["description"], "(no description)")
+}
+
+// Python prints the "-> cwd" line on stderr with backslashreplace: a 0xff in the directory name is \udcff.
+func TestRun_CwdLineEscapesNonUTF8(t *testing.T) {
+	e := testkit.New(t)
+	proj := e.Project(map[string]any{"hello": inline("true")}, testkit.Name("p\xffroj"), testkit.Approved())
+	res := e.RunWith(testkit.Opts{Cwd: proj}, "run", "hello")
+	eq(t, "exit", res.Code, 0)
+	contains(t, "stderr", res.Stderr, "p\\udcffroj")
 }
