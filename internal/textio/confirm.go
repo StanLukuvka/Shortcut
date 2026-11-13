@@ -23,6 +23,10 @@ func Ask(s *Streams, prompt string, accept []string) bool {
 	if accept == nil {
 		accept = yes
 	}
+	// Catch SIGINT before the prompt is shown: whoever sees the prompt (a person, a test) may press Ctrl-C at once.
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, syscall.SIGINT)
+	defer signal.Stop(interrupt)
 	s.Out.flushOrAbort()
 	s.Err.Write([]byte(prompt))
 	if s.in == nil {
@@ -37,9 +41,6 @@ func Ask(s *Streams, prompt string, accept []string) bool {
 		line, err := s.in.ReadString('\n')
 		got <- result{line, err}
 	}()
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, syscall.SIGINT)
-	defer signal.Stop(interrupt)
 	select {
 	case r := <-got:
 		if r.err != nil && r.line == "" {
