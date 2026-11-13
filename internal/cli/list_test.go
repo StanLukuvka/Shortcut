@@ -166,3 +166,17 @@ func TestList_NamespaceApprovalIsSingular(t *testing.T) {
 		"ps": map[string]any{"inline": "docker ps -a", "description": "list"}}))
 	testkit.Contains(t, "changed", e.Run("list").Stdout, ") changed since you approved it. Review it with")
 }
+
+// A description that is not a string, in a project file (refused) or in a global entry (shown), never panics; it never panics.
+func TestStores_ListSurvivesNonStringDescription(t *testing.T) {
+	e := testkit.New(t)
+	proj := filepath.Join(e.Home, "badlist")
+	e.WriteStore(filepath.Join(proj, ".shortcuts"), map[string]any{
+		"description": 5, "x": map[string]any{"inline": "true"}})
+	e.WriteStore(e.Store, map[string]any{"g": map[string]any{"inline": "true", "description": 5}})
+	res := e.RunWith(testkit.Opts{Cwd: proj}, "list")
+	if strings.Contains(res.Stderr, "panic") || strings.Contains(res.Stderr, "goroutine") {
+		t.Fatalf("list panicked:\n%s", res.Stderr)
+	}
+	testkit.Matches(t, res.Stdout, `g +caller +5`)
+}

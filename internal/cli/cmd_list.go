@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -113,8 +114,8 @@ func cmdList(s *textio.Streams, args []string) error {
 			return
 		}
 		s.Out.WriteString(title + ":\n")
-		if d := g.Data.Vals["description"]; pyTruthy(d) {
-			s.Out.WriteString("  " + pyStr(d) + "\n")
+		if d := textOf(g.Data.Vals["description"]); d != "" {
+			s.Out.WriteString("  " + d + "\n")
 		}
 		type row struct{ name, mode, source, desc string }
 		var rows []row
@@ -131,18 +132,15 @@ func cmdList(s *textio.Streams, args []string) error {
 			if data == nil {
 				data = &pyjson.Object{}
 			}
-			desc := ""
-			if d, ok := data.Get("description"); ok {
-				desc = pyStr(d)
-			}
+			desc := textOf(data.Vals["description"])
 			if globalNames[name] && g.NeedsApproval() && g.Name == "" {
 				desc += "  [hides global]"
 			} else if localNames[name] && !g.NeedsApproval() {
 				desc += "  [hidden here by project]"
 			}
 			mode := model.Caller
-			if c := data.Vals["cwd"]; pyTruthy(c) {
-				mode = pyStr(c)
+			if c := textOf(data.Vals["cwd"]); c != "" {
+				mode = c
 			}
 			source := ""
 			if g.LocalFile != "" {
@@ -203,3 +201,15 @@ func globalNamesOf(stores []model.Store) map[string]bool {
 
 // usable reports whether the group's file can be used (it has no error).
 func usable(g model.Group) bool { return g.Error == nil || *g.Error == "" }
+
+// textOf is a field's text. A global store entry is not validated before it is listed, so a field that is not a string
+// shows as it was written (a number as its digits) instead of failing.
+func textOf(v pyjson.Value) string {
+	switch x := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return x
+	}
+	return fmt.Sprint(v)
+}

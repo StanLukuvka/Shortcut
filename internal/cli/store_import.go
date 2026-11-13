@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"maps"
 	"os"
 	"slices"
@@ -206,7 +207,7 @@ func planImport(sourceBase, destStoreDir string, destRegistry, sourceRegistry *p
 			continue
 		}
 		if err := model.ValidateName(name); err != nil { // untrusted source
-			skipped = append(skipped, pyRepr(name)+" (invalid name: "+err.Error()+")")
+			skipped = append(skipped, fmt.Sprintf("%q", name)+" (invalid name: "+err.Error()+")")
 			continue
 		}
 

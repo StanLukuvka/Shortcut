@@ -136,8 +136,7 @@ func cloneTemp(source string) (string, func(), error) {
 		case errors.Is(err, exec.ErrNotFound):
 			detail = "git: not found in PATH" // Python's "[Errno 2] No such file or directory: 'git'"
 		case errors.As(err, &exit):
-			detail = "Command '['git', 'clone', '--depth', '1', " + pyRepr(source) + ", " + pyRepr(dir) + "]'" +
-				" returned non-zero exit status " + strconv.Itoa(exit.ExitCode()) + "."
+			detail = "git clone exited with status " + strconv.Itoa(exit.ExitCode())
 		default:
 			detail = err.Error()
 		}

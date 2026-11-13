@@ -13,7 +13,7 @@ func oneLine(text string) string { return strings.ReplaceAll(text, "\n", "\\n") 
 
 func argLabel(a *pyjson.Object) string {
 	label, _ := a.Vals["name"].(string)
-	if pyTruthy(a.Vals["rest"]) {
+	if a.Vals["rest"] == true {
 		label += "..."
 	}
 	return label
@@ -23,7 +23,7 @@ func argLabel(a *pyjson.Object) string {
 func usageLine(display string, spec []*pyjson.Object) string {
 	parts := []string{"shortcut r", display}
 	for _, a := range spec {
-		if pyTruthy(a.Vals["required"]) {
+		if a.Vals["required"] == true {
 			parts = append(parts, "<"+argLabel(a)+">")
 		} else {
 			parts = append(parts, "["+argLabel(a)+"]")
@@ -39,7 +39,7 @@ func argLines(spec []*pyjson.Object) []string {
 	width, needWidth := 0, 0
 	for i, a := range spec {
 		need := "optional"
-		if pyTruthy(a.Vals["required"]) {
+		if a.Vals["required"] == true {
 			need = "required"
 		} else if d, ok := a.Vals["default"].(string); ok {
 			need = "default: " + oneLine(pyos.ShellQuote(d))
@@ -66,7 +66,7 @@ func bindArgs(display string, spec []*pyjson.Object, argv []string) ([]string, [
 	fail := func(msg string) error {
 		text := "error: " + msg + "\nusage: " + usageLine(display, spec) + "\n"
 		for _, a := range spec {
-			if pyTruthy(a.Vals["desc"]) {
+			if d, _ := a.Vals["desc"].(string); d != "" {
 				text += strings.Join(argLines(spec), "\n") + "\n"
 				break
 			}
@@ -93,7 +93,7 @@ func bindArgs(display string, spec []*pyjson.Object, argv []string) ([]string, [
 			last = i
 		}
 	}
-	hasRest := len(spec) > 0 && pyTruthy(spec[len(spec)-1].Vals["rest"])
+	hasRest := len(spec) > 0 && spec[len(spec)-1].Vals["rest"] == true
 	if len(positional) > len(spec) && !hasRest {
 		return nil, nil, fail("too many arguments")
 	}
@@ -112,12 +112,12 @@ func bindArgs(display string, spec []*pyjson.Object, argv []string) ([]string, [
 			if d, ok := a.Vals["default"].(string); ok {
 				values = []string{d}
 				fill = append(fill, d)
-			} else if pyTruthy(a.Vals["required"]) {
+			} else if a.Vals["required"] == true {
 				return nil, nil, fail("missing <" + name + ">")
 			} else {
 				fill = append(fill, "") // keeps a later default at its own position
 			}
-		} else if pyTruthy(a.Vals["required"]) && strings.Join(values, "") == "" {
+		} else if a.Vals["required"] == true && strings.Join(values, "") == "" {
 			return nil, nil, fail("<" + name + "> can't be empty")
 		}
 		value := strings.Join(values, "")

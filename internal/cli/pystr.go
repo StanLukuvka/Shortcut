@@ -1,15 +1,9 @@
 package cli
 
 import (
-	"encoding/json"
-	"fmt"
-	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
-
-	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
 )
 
 // Python-semantics shims: str and repr behaviour the frozen output depends on.
@@ -62,63 +56,6 @@ func replaceInvalidUTF8(raw []byte) string {
 	return b.String()
 }
 
-// pyTruthy is Python's bool() of a JSON value.
-func pyTruthy(v pyjson.Value) bool {
-	switch x := v.(type) {
-	case nil:
-		return false
-	case bool:
-		return x
-	case string:
-		return x != ""
-	case json.Number:
-		f, _ := strconv.ParseFloat(string(x), 64)
-		return f != 0
-	case []pyjson.Value:
-		return len(x) > 0
-	case *pyjson.Object:
-		return len(x.Keys) > 0
-	}
-	return true
-}
-
-// pyStr is Python's str() of a JSON value: a string as it is, the rest as repr shows it.
-func pyStr(v pyjson.Value) string {
-	switch x := v.(type) {
-	case nil:
-		return "None"
-	case bool:
-		if x {
-			return "True"
-		}
-		return "False"
-	case string:
-		return x
-	case json.Number:
-		return string(x)
-	case []pyjson.Value:
-		parts := make([]string, len(x))
-		for i, e := range x {
-			parts[i] = reprOf(e)
-		}
-		return "[" + strings.Join(parts, ", ") + "]"
-	case *pyjson.Object:
-		parts := make([]string, len(x.Keys))
-		for i, k := range x.Keys {
-			parts[i] = pyRepr(k) + ": " + reprOf(x.Vals[k])
-		}
-		return "{" + strings.Join(parts, ", ") + "}"
-	}
-	return fmt.Sprint(v)
-}
-
-func reprOf(v pyjson.Value) string {
-	if str, ok := v.(string); ok {
-		return pyRepr(str)
-	}
-	return pyStr(v)
-}
-
 // padRight is f"{s:<n}": padded to n code points, never cut.
 func padRight(s string, n int) string {
 	if w := utf8.RuneCountInString(s); w < n {
@@ -126,9 +63,6 @@ func padRight(s string, n int) string {
 	}
 	return s
 }
-
-// pyRepr is repr() of a str, which argparse needs for its messages too.
-var pyRepr = argparse.PyRepr
 
 // splitOnce is str.split(None, 1): the first word and what follows it, if anything.
 func splitOnce(s string) []string {
