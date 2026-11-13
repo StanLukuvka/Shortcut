@@ -102,9 +102,9 @@ func Need(t testing.TB, programs ...string) {
 // Inline is a shortcut that runs this shell text.
 func Inline(text string) map[string]any { return map[string]any{"inline": text} }
 
-// NS is the body of a version 2 namespace or store file holding these shortcuts.
+// NS is the body of a version 1 namespace or store file holding these shortcuts.
 func NS(shortcuts map[string]any) map[string]any {
-	return map[string]any{"version": 2, "shortcuts": shortcuts}
+	return map[string]any{"version": 1, "shortcuts": shortcuts}
 }
 
 // HelperMain is TestMain for a package whose test binary doubles as the program under test: when envVar is set

@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -348,11 +349,16 @@ func TestRunning_AClosedPipeStopsQuietly(t *testing.T) {
 	}
 }
 
-// Python prints the "-> cwd" line on stderr with backslashreplace: a 0xff in the directory name is \udcff.
+// The "-> cwd" line goes to stderr with a bad byte escaped (as \udcNN for now). A global shortcut needs no approval, so it
+// still runs from a folder whose name is not valid UTF-8 (a project there cannot be approved).
 func TestRun_CwdLineEscapesNonUTF8(t *testing.T) {
 	e := testkit.New(t)
-	proj := e.Project(map[string]any{"hello": testkit.Inline("true")}, testkit.Name("p\xffroj"), testkit.Approved())
-	res := e.RunWith(testkit.Opts{Cwd: proj}, "run", "hello")
+	e.WriteStore(e.Store, map[string]any{"hello": testkit.Inline("true")})
+	dir := filepath.Join(e.Tmp, "p\xffroj")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Skipf("this filesystem refuses non-UTF-8 names: %v", err)
+	}
+	res := e.RunWith(testkit.Opts{Cwd: dir}, "run", "hello")
 	res.WantCode(t, 0)
 	testkit.Contains(t, "stderr", res.Stderr, "p\\udcffroj")
 }

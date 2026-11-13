@@ -52,7 +52,7 @@ func TestEntries_CommandsThatTakeANameShowHowMany(t *testing.T) {
 	}
 }
 
-const toolRegistry = `{"version": 2, "shortcuts": {
+const toolRegistry = `{"version": 1, "shortcuts": {
  "tool": {"description": "A tool: é", "script": "scripts/tool.sh", "args": [{"name":"a","required":true,"desc":"first\nline"},{"name":"b","default":"x y"},{"name":"r","rest":true}], "confirm": true, "created": "2026-01-02", "created_by": "me", "icon": "wrench"},
  "bad": {"inline": "x", "cwd": 5, "description": "bd"},
  "gone": {"script": "scripts/none.sh"},
@@ -104,7 +104,7 @@ echo hi
   "script_path": "TMP/home/.shortcuts/scripts/tool.sh",
   "error": null,
   "entry": {
-    "description": "A tool: \u00e9",
+    "description": "A tool: é",
     "script": "scripts/tool.sh",
     "args": [
       {

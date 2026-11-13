@@ -56,7 +56,7 @@ shortcut list
 A project shares its shortcuts in a `.shortcuts` file at its root, committed with the code:
 
 ```json
-{"version": 2, "shortcuts": {"test": {"description": "Run the tests", "inline": "pytest \"$@\""}}}
+{"version": 1, "shortcuts": {"test": {"description": "Run the tests", "inline": "pytest \"$@\""}}}
 ```
 
 Each person reviews it once with `shortcut update`, and again after it changes. Then `shortcut r test` runs it from anywhere in the project.
@@ -174,7 +174,7 @@ SC_ARG_<NAME>          each declared argument, upper case with - as _. A rest ar
 
 ## Writing a namespace
 
-A namespace is a file named `<ns>.shortcut`: `{"version": 2, "shortcuts": {...}}`, with entries as in `shortcuts.json`. [docs/shortcut.schema.json](docs/shortcut.schema.json) describes them. Relative `script` and `cwd` paths resolve from the file's folder.
+A namespace is a file named `<ns>.shortcut`: `{"version": 1, "shortcuts": {...}}`, with entries as in `shortcuts.json`. [docs/shortcut.schema.json](docs/shortcut.schema.json) describes them. Relative `script` and `cwd` paths resolve from the file's folder.
 
 - `~/.shortcuts/imports/<ns>.shortcut` is found by its name.
 - `shortcut init --global <dir|git URL>` copies a folder's `<ns>.shortcut` files there, each with its `scripts/<ns>/` folder, after showing them. Every script an entry names has to be in that folder. `--replace` puts a newer copy in place of the installed one, showing what changed.
@@ -223,7 +223,7 @@ PAGER                 pages long update and init --global diffs
 - [CHANGELOG.md](CHANGELOG.md): what changed in each version.
 - [docs/](docs/): diagrams, the JSON Schema for shortcut files, and every error message.
 - [examples/podman](examples/podman/): a namespace for podman containers.
-- Code, in Go: [cmd/shortcut](cmd/shortcut/) is the entry point. `internal/cli` has the commands, one `cmd_*.go` file each, with `usage.go` and the completion scripts in `completion/`. `internal/model` has the store files, entries and lookup; `internal/approval` the approval records and review; `internal/textio` terminal output and prompts. `internal/pyos`, `internal/pyjson` and `internal/difflib` reproduce the file, JSON and diff behaviour that shortcut's output depends on; `internal/testkit` is the test sandbox. [installer/](installer/) is the install script. [bundled.go](bundled.go) embeds [templates/](templates/) in the binary.
+- Code, in Go: [cmd/shortcut](cmd/shortcut/) is the entry point. `internal/cli` has the commands, one `cmd_*.go` file each, with `usage.go` and the completion scripts in `completion/`. `internal/model` has the store files, entries and lookup; `internal/approval` the approval records and review; `internal/textio` terminal output and prompts. `internal/pyos` and `internal/difflib` reproduce the file and diff behaviour that shortcut's output depends on, and `internal/pyjson` is ordered JSON on encoding/json; `internal/testkit` is the test sandbox. [installer/](installer/) is the install script. [bundled.go](bundled.go) embeds [templates/](templates/) in the binary.
 
 ## License
 

@@ -1,13 +1,14 @@
-// Package pyjson reproduces what Python's json module does with the files shortcut reads and writes: an ordered,
-// number-preserving value model, a decoder with Python's grammar and error text, and an encoder with Python's
-// formatting. It does not import encoding/json.
+// Package pyjson is an ordered, number-preserving JSON value model on encoding/json: the decoder keeps key order
+// and number text, and refuses text that is not valid UTF-8, on the way in and on the way out.
 //
-// Strings are Go strings holding WTF-8: valid UTF-8, except that a lone surrogate U+D800..U+DFFF is kept as its
-// three-byte form ED A0..BF xx, as Python's str can hold one.
+// Strings are Go strings holding valid UTF-8. A string from the old Python-written store that held a lone surrogate
+// escape (a non-UTF-8 file name) is refused when it is read.
 package pyjson
 
-// Value is nil | bool | string | *big.Int | float64 | []Value | *Object.
-type Value any
+import "slices"
+
+// Value is nil | bool | string | json.Number | []any | *Object.
+type Value = any
 
 // Object keeps keys in first-insertion order; a duplicate key keeps its first position and takes the last value.
 type Object struct {
@@ -42,4 +43,29 @@ func (o *Object) Delete(k string) {
 			return
 		}
 	}
+}
+
+// Sorted returns a copy with the keys in order, at every depth, through objects and arrays.
+func (o *Object) Sorted() *Object {
+	out := &Object{Vals: make(map[string]Value, len(o.Keys))}
+	keys := slices.Clone(o.Keys)
+	slices.Sort(keys)
+	for _, k := range keys {
+		out.Set(k, sortedValue(o.Vals[k]))
+	}
+	return out
+}
+
+func sortedValue(v Value) Value {
+	switch t := v.(type) {
+	case *Object:
+		return t.Sorted()
+	case []any:
+		out := make([]any, len(t))
+		for i, e := range t {
+			out[i] = sortedValue(e)
+		}
+		return out
+	}
+	return v
 }

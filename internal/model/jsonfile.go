@@ -1,7 +1,6 @@
 package model
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -14,23 +13,14 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/pyos"
 )
 
-// ReadJSONFile is open(path, "r", encoding="utf-8") + json.load. Text mode turns \r\n and \r into \n before the
-// parser sees them, which only moves the positions in an error; a bad UTF-8 byte is reported at its file position.
+// ReadJSONFile reads and decodes a JSON file. A decode error is not an *fs.PathError (see isJSONError); callers
+// add the file's name. Text that is not valid UTF-8 is refused (pyjson.ErrNotUTF8).
 func ReadJSONFile(path string) (pyjson.Value, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	v, err := pyjson.Decode(raw)
-	if err == nil || bytes.IndexByte(raw, '\r') < 0 {
-		return v, err
-	}
-	var bad *pyjson.UTF8Error
-	if errors.As(err, &bad) {
-		return nil, err
-	}
-	text := strings.ReplaceAll(string(raw), "\r\n", "\n")
-	return pyjson.Parse(strings.ReplaceAll(text, "\r", "\n"))
+	return pyjson.Decode(raw)
 }
 
 // osErrText is str(OSError): "[Errno 13] Permission denied: 'path'".
@@ -48,6 +38,10 @@ func osErrText(err error) string {
 // WriteJSONAtomic writes a whole file or none of it. A symlinked file is written
 // where the link leads, with the mode it had. The temporary file is hidden, named after it, and removed on error.
 func WriteJSONAtomic(path string, v pyjson.Value) error {
+	text, err := pyjson.MarshalIndent(v) // before anything is created: a refused write leaves the old file as it was
+	if err != nil {
+		return err
+	}
 	path = pyos.Realpath(path) // follow a symlinked file to where it lives
 	dir, base := filepath.Split(path)
 	dir = filepath.Clean(dir)
@@ -68,8 +62,7 @@ func WriteJSONAtomic(path string, v pyjson.Value) error {
 			os.Remove(tmp.Name())
 		}
 	}()
-	text := pyjson.Dumps(v, pyjson.Opts{Indent: 2}) + "\n"
-	if _, err = tmp.WriteString(text); err != nil {
+	if _, err = tmp.Write(append(text, '\n')); err != nil {
 		tmp.Close()
 		return err
 	}

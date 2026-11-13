@@ -18,8 +18,6 @@ TestApproval_DiffDetails -> test_approval.py::test_diff_details
 TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles -> test_approval.py::test_invalid_utf8_and_its_escaped_text_are_different_files
 displayPath -> display_path
 entryFiles -> entry_files
-filesHash -> files_hash
-hashInput -> json.dumps(sorted(files.items()))
 
 [internal/cli]
 Die -> die()
@@ -359,18 +357,7 @@ osErrText -> str(OSError)
 
 [internal/pyjson]
 Decode -> json.load
-Dumps -> json.dumps(v, ...) without a trailing newline
-DumpsCompact -> json.dumps(v) with the default separators and ensure_ascii
 Parse -> json.loads(s)
-ReprFloat -> repr(float)
-SyntaxError -> json.JSONDecodeError
-UTF8Error -> UnicodeDecodeError
-array -> _parse_array_unicode
-checkUTF8 -> bytes.decode("utf-8")
-number -> _match_number_unicode
-object -> _parse_object_unicode
-str -> scanstring_unicode
-value -> py_scanner's scan_once
 
 [internal/pyos]
 Abs -> os.path.abspath

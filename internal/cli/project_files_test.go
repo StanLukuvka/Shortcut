@@ -79,7 +79,7 @@ func TestProjectFiles_ImportsStayInTheSharedFile(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(map[string]any{})
 	e.WriteFile(filepath.Join(proj, ".shortcuts.local"),
-		docText(t, map[string]any{"version": 2, "imports": map[string]any{"x": "x.shortcut"}, "shortcuts": map[string]any{}}), 0)
+		docText(t, map[string]any{"version": 1, "imports": map[string]any{"x": "x.shortcut"}, "shortcuts": map[string]any{}}), 0)
 	testkit.Contains(t, "list", e.RunWith(in(proj), "list").Stderr, "can't have 'imports'")
 }
 

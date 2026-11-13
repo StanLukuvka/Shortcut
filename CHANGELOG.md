@@ -12,3 +12,6 @@
 - Namespaces: `<ns>.shortcut` files, run as `shortcut r <ns> <name>`.
 - Declared arguments, `confirm`, `export`, `promote`, `init --global` from a folder or a git URL.
 - Every error message is listed in [docs/errors.md](docs/errors.md).
+- The store format restarts at `"version": 1`. A file written by the Python version (`"version": 2`) needs that one number edited by hand; shortcut does not migrate it.
+- Non-ASCII text in stores and approval records is written as the characters, not `\uXXXX`. A `.shortcuts` file with non-ASCII text asks for approval once more.
+- A store, project file or approval tree with text that is not valid UTF-8 is refused, with a message that names it.

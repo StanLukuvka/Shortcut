@@ -35,7 +35,7 @@ func cmdList(s *textio.Streams, args []string) error {
 		for _, store := range stores {
 			group, isNS := store.Namespace(names)
 			if isNS && usable(group) && approved(group) {
-				s.Out.WriteString(strings.Join(pyjson.SortStrings(slices.Clone(group.Shortcuts().Keys)), "\n") + "\n")
+				s.Out.WriteString(strings.Join(slices.Sorted(slices.Values(group.Shortcuts().Keys)), "\n") + "\n")
 			}
 			if _, inMain := store.Main.Shortcuts().Get(names); isNS || inMain {
 				break
@@ -55,7 +55,7 @@ func cmdList(s *textio.Streams, args []string) error {
 		}
 		for _, store := range stores {
 			if approved(store.Main) {
-				for _, n := range pyjson.SortStrings(slices.Clone(store.Main.Shortcuts().Keys)) {
+				for _, n := range slices.Sorted(slices.Values(store.Main.Shortcuts().Keys)) {
 					add(n)
 				}
 			}
@@ -126,7 +126,7 @@ func cmdList(s *textio.Streams, args []string) error {
 		for _, k := range runnable.Keys {
 			merged.Set(k, runnable.Vals[k])
 		}
-		for _, name := range pyjson.SortStrings(slices.Clone(merged.Keys)) {
+		for _, name := range slices.Sorted(slices.Values(merged.Keys)) {
 			data, _ := merged.Vals[name].(*pyjson.Object)
 			if data == nil {
 				data = &pyjson.Object{}

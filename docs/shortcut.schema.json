@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "shortcut file",
-  "description": "A shortcut file, in format version 2. The top level here is a .shortcut namespace file's; the global store's shortcuts.json and a project's .shortcuts may also have 'imports'. Every file uses the same entry format, except that 'export' is only allowed in .shortcuts and .shortcuts.local, and 'from' only in the global store's shortcuts.json. Only the last entry in 'args' can set 'rest'; the schema doesn't check that, but shortcut does.",
+  "description": "A shortcut file, in format version 1. The top level here is a .shortcut namespace file's; the global store's shortcuts.json and a project's .shortcuts may also have 'imports'. Every file uses the same entry format, except that 'export' is only allowed in .shortcuts and .shortcuts.local, and 'from' only in the global store's shortcuts.json. Only the last entry in 'args' can set 'rest'; the schema doesn't check that, but shortcut does.",
   "type": "object",
   "required": ["version", "shortcuts"],
   "additionalProperties": false,
   "properties": {
     "version": {
       "description": "Format version.",
-      "const": 2
+      "const": 1
     },
     "description": {
       "description": "Description of the namespace. Shown in 'list'.",

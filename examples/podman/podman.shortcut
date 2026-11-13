@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 1,
   "shortcuts": {
     "ps": {
       "description": "All containers, with status, image and ports. Flags pass to podman ps",

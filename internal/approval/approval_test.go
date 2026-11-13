@@ -17,7 +17,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-// golden reads ../testdata/approval.json with pyjson (it holds lone-surrogate escapes, which encoding/json garbles).
+// golden reads ../testdata/approval.json.
 func golden(t *testing.T, set string) []*pyjson.Object {
 	t.Helper()
 	raw := testkit.Golden(t, "approval.json")
@@ -39,6 +39,19 @@ func golden(t *testing.T, set string) []*pyjson.Object {
 func str(o *pyjson.Object, k string) string {
 	s, _ := o.Vals[k].(string)
 	return s
+}
+
+// text is the field k, or the bytes of k+"_hex" when the name is not valid UTF-8 and so is given as hex.
+func text(t *testing.T, o *pyjson.Object, k string) string {
+	t.Helper()
+	if h, ok := o.Get(k + "_hex"); ok {
+		b, err := hex.DecodeString(h.(string))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	return str(o, k)
 }
 
 func strMap(t *testing.T, v pyjson.Value) map[string]string {
@@ -76,45 +89,9 @@ func sameJSON(a, b pyjson.Value) bool {
 		}
 		return true
 	}
-	return pyjson.DumpsCompact(a) == pyjson.DumpsCompact(b)
-}
-
-func TestApproval_GoldenHash(t *testing.T) {
-	n := 0
-	for _, set := range []string{"hash_cases", "literal_abs_cases"} {
-		for _, c := range golden(t, set) {
-			n++
-			t.Run(set+"/"+str(c, "name"), func(t *testing.T) {
-				files := strMap(t, c.Vals["files"])
-				if got, want := hashInput(files), str(c, "json"); got != want {
-					t.Errorf("hash input\n got %q\nwant %q", got, want)
-				}
-				if got, want := filesHash(files), str(c, "hash"); got != want {
-					t.Errorf("hash %s, want %s", got, want)
-				}
-			})
-		}
-	}
-	if want := len(golden(t, "hash_cases")) + len(golden(t, "literal_abs_cases")); n != want || n < 20 {
-		t.Errorf("consumed %d cases, want %d", n, want)
-	}
-	t.Logf("%d hash cases", n)
-	// a sample hash, written out
-	plan := golden(t, "hash_cases")[0]
-	if str(plan, "hash") != "1a4f1b218e2fc8c36510309de93f45583a881826c19fbf2b451df5b99e1d6e8d" {
-		t.Error("the first golden case is not the sample")
-	}
-}
-
-func TestApproval_HashOrdersLikePython(t *testing.T) {
-	// 0xFF is U+DCFF to Python, below U+10000, though its byte sorts above F0; sort.Strings would say the opposite.
-	files := map[string]string{"\xff.sh": "a\n", "\U00010000.sh": "b\n"}
-	if got := hashInput(files); got != `[["\udcff.sh", "a\n"], ["\ud800\udc00.sh", "b\n"]]` {
-		t.Errorf("got %s", got)
-	}
-	if got := filesHash(map[string]string{}); got != "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945" {
-		t.Errorf("empty map hash %s", got) // sha256("[]")
-	}
+	x, err1 := pyjson.Marshal(a)
+	y, err2 := pyjson.Marshal(b)
+	return err1 == nil && err2 == nil && string(x) == string(y)
 }
 
 func TestApproval_GoldenReviewable(t *testing.T) {
@@ -140,14 +117,14 @@ func TestApproval_GoldenKeysAndRecordNames(t *testing.T) {
 	}
 	cases := golden(t, "key_cases")
 	for _, c := range cases {
-		store, name := str(c, "store"), str(c, "name")
-		g := model.Group{Name: name, File: str(c, "file"), StoreDir: store}
+		store, name := text(t, c, "store"), text(t, c, "name")
+		g := model.Group{Name: name, File: text(t, c, "file"), StoreDir: store}
 		if str(c, "kind") == "project" {
 			g = model.Group{StoreDir: store, File: store + "/.shortcuts", LocalFile: store + "/.shortcuts.local"}
 		}
-		t.Run(str(c, "kind")+" "+store+" "+name, func(t *testing.T) {
-			if got := g.Key(); got != str(c, "key") {
-				t.Errorf("key %q, want %q", got, str(c, "key"))
+		t.Run(str(c, "kind")+" "+strconv.QuoteToASCII(store)+" "+name, func(t *testing.T) {
+			if got := g.Key(); got != text(t, c, "key") {
+				t.Errorf("key %q, want %q", got, text(t, c, "key"))
 			}
 			want := str(c, "record_name")
 			if _, python := c.Get("python_error"); python {
@@ -155,7 +132,7 @@ func TestApproval_GoldenKeysAndRecordNames(t *testing.T) {
 				if utf8.ValidString(g.Key()) {
 					t.Fatal("python_error on a valid key")
 				}
-				sum := sha256.Sum256([]byte(str(c, "key")))
+				sum := sha256.Sum256([]byte(text(t, c, "key")))
 				want = hex.EncodeToString(sum[:]) + ".json"
 			}
 			if want == "" {
@@ -185,14 +162,14 @@ func buildTree(t *testing.T, env *testkit.Env, root string, tree []pyjson.Value)
 	t.Helper()
 	for _, item := range tree {
 		e := item.(*pyjson.Object)
-		if p := str(e, "path"); !utf8.ValidString(p) {
+		if p := text(t, e, "path"); !utf8.ValidString(p) {
 			probe := filepath.Join(env.Tmp, "probe\xff")
 			if err := os.WriteFile(probe, nil, 0o644); err != nil {
 				t.Skipf("this filesystem refuses non-UTF-8 file names: %v", err)
 			}
 			os.Remove(probe)
 		}
-		path := filepath.Join(root, str(e, "path"))
+		path := filepath.Join(root, text(t, e, "path"))
 		switch typ := str(e, "type"); typ {
 		case "file":
 			var content any = str(e, "content")
@@ -251,22 +228,36 @@ func TestApproval_GoldenTrees(t *testing.T) {
 				if g.Name != str(w, "name") {
 					t.Fatalf("group %d is %q, want %q", i, g.Name, str(w, "name"))
 				}
+				if contains, ok := w.Get("error_contains"); ok {
+					msg := ""
+					if g.Error != nil {
+						msg = *g.Error
+					} else if err := Check(g); err != nil {
+						msg = err.Error()
+						if State(g) != "invalid" || Require(g) == nil {
+							t.Errorf("state %s, require %v", State(g), Require(g))
+						}
+						for _, e := range c.Vals["tree"].([]pyjson.Value) { // the message shows the offending path
+							if _, bad := e.(*pyjson.Object).Get("path_hex"); bad && !strings.Contains(msg, strconv.Quote(text(t, e.(*pyjson.Object), "path"))) {
+								t.Errorf("%q does not name the path", msg)
+							}
+						}
+					}
+					if want := strings.ReplaceAll(contains.(string), "@ROOT@", root); !strings.Contains(msg, want) {
+						t.Errorf("error %q, want it to hold %q", msg, want)
+					}
+					continue
+				}
 				if wantErr := w.Vals["error"]; (g.Error == nil) != (wantErr == nil) ||
 					(g.Error != nil && afterShortcut(*g.Error) != afterShortcut(wantErr.(string))) {
 					t.Errorf("error %v, want %v", g.Error, wantErr)
 				}
-				shared, local := SharedFiles(g), LocalFiles(g)
+				shared, local := must(SharedFiles(g)), must(LocalFiles(g))
 				if wantShared := strMap(t, w.Vals["shared_files"]); !equalMaps(shared, wantShared) {
 					t.Errorf("shared files\n got %q\nwant %q", shared, wantShared)
 				}
 				if wantLocal := strMap(t, w.Vals["local_files"]); !equalMaps(local, wantLocal) {
 					t.Errorf("local files\n got %q\nwant %q", local, wantLocal)
-				}
-				if hashInput(shared) != str(w, "shared_json") || filesHash(shared) != str(w, "shared_hash") {
-					t.Errorf("shared hash %s, want %s", filesHash(shared), str(w, "shared_hash"))
-				}
-				if hashInput(local) != str(w, "local_json") || filesHash(local) != str(w, "local_hash") {
-					t.Errorf("local hash %s, want %s", filesHash(local), str(w, "local_hash"))
 				}
 				if got, want := g.Key(), strings.ReplaceAll(str(w, "key_template"), "@ROOT@", root); got != want {
 					t.Errorf("key %q, want %q", got, want)
@@ -307,7 +298,7 @@ func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template s
 	if got := State(g); got != "ok" {
 		t.Errorf("a Python-written record: state %s, want ok", got)
 	}
-	if r := Load(g); r == nil || r.Hash != filesHash(shared) || !equalMaps(r.Snapshot, shared) || !equalMaps(r.Local, local) || r.Key != g.Key() {
+	if r := Load(g); r == nil || !equalMaps(r.Snapshot, shared) || !equalMaps(r.Local, local) || r.Key != g.Key() {
 		t.Errorf("Load: %+v", r)
 	}
 	if err := os.Remove(path); err != nil {
@@ -338,7 +329,7 @@ func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template s
 	}
 }
 
-func TestApproval_NonUTF8ProjectPathIsHashedByItsRawBytes(t *testing.T) {
+func TestApproval_ProjectInANonUTF8FolderCannotBeApproved(t *testing.T) {
 	env := testkit.New(t)
 	probe := filepath.Join(env.Tmp, "caf\xe9")
 	if err := os.Mkdir(probe, 0o755); err != nil {
@@ -349,21 +340,21 @@ func TestApproval_NonUTF8ProjectPathIsHashedByItsRawBytes(t *testing.T) {
 	if g.Key() != probe {
 		t.Fatalf("key %q", g.Key())
 	}
+	// the record is still named after the key's raw bytes, so two such folders cannot share one
 	sum := sha256.Sum256([]byte(probe))
 	if got := filepath.Base(model.ApprovalPath(g)); got != hex.EncodeToString(sum[:])+".json" {
 		t.Errorf("record %s", got)
 	}
-	shared, local := SharedFiles(g), LocalFiles(g)
-	if err := Save(g, shared, local); err != nil {
-		t.Fatal(err)
+	// but the record would have to hold the key as JSON text, which cannot hold it: refused, nothing written
+	err := Save(g, must(SharedFiles(g)), must(LocalFiles(g)))
+	if err == nil || !strings.Contains(err.Error(), "not valid UTF-8") {
+		t.Fatalf("Save: %v", err)
 	}
-	if State(g) != "ok" {
+	if _, err := os.Stat(model.ApprovalPath(g)); err == nil {
+		t.Error("a record was written")
+	}
+	if State(g) != "invalid" || Check(g) == nil || Require(g) == nil { // refused up front, before any diff or prompt
 		t.Errorf("state %s", State(g))
-	}
-	// the key is written as Python's json.dumps writes it: the byte as a lone surrogate
-	raw, _ := os.ReadFile(model.ApprovalPath(g))
-	if !strings.Contains(string(raw), `caf\udce9"`) {
-		t.Errorf("record: %s", raw)
 	}
 }
 
@@ -378,7 +369,7 @@ func TestApproval_StateAndRequire(t *testing.T) {
 	if err := Require(g); err == nil || err.Error() != g.Key()+" isn't approved yet; review it with: shortcut update" {
 		t.Error(err)
 	}
-	if err := Save(g, SharedFiles(g), LocalFiles(g)); err != nil {
+	if err := Save(g, must(SharedFiles(g)), must(LocalFiles(g))); err != nil {
 		t.Fatal(err)
 	}
 	if State(g) != "ok" || Require(g) != nil {
@@ -393,16 +384,16 @@ func TestApproval_StateAndRequire(t *testing.T) {
 		t.Error(err)
 	}
 	// a .shortcuts.local appearing changes the local half
-	if err := Save(g, SharedFiles(g), LocalFiles(g)); err != nil {
+	if err := Save(g, must(SharedFiles(g)), must(LocalFiles(g))); err != nil {
 		t.Fatal(err)
 	}
-	env.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 2, "shortcuts": {"m": {"inline": "x"}}}`, 0)
+	env.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"m": {"inline": "x"}}}`, 0)
 	g = load()
 	if State(g) != "changed" || LocalIsApproved(g, Load(g)) {
 		t.Errorf("after adding .shortcuts.local: %s", State(g))
 	}
 	// a record with no snapshot (only CLI writes to .local were recorded) reads as new, not changed
-	if err := Save(g, map[string]string{}, LocalFiles(g)); err != nil {
+	if err := Save(g, map[string]string{}, must(LocalFiles(g))); err != nil {
 		t.Fatal(err)
 	}
 	if State(g) != "new" {
@@ -429,7 +420,7 @@ func TestApproval_LoadRefusesWhatIsNotARecord(t *testing.T) {
 		}
 	}
 	env.WriteFile(path, `{"snapshot": {}}`, 0) // an old record with no "local" and no hash
-	if r := Load(g); r == nil || len(r.Local) != 0 || r.Hash != "" {
+	if r := Load(g); r == nil || len(r.Local) != 0 {
 		t.Errorf("%+v", r)
 	}
 	env.WriteFile(path, "{\r\n\"snapshot\": {}\r\n}", 0)
@@ -450,7 +441,7 @@ func TestApproval_EntryFilesEdges(t *testing.T) {
 		"fifo":   map[string]any{"script": "pipe"},
 	}, testkit.Dirs("work"))
 	g := model.LoadStore(proj).Main
-	files := SharedFiles(g)
+	files := must(SharedFiles(g))
 	if files[elsewhere] != "echo out\n" { // an absolute script is used as given, so its key is the absolute path
 		t.Errorf("absolute script: %q", files)
 	}
@@ -484,7 +475,7 @@ func TestApproval_AScriptCannotStandInForACwdRecord(t *testing.T) {
 	}, testkit.Dirs("safe"), testkit.Files(map[string]any{"cwd of go": "x"}))
 	env.Symlink(filepath.Join(proj, "safe"), filepath.Join(proj, "work"))
 	store := model.LoadStore(proj)
-	files := SharedFiles(store.Main)
+	files := must(SharedFiles(store.Main))
 	if files["cwd of go"] != "x" {
 		t.Errorf("script: %q", files["cwd of go"])
 	}
@@ -534,7 +525,7 @@ func TestApproval_ATextFileCannotForgeEitherMark(t *testing.T) {
 	}
 }
 
-func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
+func TestApproval_BadBytesInAFileAndTheirEscapedTextAreDifferentContent(t *testing.T) {
 	one := Reviewable([]byte("a \xff\n"))
 	two := Reviewable([]byte("a \\xff\n"))
 	if one == two {
@@ -545,6 +536,60 @@ func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
 	}
 	if want := "a \\xff\n\n" + invalidMark + "593556958570390666a95c849eaaee0a27455bbe3f9cda2b0a2ea551af93b9e9" + "\n"; one != want {
 		t.Errorf("%q", one)
+	}
+}
+
+func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
+	env := testkit.New(t)
+	proj := env.Project(map[string]any{"a": map[string]any{"inline": "x"}}, testkit.Dirs("scripts"))
+	// a file named with the ASCII text caf\udce9.sh is an ordinary file, distinct from caf<0xe9>.sh
+	env.WriteFile(filepath.Join(proj, "scripts", `caf\udce9.sh`), "echo ascii\n", 0o644)
+	ns := func() model.Group {
+		env.WriteFile(filepath.Join(proj, "ns.shortcut"), `{"version": 1, "shortcuts": {"go": {"inline": "x"}}}`, 0)
+		env.WriteFile(filepath.Join(proj, ".shortcuts"), `{"version": 1, "shortcuts": {}, "imports": {"ns": "ns.shortcut"}}`, 0)
+		g, ok := model.LoadStore(proj).Namespace("ns")
+		if !ok {
+			t.Fatal("no namespace")
+		}
+		return g
+	}
+	g := ns()
+	if g.ScriptsDir() != filepath.Join(proj, "scripts", "ns") {
+		t.Skipf("scripts folder %s", g.ScriptsDir())
+	}
+	env.WriteFile(filepath.Join(g.ScriptsDir(), `caf\udce9.sh`), "echo ascii\n", 0o644)
+	if err := Check(g); err != nil {
+		t.Fatalf("ASCII name: %v", err)
+	}
+	shared, local, err := snapshot(g)
+	if err != nil || shared[`scripts/ns/caf\udce9.sh`] != "echo ascii\n" {
+		t.Fatalf("%q %v", shared, err)
+	}
+	if err := Save(g, shared, local); err != nil || State(g) != "ok" {
+		t.Fatalf("Save %v, state %s", err, State(g))
+	}
+	// a file named caf<0xe9>.sh is refused, and the message names it; the approval no longer holds
+	bad := filepath.Join(g.ScriptsDir(), "caf\xe9.sh")
+	if err := os.WriteFile(bad, []byte("echo bad\n"), 0o644); err != nil {
+		t.Skipf("this filesystem refuses non-UTF-8 names: %v", err)
+	}
+	err = Check(g)
+	if err == nil || !strings.Contains(err.Error(), `"scripts/ns/caf\xe9.sh"`) || !strings.Contains(err.Error(), "not valid UTF-8") {
+		t.Fatalf("Check: %v", err)
+	}
+	if State(g) != "invalid" || Require(g) == nil || Save(g, must(SharedFiles(g)), must(LocalFiles(g))) == nil {
+		t.Errorf("state %s", State(g))
+	}
+}
+
+func TestApproval_ARecordHoldingALoneSurrogateIsNoRecord(t *testing.T) {
+	env := testkit.New(t)
+	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
+	g := model.LoadStore(proj).Main
+	// what the Python version wrote for a file named caf<0xe9>: a lone surrogate escape
+	env.WriteFile(model.ApprovalPath(g), `{"snapshot": {"caf\udce9.sh": "x"}, "local": {}}`, 0)
+	if Load(g) != nil || State(g) != "new" {
+		t.Errorf("loaded as a record: %+v, state %s", Load(g), State(g))
 	}
 }
 
@@ -562,7 +607,7 @@ func TestApproval_ABinaryReplacingTextSaysSoAndTextReplacingABinaryShows(t *test
 func TestApproval_FolderFilesNamespace(t *testing.T) {
 	env := testkit.New(t)
 	proj := env.Project(map[string]any{}, testkit.Extra(map[string]any{"imports": map[string]any{"ns": "ns.shortcut"}}))
-	env.WriteFile(filepath.Join(proj, "ns.shortcut"), `{"version": 2, "shortcuts": {"go": {"script": "scripts/ns/go.sh"}}}`, 0)
+	env.WriteFile(filepath.Join(proj, "ns.shortcut"), `{"version": 1, "shortcuts": {"go": {"script": "scripts/ns/go.sh"}}}`, 0)
 	env.WriteFile(filepath.Join(proj, "scripts", "ns", "go.sh"), "echo go\n", 0o755)
 	env.WriteFile(filepath.Join(proj, "scripts", "ns", "sub", "deep.sh"), "echo deep\n", 0)
 	env.WriteFile(filepath.Join(proj, "scripts", "other", "x.sh"), "echo other\n", 0)
@@ -584,7 +629,97 @@ func TestApproval_FolderFilesNamespace(t *testing.T) {
 		t.Error("main group")
 	}
 	// the namespace's script reaches SharedFiles once, under its real path
-	if f := SharedFiles(g); f["scripts/ns/go.sh"] != "echo go\n" || len(f) != 4 {
+	if f := must(SharedFiles(g)); f["scripts/ns/go.sh"] != "echo go\n" || len(f) != 4 {
 		t.Errorf("%q", f)
+	}
+}
+
+// An approval record as an earlier version wrote it, with its "hash" field, hand-written (ASCII only).
+const oldRecord = `{
+  "key": "@ROOT@",
+  "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "snapshot": {
+    ".shortcuts": "{\n  \"shortcuts\": {\n    \"t\": {\n      \"script\": \"bin/t\"\n    }\n  },\n  \"version\": 1\n}\n",
+    "bin/t": "echo one\n"
+  },
+  "local": {}
+}
+`
+
+func TestApproval_OldRecordWithAHashStillApproves(t *testing.T) {
+	env := testkit.New(t)
+	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
+	g := model.LoadStore(proj).Main
+	rec := model.ApprovalPath(g)
+	env.WriteFile(rec, strings.ReplaceAll(oldRecord, "@ROOT@", proj), 0)
+	if got := State(g); got != "ok" {
+		t.Fatalf("unchanged files: %s", got)
+	}
+	// the hash is ignored: a record whose hash is not even a string is just as good
+	env.WriteFile(rec, strings.Replace(strings.ReplaceAll(oldRecord, "@ROOT@", proj), `"hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"`, `"hash": 7`, 1), 0)
+	if got := State(g); got != "ok" {
+		t.Errorf("non-string hash: %s", got)
+	}
+	env.WriteFile(rec, strings.ReplaceAll(oldRecord, "@ROOT@", proj), 0)
+	env.WriteFile(filepath.Join(proj, "bin", "t"), "echo two\n", 0)
+	if got := State(model.LoadStore(proj).Main); got != "changed" {
+		t.Errorf("text changed: %s", got)
+	}
+	env.WriteFile(filepath.Join(proj, "bin", "t"), "echo one\n", 0)
+	env.WriteFile(filepath.Join(proj, "bin", "u"), "echo u\n", 0)
+	env.WriteFile(filepath.Join(proj, ".shortcuts"), `{"version": 1, "shortcuts": {"t": {"script": "bin/t"}, "u": {"script": "bin/u"}}}`, 0)
+	if got := State(model.LoadStore(proj).Main); got != "changed" {
+		t.Errorf("file added: %s", got)
+	}
+	env.WriteFile(filepath.Join(proj, ".shortcuts"), `{"version": 1, "shortcuts": {"t": {"script": "bin/t"}}}`, 0)
+	if err := os.Remove(filepath.Join(proj, "bin", "t")); err != nil {
+		t.Fatal(err)
+	}
+	if got := State(model.LoadStore(proj).Main); got != "changed" {
+		t.Errorf("file removed: %s", got)
+	}
+}
+
+func TestApproval_RecordWithoutSnapshotOrLocal(t *testing.T) {
+	env := testkit.New(t)
+	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
+	g := model.LoadStore(proj).Main
+	rec := model.ApprovalPath(g)
+	env.WriteFile(rec, `{"key": "x", "hash": "abc", "local": {}}`, 0) // no snapshot: not a record, never approved
+	if got := State(g); got != "new" {
+		t.Errorf("no snapshot: %s", got)
+	}
+	// no "local" (written before .shortcuts.local existed): empty, so it approves while no local file exists
+	env.WriteFile(rec, `{"snapshot": {".shortcuts": "{\n  \"shortcuts\": {\n    \"t\": {\n      \"script\": \"bin/t\"\n    }\n  },\n  \"version\": 1\n}\n", "bin/t": "echo one\n"}}`, 0)
+	if got := State(g); got != "ok" {
+		t.Fatalf("no local: %s", got)
+	}
+	env.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"m": {"inline": "x"}}}`, 0)
+	if got := State(model.LoadStore(proj).Main); got != "changed" {
+		t.Errorf("local file appeared: %s", got)
+	}
+}
+
+// must is the value of a call that cannot fail in these tests.
+func must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
+func TestApproval_ANamespaceFileWithBadBytesInItsPathIsRefusedBeforeAnythingIsSaved(t *testing.T) {
+	env := testkit.New(t)
+	g := model.Group{Name: "ns", StoreDir: env.Store, File: filepath.Join(env.Store, "imports", "caf\xe9.shortcut")}
+	for name, err := range map[string]error{"Check": Check(g), "Save": Save(g, map[string]string{}, map[string]string{})} {
+		if err == nil || !strings.Contains(err.Error(), `caf\xe9.shortcut"`) || !strings.Contains(err.Error(), "not valid UTF-8") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if State(g) != "invalid" {
+		t.Errorf("state %s", State(g))
+	}
+	if _, err := os.Stat(model.ApprovalPath(g)); err == nil {
+		t.Error("a record was written")
 	}
 }

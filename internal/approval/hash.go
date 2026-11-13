@@ -1,4 +1,4 @@
-// Package approval decides what a project or namespace has been approved for: the files that are hashed and shown,
+// Package approval decides what a project or namespace has been approved for: the files that are compared and shown,
 // the record kept in the global store, and the diff between two states.
 package approval
 
@@ -7,12 +7,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"maps"
-	"slices"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
 )
 
 const (
@@ -20,32 +16,8 @@ const (
 	invalidMark = "\x00not UTF-8, sha256 " // last line of a text file with bad bytes
 )
 
-// hashInput is json.dumps(sorted(files.items())): an array of [path, text] pairs, default separators, ensure_ascii.
-func hashInput(files map[string]string) string {
-	var b strings.Builder
-	b.WriteByte('[')
-	for i, k := range slices.SortedFunc(maps.Keys(files), pyjson.Compare) {
-		if i > 0 {
-			b.WriteString(", ")
-		}
-		b.WriteByte('[')
-		pyjson.WriteString(&b, k)
-		b.WriteString(", ")
-		pyjson.WriteString(&b, files[k])
-		b.WriteByte(']')
-	}
-	b.WriteByte(']') // an empty map is "[]"
-	return b.String()
-}
-
-// filesHash returns the SHA-256 (lowercase hex) of hashInput's UTF-8 bytes.
-func filesHash(files map[string]string) string {
-	sum := sha256.Sum256([]byte(hashInput(files)))
-	return hex.EncodeToString(sum[:])
-}
-
-// Reviewable is a file as it's hashed and shown. Only a compiled program is hidden: a NUL or a bad byte must not
-// hide a script bash will still run. The digest keeps two files that display the same from hashing the same.
+// Reviewable is a file as it's compared and shown. Only a compiled program is hidden: a NUL or a bad byte must not
+// hide a script bash will still run. The digest keeps two files that display the same from comparing equal.
 func Reviewable(raw []byte) string {
 	sum := sha256.Sum256(raw)
 	digest := hex.EncodeToString(sum[:])
