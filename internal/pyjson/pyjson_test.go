@@ -5,34 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
-
-	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
-
-// golden reads ../testdata/approval.json.
-func golden(t *testing.T, set string) []*Object {
-	t.Helper()
-	raw := testkit.Golden(t, "approval.json")
-	v, err := Decode(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cases, ok := v.(*Object).Get(set)
-	if !ok {
-		t.Fatalf("approval.json has no %s", set)
-	}
-	var out []*Object
-	for _, c := range cases.([]Value) {
-		out = append(out, c.(*Object))
-	}
-	return out
-}
-
-func str(o *Object, k string) string {
-	v, _ := o.Get(k)
-	s, _ := v.(string)
-	return s
-}
 
 func TestObjectOrder(t *testing.T) {
 	v, err := Parse(`{"b": 1, "a": 2, "b": 3}`)
@@ -208,5 +181,20 @@ func TestSorted(t *testing.T) {
 	}
 	if first := marshal(t, v); first != `{"b":{"z":1,"a":[{"y":1,"x":2}]},"a":1}` {
 		t.Errorf("Sorted changed the original: %s", first)
+	}
+}
+
+func TestEncode_RefusesInvalidUTF8InAMap(t *testing.T) {
+	for name, v := range map[string]Value{
+		"value":  map[string]any{"k": "caf\xe9"},
+		"key":    map[string]any{"caf\xe9": "x"},
+		"nested": []Value{map[string]any{"a": map[string]any{"b": []any{"\xff"}}}},
+	} {
+		if out, err := Marshal(v); !errors.Is(err, ErrNotUTF8) || out != nil {
+			t.Errorf("%s: %q, %v", name, out, err)
+		}
+	}
+	if got := marshal(t, map[string]any{"k": "café"}); got != `{"k":"café"}` {
+		t.Errorf("%s", got)
 	}
 }

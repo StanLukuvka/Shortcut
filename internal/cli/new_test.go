@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
@@ -561,4 +562,34 @@ func TestNew_EmptyDescOnCopyIsReplaced(t *testing.T) {
 	script := e.Script("f.sh", "#!/bin/sh\necho hi\n")
 	runOK(t, e, testkit.Opts{}, "new", "x", "--copy", script, "--desc", "")
 	testkit.Eq(t, "desc", e.LoadGlobal()["x"].(map[string]any)["description"], "(no description)")
+}
+
+func TestNew_LocalInAFolderThatCannotBeApprovedWritesNothing(t *testing.T) {
+	e := testkit.New(t)
+	proj := filepath.Join(e.Tmp, "pr\xffoj")
+	if err := os.Mkdir(proj, 0o755); err != nil {
+		t.Skipf("this filesystem refuses non-UTF-8 names: %v", err)
+	}
+	res := e.RunWith(in(proj), "new", "t", "--local", "--", "echo hi")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "stderr", res.Stderr, "not valid UTF-8")
+	for _, out := range []string{res.Stdout, res.Stderr} {
+		if strings.ContainsRune(out, '\xff') || !utf8.ValidString(out) {
+			t.Errorf("raw bytes in the output: %q", out)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(proj, ".shortcuts.local")); err == nil {
+		t.Error(".shortcuts.local was written")
+	}
+}
+
+func TestList_NamesComeOutInByteOrder(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{
+		"B": testkit.Inline("true"), "a-1": testkit.Inline("true"), "a": testkit.Inline("true"), "10": testkit.Inline("true"),
+	})
+	got := strings.Fields(runOK(t, e, testkit.Opts{}, "list", "--names").Stdout)
+	if want := []string{"10", "B", "a", "a-1"}; !slices.Equal(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
 }

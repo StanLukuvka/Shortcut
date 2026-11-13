@@ -243,8 +243,8 @@ func TestApproval_GoldenTrees(t *testing.T) {
 							}
 						}
 					}
-					if !strings.Contains(msg, contains.(string)) {
-						t.Errorf("error %q, want it to hold %q", msg, contains)
+					if want := strings.ReplaceAll(contains.(string), "@ROOT@", root); !strings.Contains(msg, want) {
+						t.Errorf("error %q, want it to hold %q", msg, want)
 					}
 					continue
 				}
@@ -252,7 +252,7 @@ func TestApproval_GoldenTrees(t *testing.T) {
 					(g.Error != nil && afterShortcut(*g.Error) != afterShortcut(wantErr.(string))) {
 					t.Errorf("error %v, want %v", g.Error, wantErr)
 				}
-				shared, local := SharedFiles(g), LocalFiles(g)
+				shared, local := must(SharedFiles(g)), must(LocalFiles(g))
 				if wantShared := strMap(t, w.Vals["shared_files"]); !equalMaps(shared, wantShared) {
 					t.Errorf("shared files\n got %q\nwant %q", shared, wantShared)
 				}
@@ -346,14 +346,14 @@ func TestApproval_ProjectInANonUTF8FolderCannotBeApproved(t *testing.T) {
 		t.Errorf("record %s", got)
 	}
 	// but the record would have to hold the key as JSON text, which cannot hold it: refused, nothing written
-	err := Save(g, SharedFiles(g), LocalFiles(g))
+	err := Save(g, must(SharedFiles(g)), must(LocalFiles(g)))
 	if err == nil || !strings.Contains(err.Error(), "not valid UTF-8") {
 		t.Fatalf("Save: %v", err)
 	}
 	if _, err := os.Stat(model.ApprovalPath(g)); err == nil {
 		t.Error("a record was written")
 	}
-	if State(g) != "new" {
+	if State(g) != "invalid" || Check(g) == nil || Require(g) == nil { // refused up front, before any diff or prompt
 		t.Errorf("state %s", State(g))
 	}
 }
@@ -369,7 +369,7 @@ func TestApproval_StateAndRequire(t *testing.T) {
 	if err := Require(g); err == nil || err.Error() != g.Key()+" isn't approved yet; review it with: shortcut update" {
 		t.Error(err)
 	}
-	if err := Save(g, SharedFiles(g), LocalFiles(g)); err != nil {
+	if err := Save(g, must(SharedFiles(g)), must(LocalFiles(g))); err != nil {
 		t.Fatal(err)
 	}
 	if State(g) != "ok" || Require(g) != nil {
@@ -384,7 +384,7 @@ func TestApproval_StateAndRequire(t *testing.T) {
 		t.Error(err)
 	}
 	// a .shortcuts.local appearing changes the local half
-	if err := Save(g, SharedFiles(g), LocalFiles(g)); err != nil {
+	if err := Save(g, must(SharedFiles(g)), must(LocalFiles(g))); err != nil {
 		t.Fatal(err)
 	}
 	env.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"m": {"inline": "x"}}}`, 0)
@@ -393,7 +393,7 @@ func TestApproval_StateAndRequire(t *testing.T) {
 		t.Errorf("after adding .shortcuts.local: %s", State(g))
 	}
 	// a record with no snapshot (only CLI writes to .local were recorded) reads as new, not changed
-	if err := Save(g, map[string]string{}, LocalFiles(g)); err != nil {
+	if err := Save(g, map[string]string{}, must(LocalFiles(g))); err != nil {
 		t.Fatal(err)
 	}
 	if State(g) != "new" {
@@ -441,7 +441,7 @@ func TestApproval_EntryFilesEdges(t *testing.T) {
 		"fifo":   map[string]any{"script": "pipe"},
 	}, testkit.Dirs("work"))
 	g := model.LoadStore(proj).Main
-	files := SharedFiles(g)
+	files := must(SharedFiles(g))
 	if files[elsewhere] != "echo out\n" { // an absolute script is used as given, so its key is the absolute path
 		t.Errorf("absolute script: %q", files)
 	}
@@ -475,7 +475,7 @@ func TestApproval_AScriptCannotStandInForACwdRecord(t *testing.T) {
 	}, testkit.Dirs("safe"), testkit.Files(map[string]any{"cwd of go": "x"}))
 	env.Symlink(filepath.Join(proj, "safe"), filepath.Join(proj, "work"))
 	store := model.LoadStore(proj)
-	files := SharedFiles(store.Main)
+	files := must(SharedFiles(store.Main))
 	if files["cwd of go"] != "x" {
 		t.Errorf("script: %q", files["cwd of go"])
 	}
@@ -577,7 +577,7 @@ func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), `"scripts/ns/caf\xe9.sh"`) || !strings.Contains(err.Error(), "not valid UTF-8") {
 		t.Fatalf("Check: %v", err)
 	}
-	if State(g) != "invalid" || Require(g) == nil || Save(g, SharedFiles(g), LocalFiles(g)) == nil {
+	if State(g) != "invalid" || Require(g) == nil || Save(g, must(SharedFiles(g)), must(LocalFiles(g))) == nil {
 		t.Errorf("state %s", State(g))
 	}
 }
@@ -629,7 +629,7 @@ func TestApproval_FolderFilesNamespace(t *testing.T) {
 		t.Error("main group")
 	}
 	// the namespace's script reaches SharedFiles once, under its real path
-	if f := SharedFiles(g); f["scripts/ns/go.sh"] != "echo go\n" || len(f) != 4 {
+	if f := must(SharedFiles(g)); f["scripts/ns/go.sh"] != "echo go\n" || len(f) != 4 {
 		t.Errorf("%q", f)
 	}
 }
@@ -697,5 +697,29 @@ func TestApproval_RecordWithoutSnapshotOrLocal(t *testing.T) {
 	env.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"m": {"inline": "x"}}}`, 0)
 	if got := State(model.LoadStore(proj).Main); got != "changed" {
 		t.Errorf("local file appeared: %s", got)
+	}
+}
+
+// must is the value of a call that cannot fail in these tests.
+func must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
+func TestApproval_ANamespaceFileWithBadBytesInItsPathIsRefusedBeforeAnythingIsSaved(t *testing.T) {
+	env := testkit.New(t)
+	g := model.Group{Name: "ns", StoreDir: env.Store, File: filepath.Join(env.Store, "imports", "caf\xe9.shortcut")}
+	for name, err := range map[string]error{"Check": Check(g), "Save": Save(g, map[string]string{}, map[string]string{})} {
+		if err == nil || !strings.Contains(err.Error(), `caf\xe9.shortcut"`) || !strings.Contains(err.Error(), "not valid UTF-8") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if State(g) != "invalid" {
+		t.Errorf("state %s", State(g))
+	}
+	if _, err := os.Stat(model.ApprovalPath(g)); err == nil {
+		t.Error("a record was written")
 	}
 }

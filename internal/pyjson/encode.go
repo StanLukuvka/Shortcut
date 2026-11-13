@@ -21,6 +21,15 @@ func validate(v Value) error {
 				return err
 			}
 		}
+	case map[string]any:
+		for k, e := range t {
+			if !utf8.ValidString(k) {
+				return fmt.Errorf("%w: key %q", ErrNotUTF8, k)
+			}
+			if err := validate(e); err != nil {
+				return err
+			}
+		}
 	case *Object:
 		for _, k := range t.Keys {
 			if !utf8.ValidString(k) {

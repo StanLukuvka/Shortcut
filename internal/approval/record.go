@@ -80,6 +80,9 @@ func Save(g model.Group, shared, local map[string]string) error {
 	if err := checkPaths(local); err != nil {
 		return err
 	}
+	if err := CheckKey(g); err != nil {
+		return err
+	}
 	if !utf8.ValidString(g.Key()) { // a project in a folder whose name is not valid UTF-8: the record could not hold its key
 		return fmt.Errorf("cannot approve: %q is not valid UTF-8; rename it", g.Key())
 	}
@@ -96,18 +99,14 @@ func Save(g model.Group, shared, local map[string]string) error {
 	})
 }
 
-// matches: both halves equal what was recorded, exactly.
-func (r *Record) matches(shared, local map[string]string) bool {
-	return maps.Equal(r.Snapshot, shared) && maps.Equal(r.Local, local)
-}
-
 // LocalIsApproved: whether .shortcuts.local matches what the record holds for it.
 func LocalIsApproved(g model.Group, r *Record) bool {
 	var held map[string]string
 	if r != nil {
 		held = r.Local
 	}
-	return maps.Equal(held, LocalFiles(g))
+	local, err := LocalFiles(g)
+	return err == nil && maps.Equal(held, local)
 }
 
 // State returns "ok", "new" (never approved), "changed", or "invalid" (text that is not valid UTF-8 cannot be
@@ -124,7 +123,7 @@ func State(g model.Group) string {
 	if r == nil {
 		return "new"
 	}
-	if r.matches(shared, local) {
+	if maps.Equal(r.Snapshot, shared) && maps.Equal(r.Local, local) { // both halves exactly as recorded
 		return "ok"
 	}
 	if len(r.Snapshot) > 0 {

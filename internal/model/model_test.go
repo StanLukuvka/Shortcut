@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -636,7 +635,7 @@ func TestStores_EntryErrors(t *testing.T) {
 func TestKey_TellsNonUTF8NamesApart(t *testing.T) {
 	store := testkit.New(t).Tmp
 	keys := map[string]string{}
-	for _, file := range []string{"caf\xe9", "caf\xea", "café", `caf\udce9`, "\xed\xa0\x80", "\xed\xb2\x80"} {
+	for _, file := range []string{"caf\xe9", "caf\xea", "café", `caf\udce9`, "\xed\xa0\x80", "\xed\xb2\x80", "\xed\x80\x80", "\xed\xc0\x80", "\xed\xff\xbf", "\xed\xbf\xbf", "\xed\xa0"} {
 		g := Group{Name: "ns", StoreDir: store, File: filepath.Join(store, file)}
 		k := g.Key()
 		if prev, dup := keys[k]; dup {
@@ -690,13 +689,5 @@ func TestWriteJSONAtomic_RefusesInvalidUTF8AndKeepsTheOldFile(t *testing.T) {
 	}
 	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(path), ".*.tmp")); len(left) != 0 {
 		t.Errorf("temp files left: %v", left)
-	}
-}
-
-func TestShortcutNamesSortByByteOrder(t *testing.T) {
-	// names match ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$, so byte order is the order the Python version printed
-	got := slices.Sorted(slices.Values([]string{"b", "a-1", "B", "a_1", "a1", "A", "10", "9"}))
-	if want := []string{"10", "9", "A", "B", "a-1", "a1", "a_1", "b"}; !slices.Equal(got, want) {
-		t.Errorf("got %q", got)
 	}
 }

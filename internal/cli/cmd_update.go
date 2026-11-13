@@ -80,17 +80,26 @@ func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames 
 		s.Err.WriteString("error: cannot approve " + g.Label() + ": " + *g.Error + "\n")
 		return 1, nil
 	}
+	if err := approval.Check(g); err != nil {
+		s.Err.WriteString("error: " + err.Error() + "\n")
+		return 1, nil
+	}
 	if errs := model.EntryErrors(g); len(errs) > 0 {
 		for _, e := range errs {
 			s.Err.WriteString("error: cannot approve " + g.Label() + ": " + e + "\n")
 		}
 		return 1, nil
 	}
-	if err := approval.Check(g); err != nil {
+	shared, err := approval.SharedFiles(g)
+	if err != nil {
 		s.Err.WriteString("error: " + err.Error() + "\n")
 		return 1, nil
 	}
-	shared, local := approval.SharedFiles(g), approval.LocalFiles(g)
+	local, err := approval.LocalFiles(g)
+	if err != nil {
+		s.Err.WriteString("error: " + err.Error() + "\n")
+		return 1, nil
+	}
 	files := maps.Clone(shared)
 	maps.Copy(files, local)
 	if approval.State(g) == "ok" {

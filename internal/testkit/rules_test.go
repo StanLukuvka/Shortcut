@@ -70,7 +70,7 @@ func TestX(t *testing.T) {
 		rel, _ := filepath.Rel(root, p)
 		if d.IsDir() {
 			switch {
-			case rel == "internal/testkit", d.Name() == ".git", d.Name() == ".lad", d.Name() == "testdata":
+			case rel == "internal/testkit", d.Name() == ".git", d.Name() == ".lad", d.Name() == "testdata", isNestedRepo(root, p):
 				return filepath.SkipDir
 			}
 			return nil
