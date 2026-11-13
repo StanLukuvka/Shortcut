@@ -49,23 +49,26 @@ func TestShowDiff_ATerminalGetsColour(t *testing.T) {
 // Pager only on a terminal, with PAGER set, and at least as many lines as rows (30 on testkit's terminal).
 func TestShowDiff_Pager(t *testing.T) {
 	e := testkit.New(t)
+	ran := e.Script("ran.sh", "#!/bin/sh\ncat >/dev/null\necho \"pager ran arg=$1\"\n")
+	fails := e.Script("fails.sh", "#!/bin/sh\ncat >/dev/null\necho pager ran\nexit 1\n")
+	less := e.Script("less.sh", "#!/bin/sh\ncat >/dev/null\necho less=$LESS\n")
 	for _, c := range []struct {
 		name, lines string
 		env         map[string]string
 		pager       bool // the pager ran
 		printed     bool // the diff was printed directly
 	}{
-		{"used", "30", map[string]string{"PAGER": "sh -c 'cat >/dev/null; echo pager ran'"}, true, false},
-		{"one line short", "29", map[string]string{"PAGER": "sh -c 'cat >/dev/null; echo pager ran'"}, false, true},
-		{"LINES decides the rows", "5", map[string]string{"PAGER": "sh -c 'cat >/dev/null; echo pager ran'", "LINES": "5"}, true, false},
+		{"used", "30", map[string]string{"PAGER": ran}, true, false},
+		{"one line short", "29", map[string]string{"PAGER": ran}, false, true},
+		{"LINES decides the rows", "5", map[string]string{"PAGER": ran, "LINES": "5"}, true, false},
 		{"unset", "40", map[string]string{}, false, true},
 		{"empty", "40", map[string]string{"PAGER": ""}, false, true},
-		{"a failing pager falls through to printing", "40", map[string]string{"PAGER": "sh -c 'cat >/dev/null; echo pager ran; exit 1'"}, true, true},
+		{"a failing pager falls through to printing", "40", map[string]string{"PAGER": fails}, true, true},
 		{"not found", "40", map[string]string{"PAGER": "no-such-pager-zz9"}, false, true},
-		{"bad split", "40", map[string]string{"PAGER": "'unterminated"}, false, true},
+		{"split on blanks", "40", map[string]string{"PAGER": ran + "  -R"}, true, false},
 		{"blank", "40", map[string]string{"PAGER": "  "}, false, true},
-		{"LESS defaults to FRX", "40", map[string]string{"PAGER": "sh -c 'cat >/dev/null; echo less=$LESS'"}, false, false},
-		{"LESS is kept", "40", map[string]string{"PAGER": "sh -c 'cat >/dev/null; echo less=$LESS'", "LESS": "-X"}, false, false},
+		{"LESS defaults to FRX", "40", map[string]string{"PAGER": less}, false, false},
+		{"LESS is kept", "40", map[string]string{"PAGER": less, "LESS": "-X"}, false, false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			got := diffOn(t, e, true, c.lines, c.env)
@@ -74,6 +77,9 @@ func TestShowDiff_Pager(t *testing.T) {
 			}
 			if printed := strings.Contains(got, "+added"); printed != c.printed {
 				t.Errorf("printed = %v in %q", printed, got)
+			}
+			if c.name == "split on blanks" && !strings.Contains(got, "arg=-R") {
+				t.Errorf("the pager did not get -R: %q", got)
 			}
 			if strings.HasPrefix(c.name, "LESS") {
 				want := map[string]string{"LESS defaults to FRX": "less=FRX", "LESS is kept": "less=-X"}[c.name]

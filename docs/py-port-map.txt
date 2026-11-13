@@ -374,7 +374,6 @@ Realpath -> os.path.realpath(filename), strict=False (CPython 3.14's iterative p
 Relpath -> posixpath.relpath(path, start)
 ShellJoin -> shlex.join
 ShellQuote -> shlex.quote
-ShellSplit -> shlex.split(s) (POSIX mode, no comments)
 Suffix -> pathlib.PurePath(p).suffix as Python 3.14 has it
 TerminalRows -> shutil.get_terminal_size().lines
 TestLock_ASymlinkedLockIsRefused -> test_symlink_safety.py::test_a_store_never_writes_through_a_symlink (the .lock half)

@@ -10,7 +10,7 @@ import (
 
 // ShowDiff shows a diff: each line made Safe; on a terminal added lines green and removed red (the +++ and
 // --- headers and context stay plain); then the text goes to $PAGER when stdout is a terminal, PAGER is set and
-// there are at least as many lines as terminal rows, else straight to stdout. A pager that cannot start, a bad
+// there are at least as many lines as terminal rows, else straight to stdout. A pager that cannot start, a blank
 // PAGER value or a non-zero exit falls through to printing the text directly (so it can print twice).
 func ShowDiff(s *Streams, lines []string) {
 	tty := s.Out.IsTerminal()
@@ -38,8 +38,8 @@ func ShowDiff(s *Streams, lines []string) {
 }
 
 func runPager(s *Streams, pager, text string) bool {
-	argv, err := pyos.ShellSplit(pager)
-	if err != nil || len(argv) == 0 { // lazy: Python's empty split raises IndexError (a traceback); printing is kinder
+	argv := strings.Fields(pager) // lazy: no quoting, so a pager path with a space does not work; shell-split if it is ever missed
+	if len(argv) == 0 {
 		return false
 	}
 	cmd := exec.Command(argv[0], argv[1:]...)
