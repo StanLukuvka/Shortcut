@@ -314,7 +314,7 @@ func TestStores_NamespaceFlagCreatesANamespace(t *testing.T) {
 	res := runOK(t, e, testkit.Opts{}, "new", "delete", "--namespace", "docker", "--desc", "Remove one", "--", `echo "rm $1"`)
 	testkit.Contains(t, "stderr", res.Stderr, "needs approving before it runs: shortcut update docker")
 	doc := decodeObject(t, testkit.ReadFile(t, filepath.Join(e.Store, "imports", "docker.shortcut")))
-	testkit.Eq(t, "version", doc["version"], float64(2))
+	testkit.Eq(t, "version", doc["version"], float64(1))
 	testkit.Eq(t, "inline", doc["shortcuts"].(map[string]any)["delete"].(map[string]any)["inline"], `echo "rm $1"`)
 	if _, has := e.LoadGlobal()["delete"]; has {
 		t.Errorf("delete is global")
@@ -388,7 +388,7 @@ func TestStores_ConcurrentNewKeepsEveryEntry(t *testing.T) {
 func TestStores_ASymlinkedStoreFileIsWrittenWhereItLeads(t *testing.T) {
 	e := testkit.New(t)
 	dotfiles := e.Folder("dotfiles")
-	target := e.WriteFile(filepath.Join(dotfiles, "shortcuts.json"), `{"version": 2, "shortcuts": {}}`, 0o644)
+	target := e.WriteFile(filepath.Join(dotfiles, "shortcuts.json"), `{"version": 1, "shortcuts": {}}`, 0o644)
 	link := filepath.Join(e.Store, "shortcuts.json")
 	e.Symlink(target, link)
 	runOK(t, e, testkit.Opts{}, "new", "hi", "--", "echo hi")
@@ -414,7 +414,7 @@ func TestStores_UnknownFieldsAreErrors(t *testing.T) {
 		name, message string
 		data          map[string]any
 	}{
-		{"top", "unknown field: owner", map[string]any{"version": 2, "owner": "x", "shortcuts": map[string]any{}}},
+		{"top", "unknown field: owner", map[string]any{"version": 1, "owner": "x", "shortcuts": map[string]any{}}},
 		{"entry", "unknown field: sandbox", testkit.NS(map[string]any{
 			"a": map[string]any{"inline": "true", "sandbox": true}})},
 		{"arg", "unknown args field: secret", testkit.NS(map[string]any{

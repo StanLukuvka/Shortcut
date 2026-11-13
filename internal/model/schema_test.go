@@ -162,7 +162,7 @@ func TestSchema_EveryFieldIsAccepted(t *testing.T) {
 	arg["name"] = "x"
 	arg["required"] = false // required can't go with a default
 	entry["args"] = []any{arg}
-	e.WriteImport(e.Store, "ns", map[string]any{"version": 2, "description": "x", "shortcuts": map[string]any{"go": entry}})
+	e.WriteImport(e.Store, "ns", map[string]any{"version": 1, "description": "x", "shortcuts": map[string]any{"go": entry}})
 
 	// what `update ns -y` checks before it approves: the file is usable and every entry can run
 	group, ok := LoadStore(e.Store).Namespace("ns")

@@ -37,8 +37,8 @@ A flag a command doesn't take, or one missing its value, prints the command's `u
 | `corrupt registry <path>: 'description' must be a string` | |
 | `cannot overwrite corrupt registry <path>: <json error>` | shortcut won't write over a file it can't read. Fix or move it |
 | `<path> is format version <n>, newer than this shortcut reads; upgrade shortcut` | |
-| `corrupt registry <path>: 'version' must be a whole number, such as 2` | `"version"` is a string, a fraction, `null` or `true` |
-| `<path> needs "version": 2` | |
+| `corrupt registry <path>: 'version' must be a whole number, such as 1` | `"version"` is a string, a fraction, `null` or `true` |
+| `<path> needs "version": 1` | |
 | `<path> needs 'shortcuts'` | |
 | `<path> has an unknown field: <fields>` | |
 | `<path> has its own 'imports', but namespaces don't nest` | Only a store's main file can import namespaces |
@@ -187,7 +187,7 @@ These print `error: cannot approve <group>: <reason>`, where the reason is a sto
 | Message | Meaning |
 |---|---|
 | ``a project's .shortcuts is used in place, never copied: clone the project and run `shortcut update` there. To copy its exported shortcuts into your global store, add --global.`` | `init` without `--global` |
-| `a project's .shortcuts is a file you write by hand, starting from: {"version": 2, "shortcuts": {}}. For your own shortcuts, use new --local.` | |
+| `a project's .shortcuts is a file you write by hand, starting from: {"version": 1, "shortcuts": {}}. For your own shortcuts, use new --local.` | |
 | `failed to clone git repository from <url>: <git error>` | |
 | `source directory does not exist: <dir>` | |
 | `no .shortcuts or <ns>.shortcut found in <dir>` | `init --global` copies a source's `.shortcuts` exported entries, or its namespace files |

@@ -28,7 +28,7 @@ func TestStores_LocalShortcutHidingGlobalWarns(t *testing.T) {
 	e.WriteStore(e.Store, map[string]any{"penpot": map[string]any{"inline": "echo global", "cwd": fixed}})
 	proj := e.Project(map[string]any{})
 	// as new --local --cwd . writes it
-	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 2, "shortcuts": {"penpot": {"inline": "echo local", "cwd": "."}}}`, 0)
+	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"penpot": {"inline": "echo local", "cwd": "."}}}`, 0)
 	update := runOK(t, e, in(proj), "update", "-y")
 	testkit.Contains(t, "update", update.Stdout, "Inside this project, 'penpot' hides your global 'penpot'.")
 
@@ -80,7 +80,7 @@ func TestStores_NamespaceDispatch(t *testing.T) {
 
 func TestStores_NamespaceFromImportsKey(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteFile(filepath.Join(e.Tmp, "shared", "tools.shortcut"), `{"version": 2, "shortcuts": {"hi": {"inline": "echo hi from tools"}}}`, 0)
+	e.WriteFile(filepath.Join(e.Tmp, "shared", "tools.shortcut"), `{"version": 1, "shortcuts": {"hi": {"inline": "echo hi from tools"}}}`, 0)
 	proj := e.Project(testkit.OWN, testkit.Extra(map[string]any{"imports": map[string]any{"tools": "../shared/tools.shortcut"}}), testkit.Approved())
 	testkit.Eq(t, "tools hi", e.RunWith(in(proj), "r", "tools", "hi").Stdout, "hi from tools\n")
 	testkit.Eq(t, "own", e.RunWith(in(proj), "r", "own").Stdout, "own\n")
@@ -104,7 +104,7 @@ func TestStores_NamespaceCollisionAndNestingErrors(t *testing.T) {
 	testkit.Contains(t, "list", e.RunWith(in(proj), "list").Stderr, "'docker' is both")
 
 	e.WriteStore(reg, map[string]any{"ok": testkit.Inline("echo ok")})
-	e.WriteImport(reg, "nested", map[string]any{"version": 2, "imports": map[string]any{"x": "x.shortcut"}, "shortcuts": map[string]any{}})
+	e.WriteImport(reg, "nested", map[string]any{"version": 1, "imports": map[string]any{"x": "x.shortcut"}, "shortcuts": map[string]any{}})
 	res := e.RunWith(in(proj), "r", "nested", "x")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "nested", res.Stderr, "namespaces don't nest")
@@ -238,7 +238,7 @@ func TestStores_BrokenProjectRefusesANamespaceItImported(t *testing.T) {
 	e.WriteStore(e.Store, map[string]any{"docker": testkit.Inline("echo global")})
 	proj := e.Project(map[string]any{},
 		testkit.Extra(map[string]any{"imports": map[string]any{"docker": "../tools/docker.shortcut"}}),
-		testkit.Files(map[string]any{"tools/docker.shortcut": `{"version": 2, "shortcuts": {"ps": {"inline": "true"}}}`}))
+		testkit.Files(map[string]any{"tools/docker.shortcut": `{"version": 1, "shortcuts": {"ps": {"inline": "true"}}}`}))
 	runOK(t, e, in(proj), "update", ".", "-y")
 	e.CorruptStore(filepath.Join(proj, ".shortcuts"))
 
@@ -253,7 +253,7 @@ func TestStores_AnUnknownTopLevelFieldStopsTheProjectToo(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"outside": testkit.Inline("echo outside")})
 	proj := e.Project(map[string]any{"inside": testkit.Inline("true"), "mine": testkit.Inline("true")}, testkit.Approved())
-	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 2, "shortcuts": {"mine": {"inline": "echo mine"}}}`, 0)
+	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"mine": {"inline": "echo mine"}}}`, 0)
 	registry := filepath.Join(proj, ".shortcuts")
 	e.WriteStore(registry, map[string]any{"inside": testkit.Inline("true"), "mine": testkit.Inline("true")}, map[string]any{"bogus": 1})
 

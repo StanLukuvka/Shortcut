@@ -56,7 +56,7 @@ shortcut list
 A project shares its shortcuts in a `.shortcuts` file at its root, committed with the code:
 
 ```json
-{"version": 2, "shortcuts": {"test": {"description": "Run the tests", "inline": "pytest \"$@\""}}}
+{"version": 1, "shortcuts": {"test": {"description": "Run the tests", "inline": "pytest \"$@\""}}}
 ```
 
 Each person reviews it once with `shortcut update`, and again after it changes. Then `shortcut r test` runs it from anywhere in the project.
@@ -174,7 +174,7 @@ SC_ARG_<NAME>          each declared argument, upper case with - as _. A rest ar
 
 ## Writing a namespace
 
-A namespace is a file named `<ns>.shortcut`: `{"version": 2, "shortcuts": {...}}`, with entries as in `shortcuts.json`. [docs/shortcut.schema.json](docs/shortcut.schema.json) describes them. Relative `script` and `cwd` paths resolve from the file's folder.
+A namespace is a file named `<ns>.shortcut`: `{"version": 1, "shortcuts": {...}}`, with entries as in `shortcuts.json`. [docs/shortcut.schema.json](docs/shortcut.schema.json) describes them. Relative `script` and `cwd` paths resolve from the file's folder.
 
 - `~/.shortcuts/imports/<ns>.shortcut` is found by its name.
 - `shortcut init --global <dir|git URL>` copies a folder's `<ns>.shortcut` files there, each with its `scripts/<ns>/` folder, after showing them. Every script an entry names has to be in that folder. `--replace` puts a newer copy in place of the installed one, showing what changed.

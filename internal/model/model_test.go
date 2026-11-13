@@ -135,10 +135,11 @@ func TestRegistry_LoadRegistryFile(t *testing.T) {
 		{"\xef\xbb\xbf{}", "corrupt registry " + p + ": Unexpected UTF-8 BOM (decode using utf-8-sig): line 1 column 1 (char 0)"},
 		{"{\"a\": \"\xff\"}", "corrupt registry " + p + ": 'utf-8' codec can't decode byte 0xff in position 7: invalid start byte"},
 		{"{\r\n  \"a\": 1,\r\n}", "corrupt registry " + p + ": Illegal trailing comma before end of object: line 2 column 9 (char 10)"},
-		{`{"version": "2"}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 2"},
-		{`{"version": 2.0}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 2"},
-		{`{"version": null}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 2"},
-		{`{"version": true}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 2"},
+		{`{"version": "2"}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 1"},
+		{`{"version": 1.0}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 1"},
+		{`{"version": null}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 1"},
+		{`{"version": true}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 1"},
+		{`{"version": 2}`, p + " is format version 2, newer than this shortcut reads; upgrade shortcut"},
 		{`{"version": 3}`, p + " is format version 3, newer than this shortcut reads; upgrade shortcut"},
 		{`{"version": 99999999999999999999999}`, p + " is format version 99999999999999999999999, newer than this shortcut reads; upgrade shortcut"},
 	}
@@ -149,7 +150,7 @@ func TestRegistry_LoadRegistryFile(t *testing.T) {
 			t.Errorf("%q: got %v\nwant %s", c.file, err, c.want)
 		}
 	}
-	for _, ok := range []string{`{}`, `{"version": 0}`, `{"version": 1, "x": 1}`, `{"version": 2}`, `{"version": -5}`} {
+	for _, ok := range []string{`{}`, `{"version": 0}`, `{"version": 1, "x": 1}`, `{"version": -5}`} {
 		env.WriteFile(p, ok, 0)
 		if _, err := LoadRegistryFile(p); err != nil {
 			t.Errorf("%s: %v", ok, err)
@@ -163,17 +164,17 @@ func TestRegistry_LoadRegistryFile(t *testing.T) {
 
 func TestRegistry_FileError(t *testing.T) {
 	cases := []struct{ file, name, want string }{
-		{`{"version": 2, "shortcuts": {}}`, "", ""},
-		{`{"version": 2, "shortcuts": {}, "imports": {}, "description": "d"}`, "", ""},
+		{`{"version": 1, "shortcuts": {}}`, "", ""},
+		{`{"version": 1, "shortcuts": {}, "imports": {}, "description": "d"}`, "", ""},
 		{`{"shortcuts": []}`, "", "corrupt registry P: 'shortcuts' must be an object"},
 		{`{"shortcuts": null}`, "", "corrupt registry P: 'shortcuts' must be an object"},
 		{`{"description": 1}`, "", "corrupt registry P: 'description' must be a string"},
 		{`{"zed": 1, "bar": 1, "shortcuts": {}}`, "", "P has an unknown field: bar, zed"},
-		{`{"version": 2, "shortcuts": {}}`, "ns", ""},
-		{`{"version": 2, "shortcuts": {}, "imports": {}}`, "ns", "P has its own 'imports', but namespaces don't nest"},
-		{`{"shortcuts": {}}`, "ns", `P needs "version": 2`},
-		{`{"version": 1, "shortcuts": {}}`, "ns", `P needs "version": 2`},
-		{`{"version": 2}`, "ns", "P needs 'shortcuts'"},
+		{`{"version": 1, "shortcuts": {}}`, "ns", ""},
+		{`{"version": 1, "shortcuts": {}, "imports": {}}`, "ns", "P has its own 'imports', but namespaces don't nest"},
+		{`{"shortcuts": {}}`, "ns", `P needs "version": 1`},
+		{`{"version": 2, "shortcuts": {}}`, "ns", `P needs "version": 1`},
+		{`{"version": 1}`, "ns", "P needs 'shortcuts'"},
 	}
 	for _, c := range cases {
 		got := fileError("P", obj(t, c.file), c.name)
@@ -266,7 +267,7 @@ func TestStores_StoreDiscoverySkipsGlobalRoot(t *testing.T) {
 func TestStores_ProjectRootViaLocalFileOnlyAndNearest(t *testing.T) {
 	env := testkit.New(t)
 	outer := env.Project(nil, testkit.Name("outer"))
-	env.WriteFile(filepath.Join(outer, ".shortcuts.local"), `{"version": 2, "shortcuts": {}}`, 0)
+	env.WriteFile(filepath.Join(outer, ".shortcuts.local"), `{"version": 1, "shortcuts": {}}`, 0)
 	inner := filepath.Join(outer, "in")
 	env.WriteStore(filepath.Join(inner, ".shortcuts"), map[string]any{})
 	if got := FindProjectRoot(filepath.Join(inner, "x")); got != inner {
@@ -314,10 +315,10 @@ func TestStores_LocalProjectRoot(t *testing.T) {
 func TestStores_WriteJSONAtomic(t *testing.T) {
 	env := testkit.New(t)
 	dotfiles := env.Folder("dotfiles")
-	target := env.WriteFile(filepath.Join(dotfiles, "shortcuts.json"), `{"version": 2, "shortcuts": {}}`, 0o644)
+	target := env.WriteFile(filepath.Join(dotfiles, "shortcuts.json"), `{"version": 1, "shortcuts": {}}`, 0o644)
 	link := filepath.Join(env.Store, "shortcuts.json")
 	env.Symlink(target, link)
-	v := obj(t, `{"version": 2, "shortcuts": {"hi": {"description": "é", "n": 1.0}}}`)
+	v := obj(t, `{"version": 1, "shortcuts": {"hi": {"description": "é", "n": 1.0}}}`)
 	if err := WriteJSONAtomic(link, v); err != nil {
 		t.Fatal(err)
 	}
@@ -325,7 +326,7 @@ func TestStores_WriteJSONAtomic(t *testing.T) {
 		t.Error("the link was replaced")
 	}
 	got, _ := os.ReadFile(target)
-	want := "{\n  \"version\": 2,\n  \"shortcuts\": {\n    \"hi\": {\n      \"description\": \"\\u00e9\",\n      \"n\": 1.0\n    }\n  }\n}\n"
+	want := "{\n  \"version\": 1,\n  \"shortcuts\": {\n    \"hi\": {\n      \"description\": \"\\u00e9\",\n      \"n\": 1.0\n    }\n  }\n}\n"
 	if string(got) != want {
 		t.Errorf("got %q", got)
 	}
@@ -396,7 +397,7 @@ func TestStores_InitStoreCreatesOnlyAMissingRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(filepath.Join(env.Store, "shortcuts.json"))
-	if string(b) != "{\n  \"version\": 2,\n  \"shortcuts\": {}\n}\n" {
+	if string(b) != "{\n  \"version\": 1,\n  \"shortcuts\": {}\n}\n" {
 		t.Errorf("got %q", b)
 	}
 	env.WriteStore(env.Store, map[string]any{"keep": map[string]any{"inline": "x"}})
@@ -495,7 +496,7 @@ func TestStores_LoadStoreImportProblems(t *testing.T) {
 	env := testkit.New(t)
 	proj := env.Project(nil)
 	file := filepath.Join(proj, ".shortcuts")
-	env.WriteRegistryRaw(file, `{"version": 2, "shortcuts": {}, "imports": {"num": 5, "plain": "x.json", "bare": "dir/.shortcut", "ok": "~/x.shortcut", "Bad Name": "w.shortcut"}}`)
+	env.WriteRegistryRaw(file, `{"version": 1, "shortcuts": {}, "imports": {"num": 5, "plain": "x.json", "bare": "dir/.shortcut", "ok": "~/x.shortcut", "Bad Name": "w.shortcut"}}`)
 	store := LoadStore(proj)
 	want := []string{
 		"import 'num' in " + file + " must be a path",
@@ -542,7 +543,7 @@ func TestStores_GlobalStoreImportsFolderAndTwice(t *testing.T) {
 func TestStores_LoadProjectGroupErrors(t *testing.T) {
 	env := testkit.New(t)
 	proj := env.Project(map[string]any{"a": map[string]any{"inline": "1"}})
-	env.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 2, "shortcuts": {}, "imports": {}}`, 0)
+	env.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {}, "imports": {}}`, 0)
 	g := LoadProjectGroup(proj)
 	if want := filepath.Join(proj, ".shortcuts.local") + " can't have 'imports': namespaces belong in .shortcuts"; g.Error == nil || *g.Error != want {
 		t.Errorf("%v", g.Error)
@@ -552,13 +553,13 @@ func TestStores_LoadProjectGroupErrors(t *testing.T) {
 		t.Errorf("%v", g.Error)
 	}
 	// the shared file's error comes first, and the shared data is whatever read
-	env.WriteFile(filepath.Join(proj, ".shortcuts"), `{"version": 2, "shortcuts": {}, "extra": 1}`, 0)
+	env.WriteFile(filepath.Join(proj, ".shortcuts"), `{"version": 1, "shortcuts": {}, "extra": 1}`, 0)
 	if g = LoadProjectGroup(proj); g.Error == nil || *g.Error != filepath.Join(proj, ".shortcuts")+" has an unknown field: extra" {
 		t.Errorf("%v", g.Error)
 	}
 	// an absent .shortcuts is just empty
 	only := env.Project(nil, testkit.Name("only"))
-	env.WriteFile(filepath.Join(only, ".shortcuts.local"), `{"version": 2, "shortcuts": {"m": {"inline": "x"}}}`, 0)
+	env.WriteFile(filepath.Join(only, ".shortcuts.local"), `{"version": 1, "shortcuts": {"m": {"inline": "x"}}}`, 0)
 	if g = LoadProjectGroup(only); g.Error != nil || len(g.Shortcuts().Keys) != 1 {
 		t.Errorf("%+v", g)
 	}

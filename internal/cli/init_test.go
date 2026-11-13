@@ -339,7 +339,7 @@ func TestImport_ANamespaceComesWholeOrNotAtAll(t *testing.T) {
 	e.Symlink(filepath.Join(src, "scripts", "e", "real.sh"), filepath.Join(src, "scripts", "e", "x.sh"))
 	testkit.Contains(t, "symlink", e.Run("init", "--global", "-y", src).Stdout, "e (symlink in source: scripts/e/x.sh)")
 	bad := nsSource(e, "f", map[string]any{}, nil)
-	e.WriteFile(filepath.Join(bad, "f.shortcut"), `{"version": 2, "shortcuts": {}, "imports": {}}`, 0)
+	e.WriteFile(filepath.Join(bad, "f.shortcut"), `{"version": 1, "shortcuts": {}, "imports": {}}`, 0)
 	testkit.Contains(t, "nest", e.Run("init", "--global", "-y", bad).Stdout, "namespaces don't nest")
 	testkit.NotExist(t, filepath.Join(e.Store, "imports"))
 }
@@ -365,7 +365,7 @@ func TestImport_ReplacePutsANamespaceInPlaceOfTheInstalledOne(t *testing.T) {
 
 func TestImport_ReplaceLeavesAnImportFromElsewhereAndAProjectSource(t *testing.T) {
 	e := testkit.New(t)
-	elsewhere := e.WriteFile(filepath.Join(e.Tmp, "mine", "dk.shortcut"), `{"version": 2, "shortcuts": {"hi": {"inline": "echo hi"}}}`, 0)
+	elsewhere := e.WriteFile(filepath.Join(e.Tmp, "mine", "dk.shortcut"), `{"version": 1, "shortcuts": {"hi": {"inline": "echo hi"}}}`, 0)
 	e.WriteStore(e.Store, map[string]any{}, map[string]any{"imports": map[string]any{"dk": elsewhere}})
 	src := nsSource(e, "dk", map[string]any{"x": testkit.Inline("true")}, nil)
 	res := e.Run("init", "--global", "--replace", "-y", src)
@@ -379,7 +379,7 @@ func TestImport_ReplaceLeavesAnImportFromElsewhereAndAProjectSource(t *testing.T
 
 func TestImportSkips_ASourceWithAShortcutsFileSaysWhatItLeavesOut(t *testing.T) {
 	e := testkit.New(t)
-	src := e.Collection(testkit.HI, testkit.Files(map[string]any{"extra.shortcut": `{"version": 2, "shortcuts": {}}`}),
+	src := e.Collection(testkit.HI, testkit.Files(map[string]any{"extra.shortcut": `{"version": 1, "shortcuts": {}}`}),
 		testkit.Extra(map[string]any{"imports": map[string]any{"listed": "listed.shortcut"}}))
 	res := runOK(t, e, testkit.Opts{}, "init", "--global", "-y", src)
 	testkit.Contains(t, "extra", res.Stdout, "extra.shortcut (a namespace file: a source with a .shortcuts brings only its exported shortcuts)")

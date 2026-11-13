@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	RegistryVersion = 2
+	RegistryVersion = 1
 	Caller          = "caller"    // 'cwd' value, and the default: run in the user's current directory
 	ImportSuffix    = ".shortcut" // an imported namespace, in the same JSON format as shortcuts.json
 	bareImport      = "a namespace file needs a name, e.g. docker.shortcut"

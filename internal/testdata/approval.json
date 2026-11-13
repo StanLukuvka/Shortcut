@@ -878,7 +878,7 @@
         {
           "path": ".shortcuts",
           "type": "file",
-          "content": "{\n  \"shortcuts\": {\n    \"hi\": {\n      \"script\": \"scripts/hi.sh\"\n    },\n    \"inline\": {\n      \"inline\": \"echo \\u00e9\"\n    }\n  },\n  \"version\": 2\n}\n",
+          "content": "{\n  \"shortcuts\": {\n    \"hi\": {\n      \"script\": \"scripts/hi.sh\"\n    },\n    \"inline\": {\n      \"inline\": \"echo \\u00e9\"\n    }\n  },\n  \"version\": 1\n}\n",
           "mode": "0o644"
         },
         {
@@ -890,7 +890,7 @@
         {
           "path": ".shortcuts.local",
           "type": "file",
-          "content": "{\n  \"shortcuts\": {\n    \"hi\": null,\n    \"mine\": {\n      \"inline\": \"echo mine\"\n    }\n  },\n  \"version\": 2\n}\n",
+          "content": "{\n  \"shortcuts\": {\n    \"hi\": null,\n    \"mine\": {\n      \"inline\": \"echo mine\"\n    }\n  },\n  \"version\": 1\n}\n",
           "mode": "0o644"
         }
       ],
@@ -900,14 +900,14 @@
           "name": "",
           "error": null,
           "shared_files": {
-            ".shortcuts": "{\n  \"shortcuts\": {\n    \"hi\": {\n      \"script\": \"scripts/hi.sh\"\n    },\n    \"inline\": {\n      \"inline\": \"echo \\u00e9\"\n    }\n  },\n  \"version\": 2\n}\n",
+            ".shortcuts": "{\n  \"shortcuts\": {\n    \"hi\": {\n      \"script\": \"scripts/hi.sh\"\n    },\n    \"inline\": {\n      \"inline\": \"echo \\u00e9\"\n    }\n  },\n  \"version\": 1\n}\n",
             "scripts/hi.sh": "#!/usr/bin/env bash\necho hi\n"
           },
           "local_files": {
-            ".shortcuts.local": "{\n  \"shortcuts\": {\n    \"hi\": null,\n    \"mine\": {\n      \"inline\": \"echo mine\"\n    }\n  },\n  \"version\": 2\n}\n"
+            ".shortcuts.local": "{\n  \"shortcuts\": {\n    \"hi\": null,\n    \"mine\": {\n      \"inline\": \"echo mine\"\n    }\n  },\n  \"version\": 1\n}\n"
           },
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"hi\\\": {\\n      \\\"script\\\": \\\"scripts/hi.sh\\\"\\n    },\\n    \\\"inline\\\": {\\n      \\\"inline\\\": \\\"echo \\\\u00e9\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"scripts/hi.sh\": \"#!/usr/bin/env bash\\necho hi\\n\"\n  },\n  \"local\": {\n    \".shortcuts.local\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"hi\\\": null,\\n    \\\"mine\\\": {\\n      \\\"inline\\\": \\\"echo mine\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"\n  }\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"hi\\\": {\\n      \\\"script\\\": \\\"scripts/hi.sh\\\"\\n    },\\n    \\\"inline\\\": {\\n      \\\"inline\\\": \\\"echo \\\\u00e9\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"scripts/hi.sh\": \"#!/usr/bin/env bash\\necho hi\\n\"\n  },\n  \"local\": {\n    \".shortcuts.local\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"hi\\\": null,\\n    \\\"mine\\\": {\\n      \\\"inline\\\": \\\"echo mine\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\"\n  }\n}\n"
         }
       ]
     },
@@ -917,7 +917,7 @@
         {
           "path": ".shortcuts.local",
           "type": "file",
-          "content": "{\n  \"shortcuts\": {\n    \"mine\": {\n      \"inline\": \"echo mine\"\n    }\n  },\n  \"version\": 2\n}\n",
+          "content": "{\n  \"shortcuts\": {\n    \"mine\": {\n      \"inline\": \"echo mine\"\n    }\n  },\n  \"version\": 1\n}\n",
           "mode": "0o644"
         }
       ],
@@ -928,10 +928,10 @@
           "error": null,
           "shared_files": {},
           "local_files": {
-            ".shortcuts.local": "{\n  \"shortcuts\": {\n    \"mine\": {\n      \"inline\": \"echo mine\"\n    }\n  },\n  \"version\": 2\n}\n"
+            ".shortcuts.local": "{\n  \"shortcuts\": {\n    \"mine\": {\n      \"inline\": \"echo mine\"\n    }\n  },\n  \"version\": 1\n}\n"
           },
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {},\n  \"local\": {\n    \".shortcuts.local\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"mine\\\": {\\n      \\\"inline\\\": \\\"echo mine\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"\n  }\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {},\n  \"local\": {\n    \".shortcuts.local\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"mine\\\": {\\n      \\\"inline\\\": \\\"echo mine\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\"\n  }\n}\n"
         }
       ]
     },
@@ -941,13 +941,13 @@
         {
           "path": ".shortcuts",
           "type": "file",
-          "content": "{\n  \"shortcuts\": {\n    \"a\": {\n      \"inline\": \"true\"\n    }\n  },\n  \"version\": 2\n}\n",
+          "content": "{\n  \"shortcuts\": {\n    \"a\": {\n      \"inline\": \"true\"\n    }\n  },\n  \"version\": 1\n}\n",
           "mode": "0o644"
         },
         {
           "path": ".shortcuts.local",
           "type": "file",
-          "content": "{\n  \"shortcuts\": {\n    \"b\": {\n      \"script\": \"tools/b.sh\"\n    }\n  },\n  \"version\": 2\n}\n",
+          "content": "{\n  \"shortcuts\": {\n    \"b\": {\n      \"script\": \"tools/b.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
           "mode": "0o644"
         },
         {
@@ -963,14 +963,14 @@
           "name": "",
           "error": null,
           "shared_files": {
-            ".shortcuts": "{\n  \"shortcuts\": {\n    \"a\": {\n      \"inline\": \"true\"\n    }\n  },\n  \"version\": 2\n}\n"
+            ".shortcuts": "{\n  \"shortcuts\": {\n    \"a\": {\n      \"inline\": \"true\"\n    }\n  },\n  \"version\": 1\n}\n"
           },
           "local_files": {
-            ".shortcuts.local": "{\n  \"shortcuts\": {\n    \"b\": {\n      \"script\": \"tools/b.sh\"\n    }\n  },\n  \"version\": 2\n}\n",
+            ".shortcuts.local": "{\n  \"shortcuts\": {\n    \"b\": {\n      \"script\": \"tools/b.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
             "tools/b.sh": "echo b\n"
           },
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"a\\\": {\\n      \\\"inline\\\": \\\"true\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"\n  },\n  \"local\": {\n    \".shortcuts.local\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"b\\\": {\\n      \\\"script\\\": \\\"tools/b.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"tools/b.sh\": \"echo b\\n\"\n  }\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"a\\\": {\\n      \\\"inline\\\": \\\"true\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\"\n  },\n  \"local\": {\n    \".shortcuts.local\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"b\\\": {\\n      \\\"script\\\": \\\"tools/b.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"tools/b.sh\": \"echo b\\n\"\n  }\n}\n"
         }
       ]
     },
@@ -980,7 +980,7 @@
         {
           "path": ".shortcuts",
           "type": "file",
-          "content": "{\n  \"shortcuts\": {\n    \"bad\": {\n      \"script\": \"bad.sh\"\n    },\n    \"crlf\": {\n      \"script\": \"crlf.sh\"\n    },\n    \"elf\": {\n      \"script\": \"bin/prog\"\n    },\n    \"empty\": {\n      \"script\": \"empty.sh\"\n    },\n    \"marked\": {\n      \"script\": \"marked.sh\"\n    },\n    \"uni\": {\n      \"script\": \"caf\\u00e9.sh\"\n    }\n  },\n  \"version\": 2\n}\n",
+          "content": "{\n  \"shortcuts\": {\n    \"bad\": {\n      \"script\": \"bad.sh\"\n    },\n    \"crlf\": {\n      \"script\": \"crlf.sh\"\n    },\n    \"elf\": {\n      \"script\": \"bin/prog\"\n    },\n    \"empty\": {\n      \"script\": \"empty.sh\"\n    },\n    \"marked\": {\n      \"script\": \"marked.sh\"\n    },\n    \"uni\": {\n      \"script\": \"caf\\u00e9.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
           "mode": "0o644"
         },
         {
@@ -1026,7 +1026,7 @@
           "name": "",
           "error": null,
           "shared_files": {
-            ".shortcuts": "{\n  \"shortcuts\": {\n    \"bad\": {\n      \"script\": \"bad.sh\"\n    },\n    \"crlf\": {\n      \"script\": \"crlf.sh\"\n    },\n    \"elf\": {\n      \"script\": \"bin/prog\"\n    },\n    \"empty\": {\n      \"script\": \"empty.sh\"\n    },\n    \"marked\": {\n      \"script\": \"marked.sh\"\n    },\n    \"uni\": {\n      \"script\": \"caf\\u00e9.sh\"\n    }\n  },\n  \"version\": 2\n}\n",
+            ".shortcuts": "{\n  \"shortcuts\": {\n    \"bad\": {\n      \"script\": \"bad.sh\"\n    },\n    \"crlf\": {\n      \"script\": \"crlf.sh\"\n    },\n    \"elf\": {\n      \"script\": \"bin/prog\"\n    },\n    \"empty\": {\n      \"script\": \"empty.sh\"\n    },\n    \"marked\": {\n      \"script\": \"marked.sh\"\n    },\n    \"uni\": {\n      \"script\": \"caf\\u00e9.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
             "bad.sh": "echo \\xff\\xfe\n\n\u0000not UTF-8, sha256 dd1284d090313958484127c39a687db402f3a7a8017f2616d9048ece12b6d516\n",
             "crlf.sh": "echo a\r\necho b\r\n",
             "bin/prog": "\u0000binary:2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d",
@@ -1036,7 +1036,7 @@
           },
           "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"bad\\\": {\\n      \\\"script\\\": \\\"bad.sh\\\"\\n    },\\n    \\\"crlf\\\": {\\n      \\\"script\\\": \\\"crlf.sh\\\"\\n    },\\n    \\\"elf\\\": {\\n      \\\"script\\\": \\\"bin/prog\\\"\\n    },\\n    \\\"empty\\\": {\\n      \\\"script\\\": \\\"empty.sh\\\"\\n    },\\n    \\\"marked\\\": {\\n      \\\"script\\\": \\\"marked.sh\\\"\\n    },\\n    \\\"uni\\\": {\\n      \\\"script\\\": \\\"caf\\\\u00e9.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"bad.sh\": \"echo \\\\xff\\\\xfe\\n\\n\\u0000not UTF-8, sha256 dd1284d090313958484127c39a687db402f3a7a8017f2616d9048ece12b6d516\\n\",\n    \"crlf.sh\": \"echo a\\r\\necho b\\r\\n\",\n    \"bin/prog\": \"\\u0000binary:2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\",\n    \"empty.sh\": \"\",\n    \"marked.sh\": \"\\u0000binary:c8e36cf1d96ddb4263536f924a0ac802350e56d0137c306103e01af45496415f\",\n    \"caf\\u00e9.sh\": \"echo \\u00e9\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"bad\\\": {\\n      \\\"script\\\": \\\"bad.sh\\\"\\n    },\\n    \\\"crlf\\\": {\\n      \\\"script\\\": \\\"crlf.sh\\\"\\n    },\\n    \\\"elf\\\": {\\n      \\\"script\\\": \\\"bin/prog\\\"\\n    },\\n    \\\"empty\\\": {\\n      \\\"script\\\": \\\"empty.sh\\\"\\n    },\\n    \\\"marked\\\": {\\n      \\\"script\\\": \\\"marked.sh\\\"\\n    },\\n    \\\"uni\\\": {\\n      \\\"script\\\": \\\"caf\\\\u00e9.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"bad.sh\": \"echo \\\\xff\\\\xfe\\n\\n\\u0000not UTF-8, sha256 dd1284d090313958484127c39a687db402f3a7a8017f2616d9048ece12b6d516\\n\",\n    \"crlf.sh\": \"echo a\\r\\necho b\\r\\n\",\n    \"bin/prog\": \"\\u0000binary:2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\",\n    \"empty.sh\": \"\",\n    \"marked.sh\": \"\\u0000binary:c8e36cf1d96ddb4263536f924a0ac802350e56d0137c306103e01af45496415f\",\n    \"caf\\u00e9.sh\": \"echo \\u00e9\\n\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     },
@@ -1046,7 +1046,7 @@
         {
           "path": ".shortcuts",
           "type": "file",
-          "content": "{\"version\": 2, \"extra\": {\"n\": 1.0, \"big\": 1e30, \"huge\": 1e400, \"nan\": NaN, \"neg\": -Infinity, \"int\": 12345678901234567890123, \"z\": -0, \"zf\": -0.0, \"e\": 1E2, \"s\": \"\\ud800 \\u00e9 \\ud83d\\ude00\"}, \"shortcuts\": {\"x\": {\"inline\": \"echo\", \"inline\": \"echo dup\"}, \"y\": {\"inline\": \"\\ud800\"}}}",
+          "content": "{\"version\": 1, \"extra\": {\"n\": 1.0, \"big\": 1e30, \"huge\": 1e400, \"nan\": NaN, \"neg\": -Infinity, \"int\": 12345678901234567890123, \"z\": -0, \"zf\": -0.0, \"e\": 1E2, \"s\": \"\\ud800 \\u00e9 \\ud83d\\ude00\"}, \"shortcuts\": {\"x\": {\"inline\": \"echo\", \"inline\": \"echo dup\"}, \"y\": {\"inline\": \"\\ud800\"}}}",
           "mode": "0o644"
         }
       ],
@@ -1056,11 +1056,11 @@
           "name": "",
           "error": "/tmp/golden/trees/t04/.shortcuts has an unknown field: extra",
           "shared_files": {
-            ".shortcuts": "{\n  \"extra\": {\n    \"big\": 1e+30,\n    \"e\": 100.0,\n    \"huge\": Infinity,\n    \"int\": 12345678901234567890123,\n    \"n\": 1.0,\n    \"nan\": NaN,\n    \"neg\": -Infinity,\n    \"s\": \"\\ud800 \\u00e9 \\ud83d\\ude00\",\n    \"z\": 0,\n    \"zf\": -0.0\n  },\n  \"shortcuts\": {\n    \"x\": {\n      \"inline\": \"echo dup\"\n    },\n    \"y\": {\n      \"inline\": \"\\ud800\"\n    }\n  },\n  \"version\": 2\n}\n"
+            ".shortcuts": "{\n  \"extra\": {\n    \"big\": 1e+30,\n    \"e\": 100.0,\n    \"huge\": Infinity,\n    \"int\": 12345678901234567890123,\n    \"n\": 1.0,\n    \"nan\": NaN,\n    \"neg\": -Infinity,\n    \"s\": \"\\ud800 \\u00e9 \\ud83d\\ude00\",\n    \"z\": 0,\n    \"zf\": -0.0\n  },\n  \"shortcuts\": {\n    \"x\": {\n      \"inline\": \"echo dup\"\n    },\n    \"y\": {\n      \"inline\": \"\\ud800\"\n    }\n  },\n  \"version\": 1\n}\n"
           },
           "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"extra\\\": {\\n    \\\"big\\\": 1e+30,\\n    \\\"e\\\": 100.0,\\n    \\\"huge\\\": Infinity,\\n    \\\"int\\\": 12345678901234567890123,\\n    \\\"n\\\": 1.0,\\n    \\\"nan\\\": NaN,\\n    \\\"neg\\\": -Infinity,\\n    \\\"s\\\": \\\"\\\\ud800 \\\\u00e9 \\\\ud83d\\\\ude00\\\",\\n    \\\"z\\\": 0,\\n    \\\"zf\\\": -0.0\\n  },\\n  \\\"shortcuts\\\": {\\n    \\\"x\\\": {\\n      \\\"inline\\\": \\\"echo dup\\\"\\n    },\\n    \\\"y\\\": {\\n      \\\"inline\\\": \\\"\\\\ud800\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"extra\\\": {\\n    \\\"big\\\": 1e+30,\\n    \\\"e\\\": 100.0,\\n    \\\"huge\\\": Infinity,\\n    \\\"int\\\": 12345678901234567890123,\\n    \\\"n\\\": 1.0,\\n    \\\"nan\\\": NaN,\\n    \\\"neg\\\": -Infinity,\\n    \\\"s\\\": \\\"\\\\ud800 \\\\u00e9 \\\\ud83d\\\\ude00\\\",\\n    \\\"z\\\": 0,\\n    \\\"zf\\\": -0.0\\n  },\\n  \\\"shortcuts\\\": {\\n    \\\"x\\\": {\\n      \\\"inline\\\": \\\"echo dup\\\"\\n    },\\n    \\\"y\\\": {\\n      \\\"inline\\\": \\\"\\\\ud800\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     },
@@ -1070,7 +1070,7 @@
         {
           "path": ".shortcuts",
           "type": "file",
-          "content": "{\n  \"shortcuts\": {\n    \"l\": {\n      \"script\": \"scripts/link.sh\"\n    }\n  },\n  \"version\": 2\n}\n",
+          "content": "{\n  \"shortcuts\": {\n    \"l\": {\n      \"script\": \"scripts/link.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
           "mode": "0o644"
         },
         {
@@ -1091,12 +1091,12 @@
           "name": "",
           "error": null,
           "shared_files": {
-            ".shortcuts": "{\n  \"shortcuts\": {\n    \"l\": {\n      \"script\": \"scripts/link.sh\"\n    }\n  },\n  \"version\": 2\n}\n",
+            ".shortcuts": "{\n  \"shortcuts\": {\n    \"l\": {\n      \"script\": \"scripts/link.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
             "scripts/real.sh": "echo real\n"
           },
           "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"l\\\": {\\n      \\\"script\\\": \\\"scripts/link.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"scripts/real.sh\": \"echo real\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"l\\\": {\\n      \\\"script\\\": \\\"scripts/link.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"scripts/real.sh\": \"echo real\\n\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     },
@@ -1106,7 +1106,7 @@
         {
           "path": ".shortcuts",
           "type": "file",
-          "content": "{\n  \"shortcuts\": {\n    \"dir\": {\n      \"script\": \"scripts\"\n    },\n    \"gone\": {\n      \"script\": \"scripts/gone.sh\"\n    },\n    \"ok\": {\n      \"script\": \"scripts/ok.sh\"\n    }\n  },\n  \"version\": 2\n}\n",
+          "content": "{\n  \"shortcuts\": {\n    \"dir\": {\n      \"script\": \"scripts\"\n    },\n    \"gone\": {\n      \"script\": \"scripts/gone.sh\"\n    },\n    \"ok\": {\n      \"script\": \"scripts/ok.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
           "mode": "0o644"
         },
         {
@@ -1122,12 +1122,12 @@
           "name": "",
           "error": null,
           "shared_files": {
-            ".shortcuts": "{\n  \"shortcuts\": {\n    \"dir\": {\n      \"script\": \"scripts\"\n    },\n    \"gone\": {\n      \"script\": \"scripts/gone.sh\"\n    },\n    \"ok\": {\n      \"script\": \"scripts/ok.sh\"\n    }\n  },\n  \"version\": 2\n}\n",
+            ".shortcuts": "{\n  \"shortcuts\": {\n    \"dir\": {\n      \"script\": \"scripts\"\n    },\n    \"gone\": {\n      \"script\": \"scripts/gone.sh\"\n    },\n    \"ok\": {\n      \"script\": \"scripts/ok.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
             "scripts/ok.sh": "echo ok\n"
           },
           "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"dir\\\": {\\n      \\\"script\\\": \\\"scripts\\\"\\n    },\\n    \\\"gone\\\": {\\n      \\\"script\\\": \\\"scripts/gone.sh\\\"\\n    },\\n    \\\"ok\\\": {\\n      \\\"script\\\": \\\"scripts/ok.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"scripts/ok.sh\": \"echo ok\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"dir\\\": {\\n      \\\"script\\\": \\\"scripts\\\"\\n    },\\n    \\\"gone\\\": {\\n      \\\"script\\\": \\\"scripts/gone.sh\\\"\\n    },\\n    \\\"ok\\\": {\\n      \\\"script\\\": \\\"scripts/ok.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"scripts/ok.sh\": \"echo ok\\n\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     },
@@ -1137,13 +1137,13 @@
         {
           "path": ".shortcuts",
           "type": "file",
-          "content": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {\n    \"p\": {\n      \"inline\": \"echo p\"\n    }\n  },\n  \"version\": 2\n}\n",
+          "content": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {\n    \"p\": {\n      \"inline\": \"echo p\"\n    }\n  },\n  \"version\": 1\n}\n",
           "mode": "0o644"
         },
         {
           "path": "ns.shortcut",
           "type": "file",
-          "content": "{\n  \"description\": \"ns\",\n  \"shortcuts\": {\n    \"go\": {\n      \"script\": \"scripts/ns/go.sh\"\n    },\n    \"viaLink\": {\n      \"script\": \"scripts/ns/link.sh\"\n    }\n  },\n  \"version\": 2\n}\n",
+          "content": "{\n  \"description\": \"ns\",\n  \"shortcuts\": {\n    \"go\": {\n      \"script\": \"scripts/ns/go.sh\"\n    },\n    \"viaLink\": {\n      \"script\": \"scripts/ns/link.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
           "mode": "0o644"
         },
         {
@@ -1199,17 +1199,17 @@
           "name": "",
           "error": null,
           "shared_files": {
-            ".shortcuts": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {\n    \"p\": {\n      \"inline\": \"echo p\"\n    }\n  },\n  \"version\": 2\n}\n"
+            ".shortcuts": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {\n    \"p\": {\n      \"inline\": \"echo p\"\n    }\n  },\n  \"version\": 1\n}\n"
           },
           "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {\\n    \\\"p\\\": {\\n      \\\"inline\\\": \\\"echo p\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {\\n    \\\"p\\\": {\\n      \\\"inline\\\": \\\"echo p\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
         },
         {
           "name": "ns",
           "error": null,
           "shared_files": {
-            "ns.shortcut": "{\n  \"description\": \"ns\",\n  \"shortcuts\": {\n    \"go\": {\n      \"script\": \"scripts/ns/go.sh\"\n    },\n    \"viaLink\": {\n      \"script\": \"scripts/ns/link.sh\"\n    }\n  },\n  \"version\": 2\n}\n",
+            "ns.shortcut": "{\n  \"description\": \"ns\",\n  \"shortcuts\": {\n    \"go\": {\n      \"script\": \"scripts/ns/go.sh\"\n    },\n    \"viaLink\": {\n      \"script\": \"scripts/ns/link.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
             "scripts/ns/dirlink": "symlink to sub\n",
             "scripts/ns/bad.txt": "x \\xe9\n\n\u0000not UTF-8, sha256 7a4367375c389643ada40c26163239533285bf24eebc59e1db48d412ac663cfd\n",
             "scripts/ns/blob": "\u0000binary:2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d",
@@ -1220,7 +1220,7 @@
           },
           "local_files": {},
           "key_template": "[\"@ROOT@\", \"ns\", \"@ROOT@/ns.shortcut\"]",
-          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"{\\n  \\\"description\\\": \\\"ns\\\",\\n  \\\"shortcuts\\\": {\\n    \\\"go\\\": {\\n      \\\"script\\\": \\\"scripts/ns/go.sh\\\"\\n    },\\n    \\\"viaLink\\\": {\\n      \\\"script\\\": \\\"scripts/ns/link.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"scripts/ns/dirlink\": \"symlink to sub\\n\",\n    \"scripts/ns/bad.txt\": \"x \\\\xe9\\n\\n\\u0000not UTF-8, sha256 7a4367375c389643ada40c26163239533285bf24eebc59e1db48d412ac663cfd\\n\",\n    \"scripts/ns/blob\": \"\\u0000binary:2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\",\n    \"scripts/ns/link.sh\": \"echo lib\\n\",\n    \"scripts/ns/lib.sh\": \"echo lib\\n\",\n    \"scripts/ns/go.sh\": \"#!/bin/sh\\n. ./lib.sh\\n\",\n    \"scripts/ns/sub/deep.sh\": \"echo deep \\u00e9\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"{\\n  \\\"description\\\": \\\"ns\\\",\\n  \\\"shortcuts\\\": {\\n    \\\"go\\\": {\\n      \\\"script\\\": \\\"scripts/ns/go.sh\\\"\\n    },\\n    \\\"viaLink\\\": {\\n      \\\"script\\\": \\\"scripts/ns/link.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"scripts/ns/dirlink\": \"symlink to sub\\n\",\n    \"scripts/ns/bad.txt\": \"x \\\\xe9\\n\\n\\u0000not UTF-8, sha256 7a4367375c389643ada40c26163239533285bf24eebc59e1db48d412ac663cfd\\n\",\n    \"scripts/ns/blob\": \"\\u0000binary:2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\",\n    \"scripts/ns/link.sh\": \"echo lib\\n\",\n    \"scripts/ns/lib.sh\": \"echo lib\\n\",\n    \"scripts/ns/go.sh\": \"#!/bin/sh\\n. ./lib.sh\\n\",\n    \"scripts/ns/sub/deep.sh\": \"echo deep \\u00e9\\n\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     },
@@ -1230,13 +1230,13 @@
         {
           "path": ".shortcuts",
           "type": "file",
-          "content": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {},\n  \"version\": 2\n}\n",
+          "content": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {},\n  \"version\": 1\n}\n",
           "mode": "0o644"
         },
         {
           "path": "ns.shortcut",
           "type": "file",
-          "content": "{\n  \"shortcuts\": {\n    \"go\": {\n      \"script\": \"scripts/ns/caf\\udce9.sh\"\n    }\n  },\n  \"version\": 2\n}\n",
+          "content": "{\n  \"shortcuts\": {\n    \"go\": {\n      \"script\": \"scripts/ns/caf\\udce9.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
           "mode": "0o644"
         },
         {
@@ -1270,17 +1270,17 @@
           "name": "",
           "error": null,
           "shared_files": {
-            ".shortcuts": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {},\n  \"version\": 2\n}\n"
+            ".shortcuts": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {},\n  \"version\": 1\n}\n"
           },
           "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {},\\n  \\\"version\\\": 2\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {},\\n  \\\"version\\\": 1\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
         },
         {
           "name": "ns",
           "error": null,
           "shared_files": {
-            "ns.shortcut": "{\n  \"shortcuts\": {\n    \"go\": {\n      \"script\": \"scripts/ns/caf\\udce9.sh\"\n    }\n  },\n  \"version\": 2\n}\n",
+            "ns.shortcut": "{\n  \"shortcuts\": {\n    \"go\": {\n      \"script\": \"scripts/ns/caf\\udce9.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
             "scripts/ns/\ud800\udc00.sh": "echo astral\n",
             "scripts/ns/\udcff.sh": "echo ff\n",
             "scripts/ns/a.sh": "echo a\n",
@@ -1288,7 +1288,7 @@
           },
           "local_files": {},
           "key_template": "[\"@ROOT@\", \"ns\", \"@ROOT@/ns.shortcut\"]",
-          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"go\\\": {\\n      \\\"script\\\": \\\"scripts/ns/caf\\\\udce9.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"scripts/ns/\\ud800\\udc00.sh\": \"echo astral\\n\",\n    \"scripts/ns/\\udcff.sh\": \"echo ff\\n\",\n    \"scripts/ns/a.sh\": \"echo a\\n\",\n    \"scripts/ns/caf\\udce9.sh\": \"echo x\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"go\\\": {\\n      \\\"script\\\": \\\"scripts/ns/caf\\\\udce9.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"scripts/ns/\\ud800\\udc00.sh\": \"echo astral\\n\",\n    \"scripts/ns/\\udcff.sh\": \"echo ff\\n\",\n    \"scripts/ns/a.sh\": \"echo a\\n\",\n    \"scripts/ns/caf\\udce9.sh\": \"echo x\\n\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     },
@@ -1298,13 +1298,13 @@
         {
           "path": ".shortcuts",
           "type": "file",
-          "content": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {},\n  \"version\": 2\n}\n",
+          "content": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {},\n  \"version\": 1\n}\n",
           "mode": "0o644"
         },
         {
           "path": "ns.shortcut",
           "type": "file",
-          "content": "{\n  \"shortcuts\": {\n    \"a\": {\n      \"inline\": \"true\"\n    }\n  },\n  \"version\": 2\n}\n",
+          "content": "{\n  \"shortcuts\": {\n    \"a\": {\n      \"inline\": \"true\"\n    }\n  },\n  \"version\": 1\n}\n",
           "mode": "0o644"
         },
         {
@@ -1329,22 +1329,22 @@
           "name": "",
           "error": null,
           "shared_files": {
-            ".shortcuts": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {},\n  \"version\": 2\n}\n"
+            ".shortcuts": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {},\n  \"version\": 1\n}\n"
           },
           "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {},\\n  \\\"version\\\": 2\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {},\\n  \\\"version\\\": 1\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
         },
         {
           "name": "ns",
           "error": null,
           "shared_files": {
-            "ns.shortcut": "{\n  \"shortcuts\": {\n    \"a\": {\n      \"inline\": \"true\"\n    }\n  },\n  \"version\": 2\n}\n",
+            "ns.shortcut": "{\n  \"shortcuts\": {\n    \"a\": {\n      \"inline\": \"true\"\n    }\n  },\n  \"version\": 1\n}\n",
             "scripts/ns/ok.sh": "echo ok\n"
           },
           "local_files": {},
           "key_template": "[\"@ROOT@\", \"ns\", \"@ROOT@/ns.shortcut\"]",
-          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"a\\\": {\\n      \\\"inline\\\": \\\"true\\\"\\n    }\\n  },\\n  \\\"version\\\": 2\\n}\\n\",\n    \"scripts/ns/ok.sh\": \"echo ok\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"a\\\": {\\n      \\\"inline\\\": \\\"true\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"scripts/ns/ok.sh\": \"echo ok\\n\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     }

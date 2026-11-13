@@ -352,7 +352,7 @@ func TestApproval_StateAndRequire(t *testing.T) {
 	if err := Save(g, SharedFiles(g), LocalFiles(g)); err != nil {
 		t.Fatal(err)
 	}
-	env.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 2, "shortcuts": {"m": {"inline": "x"}}}`, 0)
+	env.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"m": {"inline": "x"}}}`, 0)
 	g = load()
 	if State(g) != "changed" || LocalIsApproved(g, Load(g)) {
 		t.Errorf("after adding .shortcuts.local: %s", State(g))
@@ -518,7 +518,7 @@ func TestApproval_ABinaryReplacingTextSaysSoAndTextReplacingABinaryShows(t *test
 func TestApproval_FolderFilesNamespace(t *testing.T) {
 	env := testkit.New(t)
 	proj := env.Project(map[string]any{}, testkit.Extra(map[string]any{"imports": map[string]any{"ns": "ns.shortcut"}}))
-	env.WriteFile(filepath.Join(proj, "ns.shortcut"), `{"version": 2, "shortcuts": {"go": {"script": "scripts/ns/go.sh"}}}`, 0)
+	env.WriteFile(filepath.Join(proj, "ns.shortcut"), `{"version": 1, "shortcuts": {"go": {"script": "scripts/ns/go.sh"}}}`, 0)
 	env.WriteFile(filepath.Join(proj, "scripts", "ns", "go.sh"), "echo go\n", 0o755)
 	env.WriteFile(filepath.Join(proj, "scripts", "ns", "sub", "deep.sh"), "echo deep\n", 0)
 	env.WriteFile(filepath.Join(proj, "scripts", "other", "x.sh"), "echo other\n", 0)
@@ -550,7 +550,7 @@ const oldRecord = `{
   "key": "@ROOT@",
   "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "snapshot": {
-    ".shortcuts": "{\n  \"shortcuts\": {\n    \"t\": {\n      \"script\": \"bin/t\"\n    }\n  },\n  \"version\": 2\n}\n",
+    ".shortcuts": "{\n  \"shortcuts\": {\n    \"t\": {\n      \"script\": \"bin/t\"\n    }\n  },\n  \"version\": 1\n}\n",
     "bin/t": "echo one\n"
   },
   "local": {}
@@ -578,11 +578,11 @@ func TestApproval_OldRecordWithAHashStillApproves(t *testing.T) {
 	}
 	env.WriteFile(filepath.Join(proj, "bin", "t"), "echo one\n", 0)
 	env.WriteFile(filepath.Join(proj, "bin", "u"), "echo u\n", 0)
-	env.WriteFile(filepath.Join(proj, ".shortcuts"), `{"version": 2, "shortcuts": {"t": {"script": "bin/t"}, "u": {"script": "bin/u"}}}`, 0)
+	env.WriteFile(filepath.Join(proj, ".shortcuts"), `{"version": 1, "shortcuts": {"t": {"script": "bin/t"}, "u": {"script": "bin/u"}}}`, 0)
 	if got := State(model.LoadStore(proj).Main); got != "changed" {
 		t.Errorf("file added: %s", got)
 	}
-	env.WriteFile(filepath.Join(proj, ".shortcuts"), `{"version": 2, "shortcuts": {"t": {"script": "bin/t"}}}`, 0)
+	env.WriteFile(filepath.Join(proj, ".shortcuts"), `{"version": 1, "shortcuts": {"t": {"script": "bin/t"}}}`, 0)
 	if err := os.Remove(filepath.Join(proj, "bin", "t")); err != nil {
 		t.Fatal(err)
 	}
@@ -601,11 +601,11 @@ func TestApproval_RecordWithoutSnapshotOrLocal(t *testing.T) {
 		t.Errorf("no snapshot: %s", got)
 	}
 	// no "local" (written before .shortcuts.local existed): empty, so it approves while no local file exists
-	env.WriteFile(rec, `{"snapshot": {".shortcuts": "{\n  \"shortcuts\": {\n    \"t\": {\n      \"script\": \"bin/t\"\n    }\n  },\n  \"version\": 2\n}\n", "bin/t": "echo one\n"}}`, 0)
+	env.WriteFile(rec, `{"snapshot": {".shortcuts": "{\n  \"shortcuts\": {\n    \"t\": {\n      \"script\": \"bin/t\"\n    }\n  },\n  \"version\": 1\n}\n", "bin/t": "echo one\n"}}`, 0)
 	if got := State(g); got != "ok" {
 		t.Fatalf("no local: %s", got)
 	}
-	env.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 2, "shortcuts": {"m": {"inline": "x"}}}`, 0)
+	env.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"m": {"inline": "x"}}}`, 0)
 	if got := State(model.LoadStore(proj).Main); got != "changed" {
 		t.Errorf("local file appeared: %s", got)
 	}
