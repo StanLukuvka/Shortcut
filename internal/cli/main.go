@@ -33,19 +33,8 @@ var handlers map[string]handler
 
 func init() {
 	handlers = map[string]handler{"run": cmdRun, "r": cmdRun, "completion": cmdCompletion,
-		"list": cmdList, "show": cmdShow, "location": cmdLocation, "update": cmdUpdate, "new": cmdNew, "rm": cmdRm, "promote": cmdPromote}
-	// lazy: init only parses its arguments (so -h and usage errors work) until P-7 replaces its entry.
-	for _, name := range []string{"init"} {
-		handlers[name] = func(s *textio.Streams, args []string) error {
-			if _, err := parsers[name].Parse(args); err != nil {
-				return err
-			}
-			return notPorted(name)
-		}
-	}
+		"list": cmdList, "show": cmdShow, "location": cmdLocation, "update": cmdUpdate, "new": cmdNew, "rm": cmdRm, "promote": cmdPromote, "init": cmdInit}
 }
-
-func notPorted(name string) error { return Die("shortcut " + name + " is not ported to Go yet") }
 
 // Main is main(): it runs the command and returns the process's exit code. A reader that stops (shortcut list |
 // head) ends it with 141, as a program ended by SIGPIPE does (C21); Notify turns SIGPIPE into an EPIPE error.

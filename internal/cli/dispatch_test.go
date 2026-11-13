@@ -121,10 +121,6 @@ func TestDispatch_UsageVersionAndStubs(t *testing.T) {
 	if res := e.Run(""); res.Code != 2 || !strings.HasPrefix(res.Stderr, "error: unknown command ''") {
 		t.Errorf("empty word: exit %d stderr %q", res.Code, res.Stderr)
 	}
-	// lazy: a stub parses its arguments, then says it is not ported; delete this check with the stub.
-	if res := e.Run("list", "--bogus"); res.Code != 2 || !strings.Contains(res.Stderr, "shortcut list: error: unrecognized arguments: --bogus") {
-		t.Errorf("list --bogus: exit %d stderr %q", res.Code, res.Stderr)
-	}
 }
 
 // The raw bytes of control characters in an unknown word are made safe, as in Python (stderr is a SafeOutput).
