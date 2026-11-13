@@ -1270,7 +1270,7 @@
       "groups": [
         {
           "name": "",
-          "error": "/tmp/claude-1000/-home-admin-Documents-scripts-shortcut/21246e12-7cfc-48a4-b2b6-849a3a37ab20/scratchpad/gen_golden_tmp/trees/t04/.shortcuts has an unknown field: extra",
+          "error": "/tmp/golden/trees/t04/.shortcuts has an unknown field: extra",
           "shared_files": {
             ".shortcuts": "{\n  \"extra\": {\n    \"big\": 1e+30,\n    \"e\": 100.0,\n    \"huge\": Infinity,\n    \"int\": 12345678901234567890123,\n    \"n\": 1.0,\n    \"nan\": NaN,\n    \"neg\": -Infinity,\n    \"s\": \"\\ud800 \\u00e9 \\ud83d\\ude00\",\n    \"z\": 0,\n    \"zf\": -0.0\n  },\n  \"shortcuts\": {\n    \"x\": {\n      \"inline\": \"echo dup\"\n    },\n    \"y\": {\n      \"inline\": \"\\ud800\"\n    }\n  },\n  \"version\": 2\n}\n"
           },
