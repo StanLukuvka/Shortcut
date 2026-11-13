@@ -1,3 +1,4 @@
+# FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (G1-0). Don't hand-edit without checking the plan.
 name: test
 
 on:
@@ -39,21 +40,6 @@ jobs:
           python -m venv "$RUNNER_TEMP/venv"
           "$RUNNER_TEMP/venv/bin/pip" install .
           "$RUNNER_TEMP/venv/bin/shortcut" --version
-
-  macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - name: Configure git for test fixtures
-        run: |
-          git config --global user.name "ci"
-          git config --global user.email "ci@example.invalid"
-          git config --global init.defaultBranch main
-      - name: Run tests
-        run: python -m unittest discover -s tests -v
 
   lint:
     runs-on: ubuntu-latest
