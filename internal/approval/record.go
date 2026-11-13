@@ -66,7 +66,7 @@ func Load(g model.Group) *Record {
 
 func sortedObject(m map[string]string) *pyjson.Object {
 	o := &pyjson.Object{}
-	for _, k := range slices.SortedFunc(maps.Keys(m), pyjson.Compare) { // readers sort, so the order is free; sorted is stable
+	for _, k := range slices.Sorted(maps.Keys(m)) { // readers sort, so the order is free; sorted is stable
 		o.Set(k, m[k])
 	}
 	return o

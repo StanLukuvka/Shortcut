@@ -113,7 +113,7 @@ func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames 
 	s.Out.WriteString(head + " " + g.Label() + where + "\n")
 	textio.ShowDiff(s, approval.DiffFiles(old, files))
 	local2 := g.LocalShortcuts()
-	for _, name := range pyjson.SortStrings(slices.Clone(g.SharedShortcuts().Keys)) {
+	for _, name := range slices.Sorted(slices.Values(g.SharedShortcuts().Keys)) {
 		if _, both := local2.Get(name); both {
 			s.Out.WriteString("'" + name + "' in " + model.ProjectFile + " is " + g.Source(name) + " by " + model.LocalFile + " for you.\n")
 		}
@@ -124,13 +124,13 @@ func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames 
 		if g.Name != "" {
 			hidden = []string{g.Name}
 		}
-		for _, name := range pyjson.SortStrings(slices.Clone(hidden)) {
+		for _, name := range slices.Sorted(slices.Values(hidden)) {
 			if globalNames[name] {
 				s.Out.WriteString("Inside this project, '" + name + "' hides your global '" + name + "'.\n")
 			}
 		}
 	}
-	for _, name := range pyjson.SortStrings(slices.Clone(shortcuts.Keys)) {
+	for _, name := range slices.Sorted(slices.Values(shortcuts.Keys)) {
 		data, ok := shortcuts.Vals[name].(*pyjson.Object)
 		if !ok {
 			continue

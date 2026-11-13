@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -689,5 +690,13 @@ func TestWriteJSONAtomic_RefusesInvalidUTF8AndKeepsTheOldFile(t *testing.T) {
 	}
 	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(path), ".*.tmp")); len(left) != 0 {
 		t.Errorf("temp files left: %v", left)
+	}
+}
+
+func TestShortcutNamesSortByByteOrder(t *testing.T) {
+	// names match ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$, so byte order is the order the Python version printed
+	got := slices.Sorted(slices.Values([]string{"b", "a-1", "B", "a_1", "a1", "A", "10", "9"}))
+	if want := []string{"10", "9", "A", "B", "a-1", "a1", "a_1", "b"}; !slices.Equal(got, want) {
+		t.Errorf("got %q", got)
 	}
 }

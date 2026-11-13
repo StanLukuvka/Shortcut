@@ -34,25 +34,6 @@ func str(o *Object, k string) string {
 	return s
 }
 
-func TestGolden_Floats(t *testing.T) {
-	cases := golden(t, "float_cases")
-	t.Logf("%d cases", len(cases))
-	for _, c := range cases {
-		lit := str(c, "literal")
-		v, err := Parse(lit)
-		if err != nil {
-			t.Fatalf("%s: %v", lit, err)
-		}
-		n, ok := v.(json.Number)
-		if !ok || string(n) != lit { // a number keeps the text it was written with
-			t.Errorf("%s: decoded as %T %v", lit, v, v)
-		}
-		if got, err := Marshal(v); err != nil || string(got) != lit {
-			t.Errorf("%s: written back as %s, %v", lit, got, err)
-		}
-	}
-}
-
 func TestObjectOrder(t *testing.T) {
 	v, err := Parse(`{"b": 1, "a": 2, "b": 3}`)
 	if err != nil {
@@ -80,36 +61,6 @@ func marshal(t *testing.T, v Value) string {
 		t.Fatal(err)
 	}
 	return string(b)
-}
-
-func TestCompareOrder(t *testing.T) {
-	for _, c := range []struct {
-		a, b string
-		want bool
-	}{
-		{"\xff", "\U00010000", true}, // raw 0xFF is U+DCFF, below U+10000 (bytes would say above)
-		{"￿", "\U00010000", true},
-		{"a", "ab", true},
-		{"ab", "a", false},
-		{"", "a", true},
-		{"a", "a", false},
-		{"B", "a", true},
-	} {
-		if got := Compare(c.a, c.b) < 0; got != c.want {
-			t.Errorf("Compare(%q, %q) < 0 = %v", c.a, c.b, got)
-		}
-	}
-}
-
-func TestReprFloat(t *testing.T) {
-	for _, c := range []struct {
-		f    float64
-		want string
-	}{{1e22, "1e+22"}, {1e16, "1e+16"}, {1e15, "1000000000000000.0"}, {0.0001, "0.0001"}, {0.00001, "1e-05"}, {5e-324, "5e-324"}, {100, "100.0"}} {
-		if got := ReprFloat(c.f); got != c.want {
-			t.Errorf("%v: got %s, want %s", c.f, got, c.want)
-		}
-	}
 }
 
 func TestDecode_RefusesWhatIsNotValidUTF8(t *testing.T) {

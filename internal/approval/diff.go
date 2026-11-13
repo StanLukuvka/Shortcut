@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/difflib"
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
 )
 
 // DiffFiles returns a unified diff of two {path: content} maps. No rename detection: a path on one side only
@@ -20,7 +19,7 @@ func DiffFiles(old, new map[string]string) []string {
 		paths[p] = ""
 	}
 	lines := []string{}
-	for _, path := range slices.SortedFunc(maps.Keys(paths), pyjson.Compare) {
+	for _, path := range slices.Sorted(maps.Keys(paths)) {
 		before, inOld := old[path]
 		after, inNew := new[path]
 		if inOld && inNew && before == after {

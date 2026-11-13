@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -259,7 +260,7 @@ func fileError(path string, data *pyjson.Object, name string) string {
 		}
 	}
 	if len(unknown) > 0 {
-		return fmt.Sprintf("%s has an unknown field: %s", path, strings.Join(pyjson.SortStrings(unknown), ", "))
+		return fmt.Sprintf("%s has an unknown field: %s", path, strings.Join(slices.Sorted(slices.Values(unknown)), ", "))
 	}
 	return ""
 }

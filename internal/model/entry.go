@@ -5,6 +5,7 @@ package model
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/pyjson"
@@ -58,7 +59,7 @@ func EntryFromValue(name string, v pyjson.Value) (*Entry, error) {
 		}
 	}
 	if len(unknown) > 0 {
-		return nil, bad("unknown field: " + strings.Join(pyjson.SortStrings(unknown), ", "))
+		return nil, bad("unknown field: " + strings.Join(slices.Sorted(slices.Values(unknown)), ", "))
 	}
 	e := &Entry{Name: name}
 	if d, present := data.Get("description"); present {
@@ -188,7 +189,7 @@ func ValidateArgs(name string, args pyjson.Value) error {
 			}
 		}
 		if len(unknown) > 0 {
-			return bad("unknown args field: " + strings.Join(pyjson.SortStrings(unknown), ", "))
+			return bad("unknown args field: " + strings.Join(slices.Sorted(slices.Values(unknown)), ", "))
 		}
 		for _, f := range []string{"default", "desc"} {
 			if v, _ := arg.Get(f); v != nil {

@@ -357,18 +357,7 @@ osErrText -> str(OSError)
 
 [internal/pyjson]
 Decode -> json.load
-Dumps -> json.dumps(v, ...) without a trailing newline
-DumpsCompact -> json.dumps(v) with the default separators and ensure_ascii
 Parse -> json.loads(s)
-ReprFloat -> repr(float)
-SyntaxError -> json.JSONDecodeError
-UTF8Error -> UnicodeDecodeError
-array -> _parse_array_unicode
-checkUTF8 -> bytes.decode("utf-8")
-number -> _match_number_unicode
-object -> _parse_object_unicode
-str -> scanstring_unicode
-value -> py_scanner's scan_once
 
 [internal/pyos]
 Abs -> os.path.abspath

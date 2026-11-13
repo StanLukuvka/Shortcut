@@ -60,7 +60,7 @@ CI also checks `gofmt` and runs `go vet ./...`.
 - `internal/model/`: store files, entries, groups and lookup. It never prints.
 - `internal/approval/`: what a project or namespace is approved for, the approval records, and the review diff.
 - `internal/textio/`: printed text, questions and the pager.
-- `internal/pyos/`, `internal/pyjson/`, `internal/difflib/`: the parts of the standard library's file, JSON and diff behaviour that shortcut's output depends on.
+- `internal/pyos/`, `internal/difflib/`: the parts of the standard library's file and diff behaviour that shortcut's output depends on. `internal/pyjson/`: ordered JSON on encoding/json; it refuses text that is not valid UTF-8.
 - `internal/testkit/`: the test sandbox and helpers. `internal/testdata/`: frozen golden data that the tests compare against.
 - `installer/`: `install.sh` and its tests.
 - `templates/`: the bundled shortcuts, embedded in the binary by [bundled.go](bundled.go). `examples/`: namespaces to copy from.
