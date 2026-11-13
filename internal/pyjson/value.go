@@ -1,5 +1,3 @@
-// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (G1-1). Don't hand-edit without checking the plan.
-
 // Package pyjson reproduces what Python's json module does with the files shortcut reads and writes: an ordered,
 // number-preserving value model, a decoder with Python's grammar and error text, and an encoder with Python's
 // formatting. It does not import encoding/json.

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (G1-3). Don't hand-edit without checking the plan.
 """One-off golden-data generator for the Go port (plan section 3.5). Stdlib only; runs src/shortcut read-only.
 
     python3 -I internal/testdata/gen_golden.py internal/testdata

@@ -1,5 +1,3 @@
-// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (G1-2). Don't hand-edit without checking the plan.
-
 // Package textio is where shortcut's text leaves and enters: everything printed is made safe first, a question
 // cannot be forged, and a diff can use the pager.
 package textio

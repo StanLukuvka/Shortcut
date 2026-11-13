@@ -1,5 +1,3 @@
-// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (G1-2). Don't hand-edit without checking the plan.
-
 // Package pyos is the part of Python's os, os.path, shlex and fcntl that shortcut's behaviour depends on, ported so
 // the answers match Python's byte for byte (path functions are lexical posixpath ones, not filepath's).
 package pyos

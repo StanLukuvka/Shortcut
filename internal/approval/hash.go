@@ -1,5 +1,3 @@
-// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (G1-5). Don't hand-edit without checking the plan.
-
 // Package approval decides what a project or namespace has been approved for: the files that are hashed and shown
 // (plan section 4.1), the record kept in the global store, and the diff between two states.
 package approval

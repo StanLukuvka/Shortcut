@@ -1,5 +1,3 @@
-// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (T-0). Don't hand-edit without checking the plan.
-
 // Package testkit is the hub of the Go tests (port of tests/fixtures.py): one sandbox per test, one set of
 // fixtures, one way to start a process. Only this package may call t.TempDir, t.Setenv, os.Setenv or
 // os.MkdirTemp, or import os/exec (rules_test.go enforces it); every launch is refused unless it stays inside

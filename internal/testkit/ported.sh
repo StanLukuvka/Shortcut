@@ -1,5 +1,4 @@
 #!/bin/sh
-# FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (T-0). Don't hand-edit without checking the plan.
 #
 # Port-completeness check. Lists every `file::test_name` under tests/test_*.py, every `// py: file::test_name`
 # comment in *_test.go, and every line of dropped.txt, then prints

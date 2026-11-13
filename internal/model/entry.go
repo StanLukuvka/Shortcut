@@ -1,5 +1,3 @@
-// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (G1-5). Don't hand-edit without checking the plan.
-
 // Package model holds shortcut's data: entries, groups, stores, and the files they are read from and written to.
 // It never prints and never imports cli.
 package model
