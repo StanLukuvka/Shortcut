@@ -10,7 +10,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-// tree is the plan's 4.5 tree: directory t/real/sub, links t/l -> real, t/m -> real/sub, a -> b, b -> a, plus
+// tree is the plan's 4.5 tree (plus the 3.14 loop tree under w/): directory t/real/sub, links t/l -> real, t/m -> real/sub, a -> b, b -> a, plus
 // a file, a link to a file, a link to a missing target and a link with an absolute target.
 func tree(t *testing.T) *testkit.Env {
 	e := testkit.New(t)
@@ -22,18 +22,24 @@ func tree(t *testing.T) *testkit.Env {
 	e.Symlink("real/sub/f.txt", filepath.Join(e.Tmp, "t/lf"))
 	e.Symlink("nowhere/deeper", filepath.Join(e.Tmp, "t/dead"))
 	e.Symlink(filepath.Join(e.Tmp, "t/real"), filepath.Join(e.Tmp, "t/abs"))
+	// the 3.14 cases: loops, `..` links, dangling links. w/up -> .. is the tree's root.
+	e.WriteFile(filepath.Join(e.Tmp, "w/d/.keep"), "", 0)
+	for _, l := range [][2]string{{"loopa", "w/loopa"}, {"..", "w/up"}, {"nowhere/x", "w/dang"}, {"c2", "w/c1"}, {"c1", "w/c2"},
+		{"l2b", "w/loop"}, {"loop", "w/l2b"}, {"d", "w/l2"}, {"../w/d", "w/d/back"}, {"..", "w/d/up"}, {"d/up/w/d", "w/e"}} {
+		e.Symlink(l[0], filepath.Join(e.Tmp, l[1]))
+	}
 	return e
 }
 
-// Expected values checked against Python 3.14 (the plan's section 4.5).
+// Expected values generated once by python3 -I (3.14.10) posixpath.realpath on the same tree, relative to its root.
 func TestRealpath_Vectors(t *testing.T) {
 	e := tree(t)
 	cases := []struct{ in, want string }{
-		{"t/l/sub/../../l/sub", "t/real/sub"}, // a link resolved twice is not a loop
-		{"t/m/..", "t/real"},                  // .. applies after the link's target
+		{"t/l/sub/../../l/sub", "t/real/sub"},
+		{"t/m/..", "t/real"},
 		{"t/l/", "t/real"},
-		{"t/real/sub/../missing/../x", "t/real/x"}, // .. after a missing component is lexical
-		{"a", "a"}, // a real loop leaves the rest unresolved
+		{"t/real/sub/../missing/../x", "t/real/x"},
+		{"a", "a"},
 		{"a/x", "a/x"},
 		{"t/real/sub/f.txt", "t/real/sub/f.txt"},
 		{"t/lf", "t/real/sub/f.txt"},
@@ -43,6 +49,27 @@ func TestRealpath_Vectors(t *testing.T) {
 		{"t/abs/sub", "t/real/sub"},
 		{"t/new/file.json", "t/new/file.json"},
 		{"t//real/./sub/", "t/real/sub"},
+		{"w/loopa", "w/loopa"},
+		{"w/loopa/x", "w/loopa/x"},
+		{"w/./loopa/../up/dang", "dang"},
+		{"w/loopa/../up/dang", "dang"},
+		{"w/loopa/../t", "w/t"},
+		{"w/loop//l2", "w/loop/l2"},
+		{"w/loop/x/../l2/up", "w/loop/l2/up"},
+		{"w/c1/..", "w"},
+		{"w/c1/../c2/x", "w/c1/x"},
+		{"w/up", "."},
+		{"w/up/t/l", "t/real"},
+		{"w/dang", "w/nowhere/x"},
+		{"w/dang/../x", "w/nowhere/x"},
+		{"w/d/up/t/m", "w/t/m"},
+		{"w/d/back", "w/w/d"},
+		{"w/d/up/w/d/up", "w/w/d/up"},
+		{"w/e", "w/w/d"},
+		{"w/e/up/up", "w/w/d/up/up"},
+		{"w/l2/up/w/loopa/../t/l", "w/w/t/l"},
+		{"w/loopa/loopa/../..", "w"},
+		{"w/up/w/loopa/up", "w/loopa/up"},
 	}
 	for _, c := range cases {
 		t.Run(c.in, func(t *testing.T) {

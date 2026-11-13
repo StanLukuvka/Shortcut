@@ -71,7 +71,7 @@ func (w *Writer) put(text string) error {
 	}
 	w.buf = append(w.buf, text...)
 	if len(w.buf) >= bufSize {
-		return w.fail(w.Flush())
+		return w.flushOrAbort()
 	}
 	return nil
 }
@@ -88,6 +88,10 @@ func (w *Writer) fail(err error) error {
 	}
 	return err
 }
+
+// flushOrAbort is Flush where Python's sys.stdout.flush() raises BrokenPipeError (before a pager, a prompt, after a
+// diff): an EPIPE ends the process with 141, as a failed buffered write does. Main's own last Flush stays the plain one.
+func (w *Writer) flushOrAbort() error { return w.fail(w.Flush()) }
 
 // Flush writes the buffer. The buffer is dropped either way: a failed write is not retried.
 func (w *Writer) Flush() error {

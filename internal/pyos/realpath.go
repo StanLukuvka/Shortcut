@@ -6,70 +6,95 @@ package pyos
 
 import (
 	"os"
+	"slices"
 	"strings"
 	"syscall"
 )
 
-// Realpath is os.path.realpath(filename), strict=False, as posixpath._joinrealpath does it (3.10-3.12; 3.13+ is an
-// iterative rewrite with the same results). seen caches each link already resolved. A link is a loop only while it
-// is still being resolved (value nil); meeting a resolved one again uses the cached path, so
-// `t/l/sub/../../l/sub` works when t/l -> real.
+// Realpath is os.path.realpath(filename), strict=False, as CPython 3.14's iterative posixpath.realpath does it (the
+// 3.10-3.12 recursive _joinrealpath stopped at the first loop; 3.14 keeps resolving the remaining parts, so
+// `loop/../x` and `up/dang` after a loop differ between the two). The unresolved parts are a stack; seen caches each
+// link already resolved. A link is a loop only while it is still being resolved (value nil); meeting a resolved one
+// again uses the cached path, so `t/l/sub/../../l/sub` works when t/l -> real. The result is absolute throughout: a
+// relative input starts from the PHYSICAL cwd (getcwd(2), never $PWD).
 func Realpath(filename string) string {
-	p, _ := joinRealpath("", filename, map[string]*string{})
-	return Abs(p) // Python: abspath(path); a relative input is made absolute only at the end, against the PHYSICAL cwd
-}
-
-func joinRealpath(path, rest string, seen map[string]*string) (string, bool) {
-	if strings.HasPrefix(rest, "/") {
-		rest = rest[1:]
-		path = "/"
+	type part struct {
+		s      string
+		marker bool // the link whose path is the part below has been fully resolved
 	}
-	for rest != "" {
-		var name string
-		name, rest, _ = strings.Cut(rest, "/")
+	rest := strings.Split(filename, "/")
+	slices.Reverse(rest)
+	stack := make([]part, len(rest))
+	for i, s := range rest {
+		stack[i] = part{s: s}
+	}
+	count := len(stack)
+	path := "/"
+	if !strings.HasPrefix(filename, "/") {
+		cwd, err := Getwd()
+		if err != nil { // lazy: Python raises when the cwd is gone; here the path is only normalised. Upgrade: return an error.
+			return Normpath(filename)
+		}
+		path = cwd
+	}
+	seen := map[string]*string{}
+	for count > 0 {
+		top := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if top.marker {
+			link := stack[len(stack)-1].s
+			stack = stack[:len(stack)-1]
+			resolved := path
+			seen[link] = &resolved
+			continue
+		}
+		count--
+		name := top.s
 		switch name {
 		case "", ".":
 			continue
 		case "..":
-			if path != "" {
-				var base string
-				path, base = pySplit(path)
-				if base == ".." {
-					path = pyJoin(path, "..", "..")
-				}
+			if i := strings.LastIndex(path, "/"); i > 0 {
+				path = path[:i]
 			} else {
-				path = ".."
+				path = "/"
 			}
-			continue // lexical, also after a missing component, as Python does
+			continue
 		}
-		newpath := pyJoin(path, name)
+		newpath := path + "/" + name
+		if path == "/" {
+			newpath = "/" + name
+		}
 		st, err := os.Lstat(newpath)
-		if err != nil || st.Mode()&os.ModeSymlink == 0 { // missing or not a link: keep lexically
+		if err != nil || st.Mode()&os.ModeSymlink == 0 { // missing or not a link: keep as is
 			path = newpath
 			continue
 		}
 		if cached, ok := seen[newpath]; ok {
 			if cached != nil { // resolved before: reuse
 				path = *cached
-				continue
+			} else { // still resolving: a loop; the link stays as it is and the rest goes on from it
+				path = newpath
 			}
-			return pyJoin(newpath, rest), false // still resolving: a loop; Python leaves the rest as is
+			continue
 		}
-		seen[newpath] = nil // not resolved yet
 		target, err := os.Readlink(newpath)
 		if err != nil {
 			path = newpath
 			continue
 		}
-		var ok bool
-		path, ok = joinRealpath(path, target, seen) // the target is resolved from the folder holding the link
-		if !ok {
-			return pyJoin(path, rest), false
+		if strings.HasPrefix(target, "/") {
+			path = "/"
 		}
-		resolved := path
-		seen[newpath] = &resolved
+		seen[newpath] = nil
+		stack = append(stack, part{s: newpath}, part{marker: true})
+		tp := strings.Split(target, "/")
+		for i := len(tp) - 1; i >= 0; i-- {
+			stack = append(stack, part{s: tp[i]})
+		}
+		count += len(tp)
 	}
-	return path, true
+	return path
 }
 
 // Getwd is the physical cwd (C29): syscall.Getwd calls getcwd(2) and never reads $PWD, which os.Getwd prefers.

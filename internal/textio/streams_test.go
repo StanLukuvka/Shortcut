@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
@@ -44,6 +46,11 @@ func helper(job string) {
 	case "confirm":
 		ok, err := Confirm{Question: "run 'go'?", NoTerminal: "no terminal", Message: "will run \x1b[2Kit"}.Granted(s, false)
 		fmt.Fprintf(s.Out, "granted=%v err=%v\n", ok, err)
+	case "diffpipe": // stdout is a pipe whose reader has gone: ShowDiff's own flush must end the run with 141
+		signal.Notify(make(chan os.Signal, 1), syscall.SIGPIPE) // as cli.Main does: EPIPE comes back as an error
+		time.Sleep(300 * time.Millisecond)
+		ShowDiff(s, []string{"--- a/f", "+++ b/f", "+x"})
+		os.Exit(0) // no flush of ours: reaching here means ShowDiff swallowed the error
 	case "diff":
 		var lines []string
 		for i := 0; i < atoi(os.Getenv("TEXTIO_LINES")); i++ {
@@ -155,5 +162,16 @@ func TestStreams_ClosedStdFdsAreReopenedByTheRuntime(t *testing.T) {
 		"sh", "-c", `exec "$0" -test.run='^$' <&- >&- 2>&-`, os.Args[0])
 	if res.Code != 0 {
 		t.Errorf("exit %d (bit 0-2: fd 0-2 found closed, bit 3: write failed)", res.Code)
+	}
+}
+
+// C21: ShowDiff's flush (small diff, buffer not full) on a pipe nobody reads exits 141, as Python's flush() raising
+// BrokenPipeError does. `| true` is the reader that is gone before the child writes.
+func TestShowDiff_ABrokenPipeOnFlushEnds141(t *testing.T) {
+	e := testkit.New(t)
+	res := e.RunCmd(testkit.Opts{Env: map[string]string{"TEXTIO_HELPER": "diffpipe"}}, "bash", "-c",
+		`"$0" -test.run='^$' | true; exit ${PIPESTATUS[0]}`, os.Args[0])
+	if res.Code != 141 {
+		t.Errorf("exit %d, want 141; stderr %q", res.Code, res.Stderr)
 	}
 }

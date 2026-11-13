@@ -36,7 +36,7 @@ func ShowDiff(s *Streams, lines []string) {
 		}
 	}
 	s.Out.WriteStyled(text)
-	s.Out.Flush()
+	s.Out.flushOrAbort()
 }
 
 func runPager(s *Streams, pager, text string) bool {
@@ -51,6 +51,6 @@ func runPager(s *Streams, pager, text string) bool {
 	}
 	cmd.Stdin = strings.NewReader(text)
 	cmd.Stdout, cmd.Stderr = s.Out.File(), s.Err.File()
-	s.Out.Flush()
+	s.Out.flushOrAbort()
 	return cmd.Run() == nil
 }

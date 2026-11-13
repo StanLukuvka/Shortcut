@@ -25,7 +25,7 @@ func Ask(s *Streams, prompt string, accept []string) bool {
 	if accept == nil {
 		accept = yes
 	}
-	s.Out.Flush()
+	s.Out.flushOrAbort()
 	s.Err.Write([]byte(prompt))
 	if s.in == nil {
 		s.in = bufio.NewReader(s.In)
