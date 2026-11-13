@@ -8,17 +8,17 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
 // ExitError ends a command with a code and, optionally, text for stdout and stderr, which Main prints as it is
 // (so a message carries its own "error: " and newline). Code 0 is argparse's -h; 2 is a usage error; 1 is Die.
-type ExitError struct {
-	Code           int
-	Stdout, Stderr string
-}
+// It is argparse's error type, so a parser's exit passes through unchanged.
+type ExitError = argparse.ExitError
 
-func (e *ExitError) Error() string { return e.Stderr }
+// Namespace is what a parser returns: the value of each argument by its dest.
+type Namespace = argparse.Namespace
 
 // Die returns an error that prints "error: msg" on stderr and exits 1.
 func Die(msg string) error { return &ExitError{Code: 1, Stderr: "error: " + msg + "\n"} }

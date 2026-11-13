@@ -1,9 +1,11 @@
-package cli
+// Package argparse is a port of the part of Python 3.14's argparse that shortcut's commands use.
+package argparse
 
 import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -22,8 +24,8 @@ const (
 	kHelp                 // -h, --help
 )
 
-// action is one argument of a parser: an option when flags is set, else a positional.
-type action struct {
+// Action is one argument of a parser: an option when flags is set, else a positional.
+type Action struct {
 	flags   []string
 	dest    string
 	kind    kind // options
@@ -32,25 +34,26 @@ type action struct {
 	choices []string
 }
 
-func (a *action) name() string {
+func (a *Action) name() string {
 	if a.flags != nil {
 		return strings.Join(a.flags, "/")
 	}
 	return a.dest
 }
 
-type parser struct {
-	cmd       string // "shortcut <cmd>" is argparse's prog
-	actions   []*action
-	byFlag    map[string]*action
+type Parser struct {
+	cmd       string                  // "shortcut <cmd>" is argparse's prog
+	help      func(cmd string) string // the -h text of a command; the usage above an error is its first lines
+	actions   []*Action
+	byFlag    map[string]*Action
 	flagOrder []string // option strings in the order they were added: it orders an ambiguity message
-	conflicts map[*action][]*action
+	conflicts map[*Action][]*Action
 }
 
-// newParser makes the parser of one command, with its -h; the arguments are added in Python's order.
-func newParser(cmd string, add ...*action) *parser {
-	p := &parser{cmd: cmd, byFlag: map[string]*action{}, conflicts: map[*action][]*action{}}
-	for _, a := range append([]*action{{flags: []string{"-h", "--help"}, kind: kHelp}}, add...) {
+// New makes the parser of one command, with its -h; the arguments are added in Python's order. help gives the -h text of the command.
+func New(cmd string, help func(cmd string) string, add ...*Action) *Parser {
+	p := &Parser{cmd: cmd, help: help, byFlag: map[string]*Action{}, conflicts: map[*Action][]*Action{}}
+	for _, a := range append([]*Action{{flags: []string{"-h", "--help"}, kind: kHelp}}, add...) {
 		p.actions = append(p.actions, a)
 		for _, f := range a.flags {
 			p.byFlag[f] = a
@@ -60,9 +63,9 @@ func newParser(cmd string, add ...*action) *parser {
 	return p
 }
 
-// exclusive makes the options with these dests mutually exclusive.
-func (p *parser) exclusive(dests ...string) *parser {
-	var group []*action
+// Exclusive makes the options with these dests mutually exclusive.
+func (p *Parser) Exclusive(dests ...string) *Parser {
+	var group []*Action
 	for _, a := range p.actions {
 		for _, d := range dests {
 			if a.dest == d {
@@ -80,35 +83,32 @@ func (p *parser) exclusive(dests ...string) *parser {
 	return p
 }
 
-func flag(dest string, flags ...string) *action {
-	return &action{flags: flags, dest: dest, kind: kTrue}
+// Flag is a store_true option.
+func Flag(dest string, flags ...string) *Action {
+	return &Action{flags: flags, dest: dest, kind: kTrue}
 }
-func value(dest string, flags ...string) *action {
-	return &action{flags: flags, dest: dest, kind: kStore}
-}
-func repeated(dest string, flags ...string) *action {
-	return &action{flags: flags, dest: dest, kind: kAppend}
-}
-func optional(dest string, flags ...string) *action {
-	return &action{flags: flags, dest: dest, kind: kOptional}
-}
-func positional(dest string, nargs byte) *action { return &action{dest: dest, nargs: nargs} }
 
-// parsers is the parser of each command that has one, as its cmd_* builds it (the arguments in the order the Python version adds them).
-var parsers = map[string]*parser{
-	"new": newParser("new", positional("name", 0), value("desc", "--desc"), value("script", "--script"), value("copy", "--copy"),
-		value("cwd", "--cwd"), flag("local", "--local"), value("namespace", "--namespace"), value("by", "--by"),
-		repeated("arg", "--arg"), repeated("arg_desc", "--arg-desc"), flag("confirm", "--confirm")).exclusive("script", "copy"),
-	"list":     newParser("list", optional("names", "--names")),
-	"show":     newParser("show", positional("name", '+'), flag("json", "--json"), flag("skip_local", "--global")),
-	"location": newParser("location", positional("name", '+'), flag("skip_local", "--global")),
-	"rm": newParser("rm", positional("name", '*'), value("namespace", "--namespace"), flag("yes", "-y", "--yes"),
-		flag("local", "--local"), flag("skip_local", "--global")),
-	"promote": newParser("promote", positional("name", 0), value("new_name", "--as"), flag("yes", "-y", "--yes"), flag("force", "--force")),
-	"update":  newParser("update", positional("group", '?'), flag("yes", "-y", "--yes")),
-	"init": newParser("init", positional("source", '?'), flag("is_global", "--global"), flag("bundled", "--bundled"), flag("yes", "-y", "--yes"),
-		flag("replace", "--replace")),
-	"completion": newParser("completion", &action{dest: "shell", nargs: '?', def: "bash", choices: []string{"bash", "fish", "zsh"}}),
+// Value is --opt VALUE.
+func Value(dest string, flags ...string) *Action {
+	return &Action{flags: flags, dest: dest, kind: kStore}
+}
+
+// Repeated is --opt VALUE, given any number of times.
+func Repeated(dest string, flags ...string) *Action {
+	return &Action{flags: flags, dest: dest, kind: kAppend}
+}
+
+// Optional is --opt [VALUE]: "" when it has no value.
+func Optional(dest string, flags ...string) *Action {
+	return &Action{flags: flags, dest: dest, kind: kOptional}
+}
+
+// Positional takes nargs 0 (one word), '?', '*' or '+'.
+func Positional(dest string, nargs byte) *Action { return &Action{dest: dest, nargs: nargs} }
+
+// Choice is an optional positional that must be one of choices, def when it is left out.
+func Choice(dest, def string, choices ...string) *Action {
+	return &Action{dest: dest, nargs: '?', def: def, choices: choices}
 }
 
 // Namespace maps the dest of each argument to its value, which is a string, a bool, a []string or
@@ -126,9 +126,25 @@ func (n Namespace) Bool(dest string) bool { b, _ := n[dest].(bool); return b }
 // List is a repeated option's values, or a positional with several.
 func (n Namespace) List(dest string) []string { l, _ := n[dest].([]string); return l }
 
-// Parse returns the namespace, or an *ExitError for what argparse exits on: 2 and the usage and message on
-// stderr, or 0 and the help on stdout for -h.
-func (p *parser) Parse(argv []string) (Namespace, error) {
+// ExitError is what argparse exits with: 2 and the usage and message on stderr, or 0 and the help on stdout for -h.
+// The caller prints Stdout and Stderr as they are and exits with Code.
+type ExitError struct {
+	Code           int
+	Stdout, Stderr string
+}
+
+func (e *ExitError) Error() string { return e.Stderr }
+
+// Usage is the usage block of a command's help: its lines up to the first blank one. argparse prints it above an error.
+func Usage(help string) string {
+	if usage, _, found := strings.Cut(help, "\n\n"); found {
+		return usage + "\n"
+	}
+	return help
+}
+
+// Parse returns the namespace, or an *ExitError for what argparse exits on.
+func (p *Parser) Parse(argv []string) (Namespace, error) {
 	ns, extras, err := p.parseKnown(argv)
 	if err == nil && len(extras) > 0 {
 		err = &argError{msg: "unrecognized arguments: " + strings.Join(extras, " ")}
@@ -137,14 +153,14 @@ func (p *parser) Parse(argv []string) (Namespace, error) {
 		return ns, nil
 	}
 	if ae, ok := err.(*argError); ok {
-		return nil, &ExitError{Code: 2, Stderr: usageOf(p.cmd) + "shortcut " + p.cmd + ": error: " + ae.Error() + "\n"}
+		return nil, &ExitError{Code: 2, Stderr: Usage(p.help(p.cmd)) + "shortcut " + p.cmd + ": error: " + ae.Error() + "\n"}
 	}
 	return nil, err
 }
 
 // argError is an argument error: with an action the message names it.
 type argError struct {
-	act *action
+	act *Action
 	msg string
 }
 
@@ -158,7 +174,7 @@ func (e *argError) Error() string {
 // optTuple is what the option lookup finds for one word: the action (nil if the parser has no such option), the option
 // string it matched, and the explicit argument (`=value`, or the rest of a short word) when there is one.
 type optTuple struct {
-	act      *action
+	act      *Action
 	flag     string
 	sep      string
 	explicit *string
@@ -166,7 +182,7 @@ type optTuple struct {
 
 var negativeNumberRe = regexp.MustCompile(`^-\.?\d`)
 
-func (p *parser) parseOptional(arg string) []optTuple {
+func (p *Parser) parseOptional(arg string) []optTuple {
 	if arg == "" || arg[0] != '-' {
 		return nil
 	}
@@ -192,7 +208,7 @@ func (p *parser) parseOptional(arg string) []optTuple {
 }
 
 // optionTuples returns the options a word could be the start of.
-func (p *parser) optionTuples(arg string) []optTuple {
+func (p *Parser) optionTuples(arg string) []optTuple {
 	var out []optTuple
 	if arg[1] == '-' {
 		prefix, rest, ok := strings.Cut(arg, "=")
@@ -225,7 +241,7 @@ func (p *parser) optionTuples(arg string) []optTuple {
 }
 
 // nargsPattern is the match pattern of a positional (A is a word, - is a `--`).
-func nargsPattern(a *action) string {
+func nargsPattern(a *Action) string {
 	switch a.nargs {
 	case '?':
 		return "(-*A?-*)"
@@ -238,7 +254,7 @@ func nargsPattern(a *action) string {
 }
 
 // optionCount returns, for an option, how many of the words that follow it (as a pattern) it takes.
-func optionCount(a *action, pattern string) (int, error) {
+func optionCount(a *Action, pattern string) (int, error) {
 	switch a.kind {
 	case kTrue, kHelp:
 		return 0, nil
@@ -255,7 +271,7 @@ func optionCount(a *action, pattern string) (int, error) {
 }
 
 // matchPartial returns how many words each of the leading positionals takes.
-func matchPartial(actions []*action, pattern string) []int {
+func matchPartial(actions []*Action, pattern string) []int {
 	for i := len(actions); i > 0; i-- {
 		var re strings.Builder
 		re.WriteString("^")
@@ -280,7 +296,7 @@ func matchPartial(actions []*action, pattern string) []int {
 	return nil
 }
 
-func (p *parser) defaults() Namespace {
+func (p *Parser) defaults() Namespace {
 	ns := Namespace{}
 	for _, a := range p.actions {
 		switch {
@@ -299,7 +315,7 @@ func (p *parser) defaults() Namespace {
 }
 
 // parseKnown returns the namespace and the words nothing took.
-func (p *parser) parseKnown(argv []string) (Namespace, []string, error) {
+func (p *Parser) parseKnown(argv []string) (Namespace, []string, error) {
 	ns := p.defaults()
 	optAt := map[int][]optTuple{}
 	last := -1
@@ -321,11 +337,11 @@ func (p *parser) parseKnown(argv []string) (Namespace, []string, error) {
 	}
 	pattern := pat.String()
 
-	seen := map[*action]bool{}
-	seenNonDefault := map[*action]bool{}
+	seen := map[*Action]bool{}
+	seenNonDefault := map[*Action]bool{}
 	var extras []string
 
-	takeAction := func(a *action, words []string) error {
+	takeAction := func(a *Action, words []string) error {
 		seen[a] = true
 		var val any
 		switch {
@@ -358,7 +374,7 @@ func (p *parser) parseKnown(argv []string) (Namespace, []string, error) {
 		}
 		switch a.kind {
 		case kHelp:
-			return &ExitError{Code: 0, Stdout: helpText(p.cmd)}
+			return &ExitError{Code: 0, Stdout: p.help(p.cmd)}
 		case kTrue:
 			ns[a.dest] = true
 		case kAppend:
@@ -381,7 +397,7 @@ func (p *parser) parseKnown(argv []string) (Namespace, []string, error) {
 		t := tuples[0]
 		act, flagName, sep, explicit := t.act, t.flag, t.sep, t.explicit
 		type taken struct {
-			a     *action
+			a     *Action
 			words []string
 		}
 		var todo []taken
@@ -396,7 +412,7 @@ func (p *parser) parseKnown(argv []string) (Namespace, []string, error) {
 				switch {
 				case n == 0 && flagName[1] != '-' && *explicit != "":
 					if sep != "" || (*explicit)[0] == '-' {
-						return 0, &argError{act: act, msg: "ignored explicit argument " + pyRepr(*explicit)}
+						return 0, &argError{act: act, msg: "ignored explicit argument " + PyRepr(*explicit)}
 					}
 					todo = append(todo, taken{act, nil})
 					r, size := utf8.DecodeRuneInString(*explicit)
@@ -426,7 +442,7 @@ func (p *parser) parseKnown(argv []string) (Namespace, []string, error) {
 					stop = start + 1
 					goto done
 				default:
-					return 0, &argError{act: act, msg: "ignored explicit argument " + pyRepr(*explicit)}
+					return 0, &argError{act: act, msg: "ignored explicit argument " + PyRepr(*explicit)}
 				}
 			} else {
 				n, err := optionCount(act, pattern[start+1:])
@@ -447,7 +463,7 @@ func (p *parser) parseKnown(argv []string) (Namespace, []string, error) {
 		return stop, nil
 	}
 
-	var positionals []*action
+	var positionals []*Action
 	for _, a := range p.actions {
 		if a.flags == nil {
 			positionals = append(positionals, a)
@@ -517,7 +533,7 @@ func (p *parser) parseKnown(argv []string) (Namespace, []string, error) {
 	return ns, extras, nil
 }
 
-func checkChoice(a *action, v string) error {
+func checkChoice(a *Action, v string) error {
 	if a.choices == nil {
 		return nil
 	}
@@ -526,7 +542,47 @@ func checkChoice(a *action, v string) error {
 		if c == v {
 			return nil
 		}
-		quoted[i] = pyRepr(c)
+		quoted[i] = PyRepr(c)
 	}
-	return &argError{act: a, msg: fmt.Sprintf("invalid choice: %s (choose from %s)", pyRepr(v), strings.Join(quoted, ", "))}
+	return &argError{act: a, msg: fmt.Sprintf("invalid choice: %s (choose from %s)", PyRepr(v), strings.Join(quoted, ", "))}
+}
+
+// PyRepr is repr() of a str. A byte that is not UTF-8 is what Python's surrogateescape makes of it, \udcXX.
+func PyRepr(s string) string {
+	quote := byte('\'')
+	if strings.Contains(s, "'") && !strings.Contains(s, "\"") {
+		quote = '"'
+	}
+	var b strings.Builder
+	b.WriteByte(quote)
+	for i := 0; i < len(s); {
+		r, n := utf8.DecodeRuneInString(s[i:])
+		switch {
+		case r == utf8.RuneError && n == 1:
+			fmt.Fprintf(&b, "\\udc%02x", s[i])
+		case r == '\\':
+			b.WriteString("\\\\")
+		case r == rune(quote):
+			b.WriteString("\\" + string(r))
+		case r == '\n':
+			b.WriteString("\\n")
+		case r == '\r':
+			b.WriteString("\\r")
+		case r == '\t':
+			b.WriteString("\\t")
+		case r < 0x20 || r == 0x7f:
+			fmt.Fprintf(&b, "\\x%02x", r)
+		case r < 0x7f || unicode.IsPrint(r):
+			b.WriteRune(r)
+		case r < 0x100:
+			fmt.Fprintf(&b, "\\x%02x", r)
+		case r < 0x10000:
+			fmt.Fprintf(&b, "\\u%04x", r)
+		default:
+			fmt.Fprintf(&b, "\\U%08x", r)
+		}
+		i += n
+	}
+	b.WriteByte(quote)
+	return b.String()
 }

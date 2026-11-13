@@ -24,8 +24,6 @@ hashInput -> json.dumps(sorted(files.items()))
 [internal/cli]
 Die -> die()
 Main -> main()
-Namespace -> argparse's Namespace
-Parse -> parse_args
 TestApproval_ABinaryNeedsTypingOutAtThePrompt -> test_approval.py::test_a_binary_needs_typing_out_at_the_prompt
 TestApproval_ACwdWithANulDoesNotStopTheToolsThatFindIt -> test_approval.py::test_a_cwd_with_a_nul_does_not_stop_the_tools_that_find_it
 TestApproval_ANamespaceApprovalCoversItsWholeScriptsFolder -> test_approval.py::test_a_namespace_approval_covers_its_whole_scripts_folder
@@ -234,7 +232,6 @@ TestSymlinkSafety_MovingASymlinkUnderARelativeCwdNeedsApproval -> test_symlink_s
 applyImport -> apply_import
 applyNamespaces -> apply_namespaces
 approveGroup -> approve_group
-argError -> ArgumentError
 argLines -> arg_lines
 bindArgs -> bind_args
 cloneTemp -> cmd_init (git branch)
@@ -252,7 +249,6 @@ descOr -> parsed.desc or default
 dispatch -> dispatch (cli.py)
 entryFields -> entry_fields
 excludeFromGit -> exclude_from_git
-exclusive -> add_mutually_exclusive_group
 initNamespaces -> init_namespaces
 installedFiles -> installed_files
 isGitSource -> is_git_source
@@ -262,24 +258,16 @@ joinCommand -> join_command
 keptScript -> kept_script
 listDir -> sorted(os.listdir(dir))
 loadForEdit -> reg.setdefault("shortcuts", ...)
-matchPartial -> _match_arguments_partial
 namespaceFolderProblem -> namespace_folder_problem
 namespaceIsApproved -> namespace_is_approved
-nargsPattern -> _get_nargs_pattern
 newFromCopy -> new_from_copy
 newFromScript -> new_from_script
-newParser -> Parser(prog="shortcut <cmd>")
 noteIfUnapproved -> note_if_unapproved
 nsSource -> namespace_source
-optTuple -> _parse_optional
-optionCount -> _match_argument
-optionTuples -> _get_option_tuples
 padRight -> f"{s:<n}"
-parseKnown -> _parse_known_args
 planImport -> plan_import
 planNamespaces -> plan_namespaces
 positionalAnywhere -> re.search(POSITIONAL, text)
-pyRepr -> repr() of a str
 pyRstrip -> str.rstrip()
 pyStr -> str()
 pyTruthy -> bool()
@@ -309,6 +297,20 @@ usageLine -> usage_line
 usageText -> print_usage (cli.py)
 writeExecutable -> open(path, "w") + chmod 0o755
 writeLocal -> write_local
+
+[internal/cli/argparse]
+Exclusive -> add_mutually_exclusive_group
+Namespace -> argparse's Namespace
+New -> Parser(prog="shortcut <cmd>")
+Parse -> parse_args
+PyRepr -> repr() of a str
+argError -> ArgumentError
+matchPartial -> _match_arguments_partial
+nargsPattern -> _get_nargs_pattern
+optTuple -> _parse_optional
+optionCount -> _match_argument
+optionTuples -> _get_option_tuples
+parseKnown -> _parse_known_args
 
 [internal/difflib]
 SplitLinesKeepEnds -> str.splitlines(keepends=True)
