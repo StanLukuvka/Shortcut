@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -108,28 +109,12 @@ func runShortcut(s *textio.Streams, words []string, skipLocal, assumeYes bool) e
 		return err
 	}
 	// A shortcut run from another one gets its own SC_ARG_ variables, not the caller's
-	var env []string
-	index := map[string]int{}
-	set := func(kv string) {
-		k, _, _ := strings.Cut(kv, "=")
-		if i, ok := index[k]; ok {
-			env[i] = kv
-			return
-		}
-		index[k] = len(env)
-		env = append(env, kv)
-	}
-	for _, kv := range os.Environ() {
-		if k, _, ok := strings.Cut(kv, "="); ok && !strings.HasPrefix(k, "SC_ARG_") {
-			set(kv)
-		}
-	}
-	set("SHORTCUT_NAME=" + name)
-	set("SHORTCUT_NAMESPACE=" + resolved.Group.Name)
-	set("SHORTCUT_CALLER_CWD=" + callerCwd)
-	for _, kv := range argEnv {
-		set(kv)
-	}
+	env := slices.DeleteFunc(os.Environ(), func(kv string) bool {
+		k, _, hasEq := strings.Cut(kv, "=")
+		return !hasEq || strings.HasPrefix(k, "SC_ARG_") || k == "SHORTCUT_NAME" || k == "SHORTCUT_NAMESPACE" || k == "SHORTCUT_CALLER_CWD"
+	})
+	env = append(env, "SHORTCUT_NAME="+name, "SHORTCUT_NAMESPACE="+resolved.Group.Name, "SHORTCUT_CALLER_CWD="+callerCwd)
+	env = append(env, argEnv...)
 	err = pyos.ExecChild(plan.argv, resolved.RunCwd, env)
 	if plan.direct && errors.Is(err, syscall.ENOEXEC) && !bytes.Contains(plan.header, []byte{0}) {
 		// An executable text file with no #!: exec says "exec format error", a shell would run it with itself.

@@ -53,6 +53,13 @@ func TestRunning_TheEnvironmentSaysWhatRunsAndFromWhere(t *testing.T) {
 	}
 }
 
+func TestRunning_APresetShortcutNameIsReplacedOnce(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"cnt": testkit.Inline(`env | grep -c '^SHORTCUT_NAME='; echo "$SHORTCUT_NAME"`)})
+	res := e.RunWith(testkit.Opts{Env: map[string]string{"SHORTCUT_NAME": "outer"}}, "r", "cnt")
+	testkit.Eq(t, "stdout", res.Stdout, "1\ncnt\n")
+}
+
 func TestRunning_ANameAloneNeverRunsAShortcut(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"hello": testkit.Inline("echo hello")})
