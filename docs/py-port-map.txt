@@ -300,7 +300,7 @@ Parse -> parse_args
 UsageError -> (new: "error: ..." and a Try line, no Python equivalent)
 
 [internal/difflib]
-SplitLinesKeepEnds -> str.splitlines(keepends=True)
+SplitLinesKeepEnds -> (new: splits after \n only; was str.splitlines(keepends=True))
 Unified -> difflib.unified_diff(a, b, from, to, lineterm="") with n=3
 blocks -> get_matching_blocks
 formatRange -> _format_range_unified
