@@ -110,6 +110,16 @@ func TestExec_LookPath(t *testing.T) {
 			t.Errorf("lookPathIn(%q, %q): %v, want ENOENT", c.path, c.file, err)
 		}
 	}
+	// a match in the cwd or a relative dir is passed over; the later absolute entry still answers
+	e.WriteFile(filepath.Join(e.Tmp, "tool"), "#!/bin/sh\n", 0o755)
+	for _, p := range []string{".:" + other, ":" + other, "bin:" + other} {
+		if got, err := lookPathIn(p, "tool"); err != nil || got != other+"/tool" {
+			t.Errorf("lookPathIn(%q, tool) = %q, %v; want %q", p, got, err, other+"/tool")
+		}
+	}
+	if _, err := lookPathIn("bin:.:", "tool"); !errors.Is(err, syscall.ENOENT) {
+		t.Errorf("only relative entries: %v", err)
+	}
 	if _, err := lookPathIn(bin, "plain"); !errors.Is(err, syscall.EACCES) {
 		t.Errorf("only a non-executable match: %v", err)
 	}

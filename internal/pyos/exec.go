@@ -3,7 +3,6 @@
 package pyos
 
 import (
-	"errors"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -45,12 +44,19 @@ func pathOf(env []string) string {
 	return "/bin:/usr/bin"
 }
 
-// lookPathIn is exec.LookPath against searchPath. On failure: EACCES if an absolute entry holds a non-directory of that
-// name (it exists but cannot be run), ENOENT otherwise. An empty or "." entry never matches (exec.ErrDot): not found.
-// PATH is set for the call and restored; fine only because the process is about to exec.
+// lookPathIn is exec.LookPath against the absolute entries of searchPath; empty and relative entries ("", ".", "bin")
+// never match, and the search goes on to the later entries. On failure: EACCES if an absolute entry holds a
+// non-directory of that name (it exists but cannot be run), ENOENT otherwise. PATH is set for the call and restored;
+// fine only because the process is about to exec.
 func lookPathIn(searchPath, file string) (string, error) {
+	var abs []string
+	for _, dir := range filepath.SplitList(searchPath) {
+		if filepath.IsAbs(dir) {
+			abs = append(abs, dir)
+		}
+	}
 	old, had := os.LookupEnv("PATH")
-	os.Setenv("PATH", searchPath)
+	os.Setenv("PATH", strings.Join(abs, string(os.PathListSeparator)))
 	defer func() {
 		if had {
 			os.Setenv("PATH", old)
@@ -62,14 +68,9 @@ func lookPathIn(searchPath, file string) (string, error) {
 	if err == nil {
 		return p, nil
 	}
-	if !errors.Is(err, exec.ErrDot) {
-		for _, dir := range filepath.SplitList(searchPath) {
-			if !filepath.IsAbs(dir) {
-				continue
-			}
-			if st, serr := os.Stat(filepath.Join(dir, file)); serr == nil && !st.IsDir() {
-				return "", &os.PathError{Op: "exec", Path: file, Err: syscall.EACCES}
-			}
+	for _, dir := range abs {
+		if st, serr := os.Stat(filepath.Join(dir, file)); serr == nil && !st.IsDir() {
+			return "", &os.PathError{Op: "exec", Path: file, Err: syscall.EACCES}
 		}
 	}
 	return "", &os.PathError{Op: "exec", Path: file, Err: syscall.ENOENT}
