@@ -1,3 +1,4 @@
+// FLOW-PRODUCED: temporary marker; written by the LAD flow for .lad/plans/20261113-0238-go-rewrite.md (M4-ci). Don't hand-edit without checking the plan.
 package testkit
 
 import (
@@ -230,7 +231,9 @@ func (e *Env) BashComplete(words ...string) []string {
 	driver := e.Run("completion", "bash").Stdout +
 		fmt.Sprintf("COMP_WORDS=(%s); COMP_CWORD=%d; _shortcut\n", shquote(line), len(line)-1) +
 		"printf \"%s\\n\" \"${COMPREPLY[@]}\"\n"
-	res := e.RunCmd(Opts{}, "bash", "-c", driver)
+	// Shell, not RunCmd: the script runs `shortcut list --names`, so the test binary must be on PATH
+	// (a `shortcut` installed on the developer's machine would otherwise hide that).
+	res := e.Shell(Opts{}, driver)
 	if res.Stderr != "" {
 		e.dief("bash completion wrote to stderr: %s", res.Stderr)
 	}
