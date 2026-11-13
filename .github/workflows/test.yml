@@ -58,3 +58,34 @@ jobs:
           for f in install.sh templates/scripts/*.sh examples/podman/scripts/podman/*.sh; do bash -n "$f"; done
           python src completion bash > "$RUNNER_TEMP/completion.bash"
           bash -n "$RUNNER_TEMP/completion.bash"
+
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Configure git for test fixtures
+        run: |
+          git config --global user.name "ci"
+          git config --global user.email "ci@example.invalid"
+          git config --global init.defaultBranch main
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt: these files need formatting:" >&2
+            echo "$unformatted" >&2
+            exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test ./...
+      - name: ported.sh --strict
+        run: sh internal/testkit/ported.sh --strict
+      - name: cross-build linux/arm64
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build ./...
+      - name: cross-build darwin/amd64
+        run: CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build ./...

@@ -81,7 +81,7 @@ func TestShell_HasShortcutOnPath(t *testing.T) {
 
 func TestStart_ReadsStdoutAndSignals(t *testing.T) {
 	e := New(t)
-	useBinary(t, e, "echo ready\necho warn >&2\nexec sleep 30\n")
+	useBinary(t, e, "echo warn >&2\necho ready\nexec sleep 30\n")
 	p := e.Start(Opts{})
 	line, err := p.Stdout().ReadString('\n')
 	if err != nil || line != "ready\n" {

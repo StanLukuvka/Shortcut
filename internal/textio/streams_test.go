@@ -54,6 +54,9 @@ func helper(job string) {
 		for i := 0; i < atoi(os.Getenv("TEXTIO_LINES")); i++ {
 			lines = append(lines, []string{"--- a/f", "+++ b/f", "@@ -1 +1 @@", "+added \x1b[2J", "-removed", " context"}[i%6])
 		}
+		if os.Getenv("TEXTIO_RAW") != "" {
+			lines[0] = "--- a/a\x9bb.sh"
+		}
 		ShowDiff(s, lines)
 		s.Flush()
 	}
@@ -171,5 +174,20 @@ func TestShowDiff_ABrokenPipeOnFlushEnds141(t *testing.T) {
 		`"$0" -test.run='^$' | true; exit ${PIPESTATUS[0]}`, os.Args[0])
 	if res.Code != 141 {
 		t.Errorf("exit %d, want 141; stderr %q", res.Code, res.Stderr)
+	}
+}
+
+// Q-3: stdout escapes bytes that are not UTF-8 and lone surrogates like stderr, in Write and in WriteStyled.
+func TestStreams_NonUTF8IsEscapedOnBothStreams(t *testing.T) {
+	e := testkit.New(t)
+	s, out, errs := capture(t, e, "")
+	const raw, want = "a\x9bb\xed\xa0\x80c\n", "a\\udc9bb\\ud800c\n"
+	s.Out.WriteString(raw)
+	s.Out.WriteStyled(raw)
+	fmt.Fprint(s.Out, raw)
+	s.Err.WriteString(raw)
+	s.Flush()
+	if out() != want+want+want || errs() != want {
+		t.Errorf("stdout %q, stderr %q, want %q", out(), errs(), want)
 	}
 }
