@@ -2,7 +2,8 @@ package cli
 
 import (
 	"embed"
-	"strings"
+
+	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
 )
 
 // helpFiles are the `-h` texts of the commands, captured once from Python's argparse at 80 columns.
@@ -26,10 +27,4 @@ func helpText(cmd string) string {
 }
 
 // usageOf is the usage block of a command's help: its lines up to the first blank one. argparse prints it above an error.
-func usageOf(cmd string) string {
-	text := helpText(cmd)
-	if usage, _, found := strings.Cut(text, "\n\n"); found {
-		return usage + "\n"
-	}
-	return text
-}
+func usageOf(cmd string) string { return argparse.Usage(helpText(cmd)) }
