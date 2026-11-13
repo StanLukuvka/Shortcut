@@ -1,0 +1,12 @@
+usage: shortcut promote [-h] [--as NEW] [-y] [--force] name
+
+Add a project shortcut to your global shortcuts, run from this checkout
+
+positional arguments:
+  name        Project shortcut name
+
+options:
+  -h, --help  show this help message and exit
+  --as NEW    Global name to give it
+  -y, --yes   Do not prompt for confirmation
+  --force     Promote an entry that isn't exported

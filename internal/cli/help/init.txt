@@ -1,0 +1,14 @@
+usage: shortcut init [-h] [--global] [-y] [--replace] [source]
+
+With --global, create the global store, or review a project's exported
+shortcuts, or a folder of namespaces, and copy them there
+
+positional arguments:
+  source      Local path or git URL to import from (needs --global)
+
+options:
+  -h, --help  show this help message and exit
+  --global    Import into global store
+  -y, --yes   Import without asking
+  --replace   Put a source's namespaces in place of installed ones of the same
+              name

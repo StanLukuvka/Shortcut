@@ -1,0 +1,38 @@
+# zsh completion for shortcut (load after compinit)
+
+_shortcut() {
+    local -a subcommands
+    subcommands=(run r new list show location rm promote update init completion help)
+
+    if (( CURRENT == 2 )); then
+        compadd -- $subcommands
+        return
+    fi
+
+    case $words[2] in
+        run|r|show|location|rm|promote)
+            local -a typed
+            typed=(${words[3,CURRENT-1]:#-*})
+            if (( $#typed == 0 )) && [[ $PREFIX == -* ]]; then
+                case $words[2] in
+                    run|r) compadd -- --global -y ;;
+                    rm) compadd -- --global --local --namespace -y ;;
+                    show) compadd -- --global --json ;;
+                    promote) compadd -- --as -y --force ;;
+                    *) compadd -- --global ;;
+                esac
+            elif (( $#typed <= 1 )); then
+                compadd -- ${(f)"$(shortcut list --names $typed[1] 2>/dev/null)"}
+            fi
+            ;;
+        init)
+            compadd -- --global --replace -y
+            _files -/
+            ;;
+        completion)
+            (( CURRENT == 3 )) && compadd -- bash zsh fish
+            ;;
+    esac
+}
+
+compdef _shortcut shortcut

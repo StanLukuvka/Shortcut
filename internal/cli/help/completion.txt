@@ -1,0 +1,9 @@
+usage: shortcut completion [-h] [{bash,fish,zsh}]
+
+Generate shell completion script
+
+positional arguments:
+  {bash,fish,zsh}  Shell type
+
+options:
+  -h, --help       show this help message and exit
