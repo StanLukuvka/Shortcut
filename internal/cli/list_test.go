@@ -166,7 +166,7 @@ func TestList_NamespaceApprovalIsSingular(t *testing.T) {
 	testkit.Contains(t, "changed", e.Run("list").Stdout, ") changed since you approved it. Review it with")
 }
 
-// A description that is not a string, in a project file (refused) or in a global entry (shown), never panics; it never panics.
+// A description that is not a string, in a project file (refused) or in a global entry (shown), never panics.
 func TestStores_ListSurvivesNonStringDescription(t *testing.T) {
 	e := testkit.New(t)
 	proj := filepath.Join(e.Home, "badlist")

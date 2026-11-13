@@ -96,7 +96,7 @@ func oldProjectFolder(callerCwd string) string {
 	}
 }
 
-// LocalProjectRoot returns where --local writes, this folder and never a parent. Its errors are the
+// LocalProjectRoot returns where --local writes, this folder and never a parent. Its errors are
 // the messages die prints.
 func LocalProjectRoot(cwd string) (string, error) {
 	here := pyos.Realpath(cwd)

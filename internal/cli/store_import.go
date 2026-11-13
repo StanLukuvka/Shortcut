@@ -19,7 +19,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
-// What init --global copies into the global store : a project's exported shortcuts, or a
+// What init --global copies into the global store: a project's exported shortcuts, or a
 // folder of namespace files. Everything is planned from bytes read once, shown, and only then written, so what is
 // copied is what was reviewed. Declining writes nothing: no store, no folder, no script.
 

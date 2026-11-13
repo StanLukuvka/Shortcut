@@ -80,8 +80,7 @@ func modelSource(t *testing.T) string {
 	return b.String()
 }
 
-// argFields finds the case list of ValidateArgs that holds "rest": the fields an arg may have  (the set literal
-// holding "rest").
+// argFields finds the case list of ValidateArgs that holds "rest": the fields an arg may have.
 func argFields(t *testing.T) []string {
 	t.Helper()
 	file, err := parser.ParseFile(token.NewFileSet(), "entry.go", nil, 0)
