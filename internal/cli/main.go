@@ -32,11 +32,12 @@ type handler func(s *textio.Streams, args []string) error
 var handlers map[string]handler
 
 func init() {
-	handlers = map[string]handler{"run": cmdRun, "r": cmdRun, "completion": cmdCompletion}
+	handlers = map[string]handler{"run": cmdRun, "r": cmdRun, "completion": cmdCompletion,
+		"list": cmdList, "show": cmdShow, "location": cmdLocation}
 	// lazy: these commands only parse their arguments (so -h and usage errors work) until the slice that ports each
-	// one replaces its entry: list and show in P-2, run's body in P-3, update in P-3, new in P-4, rm in P-5,
+	// one replaces its entry: run's body in P-3, update in P-3, new in P-4, rm in P-5,
 	// promote in P-6, init in P-7.
-	for _, name := range []string{"new", "list", "show", "location", "rm", "promote", "update", "init"} {
+	for _, name := range []string{"new", "rm", "promote", "update", "init"} {
 		handlers[name] = func(s *textio.Streams, args []string) error {
 			if _, err := parsers[name].Parse(args); err != nil {
 				return err

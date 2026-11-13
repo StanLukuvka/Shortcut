@@ -75,6 +75,7 @@ func TestCompletion_BashPastFlagsAndIntoNamespaces(t *testing.T) {
 	e.WriteStore(e.Store, map[string]any{"other": map[string]any{"inline": "true"}})
 	e.WriteImport(e.Store, "docker", map[string]any{"version": 2, "shortcuts": map[string]any{
 		"delete": map[string]any{"inline": "true"}, "ps": map[string]any{"inline": "true"}}})
+	approveNamespace(t, e, "docker") // Python ran `update docker -y` (P-3); namespaces list once approved
 	check := func(want []string, words ...string) {
 		t.Helper()
 		got := e.BashComplete(words...)
@@ -87,11 +88,7 @@ func TestCompletion_BashPastFlagsAndIntoNamespaces(t *testing.T) {
 	check([]string{"--global", "--json"}, "show", "-")
 	check([]string{"--global"}, "location", "--")
 	check(nil, "r", "other", "--")
-	// Names: the script runs `shortcut list --names`, which the Go binary has from P-2 on.
-	// lazy: skipped until P-2 ports list; P-2 deletes these three lines.
-	if res := e.Run("list", "--names"); res.Code != 0 {
-		t.Skip("shortcut list is not ported yet (P-2); the flag cases above passed")
-	}
+	// Names: the script runs `shortcut list --names`.
 	if !slices.Contains(e.BashComplete("r", "o"), "other") {
 		t.Errorf("complete r o: no other")
 	}
