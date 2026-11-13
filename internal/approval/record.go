@@ -5,6 +5,7 @@ import (
 	"maps"
 	"os"
 	"slices"
+	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/pyjson"
@@ -73,6 +74,15 @@ func sortedObject(m map[string]string) *pyjson.Object {
 
 // Save records what was shown and approved, under the global store's lock.
 func Save(g model.Group, shared, local map[string]string) error {
+	if err := checkPaths(shared); err != nil {
+		return err
+	}
+	if err := checkPaths(local); err != nil {
+		return err
+	}
+	if !utf8.ValidString(g.Key()) { // a project in a folder whose name is not valid UTF-8: the record could not hold its key
+		return fmt.Errorf("cannot approve: %q is not valid UTF-8; rename it", g.Key())
+	}
 	path := model.ApprovalPath(g)
 	return model.WithRegistryLock(model.GlobalStoreDir(), func() error {
 		if err := os.MkdirAll(pyos.Dirname(path), 0o777); err != nil {
@@ -100,16 +110,21 @@ func LocalIsApproved(g model.Group, r *Record) bool {
 	return maps.Equal(held, LocalFiles(g))
 }
 
-// State returns "ok", "new" (never approved) or "changed".
+// State returns "ok", "new" (never approved), "changed", or "invalid" (text that is not valid UTF-8 cannot be
+// approved; Require says which). Anything but "ok" means not approved.
 func State(g model.Group) string {
 	if !g.NeedsApproval() {
 		return "ok"
+	}
+	shared, local, err := snapshot(g)
+	if err != nil {
+		return "invalid"
 	}
 	r := Load(g)
 	if r == nil {
 		return "new"
 	}
-	if r.matches(SharedFiles(g), LocalFiles(g)) {
+	if r.matches(shared, local) {
 		return "ok"
 	}
 	if len(r.Snapshot) > 0 {
@@ -121,6 +136,8 @@ func State(g model.Group) string {
 // Require returns an error unless the group is approved.
 func Require(g model.Group) error {
 	switch State(g) {
+	case "invalid":
+		return Check(g)
 	case "new":
 		return fmt.Errorf("%s isn't approved yet; review it with: %s", g.Label(), g.UpdateCmd())
 	case "changed":

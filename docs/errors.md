@@ -31,11 +31,12 @@ A flag a command doesn't take, or one missing its value, prints the command's `u
 | Message | Meaning |
 |---|---|
 | `registry not found: <path>` | A namespace file that's imported doesn't exist |
-| `corrupt registry <path>: <json error>` | The file isn't valid JSON |
+| `corrupt registry <path>: <json error>` | The file isn't valid JSON. The text after the path is Go's, and names the byte where it went wrong |
+| `corrupt registry <path>: contains text that is not valid UTF-8 (invalid bytes or a lone surrogate escape)` | A string in the file is not valid UTF-8: a bad byte, or a `\udcNN`-style escape for one (the Python version wrote a non-UTF-8 file name that way). Shortcut won't guess which name it meant; rename the file and edit the entry |
 | `corrupt registry <path>: root must be a JSON object` | The file is JSON, but not `{...}` |
 | `corrupt registry <path>: 'shortcuts' must be an object` | |
 | `corrupt registry <path>: 'description' must be a string` | |
-| `cannot overwrite corrupt registry <path>: <json error>` | shortcut won't write over a file it can't read. Fix or move it |
+| `cannot overwrite corrupt registry <path>: <json error>` | shortcut won't write over a file it can't read, including one that isn't valid UTF-8. Fix or move it |
 | `<path> is format version <n>, newer than this shortcut reads; upgrade shortcut` | |
 | `corrupt registry <path>: 'version' must be a whole number, such as 1` | `"version"` is a string, a fraction, `null` or `true` |
 | `<path> needs "version": 1` | |
@@ -95,6 +96,7 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `<file error>. Nothing runs inside this project until it's fixed; for your own: shortcut r --global <name>` | The project's file is broken, so no name is looked up through it |
 | `<group> isn't approved yet; review it with: <command>` | Run the `shortcut update` command it names |
 | `<group> changed since you approved it; run: <command>` | |
+| `cannot approve: "<path>" is not valid UTF-8; rename it` | A file name in the project or the namespace's scripts folder, a project's own folder name, or the text of a cwd, is not valid UTF-8, so it can't be recorded. `run` and `update` stop there until it's renamed |
 | `run directory does not exist: <dir>` | The entry's `cwd` is gone |
 | `script file not found: <path>` | |
 | `<path> has Windows line endings, so its #! line can't start it. Convert it: sed -i 's/\r$//' <path>` | The script's lines end in `\r\n` |

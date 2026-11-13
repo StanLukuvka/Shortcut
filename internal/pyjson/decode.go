@@ -1,388 +1,141 @@
 package pyjson
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
-	"math/big"
-	"strconv"
-	"strings"
 	"unicode/utf8"
 )
 
-// SyntaxError is Python's json.JSONDecodeError. Error() is str(e): "<msg>: line L column C (char N)", where N counts
-// code points, as Python does.
-type SyntaxError struct {
-	Msg       string
-	Line, Col int
-	Char      int
-}
+// ErrNotUTF8 is the refusal for text that is not valid UTF-8. encoding/json would turn it into U+FFFD, so two
+// different file names could become one; nothing that is not valid UTF-8 passes through JSON.
+var ErrNotUTF8 = errors.New("contains text that is not valid UTF-8 (invalid bytes or a lone surrogate escape)")
 
-func (e *SyntaxError) Error() string {
-	return fmt.Sprintf("%s: line %d column %d (char %d)", e.Msg, e.Line, e.Col, e.Char)
-}
-
-// UTF8Error is Python's UnicodeDecodeError for the strict 'utf-8' codec; Error() is str(e).
-type UTF8Error struct{ msg string }
-
-func (e *UTF8Error) Error() string { return e.msg }
-
-// ErrDepth stands for Python's RecursionError on deeply nested input.
-// lazy: Python's real limit depends on the interpreter's stack; this one is a fixed 1000 levels.
-var ErrDepth = errors.New("maximum recursion depth exceeded")
-
-const maxDepth = 1000
-
-// Decode is json.load on a file's bytes: strict UTF-8 first (UnicodeDecodeError text), then Parse.
-func Decode(raw []byte) (Value, error) {
-	if err := checkUTF8(raw); err != nil {
-		return nil, err
+// hex4At parses four hex digits (either case) at raw[i:i+4].
+func hex4At(raw []byte, i int) (rune, bool) {
+	if i+4 > len(raw) {
+		return 0, false
 	}
-	return Parse(string(raw))
-}
-
-// Parse is json.loads(s). s may hold WTF-8 lone surrogates.
-// lazy: an integer literal over 4300 digits parses here; Python 3.11+ raises ValueError for it.
-func Parse(s string) (Value, error) {
-	d := &decoder{s: s}
-	if strings.HasPrefix(s, "\xef\xbb\xbf") {
-		return nil, d.errAt("Unexpected UTF-8 BOM (decode using utf-8-sig)", 0)
-	}
-	v, end, err := d.value(d.skipWS(0), 0)
-	if err != nil {
-		return nil, err
-	}
-	if end = d.skipWS(end); end != len(s) {
-		return nil, d.errAt("Extra data", end)
-	}
-	return v, nil
-}
-
-type decoder struct{ s string }
-
-// errAt builds the error for the byte offset pos, reporting it in code points.
-func (d *decoder) errAt(msg string, pos int) error {
-	char := countChars(d.s[:pos])
-	line := strings.Count(d.s[:pos], "\n") + 1
-	col := char + 1
-	if nl := strings.LastIndexByte(d.s[:pos], '\n'); nl >= 0 {
-		col = char - countChars(d.s[:nl])
-	}
-	return &SyntaxError{Msg: msg, Line: line, Col: col, Char: char}
-}
-
-// countChars counts code points of WTF-8 (or UTF-8) text: every byte that is not a continuation byte starts one.
-func countChars(s string) int {
-	n := 0
-	for i := 0; i < len(s); i++ {
-		if s[i]&0xC0 != 0x80 {
-			n++
-		}
-	}
-	return n
-}
-
-func (d *decoder) skipWS(i int) int {
-	for i < len(d.s) && (d.s[i] == ' ' || d.s[i] == '\t' || d.s[i] == '\n' || d.s[i] == '\r') {
-		i++
-	}
-	return i
-}
-
-// value parses the value at i and returns it with the offset after it.
-func (d *decoder) value(i, depth int) (Value, int, error) {
-	s := d.s
-	if i >= len(s) {
-		return nil, 0, d.errAt("Expecting value", i)
-	}
-	switch c := s[i]; {
-	case c == '"':
-		str, end, err := d.str(i + 1)
-		return str, end, err
-	case c == '{':
-		return d.object(i+1, depth+1)
-	case c == '[':
-		return d.array(i+1, depth+1)
-	case strings.HasPrefix(s[i:], "null"):
-		return nil, i + 4, nil
-	case strings.HasPrefix(s[i:], "true"):
-		return true, i + 4, nil
-	case strings.HasPrefix(s[i:], "false"):
-		return false, i + 5, nil
-	case strings.HasPrefix(s[i:], "NaN"):
-		return math.NaN(), i + 3, nil
-	case strings.HasPrefix(s[i:], "Infinity"):
-		return math.Inf(1), i + 8, nil
-	case strings.HasPrefix(s[i:], "-Infinity"):
-		return math.Inf(-1), i + 9, nil
-	}
-	return d.number(i)
-}
-
-// number parses a number.
-func (d *decoder) number(start int) (Value, int, error) {
-	s := d.s
-	i := start
-	if i < len(s) && s[i] == '-' {
-		i++
-	}
-	switch {
-	case i < len(s) && s[i] >= '1' && s[i] <= '9':
-		for i < len(s) && isDigit(s[i]) {
-			i++
-		}
-	case i < len(s) && s[i] == '0':
-		i++
-	default:
-		return nil, 0, d.errAt("Expecting value", start)
-	}
-	isFloat := false
-	// A '.' or 'e' only counts when something can follow it, as in the C scanner (idx < end_idx).
-	if i+1 < len(s) && s[i] == '.' && isDigit(s[i+1]) {
-		i++
-		for i < len(s) && isDigit(s[i]) {
-			i++
-		}
-		isFloat = true
-	}
-	if i+1 < len(s) && (s[i] == 'e' || s[i] == 'E') {
-		j := i + 1
-		if s[j] == '-' || s[j] == '+' {
-			j++
-		}
-		if j < len(s) && isDigit(s[j]) {
-			for j < len(s) && isDigit(s[j]) {
-				j++
-			}
-			i, isFloat = j, true
-		}
-	}
-	lit := s[start:i]
-	if !isFloat {
-		n, _ := new(big.Int).SetString(lit, 10)
-		return n, i, nil
-	}
-	f, _ := strconv.ParseFloat(lit, 64) // out of range gives +-Inf, as Python's float()
-	return f, i, nil
-}
-
-func isDigit(c byte) bool { return c >= '0' && c <= '9' }
-
-// object parses an object; i is just after the '{'.
-func (d *decoder) object(i, depth int) (Value, int, error) {
-	if depth > maxDepth {
-		return nil, 0, ErrDepth
-	}
-	s := d.s
-	obj := &Object{}
-	i = d.skipWS(i)
-	if i >= len(s) || s[i] != '}' {
-		for {
-			if i >= len(s) || s[i] != '"' {
-				return nil, 0, d.errAt("Expecting property name enclosed in double quotes", i)
-			}
-			key, end, err := d.str(i + 1)
-			if err != nil {
-				return nil, 0, err
-			}
-			i = d.skipWS(end)
-			if i >= len(s) || s[i] != ':' {
-				return nil, 0, d.errAt("Expecting ':' delimiter", i)
-			}
-			val, end, err := d.value(d.skipWS(i+1), depth)
-			if err != nil {
-				return nil, 0, err
-			}
-			obj.Set(key, val)
-			i = d.skipWS(end)
-			if i < len(s) && s[i] == '}' {
-				break
-			}
-			if i >= len(s) || s[i] != ',' {
-				return nil, 0, d.errAt("Expecting ',' delimiter", i)
-			}
-			comma := i
-			i = d.skipWS(i + 1)
-			if i < len(s) && s[i] == '}' {
-				return nil, 0, d.errAt("Illegal trailing comma before end of object", comma)
-			}
-		}
-	}
-	return obj, i + 1, nil
-}
-
-// array parses an array; i is just after the '['.
-func (d *decoder) array(i, depth int) (Value, int, error) {
-	if depth > maxDepth {
-		return nil, 0, ErrDepth
-	}
-	s := d.s
-	arr := []Value{}
-	i = d.skipWS(i)
-	if i < len(s) && s[i] != ']' {
-		for {
-			val, end, err := d.value(i, depth)
-			if err != nil {
-				return nil, 0, err
-			}
-			arr = append(arr, val)
-			i = d.skipWS(end)
-			if i < len(s) && s[i] == ']' {
-				break
-			}
-			if i >= len(s) || s[i] != ',' {
-				return nil, 0, d.errAt("Expecting ',' delimiter", i)
-			}
-			comma := i
-			i = d.skipWS(i + 1)
-			if i < len(s) && s[i] == ']' {
-				return nil, 0, d.errAt("Illegal trailing comma before end of array", comma)
-			}
-		}
-	}
-	if i >= len(s) || s[i] != ']' {
-		return nil, 0, d.errAt("Expecting value", i)
-	}
-	return arr, i + 1, nil
-}
-
-// str parses a string (strict); i is just after the opening quote.
-func (d *decoder) str(i int) (string, int, error) {
-	s := d.s
-	begin := i - 1
-	var b strings.Builder
-	for {
-		start := i
-		for i < len(s) && s[i] != '"' && s[i] != '\\' {
-			if s[i] < 0x20 {
-				return "", 0, d.errAt("Invalid control character at", i)
-			}
-			i++
-		}
-		if i >= len(s) {
-			return "", 0, d.errAt("Unterminated string starting at", begin)
-		}
-		b.WriteString(s[start:i])
-		if s[i] == '"' {
-			return b.String(), i + 1, nil
-		}
-		i++ // the backslash
-		if i >= len(s) {
-			return "", 0, d.errAt("Unterminated string starting at", begin)
-		}
-		if c := s[i]; c != 'u' {
-			esc, ok := map[byte]byte{'"': '"', '\\': '\\', '/': '/', 'b': '\b', 'f': '\f', 'n': '\n', 'r': '\r', 't': '\t'}[c]
-			if !ok {
-				return "", 0, d.errAt("Invalid \\escape", i-1)
-			}
-			b.WriteByte(esc)
-			i++
-			continue
-		}
-		i++ // the 'u'
-		if i+4 >= len(s) {
-			return "", 0, d.errAt("Invalid \\uXXXX escape", i-1)
-		}
-		c, ok := hex4(s[i : i+4])
-		if !ok {
-			return "", 0, d.errAt("Invalid \\uXXXX escape", i-1)
-		}
-		i += 4
-		// A high surrogate followed by \uXXXX holding a low one is one astral character; the C scanner needs a
-		// further character after that escape (end + 6 < len).
-		if c >= 0xD800 && c <= 0xDBFF && i+6 < len(s) && s[i] == '\\' && s[i+1] == 'u' {
-			c2, ok := hex4(s[i+2 : i+6])
-			if !ok {
-				return "", 0, d.errAt("Invalid \\uXXXX escape", i+1)
-			}
-			if c2 >= 0xDC00 && c2 <= 0xDFFF {
-				c = 0x10000 + (c-0xD800)<<10 + (c2 - 0xDC00)
-				i += 6
-			}
-		}
-		if c >= 0xDC80 && c <= 0xDCFF { // surrogateescape: the raw byte, as os.fsencode gives it
-			b.WriteByte(byte(c - 0xDC00))
-		} else if c >= 0xD800 && c <= 0xDFFF { // any other lone surrogate: WTF-8
-			b.WriteByte(0xE0 | byte(c>>12))
-			b.WriteByte(0x80 | byte(c>>6)&0x3F)
-			b.WriteByte(0x80 | byte(c)&0x3F)
-		} else {
-			b.WriteRune(c)
-		}
-	}
-}
-
-func hex4(s string) (rune, bool) {
-	var c rune
-	for i := 0; i < 4; i++ {
-		var v byte
-		switch ch := s[i]; {
-		case ch >= '0' && ch <= '9':
-			v = ch - '0'
-		case ch >= 'a' && ch <= 'f':
-			v = ch - 'a' + 10
-		case ch >= 'A' && ch <= 'F':
-			v = ch - 'A' + 10
+	var r rune
+	for _, c := range raw[i : i+4] {
+		switch {
+		case c >= '0' && c <= '9':
+			c -= '0'
+		case c >= 'a' && c <= 'f':
+			c = c - 'a' + 10
+		case c >= 'A' && c <= 'F':
+			c = c - 'A' + 10
 		default:
 			return 0, false
 		}
-		c = c<<4 | rune(v)
+		r = r<<4 | rune(c)
 	}
-	return c, true
+	return r, true
 }
 
-// checkUTF8 is bytes.decode("utf-8") with Python's error text: byte positions, and the span of the bad sequence.
-func checkUTF8(raw []byte) error {
-	for i := 0; i < len(raw); {
-		if raw[i] < 0x80 {
-			i++
-			continue
-		}
-		if r, n := utf8.DecodeRune(raw[i:]); r != utf8.RuneError || n != 1 {
-			i += n
-			continue
-		}
-		b := raw[i]
-		lo, hi := byte(0x80), byte(0xBF)
-		need := 0
-		switch {
-		case b >= 0xC2 && b <= 0xDF:
-			need = 1
-		case b >= 0xE0 && b <= 0xEF:
-			need = 2
-			if b == 0xE0 {
-				lo = 0xA0
-			} else if b == 0xED {
-				hi = 0x9F
+// checkText refuses invalid UTF-8 and every surrogate escape that is not a proper high+low pair. A proper pair
+// (what ensure_ascii wrote for an emoji) decodes to the right rune and is allowed; a lone one (\udcNN is a
+// non-UTF-8 file name written by the Python version) would decode to U+FFFD and merge distinct names.
+func checkText(raw []byte) error {
+	if !utf8.Valid(raw) {
+		return ErrNotUTF8
+	}
+	inStr := false
+	for i := 0; i < len(raw); i++ {
+		switch c := raw[i]; {
+		case !inStr:
+			inStr = c == '"'
+		case c == '"':
+			inStr = false
+		case c == '\\' && i+1 < len(raw):
+			if raw[i+1] != 'u' {
+				i++ // \" \\ \n ...: skip the escaped byte so \" does not end the string
+				continue
 			}
-		case b >= 0xF0 && b <= 0xF4:
-			need = 3
-			if b == 0xF0 {
-				lo = 0x90
-			} else if b == 0xF4 {
-				hi = 0x8F
+			r, ok := hex4At(raw, i+2)
+			if !ok {
+				return nil // json.Valid reports the malformed escape with its own message
 			}
-		default:
-			return utf8Err(i, i+1, "invalid start byte", raw)
-		}
-		end := i + 1
-		for k := 0; k < need; k++ {
-			if end >= len(raw) {
-				return utf8Err(i, end, "unexpected end of data", raw)
+			switch {
+			case r >= 0xdc00 && r <= 0xdfff:
+				return ErrNotUTF8 // low surrogate with no high before it
+			case r >= 0xd800 && r <= 0xdbff:
+				if i+11 < len(raw) && raw[i+6] == '\\' && raw[i+7] == 'u' {
+					if lo, ok := hex4At(raw, i+8); ok && lo >= 0xdc00 && lo <= 0xdfff {
+						i += 11 // a proper pair: both escapes consumed
+						continue
+					}
+				}
+				return ErrNotUTF8 // high surrogate with a bad or missing partner
 			}
-			if raw[end] < lo || raw[end] > hi {
-				return utf8Err(i, end, "invalid continuation byte", raw)
-			}
-			lo, hi = 0x80, 0xBF
-			end++
+			i += 5 // \uXXXX consumed (the loop adds the last 1)
 		}
 	}
 	return nil
 }
 
-func utf8Err(start, end int, reason string, raw []byte) error {
-	if end-start == 1 {
-		return &UTF8Error{fmt.Sprintf("'utf-8' codec can't decode byte 0x%02x in position %d: %s", raw[start], start, reason)}
+// Decode reads JSON into nil | bool | string | json.Number | []any | *Object. Numbers keep the text they were
+// written with (2 stays 2, 2.0 stays 2.0). Object keys keep their order; a duplicate key keeps its first position
+// and takes the last value. Invalid UTF-8 and lone surrogate escapes are refused (ErrNotUTF8); NaN, Infinity and a
+// leading byte order mark are syntax errors.
+func Decode(raw []byte) (Value, error) {
+	if err := checkText(raw); err != nil {
+		return nil, err
 	}
-	return &UTF8Error{fmt.Sprintf("'utf-8' codec can't decode bytes in position %d-%d: %s", start, end-1, reason)}
+	if !json.Valid(raw) { // syntax, trailing data, nesting limit
+		var v any
+		err := json.Unmarshal(raw, &v)
+		var se *json.SyntaxError
+		if errors.As(err, &se) {
+			return nil, fmt.Errorf("%w (at byte %d)", se, se.Offset)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, errors.New("invalid JSON")
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	return readValue(dec)
+}
+
+// Parse is Decode of a string.
+func Parse(s string) (Value, error) { return Decode([]byte(s)) }
+
+func readValue(dec *json.Decoder) (Value, error) {
+	tok, err := dec.Token()
+	if err != nil {
+		return nil, err
+	}
+	d, isDelim := tok.(json.Delim)
+	if !isDelim {
+		return tok, nil // string, json.Number, bool, nil
+	}
+	if d == '{' {
+		o := &Object{Vals: map[string]Value{}}
+		for dec.More() {
+			kt, err := dec.Token()
+			if err != nil {
+				return nil, err
+			}
+			v, err := readValue(dec)
+			if err != nil {
+				return nil, err
+			}
+			o.Set(kt.(string), v)
+		}
+		_, err := dec.Token()
+		return o, err
+	}
+	arr := []Value{}
+	for dec.More() {
+		v, err := readValue(dec)
+		if err != nil {
+			return nil, err
+		}
+		arr = append(arr, v)
+	}
+	_, err = dec.Token()
+	return arr, err
 }

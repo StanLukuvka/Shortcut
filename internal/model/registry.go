@@ -3,11 +3,14 @@ package model
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"math/big"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/pyjson"
@@ -20,11 +23,10 @@ type RegistryNotFoundError struct{ Path string }
 
 func (e *RegistryNotFoundError) Error() string { return "registry not found: " + e.Path }
 
-// isJSONError: a problem with the file's text (what json.load raises), as opposed to reading it.
+// isJSONError: a problem with the file's text (what the decoder reports), as opposed to reading it (an *fs.PathError).
 func isJSONError(err error) bool {
-	var syn *pyjson.SyntaxError
-	var u8 *pyjson.UTF8Error
-	return errors.As(err, &syn) || errors.As(err, &u8) || errors.Is(err, pyjson.ErrDepth)
+	var pe *fs.PathError
+	return !errors.As(err, &pe)
 }
 
 // GlobalStoreDir returns $SHORTCUTS_HOME (when not empty) or ~/.shortcuts, made absolute.
@@ -139,7 +141,7 @@ func InitStore(storeDir string) error {
 
 func emptyRegistry() *pyjson.Object {
 	o := &pyjson.Object{}
-	o.Set("version", bigInt(RegistryVersion))
+	o.Set("version", json.Number(strconv.Itoa(RegistryVersion)))
 	o.Set("shortcuts", &pyjson.Object{})
 	return o
 }
@@ -161,11 +163,12 @@ func LoadRegistryFile(path string) (*pyjson.Object, error) {
 		return nil, fmt.Errorf("corrupt registry %s: root must be a JSON object", path)
 	}
 	if version, present := data.Get("version"); present {
-		n, isInt := version.(*big.Int)
+		num, _ := version.(json.Number)
+		n, isInt := new(big.Int).SetString(string(num), 10) // a whole number as written: not 1.0, 1e0, a string or null
 		if !isInt {
 			return nil, fmt.Errorf("corrupt registry %s: 'version' must be a whole number, such as %d", path, RegistryVersion)
 		}
-		if n.Cmp(bigInt(RegistryVersion)) > 0 {
+		if n.Cmp(big.NewInt(RegistryVersion)) > 0 {
 			return nil, fmt.Errorf("%s is format version %s, newer than this shortcut reads; upgrade shortcut", path, n)
 		}
 	}
@@ -262,6 +265,6 @@ func fileError(path string, data *pyjson.Object, name string) string {
 }
 
 func isVersion(v pyjson.Value) bool {
-	n, ok := v.(*big.Int)
-	return ok && n.Cmp(bigInt(RegistryVersion)) == 0
+	n, ok := v.(json.Number)
+	return ok && n.String() == strconv.Itoa(RegistryVersion)
 }

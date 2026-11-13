@@ -5,8 +5,8 @@
     "generator": "internal/testdata/gen_golden.py"
   },
   "notes": [
-    "Strings may hold lone surrogates (\\udXXX escapes): decode with pyjson, not encoding/json. A non-UTF-8 path byte 0xNN is U+DC00+NN.",
-    "tree_cases: build tree[] under a temp root, load each group, compare shared_files/local_files; replace @ROOT@ with the root in key_template and record_template. Modes are octal strings; symlink targets are relative. content_hex replaces content when the bytes are not UTF-8.",
+    "A name or path that is not valid UTF-8 is given as hex of its raw bytes: store_hex, name_hex, file_hex, key_hex in key_cases, path_hex in tree_cases. The file holds no lone surrogate escape, so encoding/json-based decoding loads it.",
+    "tree_cases: build tree[] under a temp root, load each group, compare shared_files/local_files; replace @ROOT@ with the root in key_template and record_template. Modes are octal strings; symlink targets are relative. content_hex replaces content when the bytes are not UTF-8, path_hex replaces path. A group with error_contains must fail, either to load or when its snapshot is taken, with a message holding that text.",
     "key_cases[].python_error: Python raises for a project path that is not valid UTF-8 (approval_path encodes the key); the Go port must not copy the crash."
   ],
   "reviewable_cases": [
@@ -173,135 +173,6 @@
     {
       "raw_hex": "23212f62696e2f73680afffe0a",
       "expected": "#!/bin/sh\n\\xff\\xfe\n\n\u0000not UTF-8, sha256 75802291baa699097326556152e32b364666b349740b26781f6a4c4b89bee567\n"
-    }
-  ],
-  "dumps_cases": [
-    {
-      "source": "{\"a\":[1,2.5,1e22,true,null],\"k\\u00e9\":\"\\ud83d\\ude00\"}",
-      "compact": "{\"a\": [1, 2.5, 1e+22, true, null], \"k\\u00e9\": \"\\ud83d\\ude00\"}",
-      "indent2": "{\n  \"a\": [\n    1,\n    2.5,\n    1e+22,\n    true,\n    null\n  ],\n  \"k\\u00e9\": \"\\ud83d\\ude00\"\n}\n",
-      "indent2_sorted": "{\n  \"a\": [\n    1,\n    2.5,\n    1e+22,\n    true,\n    null\n  ],\n  \"k\\u00e9\": \"\\ud83d\\ude00\"\n}\n"
-    },
-    {
-      "source": "{\"version\":2,\"shortcuts\":{\"x\":{\"inline\":\"echo \\u00e9\",\"n\":1.0,\"big\":1e30}}}",
-      "compact": "{\"version\": 2, \"shortcuts\": {\"x\": {\"inline\": \"echo \\u00e9\", \"n\": 1.0, \"big\": 1e+30}}}",
-      "indent2": "{\n  \"version\": 2,\n  \"shortcuts\": {\n    \"x\": {\n      \"inline\": \"echo \\u00e9\",\n      \"n\": 1.0,\n      \"big\": 1e+30\n    }\n  }\n}\n",
-      "indent2_sorted": "{\n  \"shortcuts\": {\n    \"x\": {\n      \"big\": 1e+30,\n      \"inline\": \"echo \\u00e9\",\n      \"n\": 1.0\n    }\n  },\n  \"version\": 2\n}\n"
-    },
-    {
-      "source": "{\"b\":1,\"a\":2,\"B\":3,\"\\u00e9\":4,\"\\ud83d\\ude00\":5,\"\\uffff\":6,\"\\ue000\":7}",
-      "compact": "{\"b\": 1, \"a\": 2, \"B\": 3, \"\\u00e9\": 4, \"\\ud83d\\ude00\": 5, \"\\uffff\": 6, \"\\ue000\": 7}",
-      "indent2": "{\n  \"b\": 1,\n  \"a\": 2,\n  \"B\": 3,\n  \"\\u00e9\": 4,\n  \"\\ud83d\\ude00\": 5,\n  \"\\uffff\": 6,\n  \"\\ue000\": 7\n}\n",
-      "indent2_sorted": "{\n  \"B\": 3,\n  \"a\": 2,\n  \"b\": 1,\n  \"\\u00e9\": 4,\n  \"\\ue000\": 7,\n  \"\\uffff\": 6,\n  \"\\ud83d\\ude00\": 5\n}\n"
-    },
-    {
-      "source": "{}",
-      "compact": "{}",
-      "indent2": "{}\n",
-      "indent2_sorted": "{}\n"
-    },
-    {
-      "source": "[]",
-      "compact": "[]",
-      "indent2": "[]\n"
-    },
-    {
-      "source": "{\"a\":{},\"b\":[],\"c\":[[],{}],\"d\":[{\"e\":[]}]}",
-      "compact": "{\"a\": {}, \"b\": [], \"c\": [[], {}], \"d\": [{\"e\": []}]}",
-      "indent2": "{\n  \"a\": {},\n  \"b\": [],\n  \"c\": [\n    [],\n    {}\n  ],\n  \"d\": [\n    {\n      \"e\": []\n    }\n  ]\n}\n",
-      "indent2_sorted": "{\n  \"a\": {},\n  \"b\": [],\n  \"c\": [\n    [],\n    {}\n  ],\n  \"d\": [\n    {\n      \"e\": []\n    }\n  ]\n}\n"
-    },
-    {
-      "source": "{\"a\": NaN, \"b\": Infinity, \"c\": -Infinity, \"d\": 1e400, \"e\": -1e400, \"f\": 1.0}",
-      "compact": "{\"a\": NaN, \"b\": Infinity, \"c\": -Infinity, \"d\": Infinity, \"e\": -Infinity, \"f\": 1.0}",
-      "indent2": "{\n  \"a\": NaN,\n  \"b\": Infinity,\n  \"c\": -Infinity,\n  \"d\": Infinity,\n  \"e\": -Infinity,\n  \"f\": 1.0\n}\n",
-      "indent2_sorted": "{\n  \"a\": NaN,\n  \"b\": Infinity,\n  \"c\": -Infinity,\n  \"d\": Infinity,\n  \"e\": -Infinity,\n  \"f\": 1.0\n}\n"
-    },
-    {
-      "source": "{\"a\": 1, \"a\": 2}",
-      "compact": "{\"a\": 2}",
-      "indent2": "{\n  \"a\": 2\n}\n",
-      "indent2_sorted": "{\n  \"a\": 2\n}\n"
-    },
-    {
-      "source": "{\"a\": 1, \"b\": 2, \"a\": 3}",
-      "compact": "{\"a\": 3, \"b\": 2}",
-      "indent2": "{\n  \"a\": 3,\n  \"b\": 2\n}\n",
-      "indent2_sorted": "{\n  \"a\": 3,\n  \"b\": 2\n}\n"
-    },
-    {
-      "source": "{\"n\": [0, -0, 0.0, -0.0, 1e2, 1E2, 1e+2, 12345678901234567890123, -12345678901234567890123, 100000000000000000000000000000000000]}",
-      "compact": "{\"n\": [0, 0, 0.0, -0.0, 100.0, 100.0, 100.0, 12345678901234567890123, -12345678901234567890123, 100000000000000000000000000000000000]}",
-      "indent2": "{\n  \"n\": [\n    0,\n    0,\n    0.0,\n    -0.0,\n    100.0,\n    100.0,\n    100.0,\n    12345678901234567890123,\n    -12345678901234567890123,\n    100000000000000000000000000000000000\n  ]\n}\n",
-      "indent2_sorted": "{\n  \"n\": [\n    0,\n    0,\n    0.0,\n    -0.0,\n    100.0,\n    100.0,\n    100.0,\n    12345678901234567890123,\n    -12345678901234567890123,\n    100000000000000000000000000000000000\n  ]\n}\n"
-    },
-    {
-      "source": "{\"s\": \"\\ud800\", \"t\": \"\\udc00\\ud800\", \"u\": \"\\ud83d\", \"v\": \"\\u0000\\u007f\\u0080\\u2028\\u00a0\"}",
-      "compact": "{\"s\": \"\\ud800\", \"t\": \"\\udc00\\ud800\", \"u\": \"\\ud83d\", \"v\": \"\\u0000\\u007f\\u0080\\u2028\\u00a0\"}",
-      "indent2": "{\n  \"s\": \"\\ud800\",\n  \"t\": \"\\udc00\\ud800\",\n  \"u\": \"\\ud83d\",\n  \"v\": \"\\u0000\\u007f\\u0080\\u2028\\u00a0\"\n}\n",
-      "indent2_sorted": "{\n  \"s\": \"\\ud800\",\n  \"t\": \"\\udc00\\ud800\",\n  \"u\": \"\\ud83d\",\n  \"v\": \"\\u0000\\u007f\\u0080\\u2028\\u00a0\"\n}\n"
-    },
-    {
-      "source": "{\"s\": \"tab\\there \\\"q\\\" back\\\\ slash \\/ \\b\\f\\n\\r\"}",
-      "compact": "{\"s\": \"tab\\there \\\"q\\\" back\\\\ slash / \\b\\f\\n\\r\"}",
-      "indent2": "{\n  \"s\": \"tab\\there \\\"q\\\" back\\\\ slash / \\b\\f\\n\\r\"\n}\n",
-      "indent2_sorted": "{\n  \"s\": \"tab\\there \\\"q\\\" back\\\\ slash / \\b\\f\\n\\r\"\n}\n"
-    },
-    {
-      "source": "{\"s\": \"\u00e9 \ud83d\ude00 \ud800\udc00 \u4e2d\"}",
-      "compact": "{\"s\": \"\\u00e9 \\ud83d\\ude00 \\ud800\\udc00 \\u4e2d\"}",
-      "indent2": "{\n  \"s\": \"\\u00e9 \\ud83d\\ude00 \\ud800\\udc00 \\u4e2d\"\n}\n",
-      "indent2_sorted": "{\n  \"s\": \"\\u00e9 \\ud83d\\ude00 \\ud800\\udc00 \\u4e2d\"\n}\n"
-    },
-    {
-      "source": "{\"k\u00e9\": 1, \"\ud83d\ude00\": 2}",
-      "compact": "{\"k\\u00e9\": 1, \"\\ud83d\\ude00\": 2}",
-      "indent2": "{\n  \"k\\u00e9\": 1,\n  \"\\ud83d\\ude00\": 2\n}\n",
-      "indent2_sorted": "{\n  \"k\\u00e9\": 1,\n  \"\\ud83d\\ude00\": 2\n}\n"
-    },
-    {
-      "source": "{\"version\": 2, \"description\": \"d\", \"shortcuts\": {\"a\": {\"script\": \"scripts/a.sh\", \"cwd\": \"caller\", \"args\": [{\"name\": \"x\", \"default\": \"1\"}]}}}",
-      "compact": "{\"version\": 2, \"description\": \"d\", \"shortcuts\": {\"a\": {\"script\": \"scripts/a.sh\", \"cwd\": \"caller\", \"args\": [{\"name\": \"x\", \"default\": \"1\"}]}}}",
-      "indent2": "{\n  \"version\": 2,\n  \"description\": \"d\",\n  \"shortcuts\": {\n    \"a\": {\n      \"script\": \"scripts/a.sh\",\n      \"cwd\": \"caller\",\n      \"args\": [\n        {\n          \"name\": \"x\",\n          \"default\": \"1\"\n        }\n      ]\n    }\n  }\n}\n",
-      "indent2_sorted": "{\n  \"description\": \"d\",\n  \"shortcuts\": {\n    \"a\": {\n      \"args\": [\n        {\n          \"default\": \"1\",\n          \"name\": \"x\"\n        }\n      ],\n      \"cwd\": \"caller\",\n      \"script\": \"scripts/a.sh\"\n    }\n  },\n  \"version\": 2\n}\n"
-    },
-    {
-      "source": " \t\r\n{ \"a\" :\t[ 1 ,\n2 ] } \n",
-      "compact": "{\"a\": [1, 2]}",
-      "indent2": "{\n  \"a\": [\n    1,\n    2\n  ]\n}\n",
-      "indent2_sorted": "{\n  \"a\": [\n    1,\n    2\n  ]\n}\n"
-    },
-    {
-      "source": "{\"a\": 1.5e-7, \"b\": 123456789.123456789, \"c\": 0.1, \"d\": 5e-324}",
-      "compact": "{\"a\": 1.5e-07, \"b\": 123456789.12345679, \"c\": 0.1, \"d\": 5e-324}",
-      "indent2": "{\n  \"a\": 1.5e-07,\n  \"b\": 123456789.12345679,\n  \"c\": 0.1,\n  \"d\": 5e-324\n}\n",
-      "indent2_sorted": "{\n  \"a\": 1.5e-07,\n  \"b\": 123456789.12345679,\n  \"c\": 0.1,\n  \"d\": 5e-324\n}\n"
-    },
-    {
-      "source": "{\"a\": true, \"b\": false, \"c\": null}",
-      "compact": "{\"a\": true, \"b\": false, \"c\": null}",
-      "indent2": "{\n  \"a\": true,\n  \"b\": false,\n  \"c\": null\n}\n",
-      "indent2_sorted": "{\n  \"a\": true,\n  \"b\": false,\n  \"c\": null\n}\n"
-    },
-    {
-      "source": "\"str\"",
-      "compact": "\"str\"",
-      "indent2": "\"str\"\n"
-    },
-    {
-      "source": "42",
-      "compact": "42",
-      "indent2": "42\n"
-    },
-    {
-      "source": "null",
-      "compact": "null",
-      "indent2": "null\n"
-    },
-    {
-      "source": "[1, [2, [3]]]",
-      "compact": "[1, [2, [3]]]",
-      "indent2": "[\n  1,\n  [\n    2,\n    [\n      3\n    ]\n  ]\n]\n"
     }
   ],
   "float_cases": [
@@ -551,238 +422,6 @@
       "type": "float"
     }
   ],
-  "loads_cases": [
-    {
-      "source": "{not json",
-      "error": "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"
-    },
-    {
-      "source": "{\"a\": 1,}",
-      "error": "Illegal trailing comma before end of object: line 1 column 8 (char 7)"
-    },
-    {
-      "source": "",
-      "error": "Expecting value: line 1 column 1 (char 0)"
-    },
-    {
-      "source": " ",
-      "error": "Expecting value: line 1 column 2 (char 1)"
-    },
-    {
-      "source": "[",
-      "error": "Expecting value: line 1 column 2 (char 1)"
-    },
-    {
-      "source": "{\"a\"",
-      "error": "Expecting ':' delimiter: line 1 column 5 (char 4)"
-    },
-    {
-      "source": "{\"a\":",
-      "error": "Expecting value: line 1 column 6 (char 5)"
-    },
-    {
-      "source": "{\"a\": 1",
-      "error": "Expecting ',' delimiter: line 1 column 8 (char 7)"
-    },
-    {
-      "source": "[1,]",
-      "error": "Illegal trailing comma before end of array: line 1 column 3 (char 2)"
-    },
-    {
-      "source": "[1 2]",
-      "error": "Expecting ',' delimiter: line 1 column 4 (char 3)"
-    },
-    {
-      "source": "{\"a\" 1}",
-      "error": "Expecting ':' delimiter: line 1 column 6 (char 5)"
-    },
-    {
-      "source": "nul",
-      "error": "Expecting value: line 1 column 1 (char 0)"
-    },
-    {
-      "source": "tru",
-      "error": "Expecting value: line 1 column 1 (char 0)"
-    },
-    {
-      "source": "NaN",
-      "compact": "NaN"
-    },
-    {
-      "source": "-",
-      "error": "Expecting value: line 1 column 1 (char 0)"
-    },
-    {
-      "source": "01",
-      "error": "Extra data: line 1 column 2 (char 1)"
-    },
-    {
-      "source": "1.",
-      "error": "Extra data: line 1 column 2 (char 1)"
-    },
-    {
-      "source": ".5",
-      "error": "Expecting value: line 1 column 1 (char 0)"
-    },
-    {
-      "source": "+1",
-      "error": "Expecting value: line 1 column 1 (char 0)"
-    },
-    {
-      "source": "'a'",
-      "error": "Expecting value: line 1 column 1 (char 0)"
-    },
-    {
-      "source": "\"a",
-      "error": "Unterminated string starting at: line 1 column 1 (char 0)"
-    },
-    {
-      "source": "\"\\x\"",
-      "error": "Invalid \\escape: line 1 column 2 (char 1)"
-    },
-    {
-      "source": "\"\\u12\"",
-      "error": "Invalid \\uXXXX escape: line 1 column 3 (char 2)"
-    },
-    {
-      "source": "\"\\ud800\\u0041\"",
-      "compact": "\"\\ud800A\""
-    },
-    {
-      "source": "\"a\nb\"",
-      "error": "Invalid control character at: line 1 column 3 (char 2)"
-    },
-    {
-      "source": "\"\t\"",
-      "error": "Invalid control character at: line 1 column 2 (char 1)"
-    },
-    {
-      "source": "\ufeff{}",
-      "error": "Unexpected UTF-8 BOM (decode using utf-8-sig): line 1 column 1 (char 0)"
-    },
-    {
-      "source": "{} x",
-      "error": "Extra data: line 1 column 4 (char 3)"
-    },
-    {
-      "source": "{}{}",
-      "error": "Extra data: line 1 column 3 (char 2)"
-    },
-    {
-      "source": "[1]]",
-      "error": "Extra data: line 1 column 4 (char 3)"
-    },
-    {
-      "source": "{\"a\": NaN}",
-      "compact": "{\"a\": NaN}"
-    },
-    {
-      "source": "{\"a\": Infinity}",
-      "compact": "{\"a\": Infinity}"
-    },
-    {
-      "source": "{\"a\": -Infinity}",
-      "compact": "{\"a\": -Infinity}"
-    },
-    {
-      "source": "{\"a\": -}",
-      "error": "Expecting value: line 1 column 7 (char 6)"
-    },
-    {
-      "source": "\u00a0{}",
-      "error": "Expecting value: line 1 column 1 (char 0)"
-    },
-    {
-      "source": "{\"a\": 1e}",
-      "error": "Expecting ',' delimiter: line 1 column 8 (char 7)"
-    },
-    {
-      "source": "{1: 2}",
-      "error": "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"
-    },
-    {
-      "source": "{,}",
-      "error": "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"
-    },
-    {
-      "source": "{\"a\": 1,, \"b\": 2}",
-      "error": "Expecting property name enclosed in double quotes: line 1 column 9 (char 8)"
-    },
-    {
-      "source": "[,1]",
-      "error": "Expecting value: line 1 column 2 (char 1)"
-    },
-    {
-      "source": "[\n1,\n2\n,]",
-      "error": "Illegal trailing comma before end of array: line 4 column 1 (char 7)"
-    },
-    {
-      "source": "{\n  \"a\": 1,\n  \"b\": [1, 2,\n}",
-      "error": "Expecting value: line 4 column 1 (char 26)"
-    },
-    {
-      "source": "\"\\ud800\"",
-      "compact": "\"\\ud800\""
-    },
-    {
-      "source": "\"\\ud83d\\ude00\"",
-      "compact": "\"\\ud83d\\ude00\""
-    },
-    {
-      "source": "{\"\\ud800\": 1}",
-      "compact": "{\"\\ud800\": 1}"
-    },
-    {
-      "source": "-0",
-      "compact": "0"
-    },
-    {
-      "source": "-0.0",
-      "compact": "-0.0"
-    },
-    {
-      "source": "1e5",
-      "compact": "100000.0"
-    },
-    {
-      "source": "1E-2",
-      "compact": "0.01"
-    },
-    {
-      "source": "00",
-      "error": "Extra data: line 1 column 2 (char 1)"
-    },
-    {
-      "source": "-01",
-      "error": "Extra data: line 1 column 3 (char 2)"
-    },
-    {
-      "source": "0x10",
-      "error": "Extra data: line 1 column 2 (char 1)"
-    }
-  ],
-  "loads_bytes_cases": [
-    {
-      "raw_hex": "7b2261223a2022ff227d",
-      "error": "UnicodeDecodeError: 'utf-8' codec can't decode byte 0xff in position 7: invalid start byte"
-    },
-    {
-      "raw_hex": "efbbbf7b7d",
-      "error": "JSONDecodeError: Unexpected UTF-8 BOM (decode using utf-8-sig): line 1 column 1 (char 0)"
-    },
-    {
-      "raw_hex": "7b2261223a2022c3a9227d",
-      "compact": "{\"a\": \"\\u00e9\"}"
-    },
-    {
-      "raw_hex": "ff",
-      "error": "UnicodeDecodeError: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte"
-    },
-    {
-      "raw_hex": "7b2261223a2022eda080227d",
-      "error": "UnicodeDecodeError: 'utf-8' codec can't decode byte 0xed in position 7: invalid continuation byte"
-    }
-  ],
   "key_cases": [
     {
       "kind": "namespace",
@@ -818,9 +457,9 @@
     },
     {
       "kind": "namespace",
-      "store": "/tmp/caf\udce9",
+      "store_hex": "2f746d702f636166e9",
       "name": "ns",
-      "file": "/tmp/caf\udce9/imports/ns.shortcut",
+      "file_hex": "2f746d702f636166e92f696d706f7274732f6e732e73686f7274637574",
       "key": "[\"/tmp/caf\\udce9\", \"ns\", \"/tmp/caf\\udce9/imports/ns.shortcut\"]",
       "record_name": "c2f1fdb5f65b9960916024395df3e9b4d81026f06a6ef3b2b54f18f3fdfa9115.json"
     },
@@ -828,7 +467,7 @@
       "kind": "namespace",
       "store": "/tmp/s",
       "name": "ns",
-      "file": "/tmp/s/imports/caf\udce9.shortcut",
+      "file_hex": "2f746d702f732f696d706f7274732f636166e92e73686f7274637574",
       "key": "[\"/tmp/s\", \"ns\", \"/tmp/s/imports/caf\\udce9.shortcut\"]",
       "record_name": "2ba07bf7bc37e1909587103fff65cdf54b6b1fa68fe61851f5ab671d15aa0b86.json"
     },
@@ -866,8 +505,8 @@
     },
     {
       "kind": "project",
-      "store": "/tmp/caf\udce9",
-      "key": "/tmp/caf\udce9",
+      "store_hex": "2f746d702f636166e9",
+      "key_hex": "2f746d702f636166e9",
       "python_error": "UnicodeEncodeError: 'utf-8' codec can't encode character '\\udce9' in position 8: surrogates not allowed"
     }
   ],
@@ -1041,12 +680,12 @@
       ]
     },
     {
-      "name": "project data as loaded: floats, big ints, NaN, duplicates, surrogates",
+      "name": "project data as loaded: floats, big ints, 1e400, duplicates",
       "tree": [
         {
           "path": ".shortcuts",
           "type": "file",
-          "content": "{\"version\": 1, \"extra\": {\"n\": 1.0, \"big\": 1e30, \"huge\": 1e400, \"nan\": NaN, \"neg\": -Infinity, \"int\": 12345678901234567890123, \"z\": -0, \"zf\": -0.0, \"e\": 1E2, \"s\": \"\\ud800 \\u00e9 \\ud83d\\ude00\"}, \"shortcuts\": {\"x\": {\"inline\": \"echo\", \"inline\": \"echo dup\"}, \"y\": {\"inline\": \"\\ud800\"}}}",
+          "content": "{\"version\": 1, \"extra\": {\"n\": 1.0, \"big\": 1e30, \"huge\": 1e400, \"int\": 12345678901234567890123, \"z\": -0, \"zf\": -0.0, \"e\": 1E2}, \"shortcuts\": {\"x\": {\"inline\": \"echo\", \"inline\": \"echo dup\"}, \"y\": {\"inline\": \"x\"}}}",
           "mode": "0o644"
         }
       ],
@@ -1056,11 +695,65 @@
           "name": "",
           "error": "/tmp/golden/trees/t04/.shortcuts has an unknown field: extra",
           "shared_files": {
-            ".shortcuts": "{\n  \"extra\": {\n    \"big\": 1e+30,\n    \"e\": 100.0,\n    \"huge\": Infinity,\n    \"int\": 12345678901234567890123,\n    \"n\": 1.0,\n    \"nan\": NaN,\n    \"neg\": -Infinity,\n    \"s\": \"\\ud800 \\u00e9 \\ud83d\\ude00\",\n    \"z\": 0,\n    \"zf\": -0.0\n  },\n  \"shortcuts\": {\n    \"x\": {\n      \"inline\": \"echo dup\"\n    },\n    \"y\": {\n      \"inline\": \"\\ud800\"\n    }\n  },\n  \"version\": 1\n}\n"
+            ".shortcuts": "{\n  \"extra\": {\n    \"big\": 1e30,\n    \"e\": 1E2,\n    \"huge\": 1e400,\n    \"int\": 12345678901234567890123,\n    \"n\": 1.0,\n    \"z\": -0,\n    \"zf\": -0.0\n  },\n  \"shortcuts\": {\n    \"x\": {\n      \"inline\": \"echo dup\"\n    },\n    \"y\": {\n      \"inline\": \"x\"\n    }\n  },\n  \"version\": 1\n}\n"
           },
           "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"extra\\\": {\\n    \\\"big\\\": 1e+30,\\n    \\\"e\\\": 100.0,\\n    \\\"huge\\\": Infinity,\\n    \\\"int\\\": 12345678901234567890123,\\n    \\\"n\\\": 1.0,\\n    \\\"nan\\\": NaN,\\n    \\\"neg\\\": -Infinity,\\n    \\\"s\\\": \\\"\\\\ud800 \\\\u00e9 \\\\ud83d\\\\ude00\\\",\\n    \\\"z\\\": 0,\\n    \\\"zf\\\": -0.0\\n  },\\n  \\\"shortcuts\\\": {\\n    \\\"x\\\": {\\n      \\\"inline\\\": \\\"echo dup\\\"\\n    },\\n    \\\"y\\\": {\\n      \\\"inline\\\": \\\"\\\\ud800\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"extra\\\": {\\n    \\\"big\\\": 1e30,\\n    \\\"e\\\": 1E2,\\n    \\\"huge\\\": 1e400,\\n    \\\"int\\\": 12345678901234567890123,\\n    \\\"n\\\": 1.0,\\n    \\\"z\\\": -0,\\n    \\\"zf\\\": -0.0\\n  },\\n  \\\"shortcuts\\\": {\\n    \\\"x\\\": {\\n      \\\"inline\\\": \\\"echo dup\\\"\\n    },\\n    \\\"y\\\": {\\n      \\\"inline\\\": \\\"x\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
+        }
+      ]
+    },
+    {
+      "name": "project data with NaN is refused",
+      "tree": [
+        {
+          "path": ".shortcuts",
+          "type": "file",
+          "content": "{\"version\": 1, \"shortcuts\": {}, \"n\": NaN}",
+          "mode": "0o644"
+        }
+      ],
+      "problems": [],
+      "groups": [
+        {
+          "name": "",
+          "error_contains": "corrupt registry"
+        }
+      ]
+    },
+    {
+      "name": "project data with -Infinity is refused",
+      "tree": [
+        {
+          "path": ".shortcuts",
+          "type": "file",
+          "content": "{\"version\": 1, \"shortcuts\": {}, \"n\": -Infinity}",
+          "mode": "0o644"
+        }
+      ],
+      "problems": [],
+      "groups": [
+        {
+          "name": "",
+          "error_contains": "corrupt registry"
+        }
+      ]
+    },
+    {
+      "name": "project data with a lone surrogate escape is refused",
+      "tree": [
+        {
+          "path": ".shortcuts",
+          "type": "file",
+          "content": "{\"version\": 1, \"shortcuts\": {\"y\": {\"inline\": \"\\ud800\"}}}",
+          "mode": "0o644"
+        }
+      ],
+      "problems": [],
+      "groups": [
+        {
+          "name": "",
+          "error_contains": "not valid UTF-8"
         }
       ]
     },
@@ -1225,7 +918,7 @@
       ]
     },
     {
-      "name": "namespace with non-UTF-8 and astral file names",
+      "name": "namespace with a non-UTF-8 file name is refused",
       "tree": [
         {
           "path": ".shortcuts",
@@ -1236,31 +929,19 @@
         {
           "path": "ns.shortcut",
           "type": "file",
-          "content": "{\n  \"shortcuts\": {\n    \"go\": {\n      \"script\": \"scripts/ns/caf\\udce9.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
+          "content": "{\n  \"shortcuts\": {\n    \"go\": {\n      \"script\": \"scripts/ns/a.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
           "mode": "0o644"
         },
         {
-          "path": "scripts/ns/caf\udce9.sh",
           "type": "file",
           "content": "echo x\n",
-          "mode": "0o755"
+          "mode": "0o755",
+          "path_hex": "736372697074732f6e732f636166e92e7368"
         },
         {
           "path": "scripts/ns/a.sh",
           "type": "file",
           "content": "echo a\n",
-          "mode": "0o644"
-        },
-        {
-          "path": "scripts/ns/\udcff.sh",
-          "type": "file",
-          "content": "echo ff\n",
-          "mode": "0o644"
-        },
-        {
-          "path": "scripts/ns/\ud800\udc00.sh",
-          "type": "file",
-          "content": "echo astral\n",
           "mode": "0o644"
         }
       ],
@@ -1278,17 +959,7 @@
         },
         {
           "name": "ns",
-          "error": null,
-          "shared_files": {
-            "ns.shortcut": "{\n  \"shortcuts\": {\n    \"go\": {\n      \"script\": \"scripts/ns/caf\\udce9.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
-            "scripts/ns/\ud800\udc00.sh": "echo astral\n",
-            "scripts/ns/\udcff.sh": "echo ff\n",
-            "scripts/ns/a.sh": "echo a\n",
-            "scripts/ns/caf\udce9.sh": "echo x\n"
-          },
-          "local_files": {},
-          "key_template": "[\"@ROOT@\", \"ns\", \"@ROOT@/ns.shortcut\"]",
-          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"go\\\": {\\n      \\\"script\\\": \\\"scripts/ns/caf\\\\udce9.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"scripts/ns/\\ud800\\udc00.sh\": \"echo astral\\n\",\n    \"scripts/ns/\\udcff.sh\": \"echo ff\\n\",\n    \"scripts/ns/a.sh\": \"echo a\\n\",\n    \"scripts/ns/caf\\udce9.sh\": \"echo x\\n\"\n  },\n  \"local\": {}\n}\n"
+          "error_contains": "not valid UTF-8"
         }
       ]
     },
@@ -1345,6 +1016,60 @@
           "local_files": {},
           "key_template": "[\"@ROOT@\", \"ns\", \"@ROOT@/ns.shortcut\"]",
           "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"a\\\": {\\n      \\\"inline\\\": \\\"true\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"scripts/ns/ok.sh\": \"echo ok\\n\"\n  },\n  \"local\": {}\n}\n"
+        }
+      ]
+    },
+    {
+      "name": "namespace with astral file names",
+      "tree": [
+        {
+          "path": ".shortcuts",
+          "type": "file",
+          "content": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {},\n  \"version\": 1\n}\n",
+          "mode": "0o644"
+        },
+        {
+          "path": "ns.shortcut",
+          "type": "file",
+          "content": "{\n  \"shortcuts\": {\n    \"go\": {\n      \"script\": \"scripts/ns/a.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
+          "mode": "0o644"
+        },
+        {
+          "path": "scripts/ns/a.sh",
+          "type": "file",
+          "content": "echo a\n",
+          "mode": "0o644"
+        },
+        {
+          "path": "scripts/ns/\ud800\udc00.sh",
+          "type": "file",
+          "content": "echo astral\n",
+          "mode": "0o644"
+        }
+      ],
+      "problems": [],
+      "groups": [
+        {
+          "name": "",
+          "error": null,
+          "shared_files": {
+            ".shortcuts": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {},\n  \"version\": 1\n}\n"
+          },
+          "local_files": {},
+          "key_template": "@ROOT@",
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {},\\n  \\\"version\\\": 1\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
+        },
+        {
+          "name": "ns",
+          "error": null,
+          "shared_files": {
+            "ns.shortcut": "{\n  \"shortcuts\": {\n    \"go\": {\n      \"script\": \"scripts/ns/a.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
+            "scripts/ns/a.sh": "echo a\n",
+            "scripts/ns/\ud800\udc00.sh": "echo astral\n"
+          },
+          "local_files": {},
+          "key_template": "[\"@ROOT@\", \"ns\", \"@ROOT@/ns.shortcut\"]",
+          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"go\\\": {\\n      \\\"script\\\": \\\"scripts/ns/a.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"scripts/ns/a.sh\": \"echo a\\n\",\n    \"scripts/ns/\\ud800\\udc00.sh\": \"echo astral\\n\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     }

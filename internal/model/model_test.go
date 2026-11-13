@@ -130,11 +130,7 @@ func TestRegistry_LoadRegistryFile(t *testing.T) {
 	env := testkit.New(t)
 	p := filepath.Join(env.Tmp, "r.json")
 	cases := []struct{ file, want string }{
-		{`{not json`, "corrupt registry " + p + ": Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"},
 		{`[]`, "corrupt registry " + p + ": root must be a JSON object"},
-		{"\xef\xbb\xbf{}", "corrupt registry " + p + ": Unexpected UTF-8 BOM (decode using utf-8-sig): line 1 column 1 (char 0)"},
-		{"{\"a\": \"\xff\"}", "corrupt registry " + p + ": 'utf-8' codec can't decode byte 0xff in position 7: invalid start byte"},
-		{"{\r\n  \"a\": 1,\r\n}", "corrupt registry " + p + ": Illegal trailing comma before end of object: line 2 column 9 (char 10)"},
 		{`{"version": "2"}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 1"},
 		{`{"version": 1.0}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 1"},
 		{`{"version": null}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 1"},
@@ -149,6 +145,25 @@ func TestRegistry_LoadRegistryFile(t *testing.T) {
 		if err == nil || err.Error() != c.want {
 			t.Errorf("%q: got %v\nwant %s", c.file, err, c.want)
 		}
+	}
+	// Go's wording after the path, and the file is named; text that is not valid UTF-8 says so
+	for _, c := range []struct{ file, want string }{
+		{`{not json`, "invalid character 'n' looking for beginning of object key string (at byte "},
+		{"\xef\xbb\xbf{}", "invalid character"},
+		{"{\r\n  \"a\": 1,\r\n}", "invalid character '}'"},
+		{`{"a": NaN}`, "invalid character 'N'"},
+		{"{\"a\": \"\xff\"}", "not valid UTF-8"},
+		{`{"a": "\udce9"}`, "not valid UTF-8"},
+	} {
+		env.WriteFile(p, c.file, 0)
+		_, err := LoadRegistryFile(p)
+		if err == nil || !strings.HasPrefix(err.Error(), "corrupt registry "+p+": ") || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%q: got %v, want it to name %s and say %q", c.file, err, p, c.want)
+		}
+	}
+	env.WriteFile(p, "{\r\n  \"version\": 1,\r\n  \"shortcuts\": {}\r\n}\r\n", 0) // CRLF line ends are plain white space
+	if _, err := LoadRegistryFile(p); err != nil {
+		t.Errorf("a CRLF registry: %v", err)
 	}
 	for _, ok := range []string{`{}`, `{"version": 0}`, `{"version": 1, "x": 1}`, `{"version": -5}`} {
 		env.WriteFile(p, ok, 0)

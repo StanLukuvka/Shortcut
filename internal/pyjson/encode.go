@@ -1,8 +1,8 @@
 package pyjson
 
 import (
+	"encoding/json"
 	"fmt"
-	"math/big"
 	"slices"
 	"strings"
 )
@@ -37,8 +37,8 @@ func encode(b *strings.Builder, v Value, o Opts, level int) {
 		}
 	case string:
 		WriteString(b, x)
-	case *big.Int:
-		b.WriteString(x.String())
+	case json.Number:
+		b.WriteString(string(x)) // the number as it was written
 	case float64:
 		b.WriteString(ReprFloat(x))
 	case []Value:

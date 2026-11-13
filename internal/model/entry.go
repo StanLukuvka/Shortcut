@@ -4,7 +4,6 @@ package model
 
 import (
 	"fmt"
-	"math/big"
 	"regexp"
 	"strings"
 
@@ -245,5 +244,3 @@ func PlacementError(e *Entry, inProject, inGlobal bool) string {
 	}
 	return ""
 }
-
-func bigInt(n int64) *big.Int { return big.NewInt(n) }

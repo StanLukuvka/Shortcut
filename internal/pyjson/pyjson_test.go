@@ -2,14 +2,15 @@ package pyjson
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"errors"
-	"github.com/StanLukuvka/Shortcut/internal/testkit"
-	"math/big"
 	"strings"
 	"testing"
+
+	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-// golden reads ../testdata/approval.json with this package's own decoder (it holds lone-surrogate escapes).
+// golden reads ../testdata/approval.json.
 func golden(t *testing.T, set string) []*Object {
 	t.Helper()
 	raw := testkit.Golden(t, "approval.json")
@@ -34,57 +35,17 @@ func str(o *Object, k string) string {
 	return s
 }
 
-func TestGolden_Loads(t *testing.T) {
-	cases := golden(t, "loads_cases")
-	t.Logf("%d cases", len(cases))
-	for _, c := range cases {
-		src := str(c, "source")
-		t.Run(src, func(t *testing.T) {
-			v, err := Parse(src)
-			if want, bad := c.Get("error"); bad {
-				if err == nil || err.Error() != want {
-					t.Fatalf("error = %v, want %q", err, want)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got := DumpsCompact(v); got != str(c, "compact") {
-				t.Fatalf("got %s, want %s", got, str(c, "compact"))
-			}
-		})
-	}
-}
-
-func TestGolden_LoadsBytes(t *testing.T) {
-	cases := golden(t, "loads_bytes_cases")
-	t.Logf("%d cases", len(cases))
-	for _, c := range cases {
-		raw, err := hex.DecodeString(str(c, "raw_hex"))
+// text is the field k, or the bytes of k+"_hex" when the name is not valid UTF-8 and so is given as hex.
+func text(t *testing.T, o *Object, k string) string {
+	t.Helper()
+	if h, ok := o.Get(k + "_hex"); ok {
+		b, err := hex.DecodeString(h.(string))
 		if err != nil {
 			t.Fatal(err)
 		}
-		v, err := Decode(raw)
-		if want, bad := c.Get("error"); bad {
-			var name string
-			var se *SyntaxError
-			var ue *UTF8Error
-			switch {
-			case errors.As(err, &se):
-				name = "JSONDecodeError: "
-			case errors.As(err, &ue):
-				name = "UnicodeDecodeError: "
-			}
-			if err == nil || name+err.Error() != want {
-				t.Errorf("%x: error = %v, want %q", raw, err, want)
-			}
-			continue
-		}
-		if err != nil || DumpsCompact(v) != str(c, "compact") {
-			t.Errorf("%x: got %v, %v", raw, v, err)
-		}
+		return string(b)
 	}
+	return str(o, k)
 }
 
 func TestGolden_Floats(t *testing.T) {
@@ -96,33 +57,12 @@ func TestGolden_Floats(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", lit, err)
 		}
-		_, isInt := v.(*big.Int)
-		if isInt != (str(c, "type") == "int") {
-			t.Errorf("%s: decoded as %T, Python says %s", lit, v, str(c, "type"))
+		n, ok := v.(json.Number)
+		if !ok || string(n) != lit { // a number keeps the text it was written with
+			t.Errorf("%s: decoded as %T %v", lit, v, v)
 		}
-		if got := DumpsCompact(v); got != str(c, "dumps") {
-			t.Errorf("%s: got %s, want %s", lit, got, str(c, "dumps"))
-		}
-	}
-}
-
-func TestGolden_Dumps(t *testing.T) {
-	cases := golden(t, "dumps_cases")
-	t.Logf("%d cases", len(cases))
-	for _, c := range cases {
-		v, err := Parse(str(c, "source"))
-		if err != nil {
-			t.Fatalf("%s: %v", str(c, "source"), err)
-		}
-		check := func(name string, o Opts, want string) {
-			if got := Dumps(v, o); got != want {
-				t.Errorf("%s %s: got %q, want %q", str(c, "source"), name, got, want)
-			}
-		}
-		check("compact", Opts{}, str(c, "compact"))
-		check("indent2", Opts{Indent: 2}, strings.TrimSuffix(str(c, "indent2"), "\n"))
-		if _, ok := c.Get("indent2_sorted"); ok {
-			check("indent2_sorted", Opts{Indent: 2, SortKeys: true}, strings.TrimSuffix(str(c, "indent2_sorted"), "\n"))
+		if got := DumpsCompact(v); got != lit {
+			t.Errorf("%s: written back as %s", lit, got)
 		}
 	}
 }
@@ -138,71 +78,12 @@ func TestGolden_KeyJSON(t *testing.T) {
 			continue
 		}
 		n++
-		key := DumpsCompact([]Value{str(c, "store"), str(c, "name"), str(c, "file")})
+		key := DumpsCompact([]Value{text(t, c, "store"), text(t, c, "name"), text(t, c, "file")})
 		if key != str(c, "key") {
 			t.Errorf("got %s, want %s", key, str(c, "key"))
 		}
 	}
 	t.Logf("%d of %d cases (namespace keys)", n, len(cases))
-}
-
-func TestSyntaxErrors(t *testing.T) {
-	for _, c := range []struct{ src, want string }{
-		{"", "Expecting value: line 1 column 1 (char 0)"},
-		{"{", "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"},
-		{`{"a" 1}`, "Expecting ':' delimiter: line 1 column 6 (char 5)"},
-		{`[1 2]`, "Expecting ',' delimiter: line 1 column 4 (char 3)"},
-		{`{"a": 1 "b"}`, "Expecting ',' delimiter: line 1 column 9 (char 8)"},
-		{`"abc`, "Unterminated string starting at: line 1 column 1 (char 0)"},
-		{`"abc\`, "Unterminated string starting at: line 1 column 1 (char 0)"},
-		{"\"a\x01\"", "Invalid control character at: line 1 column 3 (char 2)"},
-		{`"\q"`, "Invalid \\escape: line 1 column 2 (char 1)"},
-		{`"\u00"`, "Invalid \\uXXXX escape: line 1 column 3 (char 2)"},
-		{`"\u00zz"`, "Invalid \\uXXXX escape: line 1 column 3 (char 2)"},
-		{`"\ud800\u00zz"`, "Invalid \\uXXXX escape: line 1 column 9 (char 8)"},
-		{"{} []", "Extra data: line 1 column 4 (char 3)"},
-		{`{"a": 1,}`, "Illegal trailing comma before end of object: line 1 column 8 (char 7)"},
-		{`[1, 2 ,  ]`, "Illegal trailing comma before end of array: line 1 column 7 (char 6)"},
-		{"\xef\xbb\xbf{}", "Unexpected UTF-8 BOM (decode using utf-8-sig): line 1 column 1 (char 0)"},
-		// positions count code points, not bytes: the e-acute and the emoji are one char each
-		{"[\"é\U0001F600\", x]", "Expecting value: line 1 column 8 (char 7)"},
-		{"{\n\"é\": 1\n  x}", "Expecting ',' delimiter: line 3 column 3 (char 11)"},
-		{" {}", "Expecting value: line 1 column 1 (char 0)"}, // only space, tab, newline, CR are whitespace
-	} {
-		if _, err := Parse(c.src); err == nil || err.Error() != c.want {
-			t.Errorf("%q: got %v, want %q", c.src, err, c.want)
-		}
-	}
-}
-
-func TestUTF8Errors(t *testing.T) {
-	for _, c := range []struct {
-		raw  string
-		want string
-	}{
-		{"{\"a\": \"\xff\"}", "'utf-8' codec can't decode byte 0xff in position 7: invalid start byte"},
-		{"a\xe2\x82", "'utf-8' codec can't decode bytes in position 1-2: unexpected end of data"},
-		{"a\xe2", "'utf-8' codec can't decode byte 0xe2 in position 1: unexpected end of data"},
-		{"\xe2\x82A", "'utf-8' codec can't decode bytes in position 0-1: invalid continuation byte"},
-		{"\xed\xa0\x80", "'utf-8' codec can't decode byte 0xed in position 0: invalid continuation byte"},
-		{"\xc0\x80", "'utf-8' codec can't decode byte 0xc0 in position 0: invalid start byte"},
-	} {
-		if _, err := Decode([]byte(c.raw)); err == nil || err.Error() != c.want {
-			t.Errorf("%q: got %v, want %q", c.raw, err, c.want)
-		}
-	}
-}
-
-func TestDepthLimit(t *testing.T) {
-	if _, err := Parse(strings.Repeat("[", 999) + strings.Repeat("]", 999)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Parse(strings.Repeat("[", 5000)); !errors.Is(err, ErrDepth) {
-		t.Fatalf("got %v", err)
-	}
-	if _, err := Parse(strings.Repeat(`{"a":`, 5000)); !errors.Is(err, ErrDepth) {
-		t.Fatalf("got %v", err)
-	}
 }
 
 func TestObjectOrder(t *testing.T) {
@@ -222,23 +103,6 @@ func TestObjectOrder(t *testing.T) {
 	}
 	if _, ok := o.Get("b"); ok {
 		t.Fatal("b not deleted")
-	}
-}
-
-func TestLoneSurrogates(t *testing.T) {
-	v, err := Parse(`"\ud800x\udc00\ud83d\ude00"`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := "\xed\xa0\x80x\xed\xb0\x80\U0001F600"; v != want {
-		t.Fatalf("got %q", v)
-	}
-	if got := DumpsCompact(v); got != `"\ud800x\udc00\ud83d\ude00"` {
-		t.Fatal(got)
-	}
-	// a raw invalid byte is surrogateescape: 0xE9 is U+DCE9
-	if got := DumpsCompact("caf\xe9"); got != `"caf\udce9"` {
-		t.Fatal(got)
 	}
 }
 
@@ -272,20 +136,81 @@ func TestReprFloat(t *testing.T) {
 	}
 }
 
-func TestSurrogateEscapeRoundTrip(t *testing.T) {
-	v, err := Parse(`"caf\udce9.sh"`)
-	if err != nil || v != "caf\xe9.sh" {
-		t.Fatalf("got %q, %v", v, err)
+func TestDecode_RefusesWhatIsNotValidUTF8(t *testing.T) {
+	for _, src := range []string{
+		`{"a": "\udce9"}`,   // what the Python version wrote for a file name caf<0xe9>
+		`["\ud800"]`,        // lone high surrogate
+		`["\ud800\u0041"]`,  // high surrogate followed by something that is not a low one
+		`["\ud800 \udc00"]`, // a pair needs the escapes side by side
+		`["\udc00"]`,        // lone low surrogate
+		`["\udc00\ud800"]`,  // low before high
+		`{"\udcff": 1}`,     // in a key too
+		"{\"a\": \"\xe9\"}", // a raw invalid byte
+	} {
+		_, err := Decode([]byte(src))
+		if err == nil {
+			t.Errorf("%q loaded", src)
+		}
+		if !errors.Is(err, ErrNotUTF8) {
+			t.Errorf("%q: %v, want ErrNotUTF8", src, err)
+		}
 	}
-	if got := DumpsCompact(v); got != `"caf\udce9.sh"` {
-		t.Fatal(got)
+	if _, err := Decode([]byte{'"', 0xe9, '"'}); !errors.Is(err, ErrNotUTF8) {
+		t.Errorf("raw byte: %v", err)
 	}
-	v, _ = Parse(`"\ud800"`)
-	if v != "\xed\xa0\x80" || DumpsCompact(v) != `"\ud800"` {
-		t.Fatalf("got %q", v)
+	for src, want := range map[string]string{
+		`"\ud83d\ude00"`:   "\U0001F600", // a proper pair, as ensure_ascii wrote an emoji
+		`"\uD83D\uDE00"`:   "\U0001F600",
+		"\"\U0001F600\"":   "\U0001F600",
+		"\"\\ufffd\"":      "\uFFFD", // an escaped U+FFFD is a real character, not a lost byte
+		"\"\uFFFD\"":       "\uFFFD",
+		`"a\\udce9"`:       `a\udce9`, // an escaped backslash, then the plain text udce9
+		`"\"\ud83d\ude00"`: "\"\U0001F600",
+	} {
+		v, err := Parse(src)
+		if err != nil || v != want {
+			t.Errorf("%s: got %q, %v, want %q", src, v, err, want)
+		}
 	}
-	d, _ := Parse(`"\udcff.sh"`)
-	if Compare(d.(string), "\xff.sh") != 0 {
-		t.Fatal("decoded and raw differ")
+}
+
+func TestDecode_PythonWrittenStoreKeepsOrderAndNumberText(t *testing.T) {
+	src := `{"zed": 1, "version": 1, "n": [1.0, 12345678901234567890, 1e400, 0, -0, 2E2], "alpha": {}, "list": [], "a": {"k": 1, "b": [], "c": {}}}`
+	v, err := Parse(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := v.(*Object)
+	if got := strings.Join(o.Keys, ","); got != "zed,version,n,alpha,list,a" {
+		t.Errorf("key order %s", got)
+	}
+	for i, want := range []string{"1.0", "12345678901234567890", "1e400", "0", "-0", "2E2"} {
+		if got := o.Vals["n"].([]Value)[i]; got != json.Number(want) {
+			t.Errorf("number %d: %#v, want %s", i, got, want)
+		}
+	}
+	if o.Vals["alpha"].(*Object).Vals == nil || o.Vals["list"].([]Value) == nil {
+		t.Error("{} and [] must not be nil")
+	}
+}
+
+func TestDecode_DuplicatesDepthAndWhatIsNotJSON(t *testing.T) {
+	v, err := Parse(`{"b": 1, "a": 2, "b": 3}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o := v.(*Object); strings.Join(o.Keys, ",") != "b,a" || o.Vals["b"] != json.Number("3") { // first place, last value
+		t.Errorf("%v", o)
+	}
+	if v, _ := Parse(`{}`); v.(*Object).Vals == nil {
+		t.Error("{} has nil Vals")
+	}
+	for _, src := range []string{
+		strings.Repeat("[", 20000), strings.Repeat("[", 20000) + strings.Repeat("]", 20000), // deeper than encoding/json reads
+		"\xef\xbb\xbf{}", `{"a": NaN}`, `[Infinity]`, `[-Infinity]`, `{} x`, `{"a": 1,}`, `[1 2]`, ``, `{`, `"a`, `01`, "\"a\x01\"",
+	} {
+		if _, err := Parse(src); err == nil {
+			t.Errorf("%.30q loaded", src)
+		}
 	}
 }

@@ -86,6 +86,10 @@ func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames 
 		}
 		return 1, nil
 	}
+	if err := approval.Check(g); err != nil {
+		s.Err.WriteString("error: " + err.Error() + "\n")
+		return 1, nil
+	}
 	shared, local := approval.SharedFiles(g), approval.LocalFiles(g)
 	files := maps.Clone(shared)
 	maps.Copy(files, local)

@@ -1,8 +1,12 @@
 package approval
 
 import (
+	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/pyjson"
@@ -115,4 +119,31 @@ func LocalFiles(g model.Group) map[string]string {
 		return map[string]string{}
 	}
 	return merge(jsonFile(g, g.LocalFile, g.LocalData), entryFiles(g, g.LocalShortcuts(), " in "+model.LocalFile))
+}
+
+// checkPaths refuses a snapshot with text that is not valid UTF-8 in a path or a value: the record is JSON, and
+// JSON cannot hold it without merging two different names into one. The smallest offender is named.
+func checkPaths(files map[string]string) error {
+	for _, p := range slices.Sorted(maps.Keys(files)) {
+		if !utf8.ValidString(p) || !utf8.ValidString(files[p]) {
+			return fmt.Errorf("cannot approve: %q is not valid UTF-8; rename it", p)
+		}
+	}
+	return nil
+}
+
+// snapshot is SharedFiles and LocalFiles, or the error for text that cannot be approved. State, Save and Require
+// get the maps this way.
+func snapshot(g model.Group) (shared, local map[string]string, err error) {
+	shared, local = SharedFiles(g), LocalFiles(g)
+	if err = checkPaths(shared); err == nil {
+		err = checkPaths(local)
+	}
+	return shared, local, err
+}
+
+// Check is nil when the group's files can be approved, else the error that says why not.
+func Check(g model.Group) error {
+	_, _, err := snapshot(g)
+	return err
 }

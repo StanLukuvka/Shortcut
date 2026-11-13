@@ -1,8 +1,9 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
-	"math/big"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -70,10 +71,9 @@ func pyTruthy(v pyjson.Value) bool {
 		return x
 	case string:
 		return x != ""
-	case *big.Int:
-		return x.Sign() != 0
-	case float64:
-		return x != 0
+	case json.Number:
+		f, _ := strconv.ParseFloat(string(x), 64)
+		return f != 0
 	case []pyjson.Value:
 		return len(x) > 0
 	case *pyjson.Object:
@@ -94,10 +94,8 @@ func pyStr(v pyjson.Value) string {
 		return "False"
 	case string:
 		return x
-	case *big.Int:
-		return x.String()
-	case float64:
-		return pyjson.ReprFloat(x)
+	case json.Number:
+		return string(x)
 	case []pyjson.Value:
 		parts := make([]string, len(x))
 		for i, e := range x {

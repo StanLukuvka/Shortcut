@@ -327,18 +327,22 @@ func TestUpdate_Refusals(t *testing.T) {
 	testkit.Contains(t, "local", res.Stdout, "'y' in .shortcuts is overridden by .shortcuts.local for you.\n")
 }
 
-// Q-3: a script path that is not UTF-8 prints escaped in the diff header on stdout, never as a raw 0x9b.
-func TestUpdate_NonUTF8PathIsEscapedOnStdout(t *testing.T) {
+// Q-3: a file name that is not valid UTF-8 cannot be approved, and the refusal shows it escaped, never as a raw 0x9b.
+func TestUpdate_NonUTF8PathIsRefusedAndShownEscaped(t *testing.T) {
 	e := testkit.New(t)
-	proj := e.Project(testkit.HI)
-	bad := "scripts/a\x9bb\xed\xa0\x80c.sh"
-	e.WriteFile(filepath.Join(proj, bad), "echo hi\n", 0)
-	e.WriteRegistryRaw(filepath.Join(proj, ".shortcuts"),
-		`{"version": 1, "shortcuts": {"hi": {"description": "d", "script": "scripts/a\udc9bb\ud800c.sh"}}}`)
-	out := runOK(t, e, in(proj), "update", "-y").Stdout
-	testkit.Contains(t, "update", out, "--- a/scripts/a\\udc9bb\\ud800c.sh")
-	if !utf8.ValidString(out) || strings.ContainsAny(out, "\u0080\u009b") {
-		t.Errorf("stdout holds raw bytes: %q", out)
+	e.WriteImport(e.Store, "docker", testkit.NS(map[string]any{"ps": testkit.Inline("echo ps")}))
+	bad := filepath.Join(e.Store, "imports", "scripts", "docker", "a\x9bb\xed\xa0\x80c.sh")
+	if err := os.MkdirAll(filepath.Dir(bad), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bad, []byte("echo hi\n"), 0o644); err != nil {
+		t.Skipf("this filesystem refuses non-UTF-8 names: %v", err)
+	}
+	res := e.Run("update", "docker", "-y")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "update", res.Stderr, `"scripts/docker/a\x9bb\xed\xa0\x80c.sh" is not valid UTF-8; rename it`)
+	if !utf8.ValidString(res.Stdout+res.Stderr) || strings.ContainsAny(res.Stdout+res.Stderr, "\u0080\u009b") {
+		t.Errorf("output holds raw bytes: %q %q", res.Stdout, res.Stderr)
 	}
 }
 

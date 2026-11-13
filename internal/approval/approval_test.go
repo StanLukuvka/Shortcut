@@ -17,7 +17,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-// golden reads ../testdata/approval.json with pyjson (it holds lone-surrogate escapes, which encoding/json garbles).
+// golden reads ../testdata/approval.json.
 func golden(t *testing.T, set string) []*pyjson.Object {
 	t.Helper()
 	raw := testkit.Golden(t, "approval.json")
@@ -39,6 +39,19 @@ func golden(t *testing.T, set string) []*pyjson.Object {
 func str(o *pyjson.Object, k string) string {
 	s, _ := o.Vals[k].(string)
 	return s
+}
+
+// text is the field k, or the bytes of k+"_hex" when the name is not valid UTF-8 and so is given as hex.
+func text(t *testing.T, o *pyjson.Object, k string) string {
+	t.Helper()
+	if h, ok := o.Get(k + "_hex"); ok {
+		b, err := hex.DecodeString(h.(string))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	return str(o, k)
 }
 
 func strMap(t *testing.T, v pyjson.Value) map[string]string {
@@ -102,14 +115,14 @@ func TestApproval_GoldenKeysAndRecordNames(t *testing.T) {
 	}
 	cases := golden(t, "key_cases")
 	for _, c := range cases {
-		store, name := str(c, "store"), str(c, "name")
-		g := model.Group{Name: name, File: str(c, "file"), StoreDir: store}
+		store, name := text(t, c, "store"), text(t, c, "name")
+		g := model.Group{Name: name, File: text(t, c, "file"), StoreDir: store}
 		if str(c, "kind") == "project" {
 			g = model.Group{StoreDir: store, File: store + "/.shortcuts", LocalFile: store + "/.shortcuts.local"}
 		}
-		t.Run(str(c, "kind")+" "+store+" "+name, func(t *testing.T) {
-			if got := g.Key(); got != str(c, "key") {
-				t.Errorf("key %q, want %q", got, str(c, "key"))
+		t.Run(str(c, "kind")+" "+strconv.QuoteToASCII(store)+" "+name, func(t *testing.T) {
+			if got := g.Key(); got != text(t, c, "key") {
+				t.Errorf("key %q, want %q", got, text(t, c, "key"))
 			}
 			want := str(c, "record_name")
 			if _, python := c.Get("python_error"); python {
@@ -117,7 +130,7 @@ func TestApproval_GoldenKeysAndRecordNames(t *testing.T) {
 				if utf8.ValidString(g.Key()) {
 					t.Fatal("python_error on a valid key")
 				}
-				sum := sha256.Sum256([]byte(str(c, "key")))
+				sum := sha256.Sum256([]byte(text(t, c, "key")))
 				want = hex.EncodeToString(sum[:]) + ".json"
 			}
 			if want == "" {
@@ -147,14 +160,14 @@ func buildTree(t *testing.T, env *testkit.Env, root string, tree []pyjson.Value)
 	t.Helper()
 	for _, item := range tree {
 		e := item.(*pyjson.Object)
-		if p := str(e, "path"); !utf8.ValidString(p) {
+		if p := text(t, e, "path"); !utf8.ValidString(p) {
 			probe := filepath.Join(env.Tmp, "probe\xff")
 			if err := os.WriteFile(probe, nil, 0o644); err != nil {
 				t.Skipf("this filesystem refuses non-UTF-8 file names: %v", err)
 			}
 			os.Remove(probe)
 		}
-		path := filepath.Join(root, str(e, "path"))
+		path := filepath.Join(root, text(t, e, "path"))
 		switch typ := str(e, "type"); typ {
 		case "file":
 			var content any = str(e, "content")
@@ -212,6 +225,26 @@ func TestApproval_GoldenTrees(t *testing.T) {
 				groups++
 				if g.Name != str(w, "name") {
 					t.Fatalf("group %d is %q, want %q", i, g.Name, str(w, "name"))
+				}
+				if contains, ok := w.Get("error_contains"); ok {
+					msg := ""
+					if g.Error != nil {
+						msg = *g.Error
+					} else if err := Check(g); err != nil {
+						msg = err.Error()
+						if State(g) != "invalid" || Require(g) == nil {
+							t.Errorf("state %s, require %v", State(g), Require(g))
+						}
+						for _, e := range c.Vals["tree"].([]pyjson.Value) { // the message shows the offending path
+							if _, bad := e.(*pyjson.Object).Get("path_hex"); bad && !strings.Contains(msg, strconv.Quote(text(t, e.(*pyjson.Object), "path"))) {
+								t.Errorf("%q does not name the path", msg)
+							}
+						}
+					}
+					if !strings.Contains(msg, contains.(string)) {
+						t.Errorf("error %q, want it to hold %q", msg, contains)
+					}
+					continue
 				}
 				if wantErr := w.Vals["error"]; (g.Error == nil) != (wantErr == nil) ||
 					(g.Error != nil && afterShortcut(*g.Error) != afterShortcut(wantErr.(string))) {
@@ -294,7 +327,7 @@ func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template s
 	}
 }
 
-func TestApproval_NonUTF8ProjectPathIsHashedByItsRawBytes(t *testing.T) {
+func TestApproval_ProjectInANonUTF8FolderCannotBeApproved(t *testing.T) {
 	env := testkit.New(t)
 	probe := filepath.Join(env.Tmp, "caf\xe9")
 	if err := os.Mkdir(probe, 0o755); err != nil {
@@ -305,21 +338,21 @@ func TestApproval_NonUTF8ProjectPathIsHashedByItsRawBytes(t *testing.T) {
 	if g.Key() != probe {
 		t.Fatalf("key %q", g.Key())
 	}
+	// the record is still named after the key's raw bytes, so two such folders cannot share one
 	sum := sha256.Sum256([]byte(probe))
 	if got := filepath.Base(model.ApprovalPath(g)); got != hex.EncodeToString(sum[:])+".json" {
 		t.Errorf("record %s", got)
 	}
-	shared, local := SharedFiles(g), LocalFiles(g)
-	if err := Save(g, shared, local); err != nil {
-		t.Fatal(err)
+	// but the record would have to hold the key as JSON text, which cannot hold it: refused, nothing written
+	err := Save(g, SharedFiles(g), LocalFiles(g))
+	if err == nil || !strings.Contains(err.Error(), "not valid UTF-8") {
+		t.Fatalf("Save: %v", err)
 	}
-	if State(g) != "ok" {
+	if _, err := os.Stat(model.ApprovalPath(g)); err == nil {
+		t.Error("a record was written")
+	}
+	if State(g) != "new" {
 		t.Errorf("state %s", State(g))
-	}
-	// the key is written as Python's json.dumps writes it: the byte as a lone surrogate
-	raw, _ := os.ReadFile(model.ApprovalPath(g))
-	if !strings.Contains(string(raw), `caf\udce9"`) {
-		t.Errorf("record: %s", raw)
 	}
 }
 
@@ -490,7 +523,7 @@ func TestApproval_ATextFileCannotForgeEitherMark(t *testing.T) {
 	}
 }
 
-func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
+func TestApproval_BadBytesInAFileAndTheirEscapedTextAreDifferentContent(t *testing.T) {
 	one := Reviewable([]byte("a \xff\n"))
 	two := Reviewable([]byte("a \\xff\n"))
 	if one == two {
@@ -501,6 +534,60 @@ func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
 	}
 	if want := "a \\xff\n\n" + invalidMark + "593556958570390666a95c849eaaee0a27455bbe3f9cda2b0a2ea551af93b9e9" + "\n"; one != want {
 		t.Errorf("%q", one)
+	}
+}
+
+func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
+	env := testkit.New(t)
+	proj := env.Project(map[string]any{"a": map[string]any{"inline": "x"}}, testkit.Dirs("scripts"))
+	// a file named with the ASCII text caf\udce9.sh is an ordinary file, distinct from caf<0xe9>.sh
+	env.WriteFile(filepath.Join(proj, "scripts", `caf\udce9.sh`), "echo ascii\n", 0o644)
+	ns := func() model.Group {
+		env.WriteFile(filepath.Join(proj, "ns.shortcut"), `{"version": 1, "shortcuts": {"go": {"inline": "x"}}}`, 0)
+		env.WriteFile(filepath.Join(proj, ".shortcuts"), `{"version": 1, "shortcuts": {}, "imports": {"ns": "ns.shortcut"}}`, 0)
+		g, ok := model.LoadStore(proj).Namespace("ns")
+		if !ok {
+			t.Fatal("no namespace")
+		}
+		return g
+	}
+	g := ns()
+	if g.ScriptsDir() != filepath.Join(proj, "scripts", "ns") {
+		t.Skipf("scripts folder %s", g.ScriptsDir())
+	}
+	env.WriteFile(filepath.Join(g.ScriptsDir(), `caf\udce9.sh`), "echo ascii\n", 0o644)
+	if err := Check(g); err != nil {
+		t.Fatalf("ASCII name: %v", err)
+	}
+	shared, local, err := snapshot(g)
+	if err != nil || shared[`scripts/ns/caf\udce9.sh`] != "echo ascii\n" {
+		t.Fatalf("%q %v", shared, err)
+	}
+	if err := Save(g, shared, local); err != nil || State(g) != "ok" {
+		t.Fatalf("Save %v, state %s", err, State(g))
+	}
+	// a file named caf<0xe9>.sh is refused, and the message names it; the approval no longer holds
+	bad := filepath.Join(g.ScriptsDir(), "caf\xe9.sh")
+	if err := os.WriteFile(bad, []byte("echo bad\n"), 0o644); err != nil {
+		t.Skipf("this filesystem refuses non-UTF-8 names: %v", err)
+	}
+	err = Check(g)
+	if err == nil || !strings.Contains(err.Error(), `"scripts/ns/caf\xe9.sh"`) || !strings.Contains(err.Error(), "not valid UTF-8") {
+		t.Fatalf("Check: %v", err)
+	}
+	if State(g) != "invalid" || Require(g) == nil || Save(g, SharedFiles(g), LocalFiles(g)) == nil {
+		t.Errorf("state %s", State(g))
+	}
+}
+
+func TestApproval_ARecordHoldingALoneSurrogateIsNoRecord(t *testing.T) {
+	env := testkit.New(t)
+	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
+	g := model.LoadStore(proj).Main
+	// what the Python version wrote for a file named caf<0xe9>: a lone surrogate escape
+	env.WriteFile(model.ApprovalPath(g), `{"snapshot": {"caf\udce9.sh": "x"}, "local": {}}`, 0)
+	if Load(g) != nil || State(g) != "new" {
+		t.Errorf("loaded as a record: %+v, state %s", Load(g), State(g))
 	}
 }
 

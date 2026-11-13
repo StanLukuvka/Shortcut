@@ -1,11 +1,12 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -72,7 +73,7 @@ func targetGroup(ns Namespace, cwd string) (model.Group, error) {
 func loadForEdit(path string, isNew bool) (*pyjson.Object, *pyjson.Object, error) {
 	reg := &pyjson.Object{}
 	if isNew {
-		reg.Set("version", big.NewInt(model.RegistryVersion))
+		reg.Set("version", json.Number(strconv.Itoa(model.RegistryVersion)))
 		reg.Set("shortcuts", &pyjson.Object{})
 	} else {
 		var err error
