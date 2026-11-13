@@ -7,21 +7,21 @@ package difflib
 
 import "sort"
 
-// Op is one get_opcodes tuple. Tag is 'r' replace, 'd' delete, 'i' insert, 'e' equal.
-type Op struct {
+// op is one edit operation. Tag is 'r' replace, 'd' delete, 'i' insert, 'e' equal.
+type op struct {
 	Tag            byte
 	I1, I2, J1, J2 int
 }
 
-// Match is a get_matching_blocks triple.
-type Match struct{ A, B, Size int }
+// match is a block of lines that a and b share.
+type match struct{ A, B, Size int }
 
 type matcher struct {
 	a, b []string
 	b2j  map[string][]int
 }
 
-// newMatcher is __chain_b with isjunk=None, autojunk=True.
+// newMatcher indexes b by line, with no junk function and autojunk on.
 func newMatcher(a, b []string) *matcher {
 	m := &matcher{a: a, b: b, b2j: map[string][]int{}}
 	for i, s := range b {
@@ -38,9 +38,9 @@ func newMatcher(a, b []string) *matcher {
 	return m
 }
 
-// longest is find_longest_match. With no junk set, only the popular-element
+// longest finds the longest matching block in a[alo:ahi] and b[blo:bhi]. With no junk set, only the popular-element
 // extension loops of the original remain.
-func (m *matcher) longest(alo, ahi, blo, bhi int) Match {
+func (m *matcher) longest(alo, ahi, blo, bhi int) match {
 	besti, bestj, bestsize := alo, blo, 0
 	j2len := map[int]int{}
 	for i := alo; i < ahi; i++ {
@@ -66,15 +66,15 @@ func (m *matcher) longest(alo, ahi, blo, bhi int) Match {
 	for besti+bestsize < ahi && bestj+bestsize < bhi && m.a[besti+bestsize] == m.b[bestj+bestsize] {
 		bestsize++
 	}
-	return Match{besti, bestj, bestsize}
+	return match{besti, bestj, bestsize}
 }
 
-// blocks is get_matching_blocks.
-func (m *matcher) blocks() []Match {
+// blocks returns the matching blocks.
+func (m *matcher) blocks() []match {
 	la, lb := len(m.a), len(m.b)
 	type span struct{ alo, ahi, blo, bhi int }
 	queue := []span{{0, la, 0, lb}}
-	var found []Match
+	var found []match
 	for len(queue) > 0 {
 		q := queue[len(queue)-1]
 		queue = queue[:len(queue)-1]
@@ -100,7 +100,7 @@ func (m *matcher) blocks() []Match {
 		}
 		return x.Size < y.Size
 	})
-	var out []Match
+	var out []match
 	i1, j1, k1 := 0, 0, 0
 	for _, f := range found {
 		if i1+k1 == f.A && j1+k1 == f.B {
@@ -108,19 +108,19 @@ func (m *matcher) blocks() []Match {
 			continue
 		}
 		if k1 > 0 {
-			out = append(out, Match{i1, j1, k1})
+			out = append(out, match{i1, j1, k1})
 		}
 		i1, j1, k1 = f.A, f.B, f.Size
 	}
 	if k1 > 0 {
-		out = append(out, Match{i1, j1, k1})
+		out = append(out, match{i1, j1, k1})
 	}
-	return append(out, Match{la, lb, 0})
+	return append(out, match{la, lb, 0})
 }
 
-// opcodes is get_opcodes.
-func (m *matcher) opcodes() []Op {
-	var answer []Op
+// opcodes returns the edit operations that turn a into b.
+func (m *matcher) opcodes() []op {
+	var answer []op
 	i, j := 0, 0
 	for _, mb := range m.blocks() {
 		var tag byte
@@ -133,21 +133,21 @@ func (m *matcher) opcodes() []Op {
 			tag = 'i'
 		}
 		if tag != 0 {
-			answer = append(answer, Op{tag, i, mb.A, j, mb.B})
+			answer = append(answer, op{tag, i, mb.A, j, mb.B})
 		}
 		i, j = mb.A+mb.Size, mb.B+mb.Size
 		if mb.Size > 0 {
-			answer = append(answer, Op{'e', mb.A, i, mb.B, j})
+			answer = append(answer, op{'e', mb.A, i, mb.B, j})
 		}
 	}
 	return answer
 }
 
-// groupedOpcodes is get_grouped_opcodes(n).
-func (m *matcher) groupedOpcodes(n int) [][]Op {
+// groupedOpcodes groups the opcodes into hunks with n lines of context.
+func (m *matcher) groupedOpcodes(n int) [][]op {
 	codes := m.opcodes()
 	if len(codes) == 0 {
-		codes = []Op{{'e', 0, 1, 0, 1}}
+		codes = []op{{'e', 0, 1, 0, 1}}
 	}
 	if c := &codes[0]; c.Tag == 'e' {
 		c.I1, c.J1 = max(c.I1, c.I2-n), max(c.J1, c.J2-n)
@@ -155,11 +155,11 @@ func (m *matcher) groupedOpcodes(n int) [][]Op {
 	if c := &codes[len(codes)-1]; c.Tag == 'e' {
 		c.I2, c.J2 = min(c.I2, c.I1+n), min(c.J2, c.J1+n)
 	}
-	var groups [][]Op
-	var group []Op
+	var groups [][]op
+	var group []op
 	for _, c := range codes {
 		if c.Tag == 'e' && c.I2-c.I1 > 2*n {
-			group = append(group, Op{'e', c.I1, min(c.I2, c.I1+n), c.J1, min(c.J2, c.J1+n)})
+			group = append(group, op{'e', c.I1, min(c.I2, c.I1+n), c.J1, min(c.J2, c.J1+n)})
 			groups = append(groups, group)
 			group = nil
 			c.I1, c.J1 = max(c.I1, c.I2-n), max(c.J1, c.J2-n)

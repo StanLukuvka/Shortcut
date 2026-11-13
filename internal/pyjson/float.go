@@ -48,7 +48,3 @@ func ReprFloat(f float64) string {
 	}
 	return out
 }
-
-func nan() float64 { return math.NaN() }
-
-func inf(sign int) float64 { return math.Inf(sign) }

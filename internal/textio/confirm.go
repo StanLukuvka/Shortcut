@@ -14,10 +14,10 @@ import (
 
 var yes = []string{"y", "yes"}
 
-// Ask is helpers.ask: the prompt goes to stderr through Safe (so it reaches the terminal when stdout is redirected),
+// Ask asks a question: the prompt goes to stderr through Safe (so it reaches the terminal when stdout is redirected),
 // one line is read, and it counts when its trimmed lower case is in accept (nil: y, yes). End of input or Ctrl-C
 // prints a newline to stdout and answers no. Stdout is flushed first, as input() does. SIGINT is caught only while
-// waiting, elsewhere it keeps its default and kills the process (C23).
+// waiting, elsewhere it keeps its default and kills the process.
 // lazy: a read error other than EOF counts as EOF (Python raises OSError); the reading goroutine is left behind on Ctrl-C.
 func Ask(s *Streams, prompt string, accept []string) bool {
 	if accept == nil {
@@ -28,7 +28,7 @@ func Ask(s *Streams, prompt string, accept []string) bool {
 	signal.Notify(interrupt, syscall.SIGINT)
 	defer signal.Stop(interrupt)
 	s.Out.flushOrAbort()
-	s.Err.Write([]byte(prompt))
+	s.Err.WriteString(prompt)
 	if s.in == nil {
 		s.in = bufio.NewReader(s.In)
 	}
@@ -64,7 +64,7 @@ type Confirm struct {
 	TellOnYes  bool     // show Message with -y too, for a change that can't be taken back
 }
 
-// Granted is Confirm.granted. With no terminal on stdin it returns an error carrying NoTerminal: the caller's error
+// Granted reports whether the answer was yes. With no terminal on stdin it returns an error carrying NoTerminal: the caller's error
 // path prints it as "error: ..." and exits 1, which is what die() did. After a "no" it has printed "Aborted." and
 // returns false.
 func (c Confirm) Granted(s *Streams, assumeYes bool) (bool, error) {

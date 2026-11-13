@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 
 	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
@@ -15,21 +16,12 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
-// Adding an entry to a store (writes.py): which file it goes in, under that store's lock, keeping an approval that
+// Adding an entry to a store: which file it goes in, under that store's lock, keeping an approval that
 // still holds. Lock discipline: the registry lock is never nested and InitStore never runs inside it; for a
 // namespace the approval is saved after the lock is released, because Save takes the global store's lock, which
 // is the lock a namespace's registry write holds.
 
-func pathExists(path string) bool { _, err := os.Stat(path); return err == nil }
-
-func isDirPath(path string) bool { st, err := os.Stat(path); return err == nil && st.IsDir() }
-
-func isLink(path string) bool {
-	st, err := os.Lstat(path)
-	return err == nil && st.Mode()&os.ModeSymlink != 0
-}
-
-// noteIfUnapproved is note_if_unapproved: after a change made through shortcut, say so if it needs approving before
+// noteIfUnapproved says so, after a change made through shortcut, if the group needs approving before
 // it runs.
 func noteIfUnapproved(s *textio.Streams, g model.Group) {
 	if g.NeedsApproval() && approval.State(model.ReloadGroup(g)) != "ok" {
@@ -37,7 +29,7 @@ func noteIfUnapproved(s *textio.Streams, g model.Group) {
 	}
 }
 
-// targetGroup is target_group: the file a new shortcut goes in. It creates nothing; register does.
+// targetGroup returns the file a new shortcut goes in. It creates nothing; register does.
 func targetGroup(ns Namespace, cwd string) (model.Group, error) {
 	if err := model.ValidateName(ns.Str("name")); err != nil {
 		return model.Group{}, err
@@ -75,30 +67,66 @@ func targetGroup(ns Namespace, cwd string) (model.Group, error) {
 	return group, nil
 }
 
-// shortcutsOf is reg.setdefault("shortcuts", {}) for a file that was read: a "shortcuts" that is not an object is
-// refused where Python's next line would have raised.
-func shortcutsOf(path string, reg *pyjson.Object) (*pyjson.Object, error) {
+// loadForEdit is the registry at path, or a fresh one when isNew, with its "shortcuts" object. A "shortcuts" that is
+// not an object is refused (Python's next line would have raised).
+func loadForEdit(path string, isNew bool) (*pyjson.Object, *pyjson.Object, error) {
+	reg := &pyjson.Object{}
+	if isNew {
+		reg.Set("version", big.NewInt(model.RegistryVersion))
+		reg.Set("shortcuts", &pyjson.Object{})
+	} else {
+		var err error
+		if reg, err = model.LoadRegistryFile(path); err != nil {
+			return nil, nil, err
+		}
+	}
 	v, has := reg.Get("shortcuts")
 	if !has {
 		o := &pyjson.Object{}
 		reg.Set("shortcuts", o)
-		return o, nil
+		return reg, o, nil
 	}
 	o, ok := v.(*pyjson.Object)
 	if !ok {
-		return nil, fmt.Errorf("corrupt registry %s: 'shortcuts' must be an object", path)
+		return nil, nil, fmt.Errorf("corrupt registry %s: 'shortcuts' must be an object", path)
 	}
-	return o, nil
+	return reg, o, nil
 }
 
-func newRegistry() *pyjson.Object {
-	reg := &pyjson.Object{}
-	reg.Set("version", big.NewInt(model.RegistryVersion))
-	reg.Set("shortcuts", &pyjson.Object{})
-	return reg
+// confirmed asks c and turns a "no" into exit 1; nil means go ahead.
+func confirmed(s *textio.Streams, c textio.Confirm, assumeYes bool) error {
+	granted, err := c.Granted(s, assumeYes)
+	if err != nil {
+		return err
+	}
+	if !granted {
+		return &ExitError{Code: 1}
+	}
+	return nil
 }
 
-// register is _register: add entry to group's file under the registry lock; writeScript runs first, once the name
+// lockedGroupWrite runs mutate under the group's store lock. If the group's approval held before it, the approval
+// follows the write, saved after the lock is released: Save takes the global store's lock, which a namespace's
+// registry write holds.
+func lockedGroupWrite(group model.Group, mutate func() error) error {
+	var keep map[string]string
+	err := model.WithRegistryLock(group.StoreDir, func() error {
+		approved := namespaceIsApproved(group)
+		if err := mutate(); err != nil {
+			return err
+		}
+		if approved {
+			keep = approval.SharedFiles(model.ReloadGroup(group))
+		}
+		return nil
+	})
+	if err != nil || keep == nil {
+		return err
+	}
+	return approval.Save(group, keep, map[string]string{})
+}
+
+// register adds entry to group's file under the registry lock; writeScript runs first, once the name
 // is known free. It creates a missing store or namespace file. A project's group means .shortcuts.local.
 func register(s *textio.Streams, group model.Group, entry *model.Entry, writeScript func() error) error {
 	storeDir := group.StoreDir
@@ -128,18 +156,8 @@ func register(s *textio.Streams, group model.Group, entry *model.Entry, writeScr
 			return err
 		}
 	}
-	var keep map[string]string
-	err := model.WithRegistryLock(storeDir, func() error {
-		isNewFile := group.Name != "" && !pathExists(group.File)
-		approved := namespaceIsApproved(group)
-		reg := newRegistry()
-		if !isNewFile {
-			var err error
-			if reg, err = model.LoadRegistryFile(group.File); err != nil {
-				return err
-			}
-		}
-		shortcuts, err := shortcutsOf(group.File, reg)
+	err := lockedGroupWrite(group, func() error {
+		reg, shortcuts, err := loadForEdit(group.File, group.Name != "" && !pyos.Exists(group.File))
 		if err != nil {
 			return err
 		}
@@ -160,34 +178,23 @@ func register(s *textio.Streams, group model.Group, entry *model.Entry, writeScr
 		if err := os.MkdirAll(pyos.Dirname(group.File), 0o777); err != nil {
 			return err
 		}
-		if err := model.SaveRegistryFile(group.File, reg); err != nil {
-			return err
-		}
-		if approved {
-			keep = approval.SharedFiles(model.ReloadGroup(group))
-		}
-		return nil
+		return model.SaveRegistryFile(group.File, reg)
 	})
 	if err != nil {
 		return err
-	}
-	if keep != nil {
-		if err := approval.Save(group, keep, map[string]string{}); err != nil { // after the lock: Save takes the global one
-			return err
-		}
 	}
 	noteIfUnapproved(s, group)
 	return nil
 }
 
-// namespaceIsApproved is namespace_is_approved: before shortcut writes to a global namespace, under its lock,
+// namespaceIsApproved reports, before shortcut writes to a global namespace and under its lock,
 // whether the file matches its approval. Only then does the approval follow the write, as writeLocal does, so a hand
 // edit still needs update.
 func namespaceIsApproved(g model.Group) bool {
-	return g.Name != "" && pathExists(g.File) && approval.State(model.ReloadGroup(g)) == "ok"
+	return g.Name != "" && pyos.Exists(g.File) && approval.State(model.ReloadGroup(g)) == "ok"
 }
 
-// writeLocal is write_local: change .shortcuts.local through change(shortcuts), the only way shortcut writes to a
+// writeLocal changes .shortcuts.local through change(shortcuts), the only way shortcut writes to a
 // project. The approval record follows, but only if .local matched it first: a hand edit, or anything in .shortcuts,
 // must not get approved by the way.
 func writeLocal(root string, change func(*pyjson.Object) error) (model.Group, error) {
@@ -197,15 +204,8 @@ func writeLocal(root string, change func(*pyjson.Object) error) (model.Group, er
 		record := approval.Load(before)
 		approved := approval.LocalIsApproved(before, record)
 		path := before.LocalFile
-		isNewFile := !pathExists(path)
-		reg := newRegistry()
-		if !isNewFile {
-			var err error
-			if reg, err = model.LoadRegistryFile(path); err != nil {
-				return err
-			}
-		}
-		shortcuts, err := shortcutsOf(path, reg)
+		isNewFile := !pyos.Exists(path)
+		reg, shortcuts, err := loadForEdit(path, isNewFile)
 		if err != nil {
 			return err
 		}
@@ -231,7 +231,7 @@ func writeLocal(root string, change func(*pyjson.Object) error) (model.Group, er
 	return after, err
 }
 
-// excludeFromGit is exclude_from_git: keep .shortcuts.local out of `git add`, without touching a file the project
+// excludeFromGit keeps .shortcuts.local out of `git add`, without touching a file the project
 // commits. Any failure (no git, not a repository, a file that can't be written) is ignored, as Python's suppress(OSError).
 func excludeFromGit(root string) {
 	cmd := exec.Command("git", "rev-parse", "--git-path", "info/exclude")
@@ -247,7 +247,7 @@ func excludeFromGit(root string) {
 	var text string
 	if raw, err := os.ReadFile(path); err == nil {
 		text = string(raw)
-	} else if pathExists(path) {
+	} else if pyos.Exists(path) {
 		return
 	}
 	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
@@ -267,14 +267,14 @@ func excludeFromGit(root string) {
 	f.Close()
 }
 
-// storedCwd is stored_cwd: --cwd as typed (relative to the user's shell) -> the 'cwd' field (relative to the
+// storedCwd converts --cwd as typed (relative to the user's shell) to the 'cwd' field (relative to the
 // defining file).
 func storedCwd(value *string, g model.Group) (*string, error) {
 	if value == nil || *value == model.Caller {
 		return value, nil
 	}
 	path := pyos.Realpath(pyos.ExpandUser(*value))
-	if !isDirPath(path) {
+	if !pyos.IsDir(path) {
 		return nil, Die("--cwd directory does not exist: " + path)
 	}
 	if !model.IsGlobalStore(g.StoreDir) && pyos.IsRelativeTo(path, pyos.Realpath(g.StoreDir)) {
@@ -284,29 +284,87 @@ func storedCwd(value *string, g model.Group) (*string, error) {
 	return &path, nil
 }
 
-// storedScriptField is _stored_script_field: (registry field, absolute path) for a copy kept in the group's scripts
+// storedScriptField returns (registry field, absolute path) for a copy kept in the group's scripts
 // folder.
 func storedScriptField(g model.Group, filename string) (string, string) {
 	abs := pyos.Join(g.ScriptsDir(), filename)
 	return pyos.Relpath(abs, g.ScriptBase()), abs
 }
 
-// refuseSymlinks is refuse_symlinks: a repo can commit scripts/, or one script, as a symlink to a file of yours.
+// refuseSymlinks refuses symlinks: a repo can commit scripts/, or one script, as a symlink to a file of yours.
 // Your own stores can do what they like.
 func refuseSymlinks(g model.Group, path string) error {
 	if !g.NeedsApproval() {
 		return nil
 	}
-	base := g.ScriptBase()
+	if link := firstLinkUnder(g.ScriptBase(), pyos.Relpath(path, g.ScriptBase())); link != "" {
+		return errors.New(link + " is a symlink, so this would write somewhere else")
+	}
+	return nil
+}
+
+// firstLinkUnder is the first symlink on the way from base down rel, "" if none.
+func firstLinkUnder(base, rel string) string {
 	cur := base
-	for _, part := range strings.Split(pyos.Relpath(path, base), "/") {
+	for _, part := range strings.Split(rel, "/") {
 		if part == "" || part == "." {
 			continue
 		}
 		cur = pyos.Join(cur, part)
-		if isLink(cur) {
-			return errors.New(cur + " is a symlink, so this would write somewhere else")
+		if pyos.IsLink(cur) {
+			return cur
 		}
 	}
+	return ""
+}
+
+// prepareScriptDest refuses a script path that is, or sits under, a link or an existing file, and makes the folder.
+func prepareScriptDest(group model.Group, abs string) error {
+	if err := refuseSymlinks(group, abs); err != nil {
+		return err
+	}
+	if err := refuseExisting(abs); err != nil {
+		return err
+	}
+	return os.MkdirAll(group.ScriptsDir(), 0o777)
+}
+
+// unlinkFile removes a file or a link, and not one that is already gone; never a folder (os.Remove
+// would take an empty one), and a link only ever loses itself.
+// lazy: the error text is Go's, not Python's "[Errno 21] ..."; only a folder where a file should be reaches it.
+func unlinkFile(path string) error {
+	if err := syscall.Unlink(path); err != nil && !errors.Is(err, syscall.ENOENT) {
+		return &os.PathError{Op: "unlink", Path: path, Err: err}
+	}
 	return nil
+}
+
+// removeNamespaceFiles removes a namespace's file in imports/ and its scripts folder. A symlinked
+// folder loses only the link.
+func removeNamespaceFiles(group model.Group) error {
+	folder := group.ScriptsDir()
+	if err := unlinkFile(group.File); err != nil {
+		return err
+	}
+	switch {
+	case pyos.IsLink(folder):
+		return unlinkFile(folder)
+	case pyos.IsDir(folder):
+		return os.RemoveAll(folder) // does not follow a link inside it either
+	}
+	return nil
+}
+
+// isListedImport reports whether a namespace comes from the store file's "imports" rather than its
+// imports/ folder.
+func isListedImport(store model.Store, name string) bool {
+	if store.Main.Data == nil {
+		return false
+	}
+	imports, ok := store.Main.Data.Vals["imports"].(*pyjson.Object)
+	if !ok {
+		return false
+	}
+	_, has := imports.Get(name)
+	return has
 }

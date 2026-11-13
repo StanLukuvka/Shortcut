@@ -8,7 +8,6 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-// py: test_stores.py::test_show_and_location
 func TestStores_ShowAndLocation(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{
@@ -18,17 +17,13 @@ func TestStores_ShowAndLocation(t *testing.T) {
 	e.WriteFile(filepath.Join(e.Store, "scripts", "stored.sh"), "#!/usr/bin/env bash\necho test\n", 0)
 
 	res := e.Run("show", "inline")
-	if res.Code != 0 {
-		t.Errorf("show inline: exit %d", res.Code)
-	}
-	contains(t, "show inline", res.Stdout, "Name:        inline")
-	contains(t, "show inline", res.Stdout, "echo hello")
+	res.WantCode(t, 0)
+	testkit.Contains(t, "show inline", res.Stdout, "Name:        inline")
+	testkit.Contains(t, "show inline", res.Stdout, "echo hello")
 	res = e.Run("show", "stored")
-	if res.Code != 0 {
-		t.Errorf("show stored: exit %d", res.Code)
-	}
-	contains(t, "show stored", res.Stdout, "Name:        stored")
-	contains(t, "show stored", res.Stdout, "echo test")
+	res.WantCode(t, 0)
+	testkit.Contains(t, "show stored", res.Stdout, "Name:        stored")
+	testkit.Contains(t, "show stored", res.Stdout, "echo test")
 
 	res = e.Run("location", "stored")
 	if res.Code != 0 || !strings.HasSuffix(strings.TrimSpace(res.Stdout), "scripts/stored.sh") {
@@ -36,26 +31,24 @@ func TestStores_ShowAndLocation(t *testing.T) {
 	}
 }
 
-// py: test_stores.py::test_location_prints_a_bare_path_or_fails
 func TestStores_LocationPrintsABarePathOrFails(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"inline_one": inline("echo hi"), "scripted": map[string]any{"script": "scripts/scripted.sh"}})
+	e.WriteStore(e.Store, map[string]any{"inline_one": testkit.Inline("echo hi"), "scripted": map[string]any{"script": "scripts/scripted.sh"}})
 	e.WriteFile(filepath.Join(e.Store, "scripts", "scripted.sh"), "#!/usr/bin/env bash\n", 0)
 	res := e.Run("location", "inline_one")
 	if res.Code != 1 || res.Stdout != "" {
 		t.Errorf("inline: exit %d stdout %q", res.Code, res.Stdout)
 	}
-	contains(t, "inline", res.Stderr, "inline shortcut")
+	testkit.Contains(t, "inline", res.Stderr, "inline shortcut")
 	if res = e.Run("location", "scripted"); res.Stdout != filepath.Join(e.Store, "scripts", "scripted.sh")+"\n" {
 		t.Errorf("scripted: %q", res.Stdout)
 	}
 }
 
-// py: test_stores.py::test_commands_that_take_a_name_show_how_many
 func TestEntries_CommandsThatTakeANameShowHowMany(t *testing.T) {
 	e := testkit.New(t)
 	for _, cmd := range []string{"show", "location", "rm"} {
-		contains(t, cmd+" --help", e.Run(cmd, "--help").Stdout, "[namespace] name\n")
+		testkit.Contains(t, cmd+" --help", e.Run(cmd, "--help").Stdout, "[namespace] name\n")
 	}
 }
 
@@ -231,17 +224,17 @@ func TestShow_AScriptThatIsNotUTF8(t *testing.T) {
 // rm_test.go (TestStores_GlobalFlagReachesAHiddenShortcut).
 func TestShow_GlobalFlagReachesAHiddenShortcut(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"build": inline("echo global"), "tool": map[string]any{"script": "scripts/tool.sh", "description": "d"}})
+	e.WriteStore(e.Store, map[string]any{"build": testkit.Inline("echo global"), "tool": map[string]any{"script": "scripts/tool.sh", "description": "d"}})
 	e.WriteFile(filepath.Join(e.Store, "scripts", "tool.sh"), "#!/usr/bin/env bash\n", 0)
-	proj := e.Project(map[string]any{"build": inline("echo project"), "tool": map[string]any{"script": "tool.sh", "description": "d"}},
+	proj := e.Project(map[string]any{"build": testkit.Inline("echo project"), "tool": map[string]any{"script": "tool.sh", "description": "d"}},
 		testkit.Files(map[string]any{"tool.sh": "#!/usr/bin/env bash\n"}))
 	e.Approve(filepath.Join(proj, ".shortcuts"))
 	in := testkit.Opts{Cwd: proj}
 
-	contains(t, "show build", e.RunWith(in, "show", "build").Stdout, "echo project")
+	testkit.Contains(t, "show build", e.RunWith(in, "show", "build").Stdout, "echo project")
 	res := e.RunWith(in, "show", "--global", "build")
-	contains(t, "show --global", res.Stdout, "Scope:       global\n")
-	contains(t, "show --global", res.Stdout, "echo global")
+	testkit.Contains(t, "show --global", res.Stdout, "Scope:       global\n")
+	testkit.Contains(t, "show --global", res.Stdout, "echo global")
 	if res = e.RunWith(in, "location", "--global", "tool"); res.Stdout != filepath.Join(e.Store, "scripts", "tool.sh")+"\n" {
 		t.Errorf("location --global: %q", res.Stdout)
 	}
@@ -251,11 +244,9 @@ func TestShow_GlobalFlagReachesAHiddenShortcut(t *testing.T) {
 	hint := "The project in " + proj + " has its own 'build': leave out --global to use it."
 	for _, args := range [][]string{{"show", "--global", "build"}, {"location", "--global", "build"}, {"show", "--json", "--global", "build"}} {
 		res := e.RunWith(in, args...)
-		if res.Code != 1 {
-			t.Errorf("%v: exit %d", args, res.Code)
-		}
-		contains(t, strings.Join(args, " "), res.Stderr, "shortcut 'build' not found.")
-		contains(t, strings.Join(args, " "), res.Stderr, hint)
+		res.WantCode(t, 1)
+		testkit.Contains(t, strings.Join(args, " "), res.Stderr, "shortcut 'build' not found.")
+		testkit.Contains(t, strings.Join(args, " "), res.Stderr, hint)
 	}
 	if strings.Contains(e.RunWith(in, "show", "--global", "nothing").Stderr, "has its own") {
 		t.Error("a name the project lacks gets the hint")
@@ -265,11 +256,11 @@ func TestShow_GlobalFlagReachesAHiddenShortcut(t *testing.T) {
 	}
 }
 
-// py: the show and location lines of test_broken_project_stops_every_run_inside_it and
-// test_broken_project_refuses_a_namespace_it_imported; their run, rm and update lines are P-3's and P-5's.
+// TestShow_ReadsPastABrokenProject: show and location still work in a broken project; run, rm and update refuse it
+// (their own tests).
 func TestShow_ReadsPastABrokenProject(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"outside": inline("echo outside"), "docker": inline("echo global")})
+	e.WriteStore(e.Store, map[string]any{"outside": testkit.Inline("echo outside"), "docker": testkit.Inline("echo global")})
 	broken := e.BrokenProject()
 	in := testkit.Opts{Cwd: broken}
 	// Looking is not running: show and location read past the file, quietly
@@ -281,16 +272,14 @@ func TestShow_ReadsPastABrokenProject(t *testing.T) {
 			}
 		}
 	}
-	contains(t, "show outside", e.RunWith(in, "show", "outside").Stdout, "Scope:       global")
-	contains(t, "show nothing", e.RunWith(in, "show", "nothing").Stderr, "'nothing' not found")
-	contains(t, "show docker", e.RunWith(in, "show", "docker").Stdout, "Scope:       global")
+	testkit.Contains(t, "show outside", e.RunWith(in, "show", "outside").Stdout, "Scope:       global")
+	testkit.Contains(t, "show nothing", e.RunWith(in, "show", "nothing").Stderr, "'nothing' not found")
+	testkit.Contains(t, "show docker", e.RunWith(in, "show", "docker").Stdout, "Scope:       global")
 
 	// an unknown top-level field: the file still parses, so show finds its entries; they are not approved
-	proj := e.Project(map[string]any{"inside": inline("true")}, testkit.Name("p2"), testkit.Extra(map[string]any{"bogus": 1}))
+	proj := e.Project(map[string]any{"inside": testkit.Inline("true")}, testkit.Name("p2"), testkit.Extra(map[string]any{"bogus": 1}))
 	res := e.RunWith(testkit.Opts{Cwd: proj}, "show", "inside")
-	if res.Code != 0 {
-		t.Errorf("show inside: exit %d: %s", res.Code, res.Stderr)
-	}
-	contains(t, "show inside", res.Stdout, "Scope:       project")
-	contains(t, "show inside", res.Stdout, "Approval:    not approved (run: shortcut update)")
+	res.WantCode(t, 0)
+	testkit.Contains(t, "show inside", res.Stdout, "Scope:       project")
+	testkit.Contains(t, "show inside", res.Stdout, "Approval:    not approved (run: shortcut update)")
 }

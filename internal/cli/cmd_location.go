@@ -6,7 +6,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
-// cmdLocation is cmd_location: the path of a shortcut's script, bare.
+// cmdLocation prints the path of a shortcut's script, bare.
 func cmdLocation(s *textio.Streams, args []string) error {
 	ns, err := parsers["location"].Parse(args)
 	if err != nil {

@@ -20,11 +20,11 @@ type ExitError struct {
 
 func (e *ExitError) Error() string { return e.Stderr }
 
-// Die is die(): "error: msg" on stderr, exit 1.
+// Die returns an error that prints "error: msg" on stderr and exits 1.
 func Die(msg string) error { return &ExitError{Code: 1, Stderr: "error: " + msg + "\n"} }
 
 // handler is a command: it gets what follows the command word, and ends with nil (exit 0), an *ExitError or any
-// other error, which dispatch prints as "error: <text>" with exit 1 (C5).
+// other error, which dispatch prints as "error: <text>" with exit 1.
 type handler func(s *textio.Streams, args []string) error
 
 var handlers map[string]handler
@@ -34,8 +34,8 @@ func init() {
 		"list": cmdList, "show": cmdShow, "location": cmdLocation, "update": cmdUpdate, "new": cmdNew, "rm": cmdRm, "promote": cmdPromote, "init": cmdInit}
 }
 
-// Main is main(): it runs the command and returns the process's exit code. A reader that stops (shortcut list |
-// head) ends it with 141, as a program ended by SIGPIPE does (C21); Notify turns SIGPIPE into an EPIPE error.
+// Main runs the command and returns the process's exit code. A reader that stops (shortcut list |
+// head) ends it with 141, as a program ended by SIGPIPE does; Notify turns SIGPIPE into an EPIPE error.
 func Main(args []string, in, out, errw *os.File) int {
 	s := textio.NewStreams(in, out, errw)
 	sigpipe := make(chan os.Signal, 1)
@@ -47,7 +47,7 @@ func Main(args []string, in, out, errw *os.File) int {
 	return rc
 }
 
-// dispatch is dispatch (cli.py): the first word picks the command.
+// dispatch runs the command the first word picks.
 func dispatch(s *textio.Streams, args []string) int {
 	if len(args) == 0 {
 		s.Out.WriteString(usageText)

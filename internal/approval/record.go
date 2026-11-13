@@ -2,7 +2,9 @@ package approval
 
 import (
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/pyjson"
@@ -14,7 +16,7 @@ import (
 // alone). Records live in the global store, never next to what they approve.
 type Record struct {
 	Key      string
-	Hash     string            // FilesHash of the shared files; "" if the file's hash isn't a string
+	Hash     string            // filesHash of the shared files; "" if the file's hash isn't a string
 	Snapshot map[string]string // shared files: path -> reviewable text
 	Local    map[string]string // .shortcuts.local half; absent in old records = empty
 }
@@ -35,7 +37,7 @@ func stringMap(v pyjson.Value) (map[string]string, bool) {
 	return m, true
 }
 
-// Load is load_approval: the record, or nil when there is none, it can't be read, or it isn't shaped as one (a
+// Load returns the record, or nil when there is none, it can't be read, or it isn't shaped as one (a
 // JSON object with a "snapshot" object).
 // lazy: Python would crash later on a record whose snapshot or local holds something but strings; here that is "no record".
 func Load(g model.Group) *Record {
@@ -64,13 +66,13 @@ func Load(g model.Group) *Record {
 
 func sortedObject(m map[string]string) *pyjson.Object {
 	o := &pyjson.Object{}
-	for _, k := range sortedKeys(m) { // readers sort, so the order is free; sorted is stable
+	for _, k := range slices.SortedFunc(maps.Keys(m), pyjson.Compare) { // readers sort, so the order is free; sorted is stable
 		o.Set(k, m[k])
 	}
 	return o
 }
 
-// Save is save_approval: it records what was shown and approved, under the global store's lock.
+// Save records what was shown and approved, under the global store's lock.
 func Save(g model.Group, shared, local map[string]string) error {
 	path := model.ApprovalPath(g)
 	return model.WithRegistryLock(model.GlobalStoreDir(), func() error {
@@ -79,7 +81,7 @@ func Save(g model.Group, shared, local map[string]string) error {
 		}
 		rec := &pyjson.Object{}
 		rec.Set("key", g.Key())
-		rec.Set("hash", FilesHash(shared))
+		rec.Set("hash", filesHash(shared))
 		rec.Set("snapshot", sortedObject(shared))
 		rec.Set("local", sortedObject(local))
 		return model.WriteJSONAtomic(path, rec)
@@ -92,10 +94,10 @@ func LocalIsApproved(g model.Group, r *Record) bool {
 	if r != nil {
 		held = r.Local
 	}
-	return FilesHash(held) == FilesHash(LocalFiles(g))
+	return filesHash(held) == filesHash(LocalFiles(g))
 }
 
-// State is approval_state: "ok", "new" (never approved) or "changed".
+// State returns "ok", "new" (never approved) or "changed".
 func State(g model.Group) string {
 	if !g.NeedsApproval() {
 		return "ok"
@@ -104,7 +106,7 @@ func State(g model.Group) string {
 	if r == nil {
 		return "new"
 	}
-	if r.Hash == FilesHash(SharedFiles(g)) && LocalIsApproved(g, r) {
+	if r.Hash == filesHash(SharedFiles(g)) && LocalIsApproved(g, r) {
 		return "ok"
 	}
 	if len(r.Snapshot) > 0 {
@@ -113,7 +115,7 @@ func State(g model.Group) string {
 	return "new" // with no snapshot, only CLI writes to .local were recorded
 }
 
-// Require is require_approved.
+// Require returns an error unless the group is approved.
 func Require(g model.Group) error {
 	switch State(g) {
 	case "new":

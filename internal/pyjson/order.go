@@ -1,19 +1,37 @@
 package pyjson
 
-import "unicode/utf8"
+import (
+	"slices"
+	"unicode/utf8"
+)
 
-// Less orders two path strings as Python orders the str values os.fsdecode makes of them:
-// by code point, with each invalid UTF-8 byte 0xNN read as U+DC00+NN (surrogateescape).
-func Less(a, b string) bool {
+// Compare orders two path strings as Python orders the str values os.fsdecode makes of them:
+// by code point, with each invalid UTF-8 byte 0xNN read as U+DC00+NN (surrogateescape). It returns -1, 0 or 1.
+func Compare(a, b string) int {
 	for a != "" && b != "" {
 		ra, na := pyRune(a)
 		rb, nb := pyRune(b)
 		if ra != rb {
-			return ra < rb
+			if ra < rb {
+				return -1
+			}
+			return 1
 		}
 		a, b = a[na:], b[nb:]
 	}
-	return a == "" && b != ""
+	switch {
+	case a == "" && b != "":
+		return -1
+	case a != "" && b == "":
+		return 1
+	}
+	return 0
+}
+
+// SortStrings sorts s in place in Compare order and returns it.
+func SortStrings(s []string) []string {
+	slices.SortFunc(s, Compare)
+	return s
 }
 
 // pyRune reads one code point as a Python str would hold it: UTF-8, or an invalid byte 0xNN as U+DC00+NN. A WTF-8

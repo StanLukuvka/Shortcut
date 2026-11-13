@@ -1,7 +1,6 @@
 package textio
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -13,13 +12,13 @@ func diffOn(t *testing.T, e *testkit.Env, tty bool, lines string, env map[string
 	env["TEXTIO_HELPER"], env["TEXTIO_LINES"] = "diff", lines
 	o := testkit.Opts{Env: env}
 	if tty {
-		code, out := e.InTerminalCmd(o, nil, os.Args[0], "-test.run=^$")
+		code, out := e.InTerminalCmd(o, nil, testkit.SelfArgs()...)
 		if code != 0 {
 			t.Fatalf("exit %d: %q", code, out)
 		}
 		return out
 	}
-	res := e.RunCmd(o, os.Args[0], "-test.run=^$")
+	res := e.RunCmd(o, testkit.SelfArgs()...)
 	if res.Code != 0 {
 		t.Fatalf("exit %d: %q", res.Code, res.Stderr)
 	}
@@ -47,7 +46,7 @@ func TestShowDiff_ATerminalGetsColour(t *testing.T) {
 	}
 }
 
-// C24: pager only on a terminal, with PAGER set, and at least as many lines as rows (30 on testkit's terminal).
+// Pager only on a terminal, with PAGER set, and at least as many lines as rows (30 on testkit's terminal).
 func TestShowDiff_Pager(t *testing.T) {
 	e := testkit.New(t)
 	for _, c := range []struct {

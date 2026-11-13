@@ -176,7 +176,7 @@ func TestRegistry_FileError(t *testing.T) {
 		{`{"version": 2}`, "ns", "P needs 'shortcuts'"},
 	}
 	for _, c := range cases {
-		got := FileError("P", obj(t, c.file), c.name)
+		got := fileError("P", obj(t, c.file), c.name)
 		if got != c.want {
 			t.Errorf("%s (%q): got %q want %q", c.file, c.name, got, c.want)
 		}
@@ -203,7 +203,6 @@ func TestRegistry_ResolveScriptPath(t *testing.T) {
 	}
 }
 
-// py: test_stores.py::test_atomic_registry_save_and_corrupt_protection
 func TestStores_AtomicRegistrySaveAndCorruptProtection(t *testing.T) {
 	env := testkit.New(t)
 	data := obj(t, `{"version": 1, "shortcuts": {"test": {"description": "test", "inline": "echo 1"}}}`)
@@ -232,7 +231,6 @@ func TestStores_AtomicRegistrySaveAndCorruptProtection(t *testing.T) {
 	}
 }
 
-// py: test_stores.py::test_store_discovery_skips_global_root
 func TestStores_StoreDiscoverySkipsGlobalRoot(t *testing.T) {
 	env := testkit.New(t)
 	if err := SaveRegistryAtomic(env.Store, obj(t, `{"version": 1, "shortcuts": {}}`)); err != nil {
@@ -282,8 +280,8 @@ func TestStores_ProjectRootViaLocalFileOnlyAndNearest(t *testing.T) {
 	if got := FindProjectRoot(old); got != "" {
 		t.Errorf("1.x folder: %q", got)
 	}
-	if got := OldProjectFolder(old); got != filepath.Join(old, ".shortcuts") {
-		t.Errorf("OldProjectFolder: %q", got)
+	if got := oldProjectFolder(old); got != filepath.Join(old, ".shortcuts") {
+		t.Errorf("oldProjectFolder: %q", got)
 	}
 }
 
@@ -364,12 +362,12 @@ func TestStores_WriteJSONAtomicLeavesNoTempFileOnError(t *testing.T) {
 
 func TestStores_LockPathsAndSymlinkedLock(t *testing.T) {
 	env := testkit.New(t)
-	if got := LockPath(env.Store); got != filepath.Join(env.Store, ".lock") {
+	if got := lockPath(env.Store); got != filepath.Join(env.Store, ".lock") {
 		t.Error(got)
 	}
 	proj := env.Project(map[string]any{})
 	// sha256("<realpath>") from Python: hashlib.sha256(os.path.realpath(proj).encode()).hexdigest()
-	got := LockPath(proj)
+	got := lockPath(proj)
 	if !strings.HasPrefix(got, filepath.Join(env.Store, "locks")+"/") || !strings.HasSuffix(got, ".lock") || len(filepath.Base(got)) != 64+len(".lock") {
 		t.Error(got)
 	}
@@ -377,7 +375,7 @@ func TestStores_LockPathsAndSymlinkedLock(t *testing.T) {
 	if err := WithRegistryLock(proj, func() error { ran = true; return nil }); err != nil || !ran {
 		t.Errorf("%v %v", ran, err)
 	}
-	// a symlinked .lock is refused and its victim untouched (test_symlink_safety.py:34-41)
+	// a symlinked .lock is refused and its victim untouched
 	victim := env.WriteFile(filepath.Join(env.Tmp, "victim"), "keep\n", 0)
 	env.Symlink(victim, filepath.Join(env.Store, ".lock"))
 	ran = false

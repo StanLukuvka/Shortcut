@@ -4,8 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"github.com/StanLukuvka/Shortcut/internal/testkit"
 	"math/big"
-	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -14,10 +14,7 @@ import (
 // golden reads ../testdata/approval.json with this package's own decoder (it holds lone-surrogate escapes).
 func golden(t *testing.T, set string) []*Object {
 	t.Helper()
-	raw, err := os.ReadFile("../testdata/approval.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := testkit.Golden(t, "approval.json")
 	v, err := Decode(raw)
 	if err != nil {
 		t.Fatal(err)
@@ -124,18 +121,18 @@ func TestGolden_Dumps(t *testing.T) {
 				t.Errorf("%s %s: got %q, want %q", str(c, "source"), name, got, want)
 			}
 		}
-		check("compact", Opts{EnsureASCII: true}, str(c, "compact"))
-		check("indent2", Opts{Indent: 2, EnsureASCII: true}, strings.TrimSuffix(str(c, "indent2"), "\n"))
+		check("compact", Opts{}, str(c, "compact"))
+		check("indent2", Opts{Indent: 2}, strings.TrimSuffix(str(c, "indent2"), "\n"))
 		if _, ok := c.Get("indent2_sorted"); ok {
-			check("indent2_sorted", Opts{Indent: 2, SortKeys: true, EnsureASCII: true}, strings.TrimSuffix(str(c, "indent2_sorted"), "\n"))
+			check("indent2_sorted", Opts{Indent: 2, SortKeys: true}, strings.TrimSuffix(str(c, "indent2_sorted"), "\n"))
 		}
 	}
 }
 
-// filesJSON is the approval hash input of 4.1: json.dumps(sorted(files.items())), built with Less and WriteString.
+// filesJSON is the approval hash input: json.dumps(sorted(files.items())), built with Compare and WriteString.
 func filesJSON(files *Object) string {
 	keys := append([]string(nil), files.Keys...)
-	sort.Slice(keys, func(i, j int) bool { return Less(keys[i], keys[j]) })
+	sort.Slice(keys, func(i, j int) bool { return Compare(keys[i], keys[j]) < 0 })
 	var b strings.Builder
 	b.WriteByte('[')
 	for i, k := range keys {
@@ -143,9 +140,9 @@ func filesJSON(files *Object) string {
 			b.WriteString(", ")
 		}
 		b.WriteByte('[')
-		WriteString(&b, k, true)
+		WriteString(&b, k)
 		b.WriteString(", ")
-		WriteString(&b, files.Vals[k].(string), true)
+		WriteString(&b, files.Vals[k].(string))
 		b.WriteByte(']')
 	}
 	b.WriteByte(']')
@@ -286,15 +283,7 @@ func TestLoneSurrogates(t *testing.T) {
 	}
 }
 
-func TestWriteStringWithoutASCII(t *testing.T) {
-	var b strings.Builder
-	WriteString(&b, "aé\x7f\x01\t\"\\\U0001F600", false)
-	if want := "\"aé\x7f\\u0001\\t\\\"\\\\\U0001F600\""; b.String() != want {
-		t.Fatalf("got %q", b.String())
-	}
-}
-
-func TestLess(t *testing.T) {
+func TestCompareOrder(t *testing.T) {
 	for _, c := range []struct {
 		a, b string
 		want bool
@@ -307,8 +296,8 @@ func TestLess(t *testing.T) {
 		{"a", "a", false},
 		{"B", "a", true},
 	} {
-		if got := Less(c.a, c.b); got != c.want {
-			t.Errorf("Less(%q, %q) = %v", c.a, c.b, got)
+		if got := Compare(c.a, c.b) < 0; got != c.want {
+			t.Errorf("Compare(%q, %q) < 0 = %v", c.a, c.b, got)
 		}
 	}
 }
@@ -337,7 +326,7 @@ func TestSurrogateEscapeRoundTrip(t *testing.T) {
 		t.Fatalf("got %q", v)
 	}
 	d, _ := Parse(`"\udcff.sh"`)
-	if Less(d.(string), "\xff.sh") || Less("\xff.sh", d.(string)) {
+	if Compare(d.(string), "\xff.sh") != 0 {
 		t.Fatal("decoded and raw differ")
 	}
 }

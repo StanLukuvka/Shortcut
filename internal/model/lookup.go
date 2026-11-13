@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/pyjson"
@@ -18,11 +19,11 @@ type Found struct {
 	Hides bool         // a project's name hides a global one of either kind
 }
 
-// FindEntry is find_entry: `name` or `namespace name`, found in the project, then the global store, without judging
+// FindEntry finds `name` or `namespace name` in the project, then the global store, without judging
 // the entry. words must not be empty. strict (for run) refuses every name inside a project whose file can't be used,
 // and a store's load errors for the name it has. Without it (show, location, rm) a broken file is looked in as far as
 // it reads, so you can still see and fix what's there. Python's KeyError and ValueError are both just errors here:
-// main prints either as "error: <text>" (C5).
+// main prints either as "error: <text>".
 func FindEntry(words []string, callerCwd string, skipLocal, strict bool) (Found, error) {
 	stores := VisibleStores(callerCwd, skipLocal)
 	first, rest := words[0], words[1:]
@@ -62,7 +63,7 @@ func FindEntry(words []string, callerCwd string, skipLocal, strict bool) (Found,
 				return Found{}, errors.New(*group.Error)
 			}
 			gs := group.Shortcuts()
-			members := strings.Join(sortedLess(append([]string(nil), gs.Keys...)), ", ")
+			members := strings.Join(pyjson.SortStrings(slices.Clone(gs.Keys)), ", ")
 			if members == "" {
 				members = "(none)"
 			}
@@ -103,7 +104,7 @@ func FindEntry(words []string, callerCwd string, skipLocal, strict bool) (Found,
 			notes = append(notes, fmt.Sprintf("The project in %s has a '%s', but only the nearest project, %s, is used here.", outer, first, root))
 		}
 	default:
-		if old := OldProjectFolder(callerCwd); old != "" {
+		if old := oldProjectFolder(callerCwd); old != "" {
 			notes = append(notes, fmt.Sprintf("%s is a folder, which is how shortcut 1.x kept a project. This version reads a %s file, so nothing in that folder is used.", old, ProjectFile))
 		}
 	}
@@ -117,7 +118,7 @@ func hasName(s Store, name string) bool {
 	return has(s.Main.Shortcuts(), name) || ns
 }
 
-// ResolveShortcut is resolve_shortcut: what `shortcut run <words>` runs, and where, and the words left over as
+// ResolveShortcut returns what `shortcut run <words>` runs, and where, and the words left over as
 // arguments. An empty callerCwd is the physical cwd.
 func ResolveShortcut(words []string, callerCwd string, skipLocal, strict bool) (*ResolvedShortcut, []string, error) {
 	if callerCwd == "" {
@@ -134,7 +135,7 @@ func ResolveShortcut(words []string, callerCwd string, skipLocal, strict bool) (
 	return &ResolvedShortcut{Entry: entry, Group: f.Group, RunCwd: ResolveRunDir(entry.Cwd, f.Group, callerCwd), HidesGlobal: f.Hides}, f.Rest, nil
 }
 
-// ResolveName is resolve_name, for commands that name a shortcut: `name` or `namespace name`, and nothing else.
+// ResolveName resolves a name for commands that name a shortcut: `name` or `namespace name`, and nothing else.
 func ResolveName(words []string, skipLocal bool) (*ResolvedShortcut, error) {
 	r, rest, err := ResolveShortcut(words, "", skipLocal, false)
 	if err != nil {
@@ -150,3 +151,13 @@ func ResolveName(words []string, skipLocal bool) (*ResolvedShortcut, error) {
 func TooManyNames(words []string) error {
 	return fmt.Errorf("too many names: %s", pyos.ShellJoin(words))
 }
+
+// ResolvedShortcut is a name looked up: the entry, its group and where it runs.
+type ResolvedShortcut struct {
+	Entry       *Entry
+	Group       Group
+	RunCwd      string // computed execution directory
+	HidesGlobal bool   // project entry with the same name as a global one
+}
+
+func (r ResolvedShortcut) Display() string { return r.Group.Display(r.Entry.Name) }

@@ -17,7 +17,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
-// What init --global copies into the global store (importing.py, helpers.py): a project's exported shortcuts, or a
+// What init --global copies into the global store (as in the Python version): a project's exported shortcuts, or a
 // folder of namespace files. Everything is planned from bytes read once, shown, and only then written, so what is
 // copied is what was reviewed. Declining writes nothing: no store, no folder, no script.
 
@@ -42,7 +42,7 @@ type nsPlan struct {
 
 // importFromRoot is the part of `init --global SOURCE` that follows once the source is a folder on disk: a project
 // (.shortcuts at its root) brings its exported entries; a folder of <ns>.shortcut files brings its namespaces. label
-// is what the review says the files came from (the source as typed; P-8 passes "the bundled shortcuts"). A "no" is
+// is what the review says the files came from (the source as typed, or "the bundled shortcuts"). A "no" is
 // exit 1, with nothing written.
 func importFromRoot(s *textio.Streams, label, sourceRoot, destStoreDir string, assumeYes, replace bool) error {
 	sourceFile := pyos.Join(sourceRoot, model.ProjectFile)
@@ -50,7 +50,7 @@ func importFromRoot(s *textio.Streams, label, sourceRoot, destStoreDir string, a
 	if err != nil {
 		return err
 	}
-	if !isFilePath(sourceFile) {
+	if !pyos.IsFile(sourceFile) {
 		for _, name := range names {
 			if strings.HasSuffix(name, model.ImportSuffix) {
 				return initNamespaces(s, label, sourceRoot, destStoreDir, assumeYes, replace)
@@ -83,7 +83,7 @@ func importFromRoot(s *textio.Streams, label, sourceRoot, destStoreDir string, a
 		}
 	}
 	if listed, ok := sourceRegistry.Vals["imports"].(*pyjson.Object); ok && len(listed.Keys) > 0 {
-		keys := slices.SortedFunc(slices.Values(listed.Keys), pyjsonCmp)
+		keys := slices.SortedFunc(slices.Values(listed.Keys), pyjson.Compare)
 		skipped = append(skipped, "imports: "+strings.Join(keys, ", ")+" (namespaces a "+model.ProjectFile+" imports aren't copied)")
 	}
 	printSkipped(s, skipped)
@@ -92,7 +92,7 @@ func importFromRoot(s *textio.Streams, label, sourceRoot, destStoreDir string, a
 	}
 
 	// Global shortcuts have no approval step, so an import is reviewed here or never
-	files := map[string]string{"shortcuts.json": pyjson.Dumps(entries, pyjson.Opts{Indent: 2, SortKeys: true, EnsureASCII: true}) + "\n"}
+	files := map[string]string{"shortcuts.json": pyjson.Dumps(entries, pyjson.Opts{Indent: 2, SortKeys: true}) + "\n"}
 	for _, sc := range scripts {
 		files[pyos.Relpath(sc.path, destStoreDir)] = approval.Reviewable(sc.raw)
 	}
@@ -114,7 +114,7 @@ func importFromRoot(s *textio.Streams, label, sourceRoot, destStoreDir string, a
 // reviewing is set while a question is on the terminal: Ctrl-C there is Ask's "no", not an exit (see cmdInit).
 var reviewing atomic.Bool
 
-// review is confirm_review(...).granted(): nil when the import may go ahead, else the "no" (exit 1) or the reason
+// review is nil when the import may go ahead, else the "no" (exit 1) or the reason
 // there was nobody to ask.
 func review(s *textio.Streams, label string, old, files map[string]string, assumeYes bool) error {
 	reviewing.Store(true)
@@ -141,17 +141,7 @@ func printSkipped(s *textio.Streams, skipped []string) {
 	}
 }
 
-func pyjsonCmp(a, b string) int {
-	switch {
-	case pyjson.Less(a, b):
-		return -1
-	case pyjson.Less(b, a):
-		return 1
-	}
-	return 0
-}
-
-// listDir is sorted(os.listdir(dir)).
+// listDir returns the sorted names in dir.
 func listDir(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -161,30 +151,11 @@ func listDir(dir string) ([]string, error) {
 	for i, e := range entries {
 		names[i] = e.Name()
 	}
-	slices.SortFunc(names, pyjsonCmp)
+	slices.SortFunc(names, pyjson.Compare)
 	return names, nil
 }
 
-func isFilePath(path string) bool {
-	st, err := os.Stat(path)
-	return err == nil && st.Mode().IsRegular()
-}
-
-// pySuffix is pathlib.PurePath(p).suffix: "" for no name or no dot, and a leading or trailing dot is no suffix.
-func pySuffix(p string) string {
-	name := ""
-	for _, part := range strings.Split(p, "/") {
-		if part != "" && part != "." {
-			name = part
-		}
-	}
-	if i := strings.LastIndex(name, "."); i > 0 && i < len(name)-1 {
-		return name[i:]
-	}
-	return ""
-}
-
-// planImport is plan_import: what a source's .shortcuts would add to the global store, changing nothing: the
+// planImport works out what a source's .shortcuts would add to the global store, changing nothing: the
 // entries, the script copies (bytes read once here), and what was skipped and why. Only exported entries come.
 func planImport(sourceBase, destStoreDir string, destRegistry, sourceRegistry *pyjson.Object) (*pyjson.Object, []storedScript, []string, error) {
 	entries := &pyjson.Object{}
@@ -240,7 +211,7 @@ func planImport(sourceBase, destStoreDir string, destRegistry, sourceRegistry *p
 			skipped = append(skipped, name+" (exported, but its cwd '"+*entry.Cwd+"' only exists in the project)")
 			continue
 		}
-		if d := entry.Cwd; d != nil && *d != "" && *d != model.Caller && !isDirPath(pyos.ExpandUser(*d)) {
+		if d := entry.Cwd; d != nil && *d != "" && *d != model.Caller && !pyos.IsDir(pyos.ExpandUser(*d)) {
 			skipped = append(skipped, name+" (cwd not found here: "+*d+")")
 			continue
 		}
@@ -252,18 +223,7 @@ func planImport(sourceBase, destStoreDir string, destRegistry, sourceRegistry *p
 			}
 		}
 		if scriptField != "" {
-			cur, linked := sourceBase, false
-			for _, part := range strings.Split(scriptField, "/") {
-				if part == "" || part == "." {
-					continue
-				}
-				cur = pyos.Join(cur, part)
-				if isLink(cur) {
-					linked = true
-					break
-				}
-			}
-			if linked {
+			if firstLinkUnder(sourceBase, scriptField) != "" {
 				skipped = append(skipped, name+" (symlink in source)")
 				continue
 			}
@@ -272,11 +232,11 @@ func planImport(sourceBase, destStoreDir string, destRegistry, sourceRegistry *p
 				skipped = append(skipped, name+" (script path escapes the source: "+scriptField+")")
 				continue
 			}
-			if !isFilePath(srcPath) {
+			if !pyos.IsFile(srcPath) {
 				skipped = append(skipped, name+" (missing source script: "+scriptField+")")
 				continue
 			}
-			destRel, destAbs := storedScriptField(dest.Main, name+orSh(pySuffix(scriptField)))
+			destRel, destAbs := storedScriptField(dest.Main, name+orSh(pyos.Suffix(scriptField)))
 			if _, err := os.Lstat(destAbs); err == nil || slices.ContainsFunc(scripts, func(sc storedScript) bool { return sc.path == destAbs }) {
 				skipped = append(skipped, name+" (would replace "+destRel+")")
 				continue
@@ -300,7 +260,7 @@ func orSh(suffix string) string {
 	return suffix
 }
 
-// planNamespaces is plan_namespaces: what a folder of namespace files would add to the global store's imports/,
+// planNamespaces works out what a folder of namespace files would add to the global store's imports/,
 // changing nothing. A namespace comes whole, as <ns>.shortcut and its scripts/<ns>/ folder, the layout it has in
 // imports/, or not at all. With replace, one already in imports/ is planned too, to go in place of what's there.
 func planNamespaces(sourceRoot, destStoreDir string, replace bool) ([]nsPlan, []string, error) {
@@ -328,19 +288,19 @@ func planNamespaces(sourceRoot, destStoreDir string, replace bool) ([]nsPlan, []
 		replacing := replace && isInstalled && !listed
 		_, isShortcut := dest.Main.Shortcuts().Get(ns)
 		switch {
-		case isLink(path) || !isFilePath(path):
+		case pyos.IsLink(path) || !pyos.IsFile(path):
 			skipped = append(skipped, ns+" (not a regular file: "+filename+")")
 			continue
 		case replace && listed:
 			skipped = append(skipped, ns+" (imported from "+installed.File+", so it isn't replaced)")
 			continue
-		case !replacing && (isInstalled || lexists(pyos.Join(importsDir, filename))):
+		case !replacing && (isInstalled || pyos.Lexists(pyos.Join(importsDir, filename))):
 			skipped = append(skipped, ns+" (already a namespace; --replace puts this one in its place)")
 			continue
 		case isShortcut:
 			skipped = append(skipped, ns+" (already a shortcut)")
 			continue
-		case !replacing && lexists(pyos.Join(importsDir, folder)):
+		case !replacing && pyos.Lexists(pyos.Join(importsDir, folder)):
 			skipped = append(skipped, ns+" (would replace imports/"+folder+")")
 			continue
 		}
@@ -377,9 +337,7 @@ func planNamespaces(sourceRoot, destStoreDir string, replace bool) ([]nsPlan, []
 	return plans, skipped, nil
 }
 
-func lexists(path string) bool { _, err := os.Lstat(path); return err == nil }
-
-// namespaceFolderProblem is namespace_folder_problem: why a namespace in a source can't be copied as it is: a script
+// namespaceFolderProblem returns why a namespace in a source can't be copied as it is: a script
 // outside its scripts folder or missing, or a symlink, which would copy something else. "" is none.
 func namespaceFolderProblem(group model.Group, sourceRoot, folder string) string {
 	shared := group.SharedShortcuts()
@@ -395,7 +353,7 @@ func namespaceFolderProblem(group model.Group, sourceRoot, folder string) string
 		if !strings.HasPrefix(pyos.Normpath(script), folder+"/") {
 			return "'" + name + "' has its script outside " + folder + "/: " + script
 		}
-		if !isFilePath(pyos.Join(sourceRoot, script)) {
+		if !pyos.IsFile(pyos.Join(sourceRoot, script)) {
 			return "'" + name + "' has a missing script: " + script
 		}
 	}
@@ -406,14 +364,14 @@ func namespaceFolderProblem(group model.Group, sourceRoot, folder string) string
 		}
 	})
 	for _, p := range parts {
-		if isLink(p) {
+		if pyos.IsLink(p) {
 			return "symlink in source: " + pyos.Relpath(p, sourceRoot)
 		}
 	}
 	return ""
 }
 
-// installedFiles is installed_files: a namespace in imports/ as init shows it, its file and its scripts folder, under
+// installedFiles returns a namespace in imports/ as init shows it, its file and its scripts folder, under
 // imports/.
 func installedFiles(group model.Group, importsDir string) map[string]string {
 	paths := []string{group.File}
@@ -424,7 +382,7 @@ func installedFiles(group model.Group, importsDir string) map[string]string {
 	})
 	files := map[string]string{}
 	for _, path := range paths {
-		if !isFilePath(path) {
+		if !pyos.IsFile(path) {
 			continue
 		}
 		if raw, err := os.ReadFile(path); err == nil { // Python's suppress(OSError)
@@ -434,7 +392,7 @@ func installedFiles(group model.Group, importsDir string) map[string]string {
 	return files
 }
 
-// initNamespaces is init_namespaces: init --global from a folder of <ns>.shortcut files: copy each into imports/, or
+// initNamespaces runs init --global from a folder of <ns>.shortcut files: copy each into imports/, or
 // with replace in place of the one there. Like any namespace, it runs once shortcut update approves it.
 func initNamespaces(s *textio.Streams, label, sourceRoot, destStoreDir string, assumeYes, replace bool) error {
 	plans, skipped, err := planNamespaces(sourceRoot, destStoreDir, replace)
@@ -530,9 +488,9 @@ func writeNew(path string, raw []byte, executable bool) error {
 	return nil
 }
 
-// applyImport is apply_import: the script copies (executable), then the entries, in the registry under its lock.
+// applyImport writes the script copies (executable), then the entries, in the registry under its lock.
 // Python opens a script with "wb"; this refuses to write over one that appeared since the review, which is what the
-// plan's "would replace" check is for.
+// "would replace" check is for.
 func applyImport(storeDir string, entries *pyjson.Object, scripts []storedScript) error {
 	if err := model.InitStore(storeDir); err != nil {
 		return err
@@ -543,11 +501,7 @@ func applyImport(storeDir string, entries *pyjson.Object, scripts []storedScript
 		}
 	}
 	return model.WithRegistryLock(storeDir, func() error {
-		reg, err := model.LoadRegistry(storeDir)
-		if err != nil {
-			return err
-		}
-		shortcuts, err := shortcutsOf(pyos.Join(storeDir, "shortcuts.json"), reg)
+		reg, shortcuts, err := loadForEdit(pyos.Join(storeDir, "shortcuts.json"), false)
 		if err != nil {
 			return err
 		}
@@ -558,7 +512,7 @@ func applyImport(storeDir string, entries *pyjson.Object, scripts []storedScript
 	})
 }
 
-// applyNamespaces is apply_namespaces: under the registry lock, remove the namespaces being replaced and write the
+// applyNamespaces removes, under the registry lock, the namespaces being replaced and writes the
 // new files into imports/, each one new (never over a file that appeared since the review).
 func applyNamespaces(storeDir string, plans []nsPlan, replaced []model.Group) error {
 	if err := model.InitStore(storeDir); err != nil {

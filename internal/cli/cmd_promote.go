@@ -8,7 +8,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
-// cmdPromote is cmd_promote: a project shortcut becomes one of yours. Nothing is copied: the new entry points at
+// cmdPromote makes a project shortcut one of yours. Nothing is copied: the new entry points at
 // this checkout's script (absolute) and, for a relative cwd, at its directory, so it runs the files as they are.
 func cmdPromote(s *textio.Streams, args []string) error {
 	ns, err := parsers["promote"].Parse(args)
@@ -81,16 +81,12 @@ func cmdPromote(s *textio.Streams, args []string) error {
 	shown := &pyjson.Object{}
 	shown.Set(newName, fields)
 	s.Out.WriteString("From " + group.DefiningFile(name) + ", as your global '" + newName + "':\n")
-	s.Out.WriteString(pyjson.Dumps(shown, pyjson.Opts{Indent: 2, EnsureASCII: true}) + "\n")
+	s.Out.WriteString(pyjson.Dumps(shown, pyjson.Opts{Indent: 2}) + "\n")
 	s.Out.WriteString("This runs the project's files as they are now, like typing the command there. " +
 		"It isn't reviewed again when they change.\n")
-	granted, err := textio.Confirm{Question: "add '" + newName + "' to " + home.Main.File + "?",
-		NoTerminal: "promote '" + name + "' in a terminal, or pass -y"}.Granted(s, ns.Bool("yes"))
-	if err != nil {
+	if err := confirmed(s, textio.Confirm{Question: "add '" + newName + "' to " + home.Main.File + "?",
+		NoTerminal: "promote '" + name + "' in a terminal, or pass -y"}, ns.Bool("yes")); err != nil {
 		return err
-	}
-	if !granted {
-		return &ExitError{Code: 1}
 	}
 
 	if err := register(s, home.Main, newEntry, nil); err != nil {

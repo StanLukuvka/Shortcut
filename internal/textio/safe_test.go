@@ -43,7 +43,7 @@ func TestSafe_Text(t *testing.T) {
 	for _, c := range []struct{ in, want string }{
 		{"", ""},
 		{"plain text, tabs\tand\nnewlines stay", "plain text, tabs\tand\nnewlines stay"},
-		{"clean\x1b[2K\rfaked \u009b1m \u202egnp", "clean^[[2K^Mfaked \\u009b1m \\u202egnp"}, // test_output_safety.py's description
+		{"clean\x1b[2K\rfaked \u009b1m \u202egnp", "clean^[[2K^Mfaked \\u009b1m \\u202egnp"},
 		{"\x00\x7f", "^@^?"},
 		{"é日本\U0001F600", "é日本\U0001F600"},
 		{"a\u2027b\u202fc\u2065d\u206ae", "a\u2027b\u202fc\u2065d\u206ae"}, // just outside the ranges

@@ -113,7 +113,6 @@ func argFields(t *testing.T) []string {
 	return found
 }
 
-// py: test_schema.py::test_fields_match_the_code
 func TestSchema_FieldsMatchTheCode(t *testing.T) {
 	s := loadSchema(t)
 	// origin is written "from" in JSON, and Entry's own fields are knownFields
@@ -125,7 +124,6 @@ func TestSchema_FieldsMatchTheCode(t *testing.T) {
 	}
 }
 
-// py: test_schema.py::test_format_matches_the_code
 func TestSchema_FormatMatchesTheCode(t *testing.T) {
 	s := loadSchema(t)
 	src := modelSource(t)
@@ -147,7 +145,6 @@ var restricted = map[string]string{
 	"from":   "Only allowed in the global store's shortcuts.json",
 }
 
-// py: test_schema.py::test_every_schema_field_is_accepted
 func TestSchema_EveryFieldIsAccepted(t *testing.T) {
 	e := testkit.New(t)
 	s := loadSchema(t)
@@ -180,7 +177,6 @@ func TestSchema_EveryFieldIsAccepted(t *testing.T) {
 	}
 }
 
-// py: test_schema.py::test_restricted_fields_are_accepted_where_the_schema_allows_them
 func TestSchema_RestrictedFieldsAreAcceptedWhereTheSchemaAllowsThem(t *testing.T) {
 	e := testkit.New(t)
 	s := loadSchema(t)
@@ -198,7 +194,7 @@ func TestSchema_RestrictedFieldsAreAcceptedWhereTheSchemaAllowsThem(t *testing.T
 		t.Errorf("from requires %v", from.Required)
 	}
 
-	// Python ran `r go` in each place; run is P-3's, so what run starts with is checked: the name resolves to a
+	// Python ran `r go` in each place; here what run starts with is checked: the name resolves to a
 	// usable entry, with the field in it
 	proj := e.Project(map[string]any{"go": map[string]any{"inline": "echo go", "export": true}})
 	res, _, err := ResolveShortcut([]string{"go"}, proj, false, false)

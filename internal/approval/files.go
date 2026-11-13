@@ -9,9 +9,9 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/pyos"
 )
 
-// DisplayPath is display_path: the path relative to the group's script base, or the path itself when that string
+// displayPath returns the path relative to the group's script base, or the path itself when that string
 // starts with ".." (a literal string test, so a file named "..x" counts as outside).
-func DisplayPath(g model.Group, path string) string {
+func displayPath(g model.Group, path string) string {
 	rel := pyos.Relpath(path, g.ScriptBase())
 	if strings.HasPrefix(rel, "..") {
 		return path
@@ -19,15 +19,10 @@ func DisplayPath(g model.Group, path string) string {
 	return rel
 }
 
-func exists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
-
-// EntryFiles is entry_files: what entries point at, as {path: content}. A relative cwd adds where it really leads, so
+// entryFiles returns what entries point at, as {path: content}. A relative cwd adds where it really leads, so
 // a symlink moved under it needs approving; the leading ./ keeps that key apart from any script, whose path is
 // normalised. origin keeps two entries of the same name apart.
-func EntryFiles(g model.Group, shortcuts *pyjson.Object, origin string) map[string]string {
+func entryFiles(g model.Group, shortcuts *pyjson.Object, origin string) map[string]string {
 	files := map[string]string{}
 	for _, name := range shortcuts.Keys {
 		data, ok := shortcuts.Vals[name].(*pyjson.Object)
@@ -52,25 +47,25 @@ func EntryFiles(g model.Group, shortcuts *pyjson.Object, origin string) map[stri
 		if err != nil {
 			continue // shows up as a change the moment it becomes readable
 		}
-		files[DisplayPath(g, path)] = Reviewable(raw)
+		files[displayPath(g, path)] = Reviewable(raw)
 	}
 	return files
 }
 
-// FolderFiles is everything in a namespace's scripts folder, as {path: content}: a script it names can run or source
+// folderFiles is everything in a namespace's scripts folder, as {path: content}: a script it names can run or source
 // a file beside it, so a change to any of them needs approving. A symlinked folder in it is recorded as where it leads.
-func FolderFiles(g model.Group) map[string]string {
+func folderFiles(g model.Group) map[string]string {
 	files := map[string]string{}
 	if g.Name == "" {
 		return files
 	}
 	pyos.Walk(g.ScriptsDir(), func(dir string, dirs, names []string) {
-		real := pyos.Realpath(dir) // as EntryFiles resolves a script's path
+		real := pyos.Realpath(dir) // as entryFiles resolves a script's path
 		for _, name := range dirs {
 			link := pyos.Join(dir, name)
 			if st, err := os.Lstat(link); err == nil && st.Mode()&os.ModeSymlink != 0 {
 				if target, err := os.Readlink(link); err == nil {
-					files[DisplayPath(g, pyos.Join(real, name))] = "symlink to " + target + "\n"
+					files[displayPath(g, pyos.Join(real, name))] = "symlink to " + target + "\n"
 				}
 			}
 		}
@@ -78,7 +73,7 @@ func FolderFiles(g model.Group) map[string]string {
 			path := pyos.Join(real, name)
 			if st, err := os.Stat(path); err == nil && st.Mode().IsRegular() { // a FIFO or device would block or never end
 				if raw, err := os.ReadFile(path); err == nil {
-					files[DisplayPath(g, path)] = Reviewable(raw)
+					files[displayPath(g, path)] = Reviewable(raw)
 				}
 			}
 		}
@@ -91,7 +86,7 @@ func jsonFile(g model.Group, path string, data *pyjson.Object) map[string]string
 		data = &pyjson.Object{}
 	}
 	return map[string]string{
-		DisplayPath(g, path): pyjson.Dumps(data, pyjson.Opts{Indent: 2, SortKeys: true, EnsureASCII: true}) + "\n",
+		displayPath(g, path): pyjson.Dumps(data, pyjson.Opts{Indent: 2, SortKeys: true}) + "\n",
 	}
 }
 
@@ -108,16 +103,16 @@ func merge(maps ...map[string]string) map[string]string {
 // SharedFiles is the group's own file and what it names, the JSON normalised, and for a namespace its scripts
 // folder: exactly what is hashed, snapshotted and diffed. A project may have no .shortcuts; then this is empty.
 func SharedFiles(g model.Group) map[string]string {
-	if g.LocalFile != "" && !exists(g.File) {
+	if g.LocalFile != "" && !pyos.Exists(g.File) {
 		return map[string]string{}
 	}
-	return merge(jsonFile(g, g.File, g.Data), FolderFiles(g), EntryFiles(g, g.SharedShortcuts(), ""))
+	return merge(jsonFile(g, g.File, g.Data), folderFiles(g), entryFiles(g, g.SharedShortcuts(), ""))
 }
 
 // LocalFiles is the same for .shortcuts.local.
 func LocalFiles(g model.Group) map[string]string {
-	if g.LocalFile == "" || !exists(g.LocalFile) {
+	if g.LocalFile == "" || !pyos.Exists(g.LocalFile) {
 		return map[string]string{}
 	}
-	return merge(jsonFile(g, g.LocalFile, g.LocalData), EntryFiles(g, g.LocalShortcuts(), " in "+model.LocalFile))
+	return merge(jsonFile(g, g.LocalFile, g.LocalData), entryFiles(g, g.LocalShortcuts(), " in "+model.LocalFile))
 }

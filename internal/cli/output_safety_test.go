@@ -7,7 +7,6 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-// py: test_output_safety.py::test_stored_text_cannot_rewrite_the_terminal
 func TestOutputSafety_StoredTextCannotRewriteTheTerminal(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{
@@ -15,23 +14,20 @@ func TestOutputSafety_StoredTextCannotRewriteTheTerminal(t *testing.T) {
 	})
 	for _, args := range [][]string{{"list"}, {"show", "go"}, {"show", "--json", "go"}} {
 		res := e.Run(args...)
-		if res.Code != 0 {
-			t.Errorf("%v: exit %d %s", args, res.Code, res.Stderr)
-		}
+		res.WantCode(t, 0)
 		for _, c := range []string{"\x1b", "\r", "\u009b", "‮"} {
 			if strings.Contains(res.Stdout+res.Stderr, c) {
 				t.Errorf("%v: output has %q", args, c)
 			}
 		}
 	}
-	contains(t, "show", e.Run("show", "go").Stdout, "clean^[[2K^Mfaked")
+	testkit.Contains(t, "show", e.Run("show", "go").Stdout, "clean^[[2K^Mfaked")
 	// A shortcut's own output is its own business
 	if got := e.Run("r", "go").Stdout; got != "\x1b[31mred\x1b[0m" {
 		t.Errorf("run: %q", got)
 	}
 }
 
-// py: test_output_safety.py::test_a_terminal_prompt_cannot_be_forged
 func TestOutputSafety_ATerminalPromptCannotBeForged(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Folder("proj\x1b[2Kx")
@@ -40,10 +36,9 @@ func TestOutputSafety_ATerminalPromptCannotBeForged(t *testing.T) {
 	if strings.Contains(out, "\x1b[2Kx") {
 		t.Errorf("the escape reached the terminal:\n%q", out)
 	}
-	contains(t, "prompt", out, "^[[2Kx")
+	testkit.Contains(t, "prompt", out, "^[[2Kx")
 }
 
-// py: test_output_safety.py::test_help_stays_plain_on_a_terminal
 func TestOutputSafety_HelpStaysPlainOnATerminal(t *testing.T) {
 	e := testkit.New(t)
 	rc, out := e.InTerminal(testkit.Opts{}, nil, "new", "--help")
@@ -55,7 +50,6 @@ func TestOutputSafety_HelpStaysPlainOnATerminal(t *testing.T) {
 	}
 }
 
-// py: test_output_safety.py::test_escape_codes_in_a_diff_cannot_touch_the_terminal
 func TestOutputSafety_EscapeCodesInADiffCannotTouchTheTerminal(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(testkit.BinTool, testkit.Files(map[string]any{"bin/tool": "echo \x1b[2Jhidden\r\n"}))
@@ -63,10 +57,9 @@ func TestOutputSafety_EscapeCodesInADiffCannotTouchTheTerminal(t *testing.T) {
 	if strings.Contains(res.Stdout, "\x1b") {
 		t.Errorf("escape in the diff: %q", res.Stdout)
 	}
-	contains(t, "diff", res.Stdout, "^[[2Jhidden")
+	testkit.Contains(t, "diff", res.Stdout, "^[[2Jhidden")
 }
 
-// py: test_output_safety.py::test_a_closed_stream_changes_nothing
 func TestOutputSafety_AClosedStreamChangesNothing(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, testkit.GO)

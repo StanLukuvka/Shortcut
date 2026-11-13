@@ -1,9 +1,7 @@
 package cli
 
 import (
-	"fmt"
-	"math/big"
-	"sort"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -13,83 +11,9 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
-// pyTruthy is Python's bool() of a JSON value.
-func pyTruthy(v pyjson.Value) bool {
-	switch x := v.(type) {
-	case nil:
-		return false
-	case bool:
-		return x
-	case string:
-		return x != ""
-	case *big.Int:
-		return x.Sign() != 0
-	case float64:
-		return x != 0
-	case []pyjson.Value:
-		return len(x) > 0
-	case *pyjson.Object:
-		return len(x.Keys) > 0
-	}
-	return true
-}
-
-// pyStr is Python's str() of a JSON value: a string as it is, the rest as repr shows it.
-func pyStr(v pyjson.Value) string {
-	switch x := v.(type) {
-	case nil:
-		return "None"
-	case bool:
-		if x {
-			return "True"
-		}
-		return "False"
-	case string:
-		return x
-	case *big.Int:
-		return x.String()
-	case float64:
-		return pyjson.ReprFloat(x)
-	case []pyjson.Value:
-		parts := make([]string, len(x))
-		for i, e := range x {
-			parts[i] = reprOf(e)
-		}
-		return "[" + strings.Join(parts, ", ") + "]"
-	case *pyjson.Object:
-		parts := make([]string, len(x.Keys))
-		for i, k := range x.Keys {
-			parts[i] = pyRepr(k) + ": " + reprOf(x.Vals[k])
-		}
-		return "{" + strings.Join(parts, ", ") + "}"
-	}
-	return fmt.Sprint(v)
-}
-
-func reprOf(v pyjson.Value) string {
-	if str, ok := v.(string); ok {
-		return pyRepr(str)
-	}
-	return pyStr(v)
-}
-
-// padRight is f"{s:<n}": padded to n code points, never cut.
-func padRight(s string, n int) string {
-	if w := utf8.RuneCountInString(s); w < n {
-		return s + strings.Repeat(" ", n-w)
-	}
-	return s
-}
-
-func sortedNames(o *pyjson.Object) []string {
-	names := append([]string(nil), o.Keys...)
-	sort.Slice(names, func(i, j int) bool { return pyjson.Less(names[i], names[j]) })
-	return names
-}
-
 func approved(g model.Group) bool { return approval.State(g) == "ok" }
 
-// cmdList is cmd_list.
+// cmdList lists shortcuts.
 func cmdList(s *textio.Streams, args []string) error {
 	ns, err := parsers["list"].Parse(args)
 	if err != nil {
@@ -101,7 +25,7 @@ func cmdList(s *textio.Streams, args []string) error {
 			s.Err.WriteString("warning: " + p + "\n")
 		}
 		for _, g := range store.Groups() {
-			if g.Error != nil && *g.Error != "" {
+			if !usable(g) {
 				s.Err.WriteString("warning: " + *g.Error + "\n")
 			}
 		}
@@ -110,8 +34,8 @@ func cmdList(s *textio.Streams, args []string) error {
 	if names := ns.Str("names"); names != "" {
 		for _, store := range stores {
 			group, isNS := store.Namespace(names)
-			if isNS && (group.Error == nil || *group.Error == "") && approved(group) {
-				s.Out.WriteString(strings.Join(sortedNames(group.Shortcuts()), "\n") + "\n")
+			if isNS && usable(group) && approved(group) {
+				s.Out.WriteString(strings.Join(pyjson.SortStrings(slices.Clone(group.Shortcuts().Keys)), "\n") + "\n")
 			}
 			if _, inMain := store.Main.Shortcuts().Get(names); isNS || inMain {
 				break
@@ -131,7 +55,7 @@ func cmdList(s *textio.Streams, args []string) error {
 		}
 		for _, store := range stores {
 			if approved(store.Main) {
-				for _, n := range sortedNames(store.Main.Shortcuts()) {
+				for _, n := range pyjson.SortStrings(slices.Clone(store.Main.Shortcuts().Keys)) {
 					add(n)
 				}
 			}
@@ -147,14 +71,7 @@ func cmdList(s *textio.Streams, args []string) error {
 		return nil
 	}
 
-	globalNames := map[string]bool{}
-	home := stores[len(stores)-1]
-	for _, k := range home.Main.Shortcuts().Keys {
-		globalNames[k] = true
-	}
-	for _, n := range home.Namespaces {
-		globalNames[n.Name] = true
-	}
+	globalNames := globalNamesOf(stores)
 	localNames := map[string]bool{}
 	if len(stores) > 1 && approved(stores[0].Main) {
 		for _, k := range stores[0].Main.Shortcuts().Keys {
@@ -180,20 +97,18 @@ func cmdList(s *textio.Streams, args []string) error {
 		}
 		sections++
 		if state != "ok" {
-			verb := "changed since you approved them"
-			if g.Name != "" {
-				verb = "changed since you approved it"
-			}
-			if state == "new" {
-				verb = "aren't approved yet"
-				if g.Name != "" {
-					verb = "isn't approved yet"
+			one := g.Name != ""
+			pick := func(singular, plural string) string {
+				if one {
+					return singular
 				}
+				return plural
 			}
-			review := "them"
-			if g.Name != "" {
-				review = "it"
+			verb := pick("changed since you approved it", "changed since you approved them")
+			if state == "new" {
+				verb = pick("isn't approved yet", "aren't approved yet")
 			}
+			review := pick("it", "them")
 			s.Out.WriteString(title + " " + verb + ". Review " + review + " with: " + g.UpdateCmd() + "\n")
 			return
 		}
@@ -211,7 +126,7 @@ func cmdList(s *textio.Streams, args []string) error {
 		for _, k := range runnable.Keys {
 			merged.Set(k, runnable.Vals[k])
 		}
-		for _, name := range sortedNames(merged) {
+		for _, name := range pyjson.SortStrings(slices.Clone(merged.Keys)) {
 			data, _ := merged.Vals[name].(*pyjson.Object)
 			if data == nil {
 				data = &pyjson.Object{}
@@ -273,5 +188,18 @@ func cmdList(s *textio.Streams, args []string) error {
 	return nil
 }
 
-// usable is "not group.error": the file can be used.
+// globalNamesOf is the names your global store holds: its shortcuts and its namespaces, which a project's names hide.
+func globalNamesOf(stores []model.Store) map[string]bool {
+	names := map[string]bool{}
+	home := stores[len(stores)-1]
+	for _, k := range home.Main.Shortcuts().Keys {
+		names[k] = true
+	}
+	for _, n := range home.Namespaces {
+		names[n.Name] = true
+	}
+	return names
+}
+
+// usable reports whether the group's file can be used (it has no error).
 func usable(g model.Group) bool { return g.Error == nil || *g.Error == "" }

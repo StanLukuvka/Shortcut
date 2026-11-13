@@ -1,12 +1,17 @@
 package cli
 
 import (
+	"maps"
+	"slices"
+
 	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
+	"github.com/StanLukuvka/Shortcut/internal/pyjson"
+	"github.com/StanLukuvka/Shortcut/internal/pyos"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
-// cmdUpdate is cmd_update: review changes to project shortcuts and namespaces, and approve them.
+// cmdUpdate reviews changes to project shortcuts and namespaces, and approve them.
 func cmdUpdate(s *textio.Streams, args []string) error {
 	ns, err := parsers["update"].Parse(args)
 	if err != nil {
@@ -52,17 +57,10 @@ func cmdUpdate(s *textio.Streams, args []string) error {
 			return nil
 		}
 	}
-	home := stores[len(stores)-1]
-	globalNames := map[string]bool{}
-	for _, name := range home.Main.Shortcuts().Keys {
-		globalNames[name] = true
-	}
-	for _, n := range home.Namespaces {
-		globalNames[n.Name] = true
-	}
+	globalNames := globalNamesOf(stores)
 	code := 0
 	for _, g := range groups {
-		rc, err := approval.ApproveGroup(s, g, ns.Bool("yes"), globalNames)
+		rc, err := approveGroup(s, g, ns.Bool("yes"), globalNames)
 		if err != nil {
 			return err
 		}
@@ -72,4 +70,87 @@ func cmdUpdate(s *textio.Streams, args []string) error {
 		return &ExitError{Code: code}
 	}
 	return nil
+}
+
+// approveGroup shows what changed since the last approval and asks. What is shown is what gets
+// hashed. globalNames are your global shortcuts and namespaces, which a project's names hide inside it. It returns
+// the exit code; an error is a die (no terminal to ask on, or the record can't be written).
+func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames map[string]bool) (int, error) {
+	if g.Error != nil {
+		s.Err.WriteString("error: cannot approve " + g.Label() + ": " + *g.Error + "\n")
+		return 1, nil
+	}
+	if errs := model.EntryErrors(g); len(errs) > 0 {
+		for _, e := range errs {
+			s.Err.WriteString("error: cannot approve " + g.Label() + ": " + e + "\n")
+		}
+		return 1, nil
+	}
+	shared, local := approval.SharedFiles(g), approval.LocalFiles(g)
+	files := maps.Clone(shared)
+	maps.Copy(files, local)
+	if approval.State(g) == "ok" {
+		s.Out.WriteString(g.Label() + ": already approved, nothing has changed.\n")
+		return 0, nil
+	}
+	old := map[string]string{}
+	if record := approval.Load(g); record != nil {
+		maps.Copy(old, record.Snapshot)
+		maps.Copy(old, record.Local)
+	}
+	where := ""
+	if g.Name != "" {
+		where = " (" + pyos.Realpath(g.File) + ")" // the real place, wherever it points
+	}
+	head := "New to you:"
+	if len(old) > 0 {
+		head = "Changes to"
+	}
+	s.Out.WriteString(head + " " + g.Label() + where + "\n")
+	textio.ShowDiff(s, approval.DiffFiles(old, files))
+	local2 := g.LocalShortcuts()
+	for _, name := range pyjson.SortStrings(slices.Clone(g.SharedShortcuts().Keys)) {
+		if _, both := local2.Get(name); both {
+			s.Out.WriteString("'" + name + "' in " + model.ProjectFile + " is " + g.Source(name) + " by " + model.LocalFile + " for you.\n")
+		}
+	}
+	shortcuts := g.Shortcuts()
+	if g.IsProject() {
+		hidden := shortcuts.Keys
+		if g.Name != "" {
+			hidden = []string{g.Name}
+		}
+		for _, name := range pyjson.SortStrings(slices.Clone(hidden)) {
+			if globalNames[name] {
+				s.Out.WriteString("Inside this project, '" + name + "' hides your global '" + name + "'.\n")
+			}
+		}
+	}
+	for _, name := range pyjson.SortStrings(slices.Clone(shortcuts.Keys)) {
+		data, ok := shortcuts.Vals[name].(*pyjson.Object)
+		if !ok {
+			continue
+		}
+		cwd, isStr := data.Vals["cwd"].(string)
+		if exported, _ := data.Vals["export"].(bool); exported && isStr && model.IsRelativeCwd(&cwd) {
+			s.Err.WriteString("warning: '" + name + "' is exported, but its cwd '" + cwd + "' only exists in this checkout\n")
+		}
+	}
+	granted, err := approval.ConfirmReview("approve", old, files, "approve "+g.Label()+" in a terminal, or pass -y").Granted(s, assumeYes)
+	if err != nil {
+		return 0, err
+	}
+	if !granted {
+		return 1, nil
+	}
+	if err := approval.Save(g, shared, local); err != nil {
+		return 0, err
+	}
+	covers := "its definitions"
+	if g.Name != "" {
+		covers = "its definitions and its scripts folder"
+	}
+	s.Out.WriteString("Approved " + g.Label() + ". This covers " + covers + ", not what they call. " +
+		"Any change to them needs `" + g.UpdateCmd() + "` again.\n")
+	return 0, nil
 }

@@ -4,7 +4,7 @@ package testkit
 // so if the guard ever breaks these tests fail without reaching ~/.shortcuts. cmd/shortcut is an empty main until the
 // port lands, so the tests that Python ran against the real CLI run an `sh` stand-in (useBinary) and assert what
 // testkit did (what it launched, where, with what env); the end-to-end halves (`r go` printing "ran") belong to the
-// command tests of M3.
+// command tests.
 
 import (
 	"encoding/json"
@@ -76,7 +76,6 @@ func assertRefused(t *testing.T, e *Env, outside string, env map[string]string) 
 	}
 }
 
-// py: test_fixtures.py::test_the_sandbox_is_inside_the_temp_dir
 func TestFixtures_SandboxIsInsideTheTempDir(t *testing.T) {
 	e := New(t)
 	for _, name := range []string{"HOME", "SHORTCUTS_HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME", "BIN_DIR"} {
@@ -88,32 +87,27 @@ func TestFixtures_SandboxIsInsideTheTempDir(t *testing.T) {
 	}
 }
 
-// py: test_fixtures.py::test_a_store_derived_from_the_old_home_is_refused
 func TestFixtures_StoreDerivedFromTheOldHomeIsRefused(t *testing.T) {
 	e, outside := sandboxed(t)
 	// What `export HOME=$(mktemp -d) SHORTCUTS_HOME=$HOME/.shortcuts` leaves behind
 	assertRefused(t, e, outside, map[string]string{"SHORTCUTS_HOME": outside + "/.shortcuts"})
 }
 
-// py: test_fixtures.py::test_a_home_outside_is_refused_even_when_the_store_is_inside
 func TestFixtures_HomeOutsideIsRefusedEvenWhenTheStoreIsInside(t *testing.T) {
 	e, outside := sandboxed(t)
 	assertRefused(t, e, outside, map[string]string{"HOME": outside})
 }
 
-// py: test_fixtures.py::test_a_home_outside_is_refused_when_the_store_follows_it
 func TestFixtures_HomeOutsideIsRefusedWhenTheStoreFollowsIt(t *testing.T) {
 	e, outside := sandboxed(t)
 	assertRefused(t, e, outside, map[string]string{"HOME": outside, "SHORTCUTS_HOME": ""})
 }
 
-// py: test_fixtures.py::test_an_empty_home_is_refused
 func TestFixtures_EmptyHomeIsRefused(t *testing.T) {
 	e, outside := sandboxed(t)
 	assertRefused(t, e, outside, map[string]string{"HOME": ""})
 }
 
-// py: test_fixtures.py::test_a_tilde_store_follows_the_child_home
 func TestFixtures_TildeStoreFollowsTheChildHome(t *testing.T) {
 	e, outside := sandboxed(t)
 	assertRefused(t, e, outside, map[string]string{"HOME": outside, "SHORTCUTS_HOME": "~/.shortcuts"})
@@ -130,7 +124,6 @@ func TestFixtures_TildeStoreFollowsTheChildHome(t *testing.T) {
 	refused(t, "~user", func() { e.RunWith(Opts{Env: map[string]string{"BIN_DIR": "~root/bin"}}, "list") })
 }
 
-// py: test_fixtures.py::test_the_other_places_a_run_writes_are_guarded
 func TestFixtures_OtherPlacesARunWritesAreGuarded(t *testing.T) {
 	e, outside := sandboxed(t)
 	for _, name := range []string{"XDG_DATA_HOME", "XDG_CONFIG_HOME", "BIN_DIR"} {
@@ -138,7 +131,6 @@ func TestFixtures_OtherPlacesARunWritesAreGuarded(t *testing.T) {
 	}
 }
 
-// py: test_fixtures.py::test_a_path_that_only_looks_inside_is_refused
 func TestFixtures_PathThatOnlyLooksInsideIsRefused(t *testing.T) {
 	e, outside := sandboxed(t)
 	assertRefused(t, e, outside, map[string]string{"SHORTCUTS_HOME": e.Tmp + "-other"})
@@ -150,7 +142,6 @@ func TestFixtures_PathThatOnlyLooksInsideIsRefused(t *testing.T) {
 	assertRefused(t, e, outside, map[string]string{"SHORTCUTS_HOME": link + "/.shortcuts"})
 }
 
-// py: test_fixtures.py::test_a_cwd_outside_is_refused
 func TestFixtures_CwdOutsideIsRefused(t *testing.T) {
 	e, outside := sandboxed(t)
 	refused(t, "Run", func() { e.RunWith(Opts{Cwd: outside}, "new", "x", "--local", "--", "true") })
@@ -160,21 +151,18 @@ func TestFixtures_CwdOutsideIsRefused(t *testing.T) {
 	}
 }
 
-// py: test_fixtures.py::test_changing_the_sandbox_env_mid_test_is_refused
 func TestFixtures_ChangingTheSandboxEnvMidTestIsRefused(t *testing.T) {
 	e, outside := sandboxed(t)
 	e.Vars["SHORTCUTS_HOME"] = outside
 	refused(t, "Run", func() { e.Run("list") })
 }
 
-// py: test_fixtures.py::test_changing_os_environ_mid_test_is_refused
 func TestFixtures_ChangingTheProcessEnvMidTestIsRefused(t *testing.T) {
 	e, outside := sandboxed(t)
 	t.Setenv("HOME", outside)
 	refused(t, "Run", func() { e.Run("list") })
 }
 
-// py: test_fixtures.py::test_a_fixture_file_outside_is_refused
 func TestFixtures_FixtureFileOutsideIsRefused(t *testing.T) {
 	e, outside := sandboxed(t)
 	refused(t, "WriteStore", func() { e.WriteStore(outside+"/.shortcuts", map[string]any{}) })
@@ -184,7 +172,6 @@ func TestFixtures_FixtureFileOutsideIsRefused(t *testing.T) {
 	}
 }
 
-// py: test_fixtures.py::test_setup_refuses_before_writing_anything
 func TestFixtures_SetupRefusesBeforeWritingAnything(t *testing.T) {
 	outside, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
@@ -209,7 +196,6 @@ func TestFixtures_SetupRefusesBeforeWritingAnything(t *testing.T) {
 	}
 }
 
-// py: test_fixtures.py::test_paths_left_unset_fall_under_home
 func TestFixtures_PathsLeftUnsetFallUnderHome(t *testing.T) {
 	e := New(t)
 	outside, err := filepath.EvalSymlinks(t.TempDir())
@@ -241,7 +227,6 @@ func decoded(t *testing.T, v any) any {
 	return out
 }
 
-// py: test_fixtures.py::test_project_writes_what_it_is_given
 func TestFixtures_ProjectWritesWhatItIsGiven(t *testing.T) {
 	e := New(t)
 	imports := map[string]any{"a": "a.shortcut"}
@@ -266,7 +251,6 @@ func TestFixtures_ProjectWritesWhatItIsGiven(t *testing.T) {
 	}
 }
 
-// py: test_fixtures.py::test_project_without_shortcuts_has_no_store
 func TestFixtures_ProjectWithoutShortcutsHasNoStore(t *testing.T) {
 	e := New(t)
 	if _, err := os.Stat(filepath.Join(e.Project(nil), ".shortcuts")); err == nil {
@@ -274,11 +258,10 @@ func TestFixtures_ProjectWithoutShortcutsHasNoStore(t *testing.T) {
 	}
 }
 
-// py: test_fixtures.py::test_an_approved_project_runs_at_once
 func TestFixtures_ApprovedProjectRunsAtOnce(t *testing.T) {
 	e := New(t)
 	useBinary(t, e, `pwd -P > "$HOME/approve-cwd"; echo "$@" > "$HOME/approve-args"`+"\n")
-	proj := e.Project(GO, Approved()) // the real `r go` check: M3
+	proj := e.Project(GO, Approved()) // the real `r go` check
 	if got, _ := os.ReadFile(filepath.Join(e.Home, "approve-args")); string(got) != "update -y\n" {
 		t.Errorf("approve ran %q", got)
 	}
@@ -287,17 +270,15 @@ func TestFixtures_ApprovedProjectRunsAtOnce(t *testing.T) {
 	}
 }
 
-// py: test_fixtures.py::test_a_broken_project_reads_as_corrupt
 func TestFixtures_BrokenProjectReadsAsCorrupt(t *testing.T) {
-	e := New(t) // the "corrupt registry" message itself: M3
-	if b, _ := os.ReadFile(filepath.Join(e.BrokenProject(), ".shortcuts")); string(b) != BrokenJSON {
+	e := New(t) // the "corrupt registry" message itself
+	if b, _ := os.ReadFile(filepath.Join(e.BrokenProject(), ".shortcuts")); string(b) != brokenJSON {
 		t.Errorf("store = %q", b)
 	}
 }
 
-// py: test_fixtures.py::test_a_collection_imports
 func TestFixtures_CollectionImports(t *testing.T) {
-	e := New(t) // the `init --global` and `r hi` halves: M3
+	e := New(t) // the `init --global` and `r hi` halves
 	src := e.Collection(HI, Files(map[string]any{"bin/a.sh": "echo a\n"}), Mode(0o755))
 	if fi, err := os.Stat(filepath.Join(src, "bin", "a.sh")); err != nil || fi.Mode()&0o111 == 0 {
 		t.Errorf("bin/a.sh not executable: %v", err)
@@ -309,7 +290,6 @@ func TestFixtures_CollectionImports(t *testing.T) {
 	}
 }
 
-// py: test_fixtures.py::test_shared_fixtures_are_left_as_they_were
 func TestFixtures_SharedFixturesAreLeftAsTheyWere(t *testing.T) {
 	e := New(t)
 	useBinary(t, e, "exit 0\n")

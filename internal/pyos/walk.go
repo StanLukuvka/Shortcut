@@ -35,6 +35,6 @@ func Walk(top string, visit func(dir string, dirs, files []string)) {
 	}
 	visit(top, dirs, files)
 	for _, name := range enter {
-		Walk(pyJoin(top, name), visit)
+		Walk(Join(top, name), visit)
 	}
 }

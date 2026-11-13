@@ -16,15 +16,6 @@ func TestMain(m *testing.M) { testkit.Main(m) }
 
 const zshBlock = "# >>> shortcut completion >>>"
 
-func onPath(name string) bool {
-	for _, d := range filepath.SplitList(os.Getenv("PATH")) {
-		if fi, err := os.Stat(filepath.Join(d, name)); err == nil && !fi.IsDir() {
-			return true
-		}
-	}
-	return false
-}
-
 // release is one test's installer run: a flat file:// download dir (the layout in install.sh's header), a stub
 // zsh and the env the installer reads.
 type release struct {
@@ -40,12 +31,8 @@ func newRelease(t *testing.T) *release {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" || runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
 		t.Skipf("the installer supports linux and macOS on amd64 and arm64, not %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
-	for _, tool := range []string{"sh", "tar", "curl"} {
-		if !onPath(tool) {
-			t.Skipf("%s is not installed", tool)
-		}
-	}
-	if !onPath("sha256sum") && !onPath("shasum") {
+	testkit.Need(t, "sh", "tar", "curl")
+	if !testkit.Have("sha256sum") && !testkit.Have("shasum") {
 		t.Skip("neither sha256sum nor shasum is installed")
 	}
 	e := testkit.New(t)
@@ -116,16 +103,6 @@ func script(t *testing.T) string {
 
 func (r *release) bin() string { return r.e.Vars["BIN_DIR"] }
 
-func read(t *testing.T, path string) string {
-	t.Helper()
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(b)
-}
-
-// py: test_bundled.py::test_install_script_dry_run
 func TestInstallScriptDryRun(t *testing.T) {
 	for _, pinned := range []bool{false, true} {
 		t.Run(fmt.Sprintf("pinned=%v", pinned), func(t *testing.T) {
@@ -151,7 +128,7 @@ func TestInstallScriptDryRun(t *testing.T) {
 				t.Errorf("BIN_DIR holds %v, want only shortcut", ents)
 			}
 			compl := filepath.Join(r.e.Vars["XDG_DATA_HOME"], "bash-completion", "completions", "shortcut")
-			if !strings.Contains(read(t, compl), "complete -F _shortcut shortcut") {
+			if !strings.Contains(testkit.ReadFile(t, compl), "complete -F _shortcut shortcut") {
 				t.Errorf("%s lacks the bash completion", compl)
 			}
 		})
@@ -180,7 +157,7 @@ func TestSecondRunIsIdempotent(t *testing.T) {
 			t.Fatalf("run %d failed (%d): %s", i, res.Code, res.Stderr)
 		}
 	}
-	rc := read(t, filepath.Join(r.e.Home, ".zshrc"))
+	rc := testkit.ReadFile(t, filepath.Join(r.e.Home, ".zshrc"))
 	if n := strings.Count(rc, zshBlock); n != 1 {
 		t.Errorf(".zshrc has %d completion blocks, want 1:\n%s", n, rc)
 	}
@@ -219,7 +196,7 @@ func TestUnsupportedSystemIsRefused(t *testing.T) {
 
 func TestCutOffDownloadRunsNothing(t *testing.T) {
 	r := newRelease(t)
-	lines := strings.SplitAfter(read(t, script(t)), "\n")
+	lines := strings.SplitAfter(testkit.ReadFile(t, script(t)), "\n")
 	cut := filepath.Join(r.e.Tmp, "cut.sh")
 	if err := os.WriteFile(cut, []byte(strings.Join(lines[:len(lines)*2/3], "")), 0o644); err != nil {
 		t.Fatal(err)
@@ -262,7 +239,7 @@ func TestDataPathWithSpaceGetsWorkingBlock(t *testing.T) {
 	if res := r.install(map[string]string{"XDG_DATA_HOME": data}); res.Code != 0 {
 		t.Fatalf("install failed (%d): %s", res.Code, res.Stderr)
 	}
-	rc := read(t, filepath.Join(r.e.Home, ".zshrc"))
+	rc := testkit.ReadFile(t, filepath.Join(r.e.Home, ".zshrc"))
 	if !strings.Contains(rc, zshBlock) {
 		t.Fatalf("no block in .zshrc:\n%s", rc)
 	}
@@ -296,9 +273,7 @@ func TestUnsafeVersionIsRefused(t *testing.T) {
 
 // with no controlling terminal /dev/tty exists but can't be opened: the installer prints the hint, not a shell error
 func TestNoControllingTerminalPrintsHint(t *testing.T) {
-	if !onPath("setsid") {
-		t.Skip("setsid is not installed")
-	}
+	testkit.Need(t, "setsid")
 	r := newRelease(t)
 	res := r.e.RunCmd(testkit.Opts{Env: map[string]string{
 		"PATH":                   r.stubs + ":" + r.e.Vars["PATH"],

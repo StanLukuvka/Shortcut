@@ -15,9 +15,9 @@ const bufSize = 8192
 // exit is a variable so a test can see Abort141 without ending the test binary.
 var exit = os.Exit
 
-// Streams is shortcut's stdin, stdout and stderr (= SafeOutput over sys.std*). Out and Err run every Write through
+// Streams is shortcut's stdin, stdout and stderr. Out and Err run every Write through
 // Safe and backslashReplace; WriteStyled skips Safe, for our own colour codes. A closed fd 0/1/2 needs no case: since Go 1.22 the
-// runtime reopens it on /dev/null before main, so writes succeed and are discarded (C22).
+// runtime reopens it on /dev/null before main, so writes succeed and are discarded.
 type Streams struct {
 	In       *os.File
 	Out, Err *Writer
@@ -55,20 +55,17 @@ func (w *Writer) File() *os.File { return w.f }
 // IsTerminal is isatty on the stream: the diff colour and pager (stdout), the dim "→ dir" line (stderr).
 func (w *Writer) IsTerminal() bool { return w.tty }
 
-// Write is io.Writer through Safe. A reader that has gone ends the process with 141.
-// After Safe, backslashreplace on both streams: Python decodes argv with surrogateescape, so a stray byte 0xNN is
+// WriteString writes text to the stream through Safe, then backslashReplace, and returns len(text). A write that fails
+// with EPIPE (a reader that has gone) ends the process with 141; any other error is returned.
+// The backslash escapes apply on both streams: Python decodes argv with surrogateescape, so a stray byte 0xNN is
 // U+DCNN there and stderr (errors='backslashreplace') prints \udcnn; a lone surrogate (kept as WTF-8 ED A0..BF xx) prints
 // \udxxx. Python's stdout is strict and would crash on such text; Go prints the same escapes there instead (deliberate
-// divergence, plan §4.7), so no raw byte such as 0x9b (CSI on an 8-bit terminal) reaches a terminal.
-func (w *Writer) Write(p []byte) (int, error) {
-	return len(p), w.put(backslashReplace(Safe(string(p))))
-}
-
+// divergence), so no raw byte such as 0x9b (CSI on an 8-bit terminal) reaches a terminal.
 func (w *Writer) WriteString(text string) (int, error) {
 	return len(text), w.put(backslashReplace(Safe(text)))
 }
 
-// WriteStyled is write_styled: past Safe, but not past the escape. Everything from a file must already be Safe.
+// WriteStyled writes past Safe, but not past the escape. Everything from a file must already be Safe.
 func (w *Writer) WriteStyled(text string) error { return w.put(backslashReplace(text)) }
 
 func (w *Writer) put(text string) error {

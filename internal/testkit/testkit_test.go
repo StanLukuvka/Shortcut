@@ -132,7 +132,7 @@ func TestInTerminal_StdoutToFile(t *testing.T) {
 	e := New(t)
 	useBinary(t, e, `printf 'name? ' >&2; read x; echo "out:$x"; test -t 1 && echo tty || echo notty`+"\n")
 	file := filepath.Join(e.Tmp, "out.txt")
-	code, out := e.InTerminalStdoutTo(Opts{}, file, []Key{{Wait: "name? ", Send: []byte("amy\n")}})
+	code, out := e.InTerminal(Opts{StdoutTo: file}, []Key{{Wait: "name? ", Send: []byte("amy\n")}})
 	got, _ := os.ReadFile(file)
 	if code != 0 || string(got) != "out:amy\nnotty\n" || strings.Contains(out, "out:amy\r\nnotty") {
 		t.Errorf("code %d, file %q, terminal %q", code, got, out)
@@ -154,8 +154,8 @@ func TestFixtures_RegistryHelpers(t *testing.T) {
 	e := New(t)
 	proj := e.Project(GO)
 	store := filepath.Join(proj, ".shortcuts")
-	if e.RegistryPath(store) != store || e.RegistryPath(e.Store) != filepath.Join(e.Store, "shortcuts.json") ||
-		e.RegistryPath(proj) != filepath.Join(proj, "shortcuts.json") {
+	if e.registryPath(store) != store || e.registryPath(e.Store) != filepath.Join(e.Store, "shortcuts.json") ||
+		e.registryPath(proj) != filepath.Join(proj, "shortcuts.json") {
 		t.Error("RegistryPath")
 	}
 	e.WriteStore(e.Store, OWN)
@@ -172,26 +172,10 @@ func TestFixtures_RegistryHelpers(t *testing.T) {
 		t.Errorf("global import: %s", g)
 	}
 	// <, > and & stay as written, and a raw file keeps its key order.
-	e.WriteRegistry(e.Store, map[string]any{"a": "<&>"})
+	e.writeRegistry(e.Store, map[string]any{"a": "<&>"})
 	e.WriteRegistryRaw(e.Store, `{"z":1,"a":2}`)
 	if b, _ := os.ReadFile(filepath.Join(e.Store, "shortcuts.json")); string(b) != `{"z":1,"a":2}` {
 		t.Errorf("raw = %s", b)
-	}
-}
-
-func TestInstallBundled_PutsShortcutOnPathAndImportsTemplates(t *testing.T) {
-	e := New(t)
-	useBinary(t, e, `echo "$@" > "$HOME/init-args"`+"\n")
-	e.InstallBundled()
-	got, _ := os.ReadFile(filepath.Join(e.Home, "init-args"))
-	if want := "init --global " + filepath.Join(moduleRoot(), "templates") + " -y\n"; string(got) != want {
-		t.Errorf("init ran %q, want %q", got, want)
-	}
-	if res := e.RunCmd(Opts{}, "sh", "-c", "command -v shortcut"); strings.TrimSpace(res.Stdout) != filepath.Join(e.ToolBin, "shortcut") {
-		t.Errorf("shortcut on PATH: %q", res.Stdout)
-	}
-	if fi, err := os.Lstat(filepath.Join(e.ToolBin, "shortcut")); err != nil || fi.Mode()&os.ModeSymlink == 0 {
-		t.Errorf("not a link: %v", err)
 	}
 }
 

@@ -13,7 +13,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
-// cmdRun is cmd_run: --global, -y and --yes are the only options it reads, and only before the name; everything
+// cmdRun runs a shortcut. --global, -y and --yes are the only options it reads, and only before the name; everything
 // after that, -h included, is the shortcut's.
 func cmdRun(s *textio.Streams, args []string) error {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
@@ -32,7 +32,7 @@ func cmdRun(s *textio.Streams, args []string) error {
 	return runShortcut(s, args, skipLocal, assumeYes)
 }
 
-// runShortcut is run_shortcut: approval, the confirmation, arguments and the child process, which replaces this one.
+// runShortcut handles approval, the confirmation, arguments and the child process, which replaces this one.
 // It returns only when something stops the run.
 func runShortcut(s *textio.Streams, words []string, skipLocal, assumeYes bool) error {
 	callerCwd, err := pyos.Getwd()
@@ -57,7 +57,7 @@ func runShortcut(s *textio.Streams, words []string, skipLocal, assumeYes bool) e
 			return err
 		}
 	}
-	if st, err := os.Stat(resolved.RunCwd); err != nil || !st.IsDir() {
+	if !pyos.IsDir(resolved.RunCwd) {
 		return errors.New("run directory does not exist: " + resolved.RunCwd)
 	}
 	withArgs := ""
@@ -80,16 +80,12 @@ func runShortcut(s *textio.Streams, words []string, skipLocal, assumeYes bool) e
 		if entry.Description == "(no description)" || (entry.Inline != nil && entry.Description == *entry.Inline) {
 			message = ""
 		}
-		granted, err := textio.Confirm{
+		if err := confirmed(s, textio.Confirm{
 			Question:   "run '" + name + "'" + withArgs + " in " + realCwd + "?",
 			NoTerminal: "'" + name + "' asks for confirmation: run it in a terminal, or pass -y (" + oneLine(pyos.ShellJoin(again)) + ")",
 			Message:    message,
-		}.Granted(s, assumeYes)
-		if err != nil {
+		}, assumeYes); err != nil {
 			return err
-		}
-		if !granted {
-			return &ExitError{Code: 1}
 		}
 		// again: the files could change while the question waited
 		if err := approval.Require(resolved.Group); err != nil {
@@ -180,17 +176,4 @@ func childCommand(resolved *model.ResolvedShortcut, entry *model.Entry, name str
 		return append(append(parts, path), args...), nil
 	}
 	return append([]string{"bash", path}, args...), nil
-}
-
-// splitOnce is str.split(None, 1): the first word and what follows it, if anything.
-func splitOnce(s string) []string {
-	s = strings.TrimLeftFunc(s, isPySpace)
-	if s == "" {
-		return nil
-	}
-	i := strings.IndexFunc(s, isPySpace)
-	if i < 0 {
-		return []string{s}
-	}
-	return []string{s[:i], strings.TrimLeftFunc(s[i:], isPySpace)}
 }

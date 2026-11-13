@@ -1,12 +1,23 @@
 package cli
 
-import "github.com/StanLukuvka/Shortcut/internal/textio"
+import (
+	"embed"
+
+	"github.com/StanLukuvka/Shortcut/internal/textio"
+)
+
+//go:embed completion/*.txt
+var completionFiles embed.FS
 
 func cmdCompletion(s *textio.Streams, args []string) error {
 	ns, err := parsers["completion"].Parse(args)
 	if err != nil {
 		return err
 	}
-	_, err = s.Out.WriteString(completionScripts[ns.Str("shell")])
+	script, err := completionFiles.ReadFile("completion/" + ns.Str("shell") + ".txt")
+	if err != nil {
+		return err
+	}
+	_, err = s.Out.WriteString(string(script))
 	return err
 }

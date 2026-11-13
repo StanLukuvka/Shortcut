@@ -22,6 +22,7 @@ type Opts struct {
 	Env      map[string]string // overrides on top of Env.Vars
 	Input    *string           // nil = /dev/null as stdin
 	Timeout  time.Duration     // default 60s (15s on a terminal)
+	StdoutTo string            // InTerminal only: a file (inside Tmp) that gets stdout instead of the terminal
 	CloseFDs []int             // of 0, 1, 2: RunCmd starts the program with these closed, as `sh -c 'cmd >&-'` does
 }
 
@@ -31,7 +32,7 @@ type Result struct {
 	Stdout, Stderr string
 }
 
-// launch is where every child starts (= launch_args): the cwd and env for it, after refusing any that leave the
+// launch is where every child starts the cwd and env for it, after refusing any that leave the
 // sandbox. The process's own env is checked too, as in-process code reads it. PWD is the cwd unless Opts.Env says
 // otherwise (the symlinked-cwd tests set it to the link).
 func (e *Env) launch(o Opts) (cwd string, env []string) {
@@ -153,7 +154,7 @@ func (e *Env) ensureToolBin() {
 	}
 }
 
-// Proc is a process left running (= popen_cli).
+// Proc is a process left running.
 type Proc struct {
 	e    *Env
 	cmd  *exec.Cmd
@@ -245,7 +246,7 @@ func (e *Env) BashComplete(words ...string) []string {
 	return offered
 }
 
-// shquote is shlex.join.
+// shquote joins words into one shell-quoted string, as shlex.join does.
 func shquote(words []string) string {
 	q := make([]string, len(words))
 	for i, w := range words {

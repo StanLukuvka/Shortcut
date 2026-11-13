@@ -1,0 +1,439 @@
+The Go code is a port of the Python version at commit python-final (9b132af).
+This file maps Go names to the Python names they came from.
+
+[installer]
+TestInstallScriptDryRun -> test_bundled.py::test_install_script_dry_run
+
+[internal/approval]
+ConfirmReview -> confirm_review
+DiffFiles -> diff_files
+Load -> load_approval
+Require -> require_approved
+Save -> save_approval
+State -> approval_state
+TestApproval_ABinaryReplacingTextSaysSoAndTextReplacingABinaryShows -> test_approval.py::test_a_binary_replacing_text_says_so_and_text_replacing_a_binary_shows
+TestApproval_AScriptCannotStandInForACwdRecord -> test_approval.py::test_a_script_cannot_stand_in_for_a_cwd_record
+TestApproval_ATextFileCannotForgeEitherMark -> test_approval.py::test_a_text_file_cannot_forge_either_mark
+TestApproval_DiffDetails -> test_approval.py::test_diff_details
+TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles -> test_approval.py::test_invalid_utf8_and_its_escaped_text_are_different_files
+displayPath -> display_path
+entryFiles -> entry_files
+filesHash -> files_hash
+hashInput -> json.dumps(sorted(files.items()))
+
+[internal/cli]
+Die -> die()
+Main -> main()
+Namespace -> argparse's Namespace
+Parse -> parse_args
+TestApproval_ABinaryNeedsTypingOutAtThePrompt -> test_approval.py::test_a_binary_needs_typing_out_at_the_prompt
+TestApproval_ACwdWithANulDoesNotStopTheToolsThatFindIt -> test_approval.py::test_a_cwd_with_a_nul_does_not_stop_the_tools_that_find_it
+TestApproval_ANamespaceApprovalCoversItsWholeScriptsFolder -> test_approval.py::test_a_namespace_approval_covers_its_whole_scripts_folder
+TestApproval_ANamespaceApprovedInOneProjectIsNewInAnother -> test_approval.py::test_a_namespace_approved_in_one_project_is_new_in_another
+TestApproval_ANulCannotHideAScriptBashWouldRun -> test_approval.py::test_a_nul_cannot_hide_a_script_bash_would_run
+TestApproval_AScriptChangedWhileConfirmWaitsDoesntRun -> test_approval.py::test_a_script_changed_while_confirm_waits_doesnt_run
+TestApproval_ApprovingSaysWhatItCovers -> test_approval.py::test_approving_says_what_it_covers
+TestApproval_BlocksUntilApprovedAndAfterAnyChange -> test_approval.py::test_approval_blocks_until_approved_and_after_any_change
+TestApproval_CoversAProjectScriptLinkedFromOutside -> test_approval.py::test_approval_covers_a_project_script_linked_from_outside
+TestApproval_IsKeptOutsideWhatItApproves -> test_approval.py::test_approval_is_kept_outside_what_it_approves
+TestApproval_NonUTF8Script -> test_approval.py::test_non_utf8_script
+TestApproval_OneChangedGroupLeavesTheOthersRunning -> test_approval.py::test_one_changed_group_leaves_the_others_running
+TestApproval_PromptInTerminalAndColour -> test_approval.py::test_approval_prompt_in_terminal_and_colour
+TestApproval_SwappingTwoApprovedNamespacesNeedsApproval -> test_approval.py::test_swapping_two_approved_namespaces_needs_approval
+TestBrokenStores_ListWarnsAboutEveryEntryThatCannotRun -> test_stores.py::test_list_warns_about_every_entry_that_cannot_run
+TestBundledDesktop_TakesANamespaceMember -> test_bundled.py::test_bundled_desktop_takes_a_namespace_member
+TestBundled_DesktopEntryQuoting -> test_bundled.py::test_bundled_desktop_entry_quoting
+TestBundled_DesktopRefusesAProjectShortcut -> test_bundled.py::test_bundled_desktop_refuses_a_project_shortcut
+TestBundled_DesktopRemoveDeletesOnlyItsOwnLauncher -> test_bundled.py::test_desktop_remove_deletes_only_its_own_launcher
+TestBundled_EditOpensTheScriptOrTheDefiningFile -> test_bundled.py::test_bundled_edit_opens_the_script_or_the_defining_file
+TestBundled_NanoLoggedAndDesktop -> test_bundled.py::test_bundled_nano_logged_and_desktop
+TestBundled_ScriptsDontImportFromTheCallersFolder -> test_bundled.py::test_bundled_scripts_dont_import_from_the_callers_folder
+TestBundled_Templates -> test_bundled.py::test_bundled_templates
+TestCompletion_Bash -> test_completion.py::test_completion_bash
+TestCompletion_BashPastFlagsAndIntoNamespaces -> test_completion.py::test_bash_completion_past_flags_and_into_namespaces
+TestCompletion_ZshAndFish -> test_completion.py::test_completion_zsh_and_fish
+TestEntries_CommandsThatTakeANameShowHowMany -> test_stores.py::test_commands_that_take_a_name_show_how_many
+TestEveryMessageIsInTheTable -> test_errors.py::test_every_message_is_in_the_table
+TestExport_InitFromAProjectImportsOnlyExportedEntries -> test_export.py::test_init_from_a_project_imports_only_exported_entries
+TestExport_InitSkipsAnExportedCwdThatIsntHere -> test_export.py::test_init_skips_an_exported_cwd_that_isnt_here
+TestExport_IsRefusedInTheGlobalStoreAndNamespaces -> test_export.py::test_export_is_refused_in_the_global_store_and_namespaces
+TestExport_MustBeABoolean -> test_export.py::test_export_must_be_a_boolean
+TestExport_TheLocalFileCanExport -> test_export.py::test_the_local_file_can_export
+TestExport_UpdateDoesntWarnAboutOtherCwds -> test_export.py::test_update_doesnt_warn_about_other_cwds
+TestExport_UpdateWarnsAboutAnExportedRelativeCwdAndApproves -> test_export.py::test_update_warns_about_an_exported_relative_cwd_and_approves
+TestFrom_IsRefusedInAProjectAndANamespace -> test_promote.py::test_from_is_refused_in_a_project_and_a_namespace
+TestFrom_MustBeSourceAndName -> test_promote.py::test_from_must_be_source_and_name
+TestFrom_OriginIsNotAJSONField -> test_promote.py::test_origin_is_not_a_json_field
+TestFrom_ShowPrintsWhereItCameFrom -> test_promote.py::test_show_prints_where_it_came_from
+TestImportSkips_ASourceWithAShortcutsFileSaysWhatItLeavesOut -> test_import.py::test_a_source_with_a_shortcuts_file_says_what_it_leaves_out
+TestImport_AFolderOfNamespacesIsCopiedIntoImportsAndNeedsApproving -> test_import.py::test_a_folder_of_namespaces_is_copied_into_imports_and_needs_approving
+TestImport_ANamespaceComesWholeOrNotAtAll -> test_import.py::test_a_namespace_comes_whole_or_not_at_all
+TestImport_ASourceNeedsAProjectFile -> test_import.py::test_a_source_needs_a_project_file
+TestImport_AnImportNeverReplacesAStoredScript -> test_import.py::test_an_import_never_replaces_a_stored_script
+TestImport_DecliningAnImportWritesNothingAtAll -> test_import.py::test_declining_an_import_writes_nothing_at_all
+TestImport_ImportCopiesWhatWasReviewed -> test_import.py::test_import_copies_what_was_reviewed
+TestImport_ImportWithAClosedStdoutStillImports -> test_import.py::test_import_with_a_closed_stdout_still_imports
+TestImport_ImportWithNothingNewAsksNothing -> test_import.py::test_import_with_nothing_new_asks_nothing
+TestImport_ImportingACollectionIsReviewedFirst -> test_import.py::test_importing_a_collection_is_reviewed_first
+TestImport_InitGitSourceClone -> test_import.py::test_init_git_source_clone
+TestImport_InitGlobalMergeSkips -> test_import.py::test_init_global_merge_skips
+TestImport_InitGlobalSkipsANamespaceName -> test_import.py::test_init_global_skips_a_namespace_name
+TestImport_InitSkipsInvalidEntries -> test_import.py::test_init_skips_invalid_entries
+TestImport_InitSourceGlobalCwdRetention -> test_import.py::test_init_source_global_cwd_retention
+TestImport_InitSourceWithoutGlobalIsRefused -> test_import.py::test_init_source_without_global_is_refused
+TestImport_ReplaceLeavesAnImportFromElsewhereAndAProjectSource -> test_import.py::test_replace_leaves_an_import_from_elsewhere_and_a_project_source
+TestImport_ReplacePutsANamespaceInPlaceOfTheInstalledOne -> test_import.py::test_replace_puts_a_namespace_in_place_of_the_installed_one
+TestNew_EmptyDescOnCopyIsReplaced -> cli.py:145,175 store `parsed.desc or "(no description)"`: an empty --desc on --copy counts as none.
+TestNew_EmptyDescOnPlainNewIsKept -> cli.py:100,122 keep an explicit empty --desc (`is not None`) on a plain new.
+TestOutputSafety_AClosedStreamChangesNothing -> test_output_safety.py::test_a_closed_stream_changes_nothing
+TestOutputSafety_ATerminalPromptCannotBeForged -> test_output_safety.py::test_a_terminal_prompt_cannot_be_forged
+TestOutputSafety_EscapeCodesInADiffCannotTouchTheTerminal -> test_output_safety.py::test_escape_codes_in_a_diff_cannot_touch_the_terminal
+TestOutputSafety_HelpStaysPlainOnATerminal -> test_output_safety.py::test_help_stays_plain_on_a_terminal
+TestOutputSafety_StoredTextCannotRewriteTheTerminal -> test_output_safety.py::test_stored_text_cannot_rewrite_the_terminal
+TestProjectFiles_ACLIWriteDoesNotApproveAChangeToShared -> test_project_files.py::test_a_cli_write_does_not_approve_a_change_to_shared
+TestProjectFiles_ACLIWriteDoesNotApproveAHandEditToLocal -> test_project_files.py::test_a_cli_write_does_not_approve_a_hand_edit_to_local
+TestProjectFiles_ACLIWriteToAFreshCloneDoesNotApproveShared -> test_project_files.py::test_a_cli_write_to_a_fresh_clone_does_not_approve_shared
+TestProjectFiles_ACliWriteKeepsTheApproval -> test_project_files.py::test_a_cli_write_keeps_the_approval
+TestProjectFiles_ADiffMarksWhatLocalOverridesOrHides -> test_project_files.py::test_a_diff_marks_what_local_overrides_or_hides
+TestProjectFiles_AHandEditToLocalNeedsApproving -> test_project_files.py::test_a_hand_edit_to_local_needs_approving
+TestProjectFiles_AHiddenNameIsNotOffered -> test_project_files.py::test_a_hidden_name_is_not_offered
+TestProjectFiles_ALocalFileFromACloneNeedsApproving -> test_project_files.py::test_a_local_file_from_a_clone_needs_approving
+TestProjectFiles_ANewLocalFileIsExcludedFromGitOnce -> test_project_files.py::test_a_new_local_file_is_excluded_from_git_once
+TestProjectFiles_ANullLetsAGlobalShortcutOfThatNameThrough -> test_project_files.py::test_a_null_lets_a_global_shortcut_of_that_name_through
+TestProjectFiles_AProjectCanBeACollection -> test_project_files.py::test_a_project_can_be_a_collection
+TestProjectFiles_AProjectCanBeOnlyALocalFile -> test_project_files.py::test_a_project_can_be_only_a_local_file
+TestProjectFiles_AScriptNamedInLocalIsCovered -> test_project_files.py::test_a_script_named_in_local_is_covered
+TestProjectFiles_AWriteWithoutLocalIsRefusedForAProjectEntry -> test_project_files.py::test_a_write_without_local_is_refused_for_a_project_entry
+TestProjectFiles_ImportsStayInTheSharedFile -> test_project_files.py::test_imports_stay_in_the_shared_file
+TestProjectFiles_ListShowsEachEntrysSource -> test_project_files.py::test_list_shows_each_entrys_source
+TestProjectFiles_LocalAddsReplacesAWholeEntryAndHides -> test_project_files.py::test_local_adds_replaces_a_whole_entry_and_hides
+TestProjectFiles_LocalOnlyWorksAtTheProjectRoot -> test_project_files.py::test_local_only_works_at_the_project_root
+TestProjectFiles_NewLocalOverridesASharedNameAndSaysSo -> test_project_files.py::test_new_local_overrides_a_shared_name_and_says_so
+TestProjectFiles_NewLocalTakesACommandAndAddRecordsThePath -> test_project_files.py::test_new_local_takes_a_command_and_add_records_the_path
+TestProjectFiles_OutsideGitNothingIsExcluded -> test_project_files.py::test_outside_git_nothing_is_excluded
+TestProjectFiles_RelativePathsResolveFromTheProjectRootInBothFiles -> test_project_files.py::test_relative_paths_resolve_from_the_project_root_in_both_files
+TestProjectFiles_RmLocalHidesASharedEntryAndUndoesItself -> test_project_files.py::test_rm_local_hides_a_shared_entry_and_undoes_itself
+TestProjectFiles_RmLocalOfAnOverrideBringsTheSharedEntryBack -> test_project_files.py::test_rm_local_of_an_override_brings_the_shared_entry_back
+TestProjectFiles_RmLocalSaysTheSharedEntryAppliesAgain -> test_project_files.py::test_rm_local_says_the_shared_entry_applies_again
+TestProjectFiles_ShowJSONSaysWhichFileAnEntryComesFrom -> test_project_files.py::test_show_json_says_which_file_an_entry_comes_from
+TestProjectFiles_ShowNamesTheFileThatDefinesIt -> test_project_files.py::test_show_names_the_file_that_defines_it
+TestProjectFiles_TheCliNeverWritesTheSharedFile -> test_project_files.py::test_the_cli_never_writes_the_shared_file
+TestPromote_AGlobalNameClashNeedsAs -> test_promote.py::test_a_global_name_clash_needs_as
+TestPromote_AMissingRunDirectoryFailsLoudly -> test_promote.py::test_a_missing_run_directory_fails_loudly
+TestPromote_AnEntryThatIsntExportedNeedsForce -> test_promote.py::test_an_entry_that_isnt_exported_needs_force
+TestPromote_AnExportedEntryPromotesWithoutItsExport -> test_promote.py::test_an_exported_entry_promotes_without_its_export
+TestPromote_AnInlineEntryFromTheLocalFileKeepsItsFields -> test_promote.py::test_an_inline_entry_from_the_local_file_keeps_its_fields
+TestPromote_BashCompletionOffersPromoteFlags -> test_promote.py::test_bash_completion_offers_promote_flags
+TestPromote_ForcePointsAtTheCheckoutAndCopiesNothing -> test_promote.py::test_force_points_at_the_checkout_and_copies_nothing
+TestPromote_InATerminalItShowsTheEntryAndWarningThenAsks -> test_promote.py::test_in_a_terminal_it_shows_the_entry_and_warning_then_asks
+TestPromote_InitSkipsAnEntryWithFrom -> test_promote.py::test_init_skips_an_entry_with_from
+TestPromote_ItRunsTheProjectScriptAsItIsNow -> test_promote.py::test_it_runs_the_project_script_as_it_is_now
+TestPromote_NeedsApprovalFirst -> test_promote.py::test_promote_needs_approval_first
+TestPromote_OnlyAProjectShortcutFromInsideAProject -> test_promote.py::test_only_a_project_shortcut_from_inside_a_project
+TestPromote_WithoutATerminalItNeedsY -> test_promote.py::test_without_a_terminal_it_needs_y
+TestRunning_AClosedPipeStopsQuietly -> test_running.py::test_a_closed_pipe_stops_quietly
+TestRunning_AClosedStdoutIsTheShortcutsProblem -> test_running.py::test_a_closed_stdout_is_the_shortcuts_problem
+TestRunning_AHandWrittenInvalidNameDoesntRun -> test_running.py::test_a_hand_written_invalid_name_doesnt_run
+TestRunning_ANameAloneNeverRunsAShortcut -> test_running.py::test_a_name_alone_never_runs_a_shortcut
+TestRunning_ARunKeepsTheRealTerminal -> test_running.py::test_a_run_keeps_the_real_terminal
+TestRunning_ARunThatCantStartIsAnError -> test_running.py::test_a_run_that_cant_start_is_an_error
+TestRunning_AScriptWithWindowsLineEndingsSaysSo -> test_running.py::test_a_script_with_windows_line_endings_says_so
+TestRunning_AShortcutStartsWithSigpipeOn -> test_running.py::test_a_shortcut_starts_with_sigpipe_on
+TestRunning_AnEmptyWordDoesntFillARequiredArgument -> test_running.py::test_an_empty_word_doesnt_fill_a_required_argument
+TestRunning_ArgsThatWouldShareAVariableAreRefused -> test_running.py::test_args_that_would_share_a_variable_are_refused
+TestRunning_CommandWordsAreOrdinaryShortcutNames -> test_running.py::test_command_words_are_ordinary_shortcut_names
+TestRunning_Confirm -> test_running.py::test_confirm
+TestRunning_CtrlCReachesTheShortcut -> test_running.py::test_ctrl_c_reaches_the_shortcut
+TestRunning_DeclaredArgs -> test_running.py::test_declared_args
+TestRunning_ExitCodeAndSignalsPassStraightThrough -> test_running.py::test_exit_code_and_signals_pass_straight_through
+TestRunning_HelpNamesACommand -> test_running.py::test_help_names_a_command
+TestRunning_InvalidArgsDeclarationIsAnError -> test_running.py::test_invalid_args_declaration_is_an_error
+TestRunning_NewDeclaresArgs -> test_running.py::test_new_declares_args
+TestRunning_NewDeclaresRestArgsAndDescs -> test_running.py::test_new_declares_rest_args_and_descs
+TestRunning_NewSaysWhenACommandIgnoresArguments -> test_running.py::test_new_says_when_a_command_ignores_arguments
+TestRunning_RIsShortForRun -> test_running.py::test_r_is_short_for_run
+TestRunning_RunCwdModes -> test_running.py::test_run_cwd_modes
+TestRunning_RunDirectoryLine -> test_running.py::test_run_directory_line
+TestRunning_RunHelp -> test_running.py::test_run_help
+TestRunning_RunInlineWithPassthroughArgs -> test_running.py::test_run_inline_with_passthrough_args
+TestRunning_RunWithoutANameIsAnError -> test_running.py::test_run_without_a_name_is_an_error
+TestRunning_ScriptShebangWithoutExecAndElf -> test_running.py::test_script_shebang_without_exec_and_elf
+TestRunning_SeveralWordCommandsKeepPositionalArgumentsLive -> test_running.py::test_several_word_commands_keep_positional_arguments_live
+TestRunning_ShowJSONIsOneObjectWithWhereItResolves -> test_running.py::test_show_json_is_one_object_with_where_it_resolves
+TestRunning_ShowJSONNamesANamespaceEntryBare -> test_running.py::test_show_json_names_a_namespace_entry_bare
+TestRunning_ShowJSONPrintsAnEntryShowRefuses -> test_running.py::test_show_json_prints_an_entry_show_refuses
+TestRunning_ShowPrintsTheEntryScriptCwdAndArgs -> test_running.py::test_show_prints_the_entry_script_cwd_and_args
+TestRunning_ShowSaysWhenTheRunDirectoryOrScriptIsGone -> test_running.py::test_show_says_when_the_run_directory_or_script_is_gone
+TestRunning_TheEnvironmentSaysWhatRunsAndFromWhere -> test_running.py::test_the_environment_says_what_runs_and_from_where
+TestRunning_UnknownCommandsPointToRun -> test_running.py::test_unknown_commands_point_to_run
+TestShow_ReadsPastABrokenProject -> the show and location lines of test_broken_project_stops_every_run_inside_it and test_broken_project_refuses_a_namespace_it_imported.
+TestStoreChecks_AnEmptyListSaysHowToStart -> test_stores.py::test_an_empty_list_says_how_to_start
+TestStores_ABareShortcutFileIsRefusedWithWhy -> test_stores.py::test_a_bare_shortcut_file_is_refused_with_why
+TestStores_AFifoScriptNeverBlocks -> test_stores.py::test_a_fifo_script_never_blocks
+TestStores_AProjectNamespaceOverAGlobalOneIsAnnounced -> test_stores.py::test_a_project_namespace_over_a_global_one_is_announced
+TestStores_AProjectShortcutOverAGlobalNamespaceIsAnnounced -> test_stores.py::test_a_project_shortcut_over_a_global_namespace_is_announced
+TestStores_ARepairedProjectRunsAgain -> test_stores.py::test_a_repaired_project_runs_again
+TestStores_ASymlinkedStoreFileIsWrittenWhereItLeads -> test_stores.py::test_a_symlinked_store_file_is_written_where_it_leads
+TestStores_AVersionThatIsntAWholeNumberIsRefused -> test_stores.py::test_a_version_that_isnt_a_whole_number_is_refused
+TestStores_AddAndLinkPaths -> test_stores.py::test_add_and_link_paths
+TestStores_AnEntryWithBothInlineAndScriptIsRefused -> test_stores.py::test_an_entry_with_both_inline_and_script_is_refused
+TestStores_AnUnknownTopLevelFieldStopsTheProjectToo -> test_stores.py::test_an_unknown_top_level_field_stops_the_project_too
+TestStores_ArgsNeedANameThatIsAString -> test_stores.py::test_args_need_a_name_that_is_a_string
+TestStores_BrokenGlobalStoreStillReports -> test_stores.py::test_broken_global_store_still_reports
+TestStores_BrokenProjectRefusesANamespaceItImported -> test_stores.py::test_broken_project_refuses_a_namespace_it_imported
+TestStores_BrokenProjectStopsEveryRunInsideIt -> test_stores.py::test_broken_project_stops_every_run_inside_it
+TestStores_CliWritesKeepAnApprovedNamespaceApproved -> test_stores.py::test_cli_writes_keep_an_approved_namespace_approved
+TestStores_ConcurrentNewKeepsEveryEntry -> test_stores.py::test_concurrent_new_keeps_every_entry
+TestStores_CreationScopeRules -> test_stores.py::test_creation_scope_rules
+TestStores_DecliningRmExits1 -> test_stores.py::test_declining_rm_exits_1
+TestStores_DefaultHomeStoreIsNeverAProject -> test_stores.py::test_default_home_store_is_never_a_project
+TestStores_GlobalFlagReachesAHiddenShortcut -> test_stores.py::test_global_flag_reaches_a_hidden_shortcut
+TestStores_GroupDescriptionShowsOnceApproved -> test_stores.py::test_group_description_shows_once_approved
+TestStores_ImportsMustBeShortcutFiles -> test_stores.py::test_imports_must_be_shortcut_files
+TestStores_InitDoesNotCreateAProject -> test_stores.py::test_init_does_not_create_a_project
+TestStores_InitGlobalLeavesAnExistingStoreAlone -> test_stores.py::test_init_global_leaves_an_existing_store_alone
+TestStores_ListAndNames -> test_stores.py::test_list_and_names
+TestStores_ListNamesOfANamespace -> test_stores.py::test_list_names_of_a_namespace
+TestStores_LocalOnlyUsesAStoreInThisDirectory -> test_stores.py::test_local_only_uses_a_store_in_this_directory
+TestStores_LocalRefusesAnywhereInTheGlobalStore -> test_stores.py::test_local_refuses_anywhere_in_the_global_store
+TestStores_LocalShortcutHidingGlobalWarns -> test_stores.py::test_local_shortcut_hiding_global_warns
+TestStores_LocationPrintsABarePathOrFails -> test_stores.py::test_location_prints_a_bare_path_or_fails
+TestStores_MalformedEntriesNeverCrash -> test_stores.py::test_malformed_entries_never_crash
+TestStores_NamespaceCollisionAndNestingErrors -> test_stores.py::test_namespace_collision_and_nesting_errors
+TestStores_NamespaceDispatch -> test_stores.py::test_namespace_dispatch
+TestStores_NamespaceFlagCollisions -> test_stores.py::test_namespace_flag_collisions
+TestStores_NamespaceFlagCreatesANamespace -> test_stores.py::test_namespace_flag_creates_a_namespace
+TestStores_NamespaceFlagIsRefusedWithLocal -> test_stores.py::test_namespace_flag_is_refused_with_local
+TestStores_NamespaceFlagKeepsEachGroupsScriptsApart -> test_stores.py::test_namespace_flag_keeps_each_groups_scripts_apart
+TestStores_NamespaceFromImportsKey -> test_stores.py::test_namespace_from_imports_key
+TestStores_NewInANamespaceGivesItsScriptPath -> test_stores.py::test_new_in_a_namespace_gives_its_script_path
+TestStores_NewInHomeRefusesLocalStore -> test_stores.py::test_new_in_home_refuses_local_store
+TestStores_NewOneLinerAndTemplate -> test_stores.py::test_new_oneliner_and_template
+TestStores_NewOpensNoEditorAndPrintsTheScriptPath -> test_stores.py::test_new_opens_no_editor_and_prints_the_script_path
+TestStores_NewScriptInsideTheStoreIsKeptRelative -> test_stores.py::test_new_script_inside_the_store_is_kept_relative
+TestStores_NewTakesOneSource -> test_stores.py::test_new_takes_one_source
+TestStores_NewerStoreIsRefusedNotRewritten -> test_stores.py::test_newer_store_is_refused_not_rewritten
+TestStores_RmInABrokenProjectNeverReachesAGlobalOne -> test_stores.py::test_rm_in_a_broken_project_never_reaches_a_global_one
+TestStores_RmInteractiveAndForce -> test_stores.py::test_rm_interactive_and_force
+TestStores_RmKeepsAScriptFileThatLivesInTheScriptsFolder -> test_stores.py::test_rm_keeps_a_script_file_that_lives_in_the_scripts_folder
+TestStores_RmLocalHidesANameWhenTheProjectFileCantBeRead -> test_stores.py::test_rm_local_hides_a_name_when_the_project_file_cant_be_read
+TestStores_RmMalformedEntry -> test_stores.py::test_rm_malformed_entry
+TestStores_RmNamespaceImportedFromElsewhereKeepsItsFiles -> test_stores.py::test_rm_namespace_imported_from_elsewhere_keeps_its_files
+TestStores_RmNamespaceRemovesItWithItsScriptsFolderAndApproval -> test_stores.py::test_rm_namespace_removes_it_with_its_scripts_folder_and_approval
+TestStores_RmSaysWhatItRemovesAndWhatHappensToTheScript -> test_stores.py::test_rm_says_what_it_removes_and_what_happens_to_the_script
+TestStores_RmYStillSaysWhatItRemoved -> test_stores.py::test_rm_y_still_says_what_it_removed
+TestStores_ShortcutFileNeedsTheCurrentVersion -> test_stores.py::test_shortcut_file_needs_the_current_version
+TestStores_ShowAndLocation -> test_stores.py::test_show_and_location
+TestStores_UnknownFieldsAreErrors -> test_stores.py::test_unknown_fields_are_errors
+TestStores_UnknownTopLevelFieldStopsAGlobalShortcut -> test_stores.py::test_unknown_top_level_field_stops_a_global_shortcut
+TestStores_UpdateRefusesEntriesThatCannotRun -> test_stores.py::test_update_refuses_entries_that_cannot_run
+TestSymlinkSafety_ARunWritesNothingInTheProjectOrTheStore -> test_symlink_safety.py::test_a_run_writes_nothing_in_the_project_or_the_store
+TestSymlinkSafety_InitSkipsSymlinkedSourceScript -> test_symlink_safety.py::test_init_skips_symlinked_source_script
+TestSymlinkSafety_LocalNeverWritesThroughACommittedSymlink -> test_symlink_safety.py::test_local_never_writes_through_a_committed_symlink
+TestSymlinkSafety_MovingASymlinkUnderARelativeCwdNeedsApproval -> test_symlink_safety.py::test_moving_a_symlink_under_a_relative_cwd_needs_approval
+applyImport -> apply_import
+applyNamespaces -> apply_namespaces
+approveGroup -> approve_group
+argError -> ArgumentError
+argLines -> arg_lines
+bindArgs -> bind_args
+cloneTemp -> cmd_init (git branch)
+cmdInit -> cmd_init
+cmdList -> cmd_list
+cmdLocation -> cmd_location
+cmdNew -> cmd_new
+cmdPromote -> cmd_promote
+cmdRm -> cmd_rm
+cmdRun -> cmd_run
+cmdShow -> cmd_show
+cmdUpdate -> cmd_update
+copyScript -> shutil.copy2 + chmod(mode | 0o111)
+descOr -> parsed.desc or default
+dispatch -> dispatch (cli.py)
+entryFields -> entry_fields
+excludeFromGit -> exclude_from_git
+exclusive -> add_mutually_exclusive_group
+initNamespaces -> init_namespaces
+installedFiles -> installed_files
+isGitSource -> is_git_source
+isListedImport -> is_listed_import
+isPySpace -> str.isspace() for one character
+joinCommand -> join_command
+keptScript -> kept_script
+listDir -> sorted(os.listdir(dir))
+loadForEdit -> reg.setdefault("shortcuts", ...)
+matchPartial -> _match_arguments_partial
+namespaceFolderProblem -> namespace_folder_problem
+namespaceIsApproved -> namespace_is_approved
+nargsPattern -> _get_nargs_pattern
+newFromCopy -> new_from_copy
+newFromScript -> new_from_script
+newParser -> Parser(prog="shortcut <cmd>")
+noteIfUnapproved -> note_if_unapproved
+nsSource -> namespace_source
+optTuple -> _parse_optional
+optionCount -> _match_argument
+optionTuples -> _get_option_tuples
+padRight -> f"{s:<n}"
+parseKnown -> _parse_known_args
+planImport -> plan_import
+planNamespaces -> plan_namespaces
+positionalAnywhere -> re.search(POSITIONAL, text)
+pyRepr -> repr() of a str
+pyRstrip -> str.rstrip()
+pyStr -> str()
+pyTruthy -> bool()
+refuseSymlinks -> refuse_symlinks
+register -> _register
+removeNamespaceFiles -> remove_namespace_files
+replaceInvalidUTF8 -> bytes.decode("utf-8", "replace")
+review -> confirm_review(...).granted()
+rmLocal -> rm_local
+rmLocalMessage -> rm_local_message
+rmMessage -> rm_message
+rmNamespace -> rm_namespace
+runShortcut -> run_shortcut
+runUsage -> RUN_USAGE (cli.py)
+scriptField -> raw_entry.get("script")
+sharedEntries -> SHARED of test_project_files.py
+showJSON -> show_json
+splitOnce -> str.split(None, 1)
+storedCopy -> stored_copy
+storedCwd -> stored_cwd
+storedScriptField -> _stored_script_field
+targetGroup -> target_group
+toolProject -> tool_project
+unlinkFile -> os.unlink with suppress(FileNotFoundError)
+usable -> not group.error
+usageLine -> usage_line
+usageText -> print_usage (cli.py)
+writeExecutable -> open(path, "w") + chmod 0o755
+writeLocal -> write_local
+
+[internal/difflib]
+SplitLinesKeepEnds -> str.splitlines(keepends=True)
+Unified -> difflib.unified_diff(a, b, from, to, lineterm="") with n=3
+blocks -> get_matching_blocks
+formatRange -> _format_range_unified
+groupedOpcodes -> get_grouped_opcodes(n)
+longest -> find_longest_match
+match -> get_matching_blocks triple
+newMatcher -> __chain_b
+op -> get_opcodes tuple
+opcodes -> get_opcodes
+
+[internal/model]
+Entry -> ShortcutEntry
+EntryFromValue -> ShortcutEntry.from_dict (shortcut_entry.py:30-62)
+FindEntry -> find_entry
+FindProjectRoot -> find_project_root
+GlobalStoreDir -> get_global_store_dir
+LoadRegistryFile -> load_registry_file (helpers.py:203-218)
+LocalProjectRoot -> local_project_root
+PlacementError -> placement_error
+ReadJSONFile -> open(path, "r", encoding="utf-8") + json.load
+RegistryNotFoundError -> FileNotFoundError raised by load_registry_file
+ResolveName -> resolve_name
+ResolveRunDir -> resolve_run_dir
+ResolveShortcut -> resolve_shortcut
+SaveRegistryFile -> save_registry_file
+TestHidingAndNotFound_ANameInAnOuterProjectIsPointedAt -> test_stores.py::test_a_name_in_an_outer_project_is_pointed_at
+TestHidingAndNotFound_AOneXProjectFolderIsNamed -> test_stores.py::test_a_1x_project_folder_is_named
+TestSchema_EveryFieldIsAccepted -> test_schema.py::test_every_schema_field_is_accepted
+TestSchema_FieldsMatchTheCode -> test_schema.py::test_fields_match_the_code
+TestSchema_FormatMatchesTheCode -> test_schema.py::test_format_matches_the_code
+TestSchema_RestrictedFieldsAreAcceptedWhereTheSchemaAllowsThem -> test_schema.py::test_restricted_fields_are_accepted_where_the_schema_allows_them
+TestStores_AtomicRegistrySaveAndCorruptProtection -> test_stores.py::test_atomic_registry_save_and_corrupt_protection
+TestStores_ScopeResolutionOrder -> test_stores.py::test_scope_resolution_order
+TestStores_StoreDiscoverySkipsGlobalRoot -> test_stores.py::test_store_discovery_skips_global_root
+ToObject -> to_dict
+ValidateArgs -> validate_args (helpers.py:64-91)
+ValidateName -> validate_name
+WriteJSONAtomic -> write_json_atomic (helpers.py:241-273)
+fileError -> file_error
+lockPath -> registry_lock
+oldProjectFolder -> old_project_folder (lookup.py)
+osErrText -> str(OSError)
+
+[internal/pyjson]
+Decode -> json.load
+Dumps -> json.dumps(v, ...) without a trailing newline
+DumpsCompact -> json.dumps(v) with the default separators and ensure_ascii
+Parse -> json.loads(s)
+ReprFloat -> repr(float)
+SyntaxError -> json.JSONDecodeError
+UTF8Error -> UnicodeDecodeError
+array -> _parse_array_unicode
+checkUTF8 -> bytes.decode("utf-8")
+number -> _match_number_unicode
+object -> _parse_object_unicode
+str -> scanstring_unicode
+value -> py_scanner's scan_once
+
+[internal/pyos]
+Abs -> os.path.abspath
+Basename -> posixpath.basename
+Dirname -> posixpath.dirname
+ExecChild -> exec_child (os.execvpe)
+Exists -> os.path.exists
+ExpandUser -> posixpath.expanduser
+IsDir -> os.path.isdir
+IsFile -> os.path.isfile
+IsLink -> os.path.islink
+IsRelativeTo -> pathlib.Path.is_relative_to
+IsTerminal -> isatty(fd)
+Join -> posixpath.join
+Lexists -> os.path.lexists
+Normpath -> posixpath.normpath
+Realpath -> os.path.realpath(filename), strict=False (CPython 3.14's iterative posixpath.realpath)
+Relpath -> posixpath.relpath(path, start)
+ShellJoin -> shlex.join
+ShellQuote -> shlex.quote
+ShellSplit -> shlex.split(s) (POSIX mode, no comments)
+Suffix -> pathlib.PurePath(p).suffix as Python 3.14 has it
+TerminalRows -> shutil.get_terminal_size().lines
+TestLock_ASymlinkedLockIsRefused -> test_symlink_safety.py::test_a_store_never_writes_through_a_symlink (the .lock half)
+Walk -> os.walk(top) top-down without followlinks
+lookPath -> os._execvpe's search
+pySplit -> posixpath.split
+
+[internal/testkit]
+Proc -> popen_cli
+TestFixtures_ApprovedProjectRunsAtOnce -> test_fixtures.py::test_an_approved_project_runs_at_once
+TestFixtures_BrokenProjectReadsAsCorrupt -> test_fixtures.py::test_a_broken_project_reads_as_corrupt
+TestFixtures_ChangingTheProcessEnvMidTestIsRefused -> test_fixtures.py::test_changing_os_environ_mid_test_is_refused
+TestFixtures_ChangingTheSandboxEnvMidTestIsRefused -> test_fixtures.py::test_changing_the_sandbox_env_mid_test_is_refused
+TestFixtures_CollectionImports -> test_fixtures.py::test_a_collection_imports
+TestFixtures_CwdOutsideIsRefused -> test_fixtures.py::test_a_cwd_outside_is_refused
+TestFixtures_EmptyHomeIsRefused -> test_fixtures.py::test_an_empty_home_is_refused
+TestFixtures_FixtureFileOutsideIsRefused -> test_fixtures.py::test_a_fixture_file_outside_is_refused
+TestFixtures_HomeOutsideIsRefusedEvenWhenTheStoreIsInside -> test_fixtures.py::test_a_home_outside_is_refused_even_when_the_store_is_inside
+TestFixtures_HomeOutsideIsRefusedWhenTheStoreFollowsIt -> test_fixtures.py::test_a_home_outside_is_refused_when_the_store_follows_it
+TestFixtures_OtherPlacesARunWritesAreGuarded -> test_fixtures.py::test_the_other_places_a_run_writes_are_guarded
+TestFixtures_PathThatOnlyLooksInsideIsRefused -> test_fixtures.py::test_a_path_that_only_looks_inside_is_refused
+TestFixtures_PathsLeftUnsetFallUnderHome -> test_fixtures.py::test_paths_left_unset_fall_under_home
+TestFixtures_ProjectWithoutShortcutsHasNoStore -> test_fixtures.py::test_project_without_shortcuts_has_no_store
+TestFixtures_ProjectWritesWhatItIsGiven -> test_fixtures.py::test_project_writes_what_it_is_given
+TestFixtures_SandboxIsInsideTheTempDir -> test_fixtures.py::test_the_sandbox_is_inside_the_temp_dir
+TestFixtures_SetupRefusesBeforeWritingAnything -> test_fixtures.py::test_setup_refuses_before_writing_anything
+TestFixtures_SharedFixturesAreLeftAsTheyWere -> test_fixtures.py::test_shared_fixtures_are_left_as_they_were
+TestFixtures_StoreDerivedFromTheOldHomeIsRefused -> test_fixtures.py::test_a_store_derived_from_the_old_home_is_refused
+TestFixtures_TestsStayOnTheHub -> test_fixtures.py::test_spokes_stay_on_the_hub
+TestFixtures_TildeStoreFollowsTheChildHome -> test_fixtures.py::test_a_tilde_store_follows_the_child_home
+jsonText -> json.dumps
+launch -> launch_args
+openPty -> os.openpty without cgo
+openPty -> os.openpty without cgo
+resolve -> Path.resolve() (non-strict)
+shquote -> shlex.join
+
+[internal/textio]
+Ask -> helpers.ask
+Granted -> Confirm.granted
+Safe -> helpers.safe
+ShowDiff -> helpers.show_diff
+Streams -> SafeOutput over sys.std*
+WriteStyled -> write_styled
+bufSize -> io.DEFAULT_BUFFER_SIZE
+flushOrAbort -> sys.stdout.flush()
+isControl -> helpers.CONTROL_CHARS
