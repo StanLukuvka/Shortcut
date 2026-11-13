@@ -18,6 +18,7 @@ complete -c shortcut -n "__fish_seen_subcommand_from rm" -l local
 complete -c shortcut -n "__fish_seen_subcommand_from rm" -l namespace -r
 complete -c shortcut -n "__fish_seen_subcommand_from show" -l json
 complete -c shortcut -n "__fish_seen_subcommand_from init" -F -l global
+complete -c shortcut -n "__fish_seen_subcommand_from init" -l bundled
 complete -c shortcut -n "__fish_seen_subcommand_from init" -s y
 complete -c shortcut -n "__fish_seen_subcommand_from init" -l replace
 complete -c shortcut -n "__fish_seen_subcommand_from completion" -a "bash zsh fish"

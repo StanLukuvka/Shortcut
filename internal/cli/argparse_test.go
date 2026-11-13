@@ -36,7 +36,24 @@ func loadGolden(t *testing.T, name string) []goldenCase {
 	if len(f.Cases) == 0 {
 		t.Fatalf("%s has no cases", name)
 	}
+	for i, c := range f.Cases {
+		if c.Command == "init" {
+			f.Cases[i] = withBundled(c)
+		}
+	}
 	return f.Cases
+}
+
+// withBundled adds what P-8's --bundled changes in Python's recorded init cases: its namespace key, its place in the
+// usage line and its help line. Nothing else of the recording is touched.
+func withBundled(c goldenCase) goldenCase {
+	if c.Namespace != nil {
+		c.Namespace["bundled"] = false
+	}
+	fix := strings.NewReplacer("[--global] [-y]", "[--global] [--bundled] [-y]",
+		"  --global    Import into global store\n", "  --global    Import into global store\n  --bundled   Import the shortcuts that come with shortcut (needs --global)\n")
+	c.Stdout, c.Stderr = fix.Replace(c.Stdout), fix.Replace(c.Stderr)
+	return c
 }
 
 // parserWords is what the parser saw: `new` cuts its words at the first -- before argparse (cmd_new).

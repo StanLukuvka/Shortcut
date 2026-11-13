@@ -110,7 +110,7 @@ var parsers = map[string]*parser{
 		flag("local", "--local"), flag("skip_local", "--global")),
 	"promote": newParser("promote", positional("name", 0), value("new_name", "--as"), flag("yes", "-y", "--yes"), flag("force", "--force")),
 	"update":  newParser("update", positional("group", '?'), flag("yes", "-y", "--yes")),
-	"init": newParser("init", positional("source", '?'), flag("is_global", "--global"), flag("yes", "-y", "--yes"),
+	"init": newParser("init", positional("source", '?'), flag("is_global", "--global"), flag("bundled", "--bundled"), flag("yes", "-y", "--yes"),
 		flag("replace", "--replace")),
 	"completion": newParser("completion", &action{dest: "shell", nargs: '?', def: "bash", choices: []string{"bash", "fish", "zsh"}}),
 }

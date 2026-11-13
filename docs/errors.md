@@ -194,4 +194,6 @@ These print `error: cannot approve <group>: <reason>`, where the reason is a sto
 | `source directory does not exist: <dir>` | |
 | `no .shortcuts or <ns>.shortcut found in <dir>` | `init --global` copies a source's `.shortcuts` exported entries, or its namespace files |
 | `import <source> in a terminal, or pass -y` | |
+| `--bundled takes no source` | `init --global --bundled <source>` |
+| `--bundled copies the bundled shortcuts into your global store: add --global.` | `init --bundled` without `--global` |
 | `--replace is for a folder of namespaces, and <dir> has a .shortcuts` | A project's entries aren't replaced |

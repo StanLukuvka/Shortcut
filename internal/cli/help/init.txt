@@ -1,4 +1,4 @@
-usage: shortcut init [-h] [--global] [-y] [--replace] [source]
+usage: shortcut init [-h] [--global] [--bundled] [-y] [--replace] [source]
 
 With --global, create the global store, or review a project's exported
 shortcuts, or a folder of namespaces, and copy them there
@@ -9,6 +9,7 @@ positional arguments:
 options:
   -h, --help  show this help message and exit
   --global    Import into global store
+  --bundled   Import the shortcuts that come with shortcut (needs --global)
   -y, --yes   Import without asking
   --replace   Put a source's namespaces in place of installed ones of the same
               name
