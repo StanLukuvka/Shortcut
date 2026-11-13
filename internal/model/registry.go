@@ -158,7 +158,7 @@ func LoadRegistryFile(path string) (*pyjson.Object, error) {
 		if isJSONError(err) {
 			return nil, fmt.Errorf("corrupt registry %s: %s", path, err)
 		}
-		return nil, errors.New(osErrText(err))
+		return nil, err
 	}
 	data, ok := v.(*pyjson.Object)
 	if !ok {
@@ -185,11 +185,7 @@ func LoadRegistry(storeDir string) (*pyjson.Object, error) {
 func SaveRegistryFile(path string, data *pyjson.Object) error {
 	if pyos.IsFile(path) {
 		if _, err := ReadJSONFile(path); err != nil {
-			text := err.Error()
-			if !isJSONError(err) {
-				text = osErrText(err)
-			}
-			return fmt.Errorf("cannot overwrite corrupt registry %s: %s", path, text)
+			return fmt.Errorf("cannot overwrite corrupt registry %s: %s", path, err)
 		}
 	}
 	return WriteJSONAtomic(path, data)
