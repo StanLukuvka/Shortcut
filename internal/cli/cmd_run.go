@@ -129,12 +129,7 @@ func runShortcut(s *textio.Streams, words []string, skipLocal, assumeYes bool) e
 	for _, kv := range argEnv {
 		set(kv)
 	}
-	flush := func() { // a reader that has gone ends the run with 141, as a failed flush does
-		if err := s.Out.Flush(); errors.Is(err, syscall.EPIPE) {
-			s.Abort141()
-		}
-	}
-	return pyos.ExecChild(cmd, resolved.RunCwd, env, flush)
+	return pyos.ExecChild(cmd, resolved.RunCwd, env)
 }
 
 // childCommand is the argv of the child: bash -c for an inline command, else the script, run through its #! line,

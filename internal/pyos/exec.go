@@ -5,17 +5,15 @@ package pyos
 import (
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
 )
 
-// ExecChild runs a child as os.execvpe does: flush, chdir, default SIGPIPE and SIGXFSZ, then replace this process, so the
+// ExecChild runs a child as os.execvpe does: chdir, then replace this process, so the
 // exit code, signals and terminal are the child's. It returns only on failure. env is "K=V" strings; the PATH
 // search uses env's PATH (see pathOf), not this process's.
-func ExecChild(argv []string, cwd string, env []string, flush func()) error {
-	flush() // stdout buffer, before the image is replaced
+func ExecChild(argv []string, cwd string, env []string) error {
 	if err := os.Chdir(cwd); err != nil {
 		return err
 	}
@@ -27,7 +25,6 @@ func ExecChild(argv []string, cwd string, env []string, flush func()) error {
 		}
 		path = p
 	}
-	signal.Reset(syscall.SIGPIPE, syscall.SIGXFSZ) // a Notify'd handler is reset by exec anyway; this ends the runtime's too
 	if err := syscall.Exec(path, argv, env); err != nil {
 		return &os.PathError{Op: "exec", Path: path, Err: err}
 	}

@@ -4,9 +4,7 @@ package cli
 import (
 	"errors"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 
 	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
@@ -34,17 +32,10 @@ func init() {
 		"list": cmdList, "show": cmdShow, "location": cmdLocation, "update": cmdUpdate, "new": cmdNew, "rm": cmdRm, "promote": cmdPromote, "init": cmdInit}
 }
 
-// Main runs the command and returns the process's exit code. A reader that stops (shortcut list |
-// head) ends it with 141, as a program ended by SIGPIPE does; Notify turns SIGPIPE into an EPIPE error.
+// Main runs the command and returns the process's exit code. A write to a closed stdout or stderr ends the
+// process by SIGPIPE (the Go runtime's default; this program does not Notify it).
 func Main(args []string, in, out, errw *os.File) int {
-	s := textio.NewStreams(in, out, errw)
-	sigpipe := make(chan os.Signal, 1)
-	signal.Notify(sigpipe, syscall.SIGPIPE)
-	rc := dispatch(s, args)
-	if err := s.Flush(); errors.Is(err, syscall.EPIPE) {
-		return 141
-	}
-	return rc
+	return dispatch(textio.NewStreams(in, out, errw), args)
 }
 
 // dispatch runs the command the first word picks.

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -25,11 +24,10 @@ func helper(job string) {
 		fmt.Printf("%s\n%s\n", logical, physical)
 	case "tty":
 		fmt.Println(IsTerminal(0), IsTerminal(1), TerminalRows())
-	case "exec": // as cli.Main does: SIGPIPE is Notify'd, then the shortcut execs
-		signal.Notify(make(chan os.Signal, 1), syscall.SIGPIPE)
+	case "exec":
 		env := append(os.Environ(), "PATH="+os.Getenv("PYOS_PATH"))
 		err := ExecChild([]string{os.Getenv("PYOS_CMD"), "-c", `pwd; grep -E '^Sig(Blk|Ign)' /proc/$$/status`},
-			os.Getenv("PYOS_CWD"), env, func() { fmt.Println("flushed") })
+			os.Getenv("PYOS_CWD"), env)
 		fmt.Println("returned:", err)
 		os.Exit(7)
 	}
@@ -69,12 +67,11 @@ func TestTTY_StdinStdoutAndRows(t *testing.T) {
 
 func TestExec_FailureBeforeExecReturnsAnError(t *testing.T) {
 	e := testkit.New(t)
-	flushed := 0
 	cwd, _ := Getwd() // chdir to where we are: the test process's cwd does not move
-	if err := ExecChild([]string{"x"}, e.Tmp+"/missing", nil, func() { flushed++ }); err == nil || flushed != 1 {
-		t.Errorf("a missing cwd: err = %v, flushed = %d", err, flushed)
+	if err := ExecChild([]string{"x"}, e.Tmp+"/missing", nil); err == nil {
+		t.Errorf("a missing cwd: err = %v", err)
 	}
-	if err := ExecChild([]string{"no-such-command-zz9"}, cwd, []string{"PATH=" + e.Tmp}, func() {}); !strings.Contains(fmt.Sprint(err), "no-such-command-zz9") {
+	if err := ExecChild([]string{"no-such-command-zz9"}, cwd, []string{"PATH=" + e.Tmp}); !strings.Contains(fmt.Sprint(err), "no-such-command-zz9") {
 		t.Errorf("not found: %v", err)
 	}
 }
@@ -149,10 +146,10 @@ func TestExec_ChildPathOverrides(t *testing.T) {
 	if _, err := lookPathIn(os.Getenv("PATH"), "sh"); err != nil {
 		t.Skip("no sh on the process PATH")
 	}
-	if err := ExecChild([]string{"sh"}, e.Tmp, []string{"PATH=/nonexistent"}, func() {}); !errors.Is(err, syscall.ENOENT) {
+	if err := ExecChild([]string{"sh"}, e.Tmp, []string{"PATH=/nonexistent"}); !errors.Is(err, syscall.ENOENT) {
 		t.Errorf("override ignored: %v", err)
 	}
-	if err := ExecChild([]string{"here"}, e.Tmp, []string{"PATH="}, func() {}); !errors.Is(err, syscall.ENOENT) {
+	if err := ExecChild([]string{"here"}, e.Tmp, []string{"PATH="}); !errors.Is(err, syscall.ENOENT) {
 		t.Errorf("empty PATH found the cwd: %v", err)
 	}
 	if p, err := lookPathIn(pathOf([]string{"PATH=" + bin}), "tool"); err != nil || p != bin+"/tool" {
@@ -160,7 +157,7 @@ func TestExec_ChildPathOverrides(t *testing.T) {
 	}
 }
 
-// What a shortcut inherits: flush ran, cwd changed, SIGPIPE and SIGXFSZ default (bits 13 and 25 clear in SigIgn),
+// What a shortcut inherits: cwd changed, SIGPIPE and SIGXFSZ default (bits 13 and 25 clear in SigIgn),
 // nothing blocked.
 func TestExec_TheChildStartsClean(t *testing.T) {
 	if runtime.GOOS != "linux" {
@@ -173,12 +170,12 @@ func TestExec_TheChildStartsClean(t *testing.T) {
 		t.Fatalf("exit %d, stdout %q stderr %q", res.Code, res.Stdout, res.Stderr)
 	}
 	lines := strings.Split(strings.TrimSpace(res.Stdout), "\n")
-	if len(lines) != 4 || lines[0] != "flushed" || lines[1] != dir {
+	if len(lines) != 3 || lines[0] != dir {
 		t.Fatalf("stdout %q", res.Stdout)
 	}
-	ign, blk := hexOf(t, lines[2]), hexOf(t, lines[3])
+	ign, blk := hexOf(t, lines[1]), hexOf(t, lines[2])
 	if ign&(1<<(syscall.SIGPIPE-1)) != 0 || ign&(1<<(syscall.SIGXFSZ-1)) != 0 || blk != 0 {
-		t.Errorf("%s / %s", lines[2], lines[3])
+		t.Errorf("%s / %s", lines[1], lines[2])
 	}
 }
 

@@ -1,15 +1,11 @@
 package textio
 
 import (
-	"errors"
 	"fmt"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
@@ -29,25 +25,12 @@ func helper(job string) {
 		}
 		s.Out.WriteString("out\n")
 		s.Err.WriteString("err\n")
-		if s.Flush() != nil {
-			code |= 8
-		}
 		os.Exit(code)
 	case "ask":
 		s.Out.WriteString(fmt.Sprintf("answer=%v\n", Ask(s, "go on? ", nil)))
 	case "confirm":
 		ok, err := Confirm{Question: "run 'go'?", NoTerminal: "no terminal", Message: "will run \x1b[2Kit"}.Granted(s, false)
 		s.Out.WriteString(fmt.Sprintf("granted=%v err=%v\n", ok, err))
-	case "diffpipe": // stdout is a pipe whose reader has gone: ShowDiff's own flush must end the run with 141
-		signal.Notify(make(chan os.Signal, 1), syscall.SIGPIPE) // as cli.Main does: EPIPE comes back as an error
-		// Wait until the reader is gone: probe writes succeed until `| true` has exited, then fail with EPIPE.
-		for stop := time.Now().Add(30 * time.Second); time.Now().Before(stop); time.Sleep(5 * time.Millisecond) {
-			if _, err := os.Stdout.Write([]byte{0}); err != nil {
-				break
-			}
-		}
-		ShowDiff(s, []string{"--- a/f", "+++ b/f", "+x"})
-		os.Exit(0) // no flush of ours: reaching here means ShowDiff swallowed the error
 	case "diff":
 		var lines []string
 		for i := 0; i < atoi(os.Getenv("TEXTIO_LINES")); i++ {
@@ -57,7 +40,6 @@ func helper(job string) {
 			lines[0] = "--- a/a\x9bb.sh"
 		}
 		ShowDiff(s, lines)
-		s.Flush()
 	}
 }
 
@@ -86,72 +68,20 @@ func capture(t *testing.T, e *testkit.Env, input string) (s *Streams, out, errs 
 	return NewStreams(inf, open("out"), open("err")), read("out"), read("err")
 }
 
-func TestStreams_BufferedOutSafeAndStyled(t *testing.T) {
+func TestStreams_OutIsSafeAndStyled(t *testing.T) {
 	e := testkit.New(t)
 	s, out, errs := capture(t, e, "")
 	if s.Out.IsTerminal() || s.Err.IsTerminal() {
 		t.Error("files are not terminals")
 	}
 	s.Out.WriteString("a\x1b[2Kb\rc\n")
-	if out() != "" {
-		t.Error("stdout is buffered when it is not a terminal")
-	}
 	s.Out.WriteStyled("\x1b[2mdim\x1b[0m\n") // ours: not made safe
-	s.Err.WriteString("e\x1b\n")             // stderr is written straight away
+	s.Err.WriteString("e\x1b\n")
 	if errs() != "e^[\n" {
 		t.Errorf("stderr %q", errs())
 	}
-	if err := s.Flush(); err != nil {
-		t.Fatal(err)
-	}
 	if want := "a^[[2Kb^Mc\n\x1b[2mdim\x1b[0m\n"; out() != want {
 		t.Errorf("stdout %q, want %q", out(), want)
-	}
-	s.Out.WriteString(strings.Repeat("x", bufSize-1))
-	if len(out()) != len("a^[[2Kb^Mc\n\x1b[2mdim\x1b[0m\n") {
-		t.Error("flushed before the buffer was full")
-	}
-	s.Out.WriteString("yy")
-	if len(out()) < bufSize {
-		t.Error("a full buffer must be written")
-	}
-}
-
-// A reader that stopped ends the run with 141, nothing more written.
-func TestStreams_ABrokenPipeEnds141(t *testing.T) {
-	e := testkit.New(t)
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer w.Close()
-	r.Close()
-	errs, err := os.Create(filepath.Join(e.Tmp, "err"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer errs.Close()
-	var code int
-	exit = func(c int) { code = c; panic("exit") }
-	defer func() { exit = os.Exit }()
-	run := func(f func()) (aborted bool) {
-		defer func() { aborted = recover() != nil }()
-		f()
-		return false
-	}
-	s := NewStreams(os.Stdin, w, errs)
-	s.Out.WriteString("hello")
-	if err := s.Flush(); !errors.Is(err, syscall.EPIPE) { // Main turns this into 141 when it is the last flush
-		t.Errorf("Flush = %v, want EPIPE", err)
-	}
-	if !run(func() { s.Out.WriteString(strings.Repeat("x", bufSize)) }) || code != 141 {
-		t.Errorf("a write that had to be flushed: code %d", code)
-	}
-	direct := NewStreams(os.Stdin, w, errs)
-	direct.Out.direct = true // what a terminal would be
-	code = 0
-	if !run(func() { direct.Out.WriteString("x") }) || code != 141 {
-		t.Errorf("a direct write: code %d", code)
 	}
 }
 
@@ -163,15 +93,6 @@ func TestStreams_ClosedStdFdsAreReopenedByTheRuntime(t *testing.T) {
 	res.WantCode(t, 0) // else the code's bits 0-2 say which of fd 0-2 was found closed, bit 3 that the write failed
 }
 
-// ShowDiff's flush (small diff, buffer not full) on a pipe nobody reads exits 141, as a failed flush
-// BrokenPipeError does. `| true` is the reader that is gone before the child writes.
-func TestShowDiff_ABrokenPipeOnFlushEnds141(t *testing.T) {
-	e := testkit.New(t)
-	res := e.RunCmd(testkit.Opts{Env: map[string]string{"TEXTIO_HELPER": "diffpipe"}}, "bash", "-c",
-		`"$0" -test.run='^$' | true; exit ${PIPESTATUS[0]}`, os.Args[0])
-	res.WantCode(t, 141)
-}
-
 // Q-3: stdout escapes bytes that are not UTF-8 like stderr, in Write and in WriteStyled.
 func TestStreams_NonUTF8IsEscapedOnBothStreams(t *testing.T) {
 	e := testkit.New(t)
@@ -181,7 +102,6 @@ func TestStreams_NonUTF8IsEscapedOnBothStreams(t *testing.T) {
 	s.Out.WriteStyled(raw)
 	s.Out.WriteString(raw)
 	s.Err.WriteString(raw)
-	s.Flush()
 	if out() != want+want+want || errs() != want {
 		t.Errorf("stdout %q, stderr %q, want %q", out(), errs(), want)
 	}

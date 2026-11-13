@@ -27,7 +27,6 @@ func Ask(s *Streams, prompt string, accept []string) bool {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGINT)
 	defer signal.Stop(interrupt)
-	s.Out.flushOrAbort()
 	s.Err.WriteString(prompt)
 	if s.in == nil {
 		s.in = bufio.NewReader(s.In)
