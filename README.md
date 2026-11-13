@@ -40,7 +40,7 @@ Requirements:
 - bash: inline shortcuts run with `bash -c`.
 - `curl` or `wget`, and `sha256sum` or `shasum`, for the installer.
 - git, for `init --global <git URL>`.
-- The bundled `edit` needs python3 and `$EDITOR` (`$VISUAL` first if set, nano if neither).
+- python3, for the bundled `edit` and `desktop`. `edit` also needs `$EDITOR` (`$VISUAL` first if set, nano if neither).
 - The bundled `desktop` is for Linux only.
 
 ## Quick start
@@ -92,7 +92,7 @@ shortcut r <name> -- -5               after --, a declared argument can start wi
 shortcut new <name> -- CMD            inline shortcut
 shortcut new <name>                   a new bash script; prints its path
 shortcut new <name> --copy FILE|-     copy a script in
-shortcut new <name> --script PATH     use a script where it is; a path inside the store is kept relative
+shortcut new <name> --script PATH     use a script where it is; a path inside the store (or a project or namespace folder) is kept relative, except under the store's `scripts/`, which stays absolute
 
 shortcut list                         everything visible; warns about invalid entries and missing scripts
 shortcut list --names [ns]            bare names
@@ -158,7 +158,7 @@ Flags for `new`:
 
 - An inline shortcut runs as `bash -c CMD <name> ARGS...`, so `$0` is its name. A script runs by its shebang, or with bash.
 - It runs in its `cwd`, the caller's directory by default.
-- Every word after the name reaches it as `$1`, `$2`..., flags included. A first `--` is dropped.
+- Every word after the name reaches it as `$1`, `$2`..., flags included. A first `--` is dropped only when the shortcut declares `args`.
 - With `args` declared, a missing optional argument is filled with its default, or with an empty word if a later one has a default. A required one can't be an empty word.
 - A declared argument is also in `SC_ARG_<NAME>`, which a flag before it doesn't move. `$1` would be the flag.
 - Its exit code is shortcut's.

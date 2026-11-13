@@ -17,7 +17,7 @@ To install a newer copy over it, add `--replace` to `init`. `shortcut rm --names
 
 ## Picking a container
 
-Each terminal can pick one container. `logs`, `sh`, `restart`, `ports`, `exec` and `stop` act on it when you don't name one.
+Each terminal can pick one container. `logs`, `sh`, `restart`, `ports`, `exec`, `stop`, `start`, `inspect`, `top`, `pause`, `unpause`, `kill` and `rm` act on it when you don't name one.
 
 ```
 shortcut r podman list        numbered list; * marks the pick
@@ -38,6 +38,8 @@ A number counts from the last `list` in the same terminal. Picks and lists are k
 |---|---|
 | `ps`, `images`, `stats`, `pods`, `health` | What's there and how it's doing |
 | `list`, `use`, `current` | Numbered list and the terminal's pick |
-| `logs`, `sh`, `restart`, `ports`, `exec`, `stop` | Act on a container, the pick by default |
+| `logs`, `sh`, `restart`, `ports`, `exec`, `stop`, `start`, `inspect`, `top`, `pause`, `unpause`, `kill`, `rm` | Act on a container, the pick by default |
+| `run`, `create` | `podman run` and `podman create`; flags and the image pass through |
+| `cp` | `podman cp SRC DEST` |
 | `up`, `down`, `clogs` | `podman compose` in the current folder |
 | `prune`, `nuke` | Clean up; both ask first |

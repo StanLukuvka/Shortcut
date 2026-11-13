@@ -255,14 +255,15 @@ func excludeFromGit(root string) {
 			return
 		}
 	}
+	sep := ""
 	if text != "" && !strings.HasSuffix(text, "\n") {
-		text += "\n"
+		sep = "\n"
 	}
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o666)
 	if err != nil {
 		return
 	}
-	f.WriteString(model.LocalFile + "\n")
+	f.WriteString(sep + model.LocalFile + "\n")
 	f.Close()
 }
 

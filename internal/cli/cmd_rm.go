@@ -27,7 +27,11 @@ func cmdRm(s *textio.Streams, args []string) error {
 	}
 	names := ns.List("name")
 	if ns.Set("namespace") {
-		if ns.Bool("local") || len(names) > 0 {
+		if len(names) > 0 {
+			return Die("--namespace takes the namespace alone: shortcut rm --namespace " + ns.Str("namespace") +
+				". To remove one entry: shortcut rm " + ns.Str("namespace") + " " + pyos.ShellJoin(names))
+		}
+		if ns.Bool("local") {
 			return Die("--namespace takes the namespace alone: shortcut rm --namespace " + ns.Str("namespace"))
 		}
 		return rmNamespace(s, ns.Str("namespace"), ns.Bool("yes"))

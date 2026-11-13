@@ -57,6 +57,122 @@
         }
       ]
     },
+    "run": {
+      "description": "Run a new container. Flags and the image pass to podman run",
+      "inline": "podman run \"$@\"",
+      "created": "2026-11-13"
+    },
+    "create": {
+      "description": "Create a container without starting it. Flags and the image pass to podman create",
+      "inline": "podman create \"$@\"",
+      "created": "2026-11-13"
+    },
+    "start": {
+      "description": "Start containers by name, or this terminal's pick when none are given",
+      "inline": "if [ $# -eq 0 ]; then c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current) || exit; set -- \"$c\"; fi; podman start \"$@\"",
+      "created": "2026-11-13",
+      "args": [
+        {
+          "name": "containers",
+          "rest": true,
+          "desc": "Container names"
+        }
+      ]
+    },
+    "inspect": {
+      "description": "Inspect a container (the picked one by default)",
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman inspect \"$c\"",
+      "created": "2026-11-13",
+      "args": [
+        {
+          "name": "container",
+          "default": "",
+          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
+        }
+      ]
+    },
+    "pause": {
+      "description": "Pause a container (the picked one by default)",
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman pause \"$c\"",
+      "created": "2026-11-13",
+      "args": [
+        {
+          "name": "container",
+          "default": "",
+          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
+        }
+      ]
+    },
+    "unpause": {
+      "description": "Unpause a container (the picked one by default)",
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman unpause \"$c\"",
+      "created": "2026-11-13",
+      "args": [
+        {
+          "name": "container",
+          "default": "",
+          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
+        }
+      ]
+    },
+    "kill": {
+      "description": "Kill a container (the picked one by default)",
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman kill \"$c\"",
+      "created": "2026-11-13",
+      "args": [
+        {
+          "name": "container",
+          "default": "",
+          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
+        }
+      ]
+    },
+    "rm": {
+      "description": "Remove a container (the picked one by default)",
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman rm \"$c\"",
+      "created": "2026-11-13",
+      "args": [
+        {
+          "name": "container",
+          "default": "",
+          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
+        }
+      ]
+    },
+    "top": {
+      "description": "Processes of a container (the picked one by default). Later words are ps fields",
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") || exit; shift $(($# > 0)); podman top \"$c\" \"$@\"",
+      "created": "2026-11-13",
+      "args": [
+        {
+          "name": "container",
+          "default": "",
+          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
+        },
+        {
+          "name": "fields",
+          "rest": true,
+          "desc": "ps fields, such as pid user"
+        }
+      ]
+    },
+    "cp": {
+      "description": "Copy files between a container and the host: shortcut r podman cp web:/etc/hosts .",
+      "inline": "podman cp \"$SC_ARG_SRC\" \"$SC_ARG_DEST\"",
+      "created": "2026-11-13",
+      "args": [
+        {
+          "name": "src",
+          "required": true,
+          "desc": "Source path, or CONTAINER:PATH"
+        },
+        {
+          "name": "dest",
+          "required": true,
+          "desc": "Destination path, or CONTAINER:PATH"
+        }
+      ]
+    },
     "ports": {
       "description": "Port mappings of a container (the picked one by default)",
       "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman port \"$c\"",

@@ -181,10 +181,20 @@ func cmdList(s *textio.Streams, args []string) error {
 		sections++
 		if state != "ok" {
 			verb := "changed since you approved them"
+			if g.Name != "" {
+				verb = "changed since you approved it"
+			}
 			if state == "new" {
 				verb = "aren't approved yet"
+				if g.Name != "" {
+					verb = "isn't approved yet"
+				}
 			}
-			s.Out.WriteString(title + " " + verb + ". Review them with: " + g.UpdateCmd() + "\n")
+			review := "them"
+			if g.Name != "" {
+				review = "it"
+			}
+			s.Out.WriteString(title + " " + verb + ". Review " + review + " with: " + g.UpdateCmd() + "\n")
 			return
 		}
 		s.Out.WriteString(title + ":\n")

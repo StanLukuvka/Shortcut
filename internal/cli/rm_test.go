@@ -408,3 +408,10 @@ func TestRm_NamespaceWithALinkedScriptsFolderLosesOnlyTheLink(t *testing.T) {
 		t.Error("a file outside the namespace was deleted")
 	}
 }
+
+func TestRm_NamespaceWithANameSaysHowToRemoveOneEntry(t *testing.T) {
+	e := testkit.New(t)
+	res := e.Run("rm", "--namespace", "podman", "top")
+	eq(t, "exit", res.Code, 1)
+	contains(t, "stderr", res.Stderr, "--namespace takes the namespace alone: shortcut rm --namespace podman. To remove one entry: shortcut rm podman top")
+}

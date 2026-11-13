@@ -175,6 +175,7 @@ func TestImport_CloneIsRemovedOnCtrlCAndDecline(t *testing.T) {
 	}
 	code, out = e.InTerminal(o, []testkit.Key{{Wait: "import? [y/N]", Send: y("n\n")}}, "init", "--global", "file://"+repo)
 	eq(t, "decline exit", code, 1)
+	contains(t, "decline", out, "Aborted.")
 	if left, _ := os.ReadDir(tmp); len(left) != 0 {
 		t.Errorf("after a no the clone is still there: %v", left)
 	}

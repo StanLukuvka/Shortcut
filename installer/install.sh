@@ -130,7 +130,7 @@ main() {
   fi
 
   # bundled shortcuts: the user reviews and answers, never -y
-  if [ -z "${SHORTCUT_NO_BUNDLED:-}" ] && [ -r /dev/tty ] && [ -w /dev/tty ]; then
+  if [ -z "${SHORTCUT_NO_BUNDLED:-}" ] && ( : </dev/tty ) 2>/dev/null; then
     "$bin_dir/shortcut" init --global --bundled </dev/tty || say "Skipped the bundled shortcuts. Add them later: shortcut init --global --bundled"
   else
     say "Bundled shortcuts: shortcut init --global --bundled"

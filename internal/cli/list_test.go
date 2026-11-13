@@ -182,3 +182,14 @@ func TestList_FullListingMatchesPython(t *testing.T) {
 		t.Errorf("got:\n%s\nwant:\n%s", res.Stdout, want)
 	}
 }
+
+func TestList_NamespaceApprovalIsSingular(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteImport(e.Store, "docker", map[string]any{"version": 2, "shortcuts": map[string]any{
+		"ps": map[string]any{"inline": "docker ps", "description": "list"}}})
+	contains(t, "list", e.Run("list").Stdout, "Namespace docker ("+filepath.Join(e.Store, "imports", "docker.shortcut")+") isn't approved yet. Review it with")
+	runOK(t, e, testkit.Opts{}, "update", "docker", "-y")
+	e.WriteImport(e.Store, "docker", map[string]any{"version": 2, "shortcuts": map[string]any{
+		"ps": map[string]any{"inline": "docker ps -a", "description": "list"}}})
+	contains(t, "changed", e.Run("list").Stdout, ") changed since you approved it. Review it with")
+}
