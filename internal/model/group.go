@@ -139,5 +139,5 @@ func RecordName(key string) string {
 
 // ApprovalPath is <global store>/approvals/<RecordName(key)>.
 func ApprovalPath(g Group) string {
-	return pyos.Join(GlobalStoreDir(), ApprovalsDir, RecordName(g.Key()))
+	return pyos.Join(GlobalStoreDir(), approvalsDir, RecordName(g.Key()))
 }

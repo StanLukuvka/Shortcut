@@ -20,26 +20,18 @@ type Key struct {
 
 // InTerminal runs the binary on a fresh 30x100 pseudo-terminal, as if typed into a real one (= run_in_terminal):
 // its own session, the terminal as controlling tty, 15s. The output has the terminal's \r\n.
+// With Opts.StdoutTo, stdout goes to that file, as `> file` would; the terminal keeps stdin and stderr.
 func (e *Env) InTerminal(o Opts, keys []Key, args ...string) (code int, out string) {
 	e.T.Helper()
-	return e.terminal(o, "", keys, append([]string{Binary(e.T)}, args...))
+	return e.terminal(o, keys, append([]string{Binary(e.T)}, args...))
 }
 
 func (e *Env) InTerminalCmd(o Opts, keys []Key, argv ...string) (int, string) {
 	e.T.Helper()
-	return e.terminal(o, "", keys, argv)
+	return e.terminal(o, keys, argv)
 }
 
-// InTerminalStdoutTo is InTerminal with stdout sent to file, as `> file` would; the terminal keeps stdin and stderr.
-func (e *Env) InTerminalStdoutTo(o Opts, file string, keys []Key, args ...string) (int, string) {
-	e.T.Helper()
-	if err := refuseUnlessInside(e.Tmp, "the stdout file", file); err != nil {
-		e.die(err)
-	}
-	return e.terminal(o, file, keys, append([]string{Binary(e.T)}, args...))
-}
-
-func (e *Env) terminal(o Opts, stdoutFile string, keys []Key, argv []string) (int, string) {
+func (e *Env) terminal(o Opts, keys []Key, argv []string) (int, string) {
 	e.T.Helper()
 	cwd, env := e.launch(o)
 	d := e.timeout(o, 15*time.Second)
@@ -55,8 +47,11 @@ func (e *Env) terminal(o Opts, stdoutFile string, keys []Key, argv []string) (in
 	cmd.Dir, cmd.Env = cwd, env
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
 	var file *os.File
-	if stdoutFile != "" {
-		if file, err = os.Create(stdoutFile); err != nil {
+	if o.StdoutTo != "" {
+		if err := refuseUnlessInside(e.Tmp, "the stdout file", o.StdoutTo); err != nil {
+			e.die(err)
+		}
+		if file, err = os.Create(o.StdoutTo); err != nil {
 			e.die(err)
 		}
 		cmd.Stdout = file

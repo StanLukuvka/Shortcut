@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -19,10 +20,7 @@ import (
 // golden reads ../testdata/approval.json with pyjson (it holds lone-surrogate escapes, which encoding/json garbles).
 func golden(t *testing.T, set string) []*pyjson.Object {
 	t.Helper()
-	raw, err := os.ReadFile("../testdata/approval.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := testkit.Golden(t, "approval.json")
 	v, err := pyjson.Decode(raw)
 	if err != nil {
 		t.Fatal(err)
@@ -91,7 +89,7 @@ func TestApproval_GoldenHash(t *testing.T) {
 				if got, want := hashInput(files), str(c, "json"); got != want {
 					t.Errorf("hash input\n got %q\nwant %q", got, want)
 				}
-				if got, want := FilesHash(files), str(c, "hash"); got != want {
+				if got, want := filesHash(files), str(c, "hash"); got != want {
 					t.Errorf("hash %s, want %s", got, want)
 				}
 			})
@@ -101,10 +99,10 @@ func TestApproval_GoldenHash(t *testing.T) {
 		t.Errorf("consumed %d cases, want %d", n, want)
 	}
 	t.Logf("%d hash cases", n)
-	// plan section 4.1's sample, written out
+	// a sample hash, written out
 	plan := golden(t, "hash_cases")[0]
 	if str(plan, "hash") != "1a4f1b218e2fc8c36510309de93f45583a881826c19fbf2b451df5b99e1d6e8d" {
-		t.Error("the first golden case is not the plan's sample")
+		t.Error("the first golden case is not the sample")
 	}
 }
 
@@ -114,7 +112,7 @@ func TestApproval_HashOrdersLikePython(t *testing.T) {
 	if got := hashInput(files); got != `[["\udcff.sh", "a\n"], ["\ud800\udc00.sh", "b\n"]]` {
 		t.Errorf("got %s", got)
 	}
-	if got := FilesHash(map[string]string{}); got != "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945" {
+	if got := filesHash(map[string]string{}); got != "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945" {
 		t.Errorf("empty map hash %s", got) // sha256("[]")
 	}
 }
@@ -264,11 +262,11 @@ func TestApproval_GoldenTrees(t *testing.T) {
 				if wantLocal := strMap(t, w.Vals["local_files"]); !equalMaps(local, wantLocal) {
 					t.Errorf("local files\n got %q\nwant %q", local, wantLocal)
 				}
-				if hashInput(shared) != str(w, "shared_json") || FilesHash(shared) != str(w, "shared_hash") {
-					t.Errorf("shared hash %s, want %s", FilesHash(shared), str(w, "shared_hash"))
+				if hashInput(shared) != str(w, "shared_json") || filesHash(shared) != str(w, "shared_hash") {
+					t.Errorf("shared hash %s, want %s", filesHash(shared), str(w, "shared_hash"))
 				}
-				if hashInput(local) != str(w, "local_json") || FilesHash(local) != str(w, "local_hash") {
-					t.Errorf("local hash %s, want %s", FilesHash(local), str(w, "local_hash"))
+				if hashInput(local) != str(w, "local_json") || filesHash(local) != str(w, "local_hash") {
+					t.Errorf("local hash %s, want %s", filesHash(local), str(w, "local_hash"))
 				}
 				if got, want := g.Key(), strings.ReplaceAll(str(w, "key_template"), "@ROOT@", root); got != want {
 					t.Errorf("key %q, want %q", got, want)
@@ -309,7 +307,7 @@ func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template s
 	if got := State(g); got != "ok" {
 		t.Errorf("a Python-written record: state %s, want ok", got)
 	}
-	if r := Load(g); r == nil || r.Hash != FilesHash(shared) || !equalMaps(r.Snapshot, shared) || !equalMaps(r.Local, local) || r.Key != g.Key() {
+	if r := Load(g); r == nil || r.Hash != filesHash(shared) || !equalMaps(r.Snapshot, shared) || !equalMaps(r.Local, local) || r.Key != g.Key() {
 		t.Errorf("Load: %+v", r)
 	}
 	if err := os.Remove(path); err != nil {
@@ -472,13 +470,12 @@ func TestApproval_EntryFilesEdges(t *testing.T) {
 func TestApproval_DisplayPathTreatsADotDotPrefixAsOutside(t *testing.T) {
 	g := model.Group{StoreDir: "/p", File: "/p/.shortcuts"}
 	for path, want := range map[string]string{"/p/a.sh": "a.sh", "/p/..x/a.sh": "/p/..x/a.sh", "/q/a.sh": "/q/a.sh", "/p/d/../a.sh": "a.sh"} {
-		if got := DisplayPath(g, path); got != want {
+		if got := displayPath(g, path); got != want {
 			t.Errorf("%s: %s", path, got)
 		}
 	}
 }
 
-// py: test_approval.py::test_a_script_cannot_stand_in_for_a_cwd_record
 func TestApproval_AScriptCannotStandInForACwdRecord(t *testing.T) {
 	env := testkit.New(t)
 	proj := env.Project(map[string]any{
@@ -496,13 +493,12 @@ func TestApproval_AScriptCannotStandInForACwdRecord(t *testing.T) {
 	}
 }
 
-// py: test_approval.py::test_diff_details
 func TestApproval_DiffDetails(t *testing.T) {
-	old := map[string]string{"a.txt": "one\ntwo\n", "gone.txt": "bye\n", "same.txt": "x\n", "bin": BinaryMark + "aa"}
-	new := map[string]string{"a.txt": "one\nthree\n", "added.txt": "hi\n", "same.txt": "x\n", "bin": BinaryMark + "bb"}
+	old := map[string]string{"a.txt": "one\ntwo\n", "gone.txt": "bye\n", "same.txt": "x\n", "bin": binaryMark + "aa"}
+	new := map[string]string{"a.txt": "one\nthree\n", "added.txt": "hi\n", "same.txt": "x\n", "bin": binaryMark + "bb"}
 	lines := DiffFiles(old, new)
 	for _, want := range []string{"--- a/a.txt", "+++ b/a.txt", "-two", "+three", "-bye", "+hi", "Binary file bin changed"} {
-		if !contains(lines, want) {
+		if !slices.Contains(lines, want) {
 			t.Errorf("missing %q in %q", want, lines)
 		}
 	}
@@ -522,33 +518,22 @@ func TestApproval_DiffDetails(t *testing.T) {
 	}
 }
 
-func contains(lines []string, want string) bool {
-	for _, l := range lines {
-		if l == want {
-			return true
-		}
-	}
-	return false
-}
-
-// py: test_approval.py::test_a_text_file_cannot_forge_either_mark
 func TestApproval_ATextFileCannotForgeEitherMark(t *testing.T) {
 	bad := []byte("a \xff\n")
 	shown := Reviewable(bad)
 	if Reviewable([]byte(shown)) == shown {
 		t.Error("the shown text of a bad file hashes as the bad file")
 	}
-	forged := append([]byte(BinaryMark), "echo hidden\n"...)
-	if got := Reviewable(forged); !strings.HasPrefix(got, BinaryMark) || strings.Contains(got, "echo hidden") {
+	forged := append([]byte(binaryMark), "echo hidden\n"...)
+	if got := Reviewable(forged); !strings.HasPrefix(got, binaryMark) || strings.Contains(got, "echo hidden") {
 		t.Errorf("forged: %q", got)
 	}
 	// a plain NUL in a text file is shown, not hidden (the script bash would run stays visible)
-	if got := Reviewable([]byte("#!/bin/bash\necho PWNED\n\x00")); !strings.Contains(got, "echo PWNED") || strings.HasPrefix(got, BinaryMark) {
+	if got := Reviewable([]byte("#!/bin/bash\necho PWNED\n\x00")); !strings.Contains(got, "echo PWNED") || strings.HasPrefix(got, binaryMark) {
 		t.Errorf("nul: %q", got)
 	}
 }
 
-// py: test_approval.py::test_invalid_utf8_and_its_escaped_text_are_different_files
 func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
 	one := Reviewable([]byte("a \xff\n"))
 	two := Reviewable([]byte("a \\xff\n"))
@@ -558,19 +543,18 @@ func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
 	if got := Reviewable([]byte("plain\n")); got != "plain\n" {
 		t.Errorf("%q", got)
 	}
-	if want := "a \\xff\n\n" + InvalidMark + "593556958570390666a95c849eaaee0a27455bbe3f9cda2b0a2ea551af93b9e9" + "\n"; one != want {
+	if want := "a \\xff\n\n" + invalidMark + "593556958570390666a95c849eaaee0a27455bbe3f9cda2b0a2ea551af93b9e9" + "\n"; one != want {
 		t.Errorf("%q", one)
 	}
 }
 
-// py: test_approval.py::test_a_binary_replacing_text_says_so_and_text_replacing_a_binary_shows
 func TestApproval_ABinaryReplacingTextSaysSoAndTextReplacingABinaryShows(t *testing.T) {
-	lines := DiffFiles(map[string]string{"t": "echo hi\n"}, map[string]string{"t": BinaryMark + "aa"})
-	if !contains(lines, "Binary file t changed") {
+	lines := DiffFiles(map[string]string{"t": "echo hi\n"}, map[string]string{"t": binaryMark + "aa"})
+	if !slices.Contains(lines, "Binary file t changed") {
 		t.Errorf("%q", lines)
 	}
-	lines = DiffFiles(map[string]string{"t": BinaryMark + "aa"}, map[string]string{"t": "echo hi\n"})
-	if !contains(lines, "+echo hi") {
+	lines = DiffFiles(map[string]string{"t": binaryMark + "aa"}, map[string]string{"t": "echo hi\n"})
+	if !slices.Contains(lines, "+echo hi") {
 		t.Errorf("%q", lines)
 	}
 }
@@ -588,7 +572,7 @@ func TestApproval_FolderFilesNamespace(t *testing.T) {
 	if !ok {
 		t.Fatal("no namespace")
 	}
-	got := FolderFiles(g)
+	got := folderFiles(g)
 	want := map[string]string{
 		"scripts/ns/go.sh": "echo go\n", "scripts/ns/sub/deep.sh": "echo deep\n", "scripts/ns/dirlink": "symlink to sub\n",
 	}
@@ -596,7 +580,7 @@ func TestApproval_FolderFilesNamespace(t *testing.T) {
 		t.Errorf("got %q\nwant %q", got, want)
 	}
 	// a main group has no scripts folder in this sense
-	if len(FolderFiles(model.LoadStore(proj).Main)) != 0 {
+	if len(folderFiles(model.LoadStore(proj).Main)) != 0 {
 		t.Error("main group")
 	}
 	// the namespace's script reaches SharedFiles once, under its real path

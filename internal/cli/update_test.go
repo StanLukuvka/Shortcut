@@ -26,7 +26,6 @@ func tree(t *testing.T, roots ...string) []string {
 	return paths
 }
 
-// py: test_approval.py::test_approval_blocks_until_approved_and_after_any_change
 func TestApproval_BlocksUntilApprovedAndAfterAnyChange(t *testing.T) {
 	e := testkit.New(t)
 	shortcuts := map[string]any{
@@ -39,17 +38,13 @@ func TestApproval_BlocksUntilApprovedAndAfterAnyChange(t *testing.T) {
 
 	// First run blocked; full listing on first approval
 	res := e.RunWith(o, "r", "hi")
-	if res.Code != 1 {
-		t.Errorf("first run: exit %d", res.Code)
-	}
-	contains(t, "first run", res.Stderr, "isn't approved yet")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "first run", res.Stderr, "isn't approved yet")
 	res = e.RunWith(o, "update")
-	if res.Code != 1 {
-		t.Errorf("update with no terminal: exit %d", res.Code)
-	}
-	contains(t, "update", res.Stderr, "in a terminal, or pass -y")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "update", res.Stderr, "in a terminal, or pass -y")
 	for _, want := range []string{"+++ b/.shortcuts\n", "+++ b/scripts/hi.sh", "+echo hi"} {
-		contains(t, "update", res.Stdout, want)
+		testkit.Contains(t, "update", res.Stdout, want)
 	}
 	if code := e.RunWith(o, "r", "hi").Code; code != 1 {
 		t.Errorf("run after a refused update: exit %d", code)
@@ -59,8 +54,8 @@ func TestApproval_BlocksUntilApprovedAndAfterAnyChange(t *testing.T) {
 	if out := e.RunWith(o, "r", "hi").Stdout; out != "hi\n" {
 		t.Errorf("approved run: %q", out)
 	}
-	contains(t, "update .", e.RunWith(o, "update", ".").Stdout, "already approved")
-	contains(t, "update", e.RunWith(o, "update").Stdout, "Nothing to approve here")
+	testkit.Contains(t, "update .", e.RunWith(o, "update", ".").Stdout, "already approved")
+	testkit.Contains(t, "update", e.RunWith(o, "update").Stdout, "Nothing to approve here")
 
 	// Reordered keys and reformatting change nothing
 	e.WriteRegistryRaw(registry, "{\n       \"shortcuts\": {\n       \"there\": {\"description\": \"There\", \"inline\": \"echo there\"},\n"+
@@ -73,13 +68,11 @@ func TestApproval_BlocksUntilApprovedAndAfterAnyChange(t *testing.T) {
 	shortcuts["there"] = map[string]any{"description": "There", "inline": "echo changed"}
 	e.WriteStore(registry, shortcuts)
 	res = e.RunWith(o, "r", "hi")
-	if res.Code != 1 {
-		t.Errorf("changed json: exit %d", res.Code)
-	}
-	contains(t, "changed json", res.Stderr, proj+" changed since you approved it; run: shortcut update")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "changed json", res.Stderr, proj+" changed since you approved it; run: shortcut update")
 	out := runOK(t, e, o, "update", "-y").Stdout
-	contains(t, "diff", strings.ReplaceAll(out, "-      \"inline\": \"echo there\"", "-    \"there\": {"), "-    \"there\": {")
-	contains(t, "diff", out, "+      \"inline\": \"echo changed\"")
+	testkit.Contains(t, "diff", strings.ReplaceAll(out, "-      \"inline\": \"echo there\"", "-    \"there\": {"), "-    \"there\": {")
+	testkit.Contains(t, "diff", out, "+      \"inline\": \"echo changed\"")
 	if strings.Contains(out, "+    \"version\"") {
 		t.Errorf("version shows as changed:\n%s", out)
 	}
@@ -91,7 +84,7 @@ func TestApproval_BlocksUntilApprovedAndAfterAnyChange(t *testing.T) {
 	}
 	out = runOK(t, e, o, "update", "-y").Stdout
 	for _, want := range []string{"--- a/scripts/hi.sh", "-echo hi", "+echo evil"} {
-		contains(t, "diff", out, want)
+		testkit.Contains(t, "diff", out, want)
 	}
 	if got := e.RunWith(o, "r", "hi").Stdout; got != "evil\n" {
 		t.Errorf("run after approving the change: %q", got)
@@ -103,13 +96,10 @@ func TestApproval_BlocksUntilApprovedAndAfterAnyChange(t *testing.T) {
 		t.Errorf("script gone: exit %d", code)
 	}
 	res = e.RunWith(o, "update", "-y")
-	if res.Code != 1 {
-		t.Errorf("update with the script gone: exit %d", res.Code)
-	}
-	contains(t, "update", res.Stderr, "script not found")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "update", res.Stderr, "script not found")
 }
 
-// py: test_approval.py::test_approval_is_kept_outside_what_it_approves
 func TestApproval_IsKeptOutsideWhatItApproves(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(testkit.HI)
@@ -138,7 +128,6 @@ func TestApproval_IsKeptOutsideWhatItApproves(t *testing.T) {
 	}
 }
 
-// py: test_approval.py::test_one_changed_group_leaves_the_others_running
 func TestApproval_OneChangedGroupLeavesTheOthersRunning(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(testkit.OWN)
@@ -148,10 +137,8 @@ func TestApproval_OneChangedGroupLeavesTheOthersRunning(t *testing.T) {
 
 	e.WriteFile(docker, `{"version": 2, "shortcuts": {"ps": {"inline": "echo evil"}}}`, 0)
 	res := e.RunWith(in(proj), "r", "docker", "ps")
-	if res.Code != 1 {
-		t.Errorf("exit %d", res.Code)
-	}
-	contains(t, "docker", res.Stderr, "docker changed since you approved it; run: shortcut update docker")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "docker", res.Stderr, "docker changed since you approved it; run: shortcut update docker")
 	if out := e.RunWith(in(proj), "r", "kube", "get").Stdout; out != "get\n" {
 		t.Errorf("kube: %q", out)
 	}
@@ -164,13 +151,12 @@ func TestApproval_OneChangedGroupLeavesTheOthersRunning(t *testing.T) {
 	}
 }
 
-// py: test_approval.py::test_swapping_two_approved_namespaces_needs_approval
 func TestApproval_SwappingTwoApprovedNamespacesNeedsApproval(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(testkit.OWN)
 	reg := filepath.Join(proj, ".shortcuts")
-	e.WriteImport(reg, "dev", map[string]any{"version": 2, "shortcuts": map[string]any{"deploy": inline("echo dev")}})
-	e.WriteImport(reg, "prod", map[string]any{"version": 2, "shortcuts": map[string]any{"deploy": inline("echo prod")}})
+	e.WriteImport(reg, "dev", testkit.NS(map[string]any{"deploy": testkit.Inline("echo dev")}))
+	e.WriteImport(reg, "prod", testkit.NS(map[string]any{"deploy": testkit.Inline("echo prod")}))
 	e.Approve(reg)
 	if out := e.RunWith(in(proj), "r", "dev", "deploy").Stdout; out != "dev\n" {
 		t.Errorf("before: %q", out)
@@ -181,7 +167,7 @@ func TestApproval_SwappingTwoApprovedNamespacesNeedsApproval(t *testing.T) {
 	if res.Code != 1 || strings.Contains(res.Stdout, "prod") {
 		t.Errorf("swapped: exit %d stdout %q", res.Code, res.Stdout)
 	}
-	contains(t, "swapped", res.Stderr, "dev isn't approved yet; review it with: shortcut update dev")
+	testkit.Contains(t, "swapped", res.Stderr, "dev isn't approved yet; review it with: shortcut update dev")
 
 	runOK(t, e, in(proj), "update", "dev", "-y")
 	if out := e.RunWith(in(proj), "r", "dev", "deploy").Stdout; out != "prod\n" {
@@ -189,42 +175,35 @@ func TestApproval_SwappingTwoApprovedNamespacesNeedsApproval(t *testing.T) {
 	}
 }
 
-// py: test_approval.py::test_a_namespace_approved_in_one_project_is_new_in_another
 func TestApproval_ANamespaceApprovedInOneProjectIsNewInAnother(t *testing.T) {
 	e := testkit.New(t)
 	first := e.Project(testkit.OWN, testkit.Name("first"))
-	tools := e.WriteImport(filepath.Join(first, ".shortcuts"), "tools", map[string]any{"version": 2, "shortcuts": map[string]any{"go": inline("echo go")}})
+	tools := e.WriteImport(filepath.Join(first, ".shortcuts"), "tools", testkit.NS(map[string]any{"go": testkit.Inline("echo go")}))
 	e.Approve(filepath.Join(first, ".shortcuts"))
 	second := e.Project(map[string]any{}, testkit.Name("second"), testkit.Extra(map[string]any{"imports": map[string]any{"tools": tools}}))
 	res := e.RunWith(in(second), "r", "tools", "go")
-	if res.Code != 1 {
-		t.Errorf("exit %d", res.Code)
-	}
-	contains(t, "second", res.Stderr, "tools isn't approved yet")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "second", res.Stderr, "tools isn't approved yet")
 	if out := e.RunWith(in(first), "r", "tools", "go").Stdout; out != "go\n" {
 		t.Errorf("first: %q", out)
 	}
-	contains(t, "update", e.RunWith(in(second), "update", "-y").Stdout, "New to you: tools ("+tools+")")
+	testkit.Contains(t, "update", e.RunWith(in(second), "update", "-y").Stdout, "New to you: tools ("+tools+")")
 }
 
-// py: test_approval.py::test_approval_covers_a_project_script_linked_from_outside
 func TestApproval_CoversAProjectScriptLinkedFromOutside(t *testing.T) {
 	e := testkit.New(t)
 	outside := e.WriteFile(filepath.Join(e.Tmp, "outside.sh"), "echo one\n", 0)
 	proj := e.Project(map[string]any{"go": map[string]any{"script": outside}}, testkit.Approved())
 	e.WriteFile(outside, "echo two\n", 0)
 	res := e.RunWith(in(proj), "r", "go")
-	if res.Code != 1 {
-		t.Errorf("exit %d", res.Code)
-	}
-	contains(t, "stderr", res.Stderr, "changed since you approved it")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "stderr", res.Stderr, "changed since you approved it")
 }
 
-// py: test_approval.py::test_a_namespace_approval_covers_its_whole_scripts_folder
 func TestApproval_ANamespaceApprovalCoversItsWholeScriptsFolder(t *testing.T) {
 	e := testkit.New(t)
 	folder := filepath.Join(e.Store, "imports", "scripts", "dk")
-	e.WriteImport(e.Store, "dk", map[string]any{"version": 2, "shortcuts": map[string]any{"ps": map[string]any{"script": "scripts/dk/ps.sh"}}})
+	e.WriteImport(e.Store, "dk", testkit.NS(map[string]any{"ps": map[string]any{"script": "scripts/dk/ps.sh"}}))
 	e.WriteFile(filepath.Join(folder, "ps.sh"), "#!/usr/bin/env bash\n. \"$(dirname \"$0\")/lib/say\"\nsay ps\n", 0o755)
 	say := e.WriteFile(filepath.Join(folder, "lib", "say"), "say() { echo \"$1\"; }\n", 0)
 	runOK(t, e, testkit.Opts{}, "update", "-y", "dk")
@@ -259,14 +238,12 @@ func TestApproval_ANamespaceApprovalCoversItsWholeScriptsFolder(t *testing.T) {
 	}
 }
 
-// py: test_approval.py::test_approving_says_what_it_covers
 func TestApproval_ApprovingSaysWhatItCovers(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(testkit.GO)
-	contains(t, "update", e.RunWith(in(proj), "update", "-y").Stdout, "not what they call")
+	testkit.Contains(t, "update", e.RunWith(in(proj), "update", "-y").Stdout, "not what they call")
 }
 
-// py: test_approval.py::test_a_cwd_with_a_nul_does_not_stop_the_tools_that_find_it
 func TestApproval_ACwdWithANulDoesNotStopTheToolsThatFindIt(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(testkit.GO, testkit.Approved())
@@ -281,7 +258,6 @@ func TestApproval_ACwdWithANulDoesNotStopTheToolsThatFindIt(t *testing.T) {
 	}
 }
 
-// py: test_approval.py::test_non_utf8_script
 func TestApproval_NonUTF8Script(t *testing.T) {
 	e := testkit.New(t)
 	tool := "bin/tool"
@@ -297,31 +273,30 @@ func TestApproval_NonUTF8Script(t *testing.T) {
 	if strings.Contains(out, "Binary file") {
 		t.Errorf("a text file shown as binary:\n%s", out)
 	}
-	contains(t, "diff", out, "+echo two")
-	contains(t, "diff", out, `+# \xff\xfd`)
+	testkit.Contains(t, "diff", out, "+echo two")
+	testkit.Contains(t, "diff", out, `+# \xff\xfd`)
 }
 
-// py: test_approval.py::test_a_nul_cannot_hide_a_script_bash_would_run
 func TestApproval_ANulCannotHideAScriptBashWouldRun(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(testkit.BinTool, testkit.Files(map[string]any{"bin/tool": []byte("#!/bin/bash\necho PWNED\n\x00")}))
 	out := e.RunWith(in(proj), "update", "-y").Stdout
-	contains(t, "diff", out, "+echo PWNED")
+	testkit.Contains(t, "diff", out, "+echo PWNED")
 	if strings.Contains(out, "Binary file") {
 		t.Errorf("shown as binary:\n%s", out)
 	}
 }
 
-// What `update` shows besides the diff: a namespace's description is part of the file, and so of what is reviewed
-// (the line P-2 left out of test_group_description_shows_once_approved), and a reviewed namespace names the file.
+// What `update` shows besides the diff: a namespace's description is part of the file, and so of what is reviewed,
+// and a reviewed namespace names the file.
 func TestUpdate_ShowsAGroupDescriptionAndItsFile(t *testing.T) {
 	e := testkit.New(t)
 	path := e.WriteImport(e.Store, "docker", map[string]any{"version": 2, "description": "Docker housekeeping",
-		"shortcuts": map[string]any{"ps": inline("echo ps")}})
+		"shortcuts": map[string]any{"ps": testkit.Inline("echo ps")}})
 	out := runOK(t, e, testkit.Opts{}, "update", "docker", "-y").Stdout
-	contains(t, "update docker", out, "Docker housekeeping")
-	contains(t, "update docker", out, "New to you: docker ("+path+")\n")
-	contains(t, "update docker", out, "Approved docker. This covers its definitions and its scripts folder, not what they call.")
+	testkit.Contains(t, "update docker", out, "Docker housekeeping")
+	testkit.Contains(t, "update docker", out, "New to you: docker ("+path+")\n")
+	testkit.Contains(t, "update docker", out, "Approved docker. This covers its definitions and its scripts folder, not what they call.")
 }
 
 // update's own arguments and refusals.
@@ -345,11 +320,11 @@ func TestUpdate_Refusals(t *testing.T) {
 		t.Errorf("update -y: exit %d stderr %q", res.Code, res.Stderr)
 	}
 	// the exported-but-relative-cwd warning and the local-over-shared line
-	proj = e.Project(map[string]any{"x": map[string]any{"inline": "true", "cwd": "sub", "export": true}, "y": inline("true")}, testkit.Name("p2"))
+	proj = e.Project(map[string]any{"x": map[string]any{"inline": "true", "cwd": "sub", "export": true}, "y": testkit.Inline("true")}, testkit.Name("p2"))
 	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 2, "shortcuts": {"y": {"inline": "false"}}}`, 0)
 	res = e.RunWith(in(proj), "update", "-y")
-	contains(t, "warning", res.Stderr, "warning: 'x' is exported, but its cwd 'sub' only exists in this checkout\n")
-	contains(t, "local", res.Stdout, "'y' in .shortcuts is overridden by .shortcuts.local for you.\n")
+	testkit.Contains(t, "warning", res.Stderr, "warning: 'x' is exported, but its cwd 'sub' only exists in this checkout\n")
+	testkit.Contains(t, "local", res.Stdout, "'y' in .shortcuts is overridden by .shortcuts.local for you.\n")
 }
 
 // Q-3: a script path that is not UTF-8 prints escaped in the diff header on stdout, never as a raw 0x9b.
@@ -361,8 +336,49 @@ func TestUpdate_NonUTF8PathIsEscapedOnStdout(t *testing.T) {
 	e.WriteRegistryRaw(filepath.Join(proj, ".shortcuts"),
 		`{"version": 2, "shortcuts": {"hi": {"description": "d", "script": "scripts/a\udc9bb\ud800c.sh"}}}`)
 	out := runOK(t, e, in(proj), "update", "-y").Stdout
-	contains(t, "update", out, "--- a/scripts/a\\udc9bb\\ud800c.sh")
+	testkit.Contains(t, "update", out, "--- a/scripts/a\\udc9bb\\ud800c.sh")
 	if !utf8.ValidString(out) || strings.ContainsAny(out, "\u0080\u009b") {
 		t.Errorf("stdout holds raw bytes: %q", out)
+	}
+}
+
+func TestStores_ShortcutFileNeedsTheCurrentVersion(t *testing.T) {
+	e := testkit.New(t)
+	path := e.WriteImport(e.Store, "docker", map[string]any{"shortcuts": map[string]any{"ps": testkit.Inline("echo ps")}})
+	res := e.Run("update", "docker", "-y")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "no version", res.Stderr, `needs "version": 2`)
+
+	e.WriteFile(path, `{"version": 3, "shortcuts": {"ps": {"inline": "echo ps"}}}`, 0)
+	res = e.Run("update", "docker", "-y")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "version 3", res.Stderr, "newer than this shortcut reads; upgrade shortcut")
+}
+
+func TestStores_AVersionThatIsntAWholeNumberIsRefused(t *testing.T) {
+	e := testkit.New(t)
+	for _, version := range []string{`"3"`, "3.0", "null", "true"} {
+		e.WriteRegistryRaw(e.Store, `{"version": `+version+`, "shortcuts": {"v": {"inline": "echo ran"}}}`)
+		res := e.Run("r", "v")
+		if res.Code != 1 || res.Stdout != "" {
+			t.Errorf("%s: exit %d stdout %q", version, res.Code, res.Stdout)
+		}
+		testkit.Contains(t, version, res.Stderr, "'version' must be a whole number, such as 2")
+	}
+	proj := e.Project(testkit.GO, testkit.Extra(map[string]any{"version": "3"}))
+	res := e.RunWith(in(proj), "update", "-y")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "project", res.Stderr, "'version' must be a whole number")
+}
+
+func TestStores_ArgsNeedANameThatIsAString(t *testing.T) {
+	e := testkit.New(t)
+	for _, arg := range []map[string]any{{"required": true}, {"name": nil}, {"name": true}} {
+		entry := map[string]any{"inline": "echo hi", "args": []any{arg}}
+		e.WriteImport(e.Store, "ns", testkit.NS(map[string]any{"go": entry}))
+		res := e.Run("update", "ns", "-y")
+		raw, _ := json.Marshal(arg)
+		res.WantCode(t, 1)
+		testkit.Contains(t, string(raw), res.Stderr, "needs a 'name'")
 	}
 }

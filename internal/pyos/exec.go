@@ -9,7 +9,7 @@ import (
 	"syscall"
 )
 
-// ExecChild is exec_child (os.execvpe): flush, chdir, default SIGPIPE and SIGXFSZ, then replace this process, so the
+// ExecChild runs a child as os.execvpe does: flush, chdir, default SIGPIPE and SIGXFSZ, then replace this process, so the
 // exit code, signals and terminal are the child's. It returns only on failure. env is "K=V" strings; the PATH
 // search uses env's PATH (see pathOf), not this process's.
 func ExecChild(argv []string, cwd string, env []string, flush func()) error {
@@ -49,7 +49,7 @@ func lookPath(file, path string) (string, error) {
 	}
 	denied := false
 	for _, dir := range strings.Split(path, ":") {
-		full := pyJoin(dir, file)
+		full := Join(dir, file)
 		st, err := os.Stat(full)
 		if err != nil || st.IsDir() {
 			continue

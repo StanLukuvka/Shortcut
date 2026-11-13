@@ -14,7 +14,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/pyos"
 )
 
-// RegistryNotFoundError is the FileNotFoundError load_registry_file raises: a store without a registry is empty,
+// RegistryNotFoundError is the error for a missing registry file: a store without a registry is empty,
 // but a named namespace file that is missing is a problem.
 type RegistryNotFoundError struct{ Path string }
 
@@ -27,17 +27,7 @@ func isJSONError(err error) bool {
 	return errors.As(err, &syn) || errors.As(err, &u8) || errors.Is(err, pyjson.ErrDepth)
 }
 
-func isFile(path string) bool {
-	st, err := os.Stat(path)
-	return err == nil && st.Mode().IsRegular()
-}
-
-func isDir(path string) bool {
-	st, err := os.Stat(path)
-	return err == nil && st.IsDir()
-}
-
-// GlobalStoreDir is get_global_store_dir: $SHORTCUTS_HOME (when not empty) or ~/.shortcuts, made absolute.
+// GlobalStoreDir returns $SHORTCUTS_HOME (when not empty) or ~/.shortcuts, made absolute.
 func GlobalStoreDir() string {
 	home := os.Getenv("SHORTCUTS_HOME")
 	if home == "" {
@@ -46,7 +36,7 @@ func GlobalStoreDir() string {
 	return pyos.Abs(pyos.ExpandUser(home))
 }
 
-func RegistryExists(storeDir string) bool { return isFile(pyos.Join(storeDir, "shortcuts.json")) }
+func RegistryExists(storeDir string) bool { return pyos.IsFile(pyos.Join(storeDir, "shortcuts.json")) }
 
 // IsGlobalStore: Path(store_dir).resolve() == Path(global).resolve().
 func IsGlobalStore(storeDir string) bool {
@@ -62,10 +52,10 @@ func isProjectRoot(folder string) bool {
 	if neverAProject(pyos.Realpath(pyos.Join(folder, ProjectFile))) {
 		return false
 	}
-	return isFile(pyos.Join(folder, ProjectFile)) || isFile(pyos.Join(folder, LocalFile))
+	return pyos.IsFile(pyos.Join(folder, ProjectFile)) || pyos.IsFile(pyos.Join(folder, LocalFile))
 }
 
-// FindProjectRoot is find_project_root: the nearest folder at or above start (default the cwd) with a .shortcuts or
+// FindProjectRoot returns the nearest folder at or above start (default the cwd) with a .shortcuts or
 // .shortcuts.local that is not the global store. "" = none.
 func FindProjectRoot(start string) string {
 	if start == "" {
@@ -83,15 +73,15 @@ func FindProjectRoot(start string) string {
 	}
 }
 
-// OldProjectFolder is old_project_folder (lookup.py): the nearest .shortcuts folder above the caller that isn't the
+// oldProjectFolder returns the nearest .shortcuts folder above the caller that isn't the
 // global store. "" = none.
-func OldProjectFolder(callerCwd string) string {
+func oldProjectFolder(callerCwd string) string {
 	if callerCwd == "" {
 		callerCwd, _ = pyos.Getwd()
 	}
 	for cur := pyos.Realpath(callerCwd); ; {
 		path := pyos.Join(cur, ProjectFile)
-		if isDir(path) && !neverAProject(pyos.Realpath(path)) {
+		if pyos.IsDir(path) && !neverAProject(pyos.Realpath(path)) {
 			return path
 		}
 		parent := pyos.Dirname(cur)
@@ -102,7 +92,7 @@ func OldProjectFolder(callerCwd string) string {
 	}
 }
 
-// LocalProjectRoot is local_project_root: where --local writes, this folder and never a parent. Its errors are the
+// LocalProjectRoot returns where --local writes, this folder and never a parent. Its errors are the
 // messages Python's die() printed.
 func LocalProjectRoot(cwd string) (string, error) {
 	here := pyos.Realpath(cwd)
@@ -121,9 +111,9 @@ func LocalProjectRoot(cwd string) (string, error) {
 	return here, nil
 }
 
-// LockPath is where registry_lock locks: <store>/.lock for the global store; otherwise, to keep a repo's root clean,
+// lockPath is where the registry lock is: <store>/.lock for the global store; otherwise, to keep a repo's root clean,
 // <global>/locks/<sha256(realpath(store))>.lock. The same names as Python, so the two versions exclude each other.
-func LockPath(storeDir string) string {
+func lockPath(storeDir string) string {
 	if IsGlobalStore(storeDir) {
 		return pyos.Join(storeDir, ".lock")
 	}
@@ -134,7 +124,7 @@ func LockPath(storeDir string) string {
 // WithRegistryLock serializes read-modify-write of a store's registry across processes. Not reentrant: never nest
 // it, and never call InitStore inside it.
 func WithRegistryLock(storeDir string, fn func() error) error {
-	return pyos.WithLock(LockPath(storeDir), fn)
+	return pyos.WithLock(lockPath(storeDir), fn)
 }
 
 // InitStore creates the global store's empty registry if it has none.
@@ -154,9 +144,9 @@ func emptyRegistry() *pyjson.Object {
 	return o
 }
 
-// LoadRegistryFile is load_registry_file (helpers.py:203-218), same messages.
+// LoadRegistryFile reads a registry file, with the messages of the Python version.
 func LoadRegistryFile(path string) (*pyjson.Object, error) {
-	if !isFile(path) {
+	if !pyos.IsFile(path) {
 		return nil, &RegistryNotFoundError{path}
 	}
 	v, err := ReadJSONFile(path)
@@ -186,9 +176,9 @@ func LoadRegistry(storeDir string) (*pyjson.Object, error) {
 	return LoadRegistryFile(pyos.Join(storeDir, "shortcuts.json"))
 }
 
-// SaveRegistryFile is save_registry_file: it refuses to write over a file it can't read.
+// SaveRegistryFile refuses to write over a file it can't read.
 func SaveRegistryFile(path string, data *pyjson.Object) error {
-	if isFile(path) {
+	if pyos.IsFile(path) {
 		if _, err := ReadJSONFile(path); err != nil {
 			text := err.Error()
 			if !isJSONError(err) {
@@ -209,7 +199,7 @@ func SaveRegistryAtomic(storeDir string, data *pyjson.Object) error {
 
 var namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`) // Go's $ is end of text: no trailing newline, as fullmatch
 
-// ValidateName is validate_name, same message.
+// ValidateName checks a shortcut name, with the message of the Python version.
 func ValidateName(name string) error {
 	if !namePattern.MatchString(name) {
 		return fmt.Errorf("invalid shortcut name '%s'. Must match ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ "+
@@ -231,9 +221,9 @@ func ResolveScriptPath(baseDir, scriptField string) (string, error) {
 	return target, nil
 }
 
-// FileError is file_error: what's wrong with a file as a whole ("" = nothing); EntryErrors checks what's inside
+// fileError returns what's wrong with a file as a whole ("" = nothing); EntryErrors checks what's inside
 // 'shortcuts'. name is the namespace's, or "" for a main file.
-func FileError(path string, data *pyjson.Object, name string) string {
+func fileError(path string, data *pyjson.Object, name string) string {
 	known := map[string]bool{"version": true, "description": true, "shortcuts": true}
 	if name != "" {
 		if _, has := data.Get("imports"); has {
@@ -266,7 +256,7 @@ func FileError(path string, data *pyjson.Object, name string) string {
 		}
 	}
 	if len(unknown) > 0 {
-		return fmt.Sprintf("%s has an unknown field: %s", path, strings.Join(sortedLess(unknown), ", "))
+		return fmt.Sprintf("%s has an unknown field: %s", path, strings.Join(pyjson.SortStrings(unknown), ", "))
 	}
 	return ""
 }

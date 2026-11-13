@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/big"
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/pyjson"
@@ -17,16 +16,16 @@ const (
 	RegistryVersion = 2
 	Caller          = "caller"    // 'cwd' value, and the default: run in the user's current directory
 	ImportSuffix    = ".shortcut" // an imported namespace, in the same JSON format as shortcuts.json
-	BareImport      = "a namespace file needs a name, e.g. docker.shortcut"
+	bareImport      = "a namespace file needs a name, e.g. docker.shortcut"
 	ProjectFile     = ".shortcuts"       // shared and committed; shortcut never writes it
 	LocalFile       = ".shortcuts.local" // personal; overlays ProjectFile entry by entry
-	ApprovalsDir    = "approvals"
+	approvalsDir    = "approvals"
 )
 
 // Origin is "from" in JSON: the project promote took an entry from. Global shortcuts.json only.
 type Origin struct{ Source, Name string }
 
-// Entry is one shortcut's definition (ShortcutEntry).
+// Entry is one shortcut's definition.
 type Entry struct {
 	Name                          string
 	Description                   string  // "" allowed; always written
@@ -45,13 +44,7 @@ var knownFields = map[string]bool{
 
 var textFields = []string{"inline", "script", "cwd", "icon", "created_by", "created"}
 
-// sortedLess sorts strings in Python's order (code points after surrogateescape).
-func sortedLess(s []string) []string {
-	sort.Slice(s, func(i, j int) bool { return pyjson.Less(s[i], s[j]) })
-	return s
-}
-
-// EntryFromValue is ShortcutEntry.from_dict (shortcut_entry.py:30-62), same messages and same check order.
+// EntryFromValue builds an Entry from a decoded value, with the messages and check order of the Python version.
 func EntryFromValue(name string, v pyjson.Value) (*Entry, error) {
 	bad := func(problem string) error { return fmt.Errorf("'%s' is not a valid entry: %s", name, problem) }
 	data, ok := v.(*pyjson.Object)
@@ -66,7 +59,7 @@ func EntryFromValue(name string, v pyjson.Value) (*Entry, error) {
 		}
 	}
 	if len(unknown) > 0 {
-		return nil, bad("unknown field: " + strings.Join(sortedLess(unknown), ", "))
+		return nil, bad("unknown field: " + strings.Join(pyjson.SortStrings(unknown), ", "))
 	}
 	e := &Entry{Name: name}
 	if d, present := data.Get("description"); present {
@@ -131,7 +124,7 @@ func EntryFromValue(name string, v pyjson.Value) (*Entry, error) {
 	return e, nil
 }
 
-// ToObject is to_dict: description, then the text fields that are set, confirm, export, args, from.
+// ToObject returns the entry as an object: description, then the text fields that are set, confirm, export, args, from.
 func (e *Entry) ToObject() *pyjson.Object {
 	o := &pyjson.Object{}
 	o.Set("description", e.Description)
@@ -169,7 +162,7 @@ func ArgVar(name string) string {
 	return "SC_ARG_" + strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
 }
 
-// ValidateArgs is validate_args (helpers.py:64-91), same messages and same check order.
+// ValidateArgs checks a declared args list, with the messages and check order of the Python version.
 func ValidateArgs(name string, args pyjson.Value) error {
 	bad := func(msg string) error { return fmt.Errorf("'%s' is not a valid entry: %s", name, msg) }
 	list, ok := args.([]pyjson.Value)
@@ -196,7 +189,7 @@ func ValidateArgs(name string, args pyjson.Value) error {
 			}
 		}
 		if len(unknown) > 0 {
-			return bad("unknown args field: " + strings.Join(sortedLess(unknown), ", "))
+			return bad("unknown args field: " + strings.Join(pyjson.SortStrings(unknown), ", "))
 		}
 		for _, f := range []string{"default", "desc"} {
 			if v, _ := arg.Get(f); v != nil {
@@ -241,7 +234,7 @@ func IsRelativeCwd(cwd *string) bool {
 	return cwd != nil && *cwd != "" && *cwd != Caller && !strings.HasPrefix(pyos.ExpandUser(*cwd), "/")
 }
 
-// PlacementError is placement_error: fields only some files can have ('export' a project's own, 'from' the global
+// PlacementError reports fields only some files can have ('export' a project's own, 'from' the global
 // store's shortcuts.json). "" = none.
 func PlacementError(e *Entry, inProject, inGlobal bool) string {
 	if e.Export && !inProject {

@@ -1,6 +1,6 @@
 package cli
 
-// usageText is print_usage (cli.py), verbatim. A raw string cannot hold a backtick, so those are joined in.
+// usageText is the usage text, verbatim. A raw string cannot hold a backtick, so those are joined in.
 const usageText = `shortcut - run and manage quick scripts and commands
 
 Usage:

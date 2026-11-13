@@ -8,10 +8,10 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/pyos"
 )
 
-// ShowDiff is helpers.show_diff: each line made Safe; on a terminal added lines green and removed red (the +++ and
+// ShowDiff shows a diff: each line made Safe; on a terminal added lines green and removed red (the +++ and
 // --- headers and context stay plain); then the text goes to $PAGER when stdout is a terminal, PAGER is set and
 // there are at least as many lines as terminal rows, else straight to stdout. A pager that cannot start, a bad
-// PAGER value or a non-zero exit falls through to printing the text directly (so it can print twice, C24).
+// PAGER value or a non-zero exit falls through to printing the text directly (so it can print twice).
 func ShowDiff(s *Streams, lines []string) {
 	tty := s.Out.IsTerminal()
 	shown := make([]string, len(lines))

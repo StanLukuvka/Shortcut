@@ -21,7 +21,7 @@ func argSpec(fields ...map[string]any) []*pyjson.Object {
 	return spec
 }
 
-// bind_args and join_command have no unit tests in Python (join_command is only reached through `new`, P-4); this
+// bindArgs and joinCommand had no unit tests in Python (joinCommand is only reached through `new`); this
 // is the smallest check that fails if the binding logic breaks.
 func TestBindArgs(t *testing.T) {
 	a, b := map[string]any{"name": "a", "required": true}, map[string]any{"name": "b", "default": "x"}

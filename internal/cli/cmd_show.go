@@ -3,8 +3,6 @@ package cli
 import (
 	"os"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
@@ -12,54 +10,6 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/pyos"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
-
-// isPySpace is str.isspace() for one character: Python counts U+001C..U+001F as white space too.
-func isPySpace(r rune) bool { return unicode.IsSpace(r) || (r >= 0x1c && r <= 0x1f) }
-
-// pyRstrip is str.rstrip().
-func pyRstrip(s string) string { return strings.TrimRightFunc(s, isPySpace) }
-
-// replaceInvalidUTF8 is bytes.decode("utf-8", "replace"): one U+FFFD for each maximal invalid subpart, so a
-// truncated sequence is one and each stray byte is one (strings.ToValidUTF8 would merge a run into one).
-func replaceInvalidUTF8(raw []byte) string {
-	var b strings.Builder
-	for i := 0; i < len(raw); {
-		r, n := utf8.DecodeRune(raw[i:])
-		if r != utf8.RuneError || n != 1 {
-			b.WriteString(string(raw[i : i+n]))
-			i += n
-			continue
-		}
-		// a lead byte followed by the continuation bytes it is allowed: that much is one bad sequence
-		lo, hi, need := byte(0x80), byte(0xBF), 0
-		switch c := raw[i]; {
-		case c >= 0xC2 && c <= 0xDF:
-			need = 1
-		case c >= 0xE0 && c <= 0xEF:
-			need = 2
-			if c == 0xE0 {
-				lo = 0xA0
-			} else if c == 0xED {
-				hi = 0x9F
-			}
-		case c >= 0xF0 && c <= 0xF4:
-			need = 3
-			if c == 0xF0 {
-				lo = 0x90
-			} else if c == 0xF4 {
-				hi = 0x8F
-			}
-		}
-		j := i + 1
-		for k := 0; k < need && j < len(raw) && raw[j] >= lo && raw[j] <= hi; k++ {
-			j++
-			lo, hi = 0x80, 0xBF
-		}
-		b.WriteString("\uFFFD")
-		i = j
-	}
-	return b.String()
-}
 
 func scopeOf(g model.Group) string {
 	switch {
@@ -78,7 +28,7 @@ func orCaller(s *string) string {
 	return *s
 }
 
-// cmdShow is cmd_show.
+// cmdShow prints a shortcut's definition and where it resolves.
 func cmdShow(s *textio.Streams, args []string) error {
 	ns, err := parsers["show"].Parse(args)
 	if err != nil {
@@ -123,15 +73,14 @@ func cmdShow(s *textio.Streams, args []string) error {
 	if entry.Origin != nil {
 		out("From:        '" + entry.Origin.Name + "' in " + entry.Origin.Source)
 	}
-	if entry.Created != nil && *entry.Created != "" {
-		out("Created:     " + *entry.Created)
+	optLine := func(label string, p *string) {
+		if p != nil && *p != "" {
+			out(label + *p)
+		}
 	}
-	if entry.CreatedBy != nil && *entry.CreatedBy != "" {
-		out("Created by:  " + *entry.CreatedBy)
-	}
-	if entry.Icon != nil && *entry.Icon != "" {
-		out("Icon:        " + *entry.Icon)
-	}
+	optLine("Created:     ", entry.Created)
+	optLine("Created by:  ", entry.CreatedBy)
+	optLine("Icon:        ", entry.Icon)
 	if state := approval.State(group); state != "ok" {
 		what := "changed"
 		if state == "new" {
@@ -149,7 +98,7 @@ func cmdShow(s *textio.Streams, args []string) error {
 		return err
 	}
 	out("\nScript (" + path + "):")
-	if st, err := os.Stat(path); err == nil && st.Mode().IsRegular() {
+	if pyos.IsFile(path) {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			return err // lazy: Python's "[Errno 13] ..." text is not reproduced
@@ -163,7 +112,7 @@ func cmdShow(s *textio.Streams, args []string) error {
 	return nil
 }
 
-// showJSON is show_json: one JSON object, the entry as written plus where it resolves. A broken entry still prints,
+// showJSON prints one JSON object, the entry as written plus where it resolves. A broken entry still prints,
 // with its error and null for what can't be worked out.
 func showJSON(s *textio.Streams, words []string, skipLocal bool) error {
 	f, err := model.FindEntry(words, "", skipLocal, false)
@@ -213,6 +162,6 @@ func showJSON(s *textio.Streams, words []string, skipLocal bool) error {
 	if err != nil {
 		out.Set("error", err.Error())
 	}
-	s.Out.WriteString(pyjson.Dumps(out, pyjson.Opts{Indent: 2, EnsureASCII: true}) + "\n")
+	s.Out.WriteString(pyjson.Dumps(out, pyjson.Opts{Indent: 2}) + "\n")
 	return nil
 }

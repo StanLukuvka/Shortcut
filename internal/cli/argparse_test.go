@@ -2,7 +2,7 @@ package cli
 
 import (
 	"encoding/json"
-	"os"
+	"github.com/StanLukuvka/Shortcut/internal/testkit"
 	"reflect"
 	"strings"
 	"testing"
@@ -21,10 +21,7 @@ type goldenCase struct {
 
 func loadGolden(t *testing.T, name string) []goldenCase {
 	t.Helper()
-	raw, err := os.ReadFile("../testdata/text/" + name)
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := testkit.Golden(t, "text/"+name)
 	var f struct {
 		Cases []goldenCase `json:"cases"`
 	}
@@ -42,7 +39,7 @@ func loadGolden(t *testing.T, name string) []goldenCase {
 	return f.Cases
 }
 
-// withBundled adds what P-8's --bundled changes in Python's recorded init cases: its namespace key, its place in the
+// withBundled adds what --bundled changes in Python's recorded init cases: its namespace key, its place in the
 // usage line and its help line. Nothing else of the recording is touched.
 func withBundled(c goldenCase) goldenCase {
 	if c.Namespace != nil {

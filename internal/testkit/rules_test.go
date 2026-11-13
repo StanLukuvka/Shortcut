@@ -42,7 +42,6 @@ func violations(fset *token.FileSet, f *ast.File) []string {
 	return out
 }
 
-// py: test_fixtures.py::test_spokes_stay_on_the_hub
 func TestFixtures_TestsStayOnTheHub(t *testing.T) {
 	// The rule itself: it must see each thing it is there to stop.
 	src := `package x

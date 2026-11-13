@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -23,17 +22,9 @@ func runOK(t *testing.T, e *testkit.Env, o testkit.Opts, args ...string) testkit
 
 func in(dir string) testkit.Opts { return testkit.Opts{Cwd: dir} }
 
-func eq(t *testing.T, what string, got, want any) {
-	t.Helper()
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("%s: got %#v, want %#v", what, got, want)
-	}
-}
-
-// py: test_running.py::test_run_inline_with_passthrough_args
 func TestRunning_RunInlineWithPassthroughArgs(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"echo": inline("echo name=$0 first=$1 all=$*")})
+	e.WriteStore(e.Store, map[string]any{"echo": testkit.Inline("echo name=$0 first=$1 all=$*")})
 	for range 2 {
 		res := e.Run("run", "echo", "-v", "--option", "arg1", "arg2")
 		if res.Code != 0 || strings.TrimSpace(res.Stdout) != "name=echo first=-v all=-v --option arg1 arg2" {
@@ -42,13 +33,12 @@ func TestRunning_RunInlineWithPassthroughArgs(t *testing.T) {
 	}
 }
 
-// py: test_running.py::test_the_environment_says_what_runs_and_from_where
 func TestRunning_TheEnvironmentSaysWhatRunsAndFromWhere(t *testing.T) {
 	e := testkit.New(t)
 	show := `echo "$SHORTCUT_NAME|$SHORTCUT_NAMESPACE|$SHORTCUT_CALLER_CWD|${SC_ARG_OLD-unset}|${SC_ARG_X-unset}"`
-	e.WriteImport(e.Store, "dk", map[string]any{"version": 2, "shortcuts": map[string]any{
-		"env": map[string]any{"inline": show, "args": []any{map[string]any{"name": "x", "default": "d"}}}}})
-	e.WriteStore(e.Store, map[string]any{"env": inline(show)})
+	e.WriteImport(e.Store, "dk", testkit.NS(map[string]any{
+		"env": map[string]any{"inline": show, "args": []any{map[string]any{"name": "x", "default": "d"}}}}))
+	e.WriteStore(e.Store, map[string]any{"env": testkit.Inline(show)})
 	runOK(t, e, testkit.Opts{}, "update", "-y", "dk")
 	caller := e.Folder("caller")
 	outer := map[string]string{"SC_ARG_OLD": "outer", "SC_ARG_X": "outer", "SHORTCUT_NAMESPACE": "outer"}
@@ -62,31 +52,28 @@ func TestRunning_TheEnvironmentSaysWhatRunsAndFromWhere(t *testing.T) {
 	}
 }
 
-// py: test_running.py::test_a_name_alone_never_runs_a_shortcut
 func TestRunning_ANameAloneNeverRunsAShortcut(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"hello": inline("echo hello")})
+	e.WriteStore(e.Store, map[string]any{"hello": testkit.Inline("echo hello")})
 	for _, argv := range [][]string{{"hello"}, {"nano", "hello"}} {
 		res := e.Run(argv...)
 		if res.Code != 2 || res.Stdout != "" {
 			t.Errorf("%v: exit %d stdout %q", argv, res.Code, res.Stdout)
 		}
-		contains(t, "stderr", res.Stderr, "unknown command '"+argv[0]+"'")
-		contains(t, "stderr", res.Stderr, "shortcut run "+argv[0])
+		testkit.Contains(t, "stderr", res.Stderr, "unknown command '"+argv[0]+"'")
+		testkit.Contains(t, "stderr", res.Stderr, "shortcut run "+argv[0])
 	}
 }
 
-// py: test_running.py::test_r_is_short_for_run
 func TestRunning_RIsShortForRun(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"hello": inline(`echo "hello $1"`)})
+	e.WriteStore(e.Store, map[string]any{"hello": testkit.Inline(`echo "hello $1"`)})
 	if out := e.Run("r", "hello", "you").Stdout; out != "hello you\n" {
 		t.Errorf("r hello you: %q", out)
 	}
-	contains(t, "r --help", e.Run("r", "--help").Stdout, "shortcut run|r [--global] [-y] <name>")
+	testkit.Contains(t, "r --help", e.Run("r", "--help").Stdout, "shortcut run|r [--global] [-y] <name>")
 }
 
-// py: test_running.py::test_script_shebang_without_exec_and_elf
 // The Python script was python3; the same branches (a #! line on a file that can't be executed, no #! line, a #! line
 // on an executable) are run with sh and bash scripts.
 func TestRunning_ScriptShebangWithoutExecAndElf(t *testing.T) {
@@ -108,30 +95,24 @@ func TestRunning_ScriptShebangWithoutExecAndElf(t *testing.T) {
 	}
 }
 
-// py: test_running.py::test_run_help
 func TestRunning_RunHelp(t *testing.T) {
 	e := testkit.New(t)
 	for _, flag := range []string{"--help", "-h"} {
 		res := e.Run("run", flag)
-		if res.Code != 0 {
-			t.Errorf("run %s: exit %d", flag, res.Code)
-		}
-		contains(t, "run "+flag, res.Stdout, "shortcut run|r [--global] [-y] <name> [args...]")
+		res.WantCode(t, 0)
+		testkit.Contains(t, "run "+flag, res.Stdout, "shortcut run|r [--global] [-y] <name> [args...]")
 	}
-	e.WriteStore(e.Store, map[string]any{"echo_args": inline(`echo "args: $@"`)})
+	e.WriteStore(e.Store, map[string]any{"echo_args": testkit.Inline(`echo "args: $@"`)})
 	res := e.Run("run", "echo_args", "--help")
-	if res.Code != 0 {
-		t.Errorf("exit %d", res.Code)
-	}
-	contains(t, "stdout", res.Stdout, "args: --help")
+	res.WantCode(t, 0)
+	testkit.Contains(t, "stdout", res.Stdout, "args: --help")
 }
 
-// py: test_running.py::test_run_cwd_modes
 func TestRunning_RunCwdModes(t *testing.T) {
 	e := testkit.New(t)
 	fixed := e.Folder("fixed")
 	proj := e.Project(map[string]any{
-		"default": inline("pwd"),
+		"default": testkit.Inline("pwd"),
 		"caller":  map[string]any{"inline": "pwd", "cwd": "caller"},
 		"root":    map[string]any{"inline": "pwd", "cwd": "."},
 		"sibling": map[string]any{"inline": "pwd", "cwd": "frontend"},
@@ -144,20 +125,17 @@ func TestRunning_RunCwdModes(t *testing.T) {
 		if res.Stdout != c[1]+"\n" {
 			t.Errorf("%s: stdout %q, want %q", c[0], res.Stdout, c[1]+"\n")
 		}
-		contains(t, c[0], res.Stderr, "→ "+c[1]+"\n")
+		testkit.Contains(t, c[0], res.Stderr, "→ "+c[1]+"\n")
 	}
 	res := e.RunWith(in(here), "r", "gone")
-	if res.Code != 1 {
-		t.Errorf("gone: exit %d", res.Code)
-	}
-	contains(t, "gone", res.Stderr, "run directory does not exist")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "gone", res.Stderr, "run directory does not exist")
 }
 
-// py: test_running.py::test_run_directory_line
 func TestRunning_RunDirectoryLine(t *testing.T) {
 	e := testkit.New(t)
 	work := e.Folder("work")
-	e.WriteStore(e.Store, map[string]any{"pwd": inline("pwd")})
+	e.WriteStore(e.Store, map[string]any{"pwd": testkit.Inline("pwd")})
 	res := e.RunWith(in(work), "run", "pwd")
 	if res.Stdout != work+"\n" || res.Stderr != "→ "+work+"\n" {
 		t.Errorf("stdout %q stderr %q", res.Stdout, res.Stderr)
@@ -167,32 +145,28 @@ func TestRunning_RunDirectoryLine(t *testing.T) {
 		t.Errorf("SHORTCUT_SHOW_DIR=0: stderr %q", res.Stderr)
 	}
 	_, out := e.InTerminal(in(work), nil, "run", "pwd")
-	contains(t, "on a terminal", out, "\x1b[2m→ "+work+"\x1b[0m")
+	testkit.Contains(t, "on a terminal", out, "\x1b[2m→ "+work+"\x1b[0m")
 }
 
-// py: test_running.py::test_show_prints_the_entry_script_cwd_and_args
 func TestRunning_ShowPrintsTheEntryScriptCwdAndArgs(t *testing.T) {
 	e := testkit.New(t)
 	script := e.Script("shown.sh", "#!/usr/bin/env bash\necho show output running\n")
 	e.WriteStore(e.Store, map[string]any{"shown": map[string]any{"script": script, "description": "Show sample", "cwd": e.Tmp,
 		"args": []any{map[string]any{"name": "target", "required": true}, map[string]any{"name": "mode", "default": "fast"}}}})
 	res := e.Run("show", "shown")
-	if res.Code != 0 {
-		t.Errorf("exit %d: %s", res.Code, res.Stderr)
-	}
-	contains(t, "show", res.Stdout, "Description: Show sample\n")
-	contains(t, "show", res.Stdout, "echo show output running")
-	contains(t, "show", res.Stdout, "Run CWD:     "+e.Tmp+"\n")
-	contains(t, "show", res.Stdout, "Usage:       shortcut r shown <target> [mode]\n")
+	res.WantCode(t, 0)
+	testkit.Contains(t, "show", res.Stdout, "Description: Show sample\n")
+	testkit.Contains(t, "show", res.Stdout, "echo show output running")
+	testkit.Contains(t, "show", res.Stdout, "Run CWD:     "+e.Tmp+"\n")
+	testkit.Contains(t, "show", res.Stdout, "Usage:       shortcut r shown <target> [mode]\n")
 }
 
-// py: test_running.py::test_show_says_when_the_run_directory_or_script_is_gone
 func TestRunning_ShowSaysWhenTheRunDirectoryOrScriptIsGone(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"gone": map[string]any{"inline": "true", "cwd": "/no/such/folder"}})
-	contains(t, "cwd", e.Run("show", "gone").Stdout, "/no/such/folder")
+	testkit.Contains(t, "cwd", e.Run("show", "gone").Stdout, "/no/such/folder")
 	e.WriteStore(e.Store, map[string]any{"gone": map[string]any{"script": "scripts/none.sh"}})
-	contains(t, "script", e.Run("show", "gone").Stdout, "[file missing:")
+	testkit.Contains(t, "script", e.Run("show", "gone").Stdout, "[file missing:")
 }
 
 func decodeObject(t *testing.T, text string) map[string]any {
@@ -204,81 +178,69 @@ func decodeObject(t *testing.T, text string) map[string]any {
 	return info
 }
 
-// py: test_running.py::test_show_json_prints_an_entry_show_refuses
 func TestRunning_ShowJSONPrintsAnEntryShowRefuses(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"bad": map[string]any{"inline": "true", "cwd": 123}})
-	contains(t, "show bad", e.Run("show", "bad").Stderr, "'cwd' must be a string")
+	testkit.Contains(t, "show bad", e.Run("show", "bad").Stderr, "'cwd' must be a string")
 	res := e.Run("show", "--json", "bad")
 	if res.Code != 0 {
 		t.Fatalf("exit %d: %s", res.Code, res.Stderr)
 	}
 	info := decodeObject(t, res.Stdout)
-	eq(t, "entry", info["entry"], map[string]any{"inline": "true", "cwd": float64(123)})
-	contains(t, "error", info["error"].(string), "'cwd' must be a string")
-	eq(t, "name", info["name"], "bad")
+	testkit.Eq(t, "entry", info["entry"], map[string]any{"inline": "true", "cwd": float64(123)})
+	testkit.Contains(t, "error", info["error"].(string), "'cwd' must be a string")
+	testkit.Eq(t, "name", info["name"], "bad")
 	for _, k := range []string{"cwd", "run_cwd", "script_path"} {
-		eq(t, k, info[k], nil)
+		testkit.Eq(t, k, info[k], nil)
 	}
 }
 
-// py: test_running.py::test_show_json_is_one_object_with_where_it_resolves
 func TestRunning_ShowJSONIsOneObjectWithWhereItResolves(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"s": map[string]any{"script": "scripts/s.sh", "cwd": "/tmp"}, "c": inline("true")})
+	e.WriteStore(e.Store, map[string]any{"s": map[string]any{"script": "scripts/s.sh", "cwd": "/tmp"}, "c": testkit.Inline("true")})
 	info := decodeObject(t, e.Run("show", "--json", "s").Stdout)
 	for k, want := range map[string]any{"name": "s", "namespace": nil, "scope": "global", "defined_in": filepath.Join(e.Store, "shortcuts.json"),
 		"source": nil, "script_path": filepath.Join(e.Store, "scripts", "s.sh"), "cwd": "/tmp", "run_cwd": "/tmp", "approval": "ok",
 		"error": nil, "hides_global": false, "entry": map[string]any{"script": "scripts/s.sh", "cwd": "/tmp"}} {
-		eq(t, k, info[k], want)
+		testkit.Eq(t, k, info[k], want)
 	}
 	info = decodeObject(t, e.RunWith(in(e.Tmp), "show", "--json", "c").Stdout)
-	eq(t, "cwd", info["cwd"], nil)
-	eq(t, "run_cwd", info["run_cwd"], e.Tmp)
+	testkit.Eq(t, "cwd", info["cwd"], nil)
+	testkit.Eq(t, "run_cwd", info["run_cwd"], e.Tmp)
 }
 
-// py: test_running.py::test_show_json_names_a_namespace_entry_bare
 func TestRunning_ShowJSONNamesANamespaceEntryBare(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteImport(e.Store, "dk", map[string]any{"version": 2, "shortcuts": map[string]any{"ps": map[string]any{"inline": "true", "cwd": "."}}})
+	e.WriteImport(e.Store, "dk", testkit.NS(map[string]any{"ps": map[string]any{"inline": "true", "cwd": "."}}))
 	info := decodeObject(t, e.Run("show", "--json", "dk", "ps").Stdout)
 	for k, want := range map[string]any{"name": "ps", "namespace": "dk", "scope": "namespace",
 		"defined_in": filepath.Join(e.Store, "imports", "dk.shortcut"), "cwd": ".", "run_cwd": filepath.Join(e.Store, "imports"), "approval": "new"} {
-		eq(t, k, info[k], want)
+		testkit.Eq(t, k, info[k], want)
 	}
 }
 
-// py: test_running.py::test_a_run_that_cant_start_is_an_error
 func TestRunning_ARunThatCantStartIsAnError(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, testkit.GO)
 	res := e.RunWith(testkit.Opts{Env: map[string]string{"PATH": e.Tmp}}, "r", "go")
-	if res.Code != 1 {
-		t.Errorf("exit %d", res.Code)
-	}
-	contains(t, "stderr", res.Stderr, "error:")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "stderr", res.Stderr, "error:")
 }
 
-// py: test_running.py::test_invalid_args_declaration_is_an_error
 func TestRunning_InvalidArgsDeclarationIsAnError(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"bad": map[string]any{"inline": "true", "args": []any{
 		map[string]any{"name": "a", "rest": true}, map[string]any{"name": "b"}}}})
 	res := e.Run("r", "bad")
-	if res.Code != 1 {
-		t.Errorf("exit %d", res.Code)
-	}
-	contains(t, "stderr", res.Stderr, "only the last entry in 'args' can be 'rest'")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "stderr", res.Stderr, "only the last entry in 'args' can be 'rest'")
 	e.WriteStore(e.Store, map[string]any{"both": map[string]any{"inline": "true", "args": []any{
 		map[string]any{"name": "a", "required": true, "default": "x"}}}})
 	res = e.Run("r", "both")
-	if res.Code != 1 {
-		t.Errorf("exit %d", res.Code)
-	}
-	contains(t, "stderr", res.Stderr, "arg 'a' can't be both 'required' and have a 'default'")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "stderr", res.Stderr, "arg 'a' can't be both 'required' and have a 'default'")
 }
 
-// py: test_running.py::test_an_empty_word_doesnt_fill_a_required_argument
 func TestRunning_AnEmptyWordDoesntFillARequiredArgument(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{
@@ -289,37 +251,32 @@ func TestRunning_AnEmptyWordDoesntFillARequiredArgument(t *testing.T) {
 	if res.Code != 2 || res.Stdout != "" {
 		t.Errorf("exit %d stdout %q", res.Code, res.Stdout)
 	}
-	contains(t, "stderr", res.Stderr, "error: <target> can't be empty\n")
+	testkit.Contains(t, "stderr", res.Stderr, "error: <target> can't be empty\n")
 	if out := e.Run("r", "opt", "").Stdout; out != "[]\n" {
 		t.Errorf("opt: %q", out)
 	}
 }
 
-// py: test_running.py::test_a_script_with_windows_line_endings_says_so
 func TestRunning_AScriptWithWindowsLineEndingsSaysSo(t *testing.T) {
 	e := testkit.New(t)
 	script := e.Script("crlf.sh", "#!/usr/bin/env bash\r\necho hi\r\n")
 	e.WriteStore(e.Store, map[string]any{"crlf": map[string]any{"script": script}})
 	res := e.Run("r", "crlf")
-	if res.Code != 1 {
-		t.Errorf("exit %d", res.Code)
-	}
-	contains(t, "stderr", res.Stderr, "error: "+script+" has Windows line endings")
-	contains(t, "stderr", res.Stderr, "sed -i 's/\\r$//' "+script)
+	res.WantCode(t, 1)
+	testkit.Contains(t, "stderr", res.Stderr, "error: "+script+" has Windows line endings")
+	testkit.Contains(t, "stderr", res.Stderr, "sed -i 's/\\r$//' "+script)
 }
 
-// py: test_running.py::test_a_hand_written_invalid_name_doesnt_run
 func TestRunning_AHandWrittenInvalidNameDoesntRun(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"a b": inline("echo ran")})
+	e.WriteStore(e.Store, map[string]any{"a b": testkit.Inline("echo ran")})
 	res := e.Run("r", "a b")
 	if res.Code != 1 || res.Stdout != "" {
 		t.Errorf("exit %d stdout %q", res.Code, res.Stdout)
 	}
-	contains(t, "stderr", res.Stderr, "invalid shortcut name 'a b'")
+	testkit.Contains(t, "stderr", res.Stderr, "invalid shortcut name 'a b'")
 }
 
-// py: test_running.py::test_declared_args
 func TestRunning_DeclaredArgs(t *testing.T) {
 	e := testkit.New(t)
 	script := `printf "[%s]" "$@"; echo; echo "c=$SC_ARG_CONTAINER s=$SC_ARG_SIGNAL e=$SC_ARG_EXTRA"`
@@ -330,7 +287,7 @@ func TestRunning_DeclaredArgs(t *testing.T) {
 			map[string]any{"name": "extra", "rest": true},
 		}},
 		"two":  map[string]any{"inline": `echo "$#:$*"`, "args": []any{map[string]any{"name": "a"}, map[string]any{"name": "b", "default": "B"}}},
-		"free": inline(`echo "$#"`),
+		"free": testkit.Inline(`echo "$#"`),
 		"one":  map[string]any{"inline": "true", "args": []any{map[string]any{"name": "only"}}},
 	})
 	lines := func(args ...string) []string {
@@ -338,50 +295,45 @@ func TestRunning_DeclaredArgs(t *testing.T) {
 	}
 
 	res := e.Run("r", "kill")
-	if res.Code != 2 {
-		t.Errorf("missing: exit %d", res.Code)
-	}
-	contains(t, "missing", res.Stderr, "missing <container>")
-	contains(t, "missing", res.Stderr, "usage: shortcut r kill <container> [signal] [extra...]")
+	res.WantCode(t, 2)
+	testkit.Contains(t, "missing", res.Stderr, "missing <container>")
+	testkit.Contains(t, "missing", res.Stderr, "usage: shortcut r kill <container> [signal] [extra...]")
 	// With a desc on any argument, the error lists them all
-	contains(t, "list", res.Stderr, "  container  required       Which one\n")
-	contains(t, "list", res.Stderr, "  signal     default: TERM\n")
-	contains(t, "list", res.Stderr, "  extra...   optional\n")
+	testkit.Contains(t, "list", res.Stderr, "  container  required       Which one\n")
+	testkit.Contains(t, "list", res.Stderr, "  signal     default: TERM\n")
+	testkit.Contains(t, "list", res.Stderr, "  extra...   optional\n")
 
-	eq(t, "web", lines("r", "kill", "web"), []string{"[web][TERM]", "c=web s=TERM e="})
-	eq(t, "all", lines("r", "kill", "web", "KILL", "a b", "c"), []string{"[web][KILL][a b][c]", "c=web s=KILL e='a b' c"})
+	testkit.Eq(t, "web", lines("r", "kill", "web"), []string{"[web][TERM]", "c=web s=TERM e="})
+	testkit.Eq(t, "all", lines("r", "kill", "web", "KILL", "a b", "c"), []string{"[web][KILL][a b][c]", "c=web s=KILL e='a b' c"})
 	// Flags are neither counted nor moved, and a default keeps its position before them
-	eq(t, "flag", lines("r", "kill", "web", "--force")[0], "[web][TERM][--force]")
+	testkit.Eq(t, "flag", lines("r", "kill", "web", "--force")[0], "[web][TERM][--force]")
 	// A skipped optional keeps later defaults in their own position
-	eq(t, "two", e.Run("r", "two").Stdout, "2: B\n")
+	testkit.Eq(t, "two", e.Run("r", "two").Stdout, "2: B\n")
 
 	res = e.Run("r", "one", "a", "b")
-	if res.Code != 2 {
-		t.Errorf("too many: exit %d", res.Code)
-	}
-	contains(t, "too many", res.Stderr, "too many arguments")
-	contains(t, "too many", res.Stderr, "usage: shortcut r one [only]")
+	res.WantCode(t, 2)
+	testkit.Contains(t, "too many", res.Stderr, "too many arguments")
+	testkit.Contains(t, "too many", res.Stderr, "usage: shortcut r one [only]")
 	if strings.Contains(res.Stderr, "  only") {
 		t.Errorf("a list with no desc anywhere: %q", res.Stderr)
 	}
 
 	// After --, every word is a value, even one starting with a dash; the -- itself is dropped
-	contains(t, "-5", e.Run("r", "kill", "-5").Stderr, "missing <container>")
-	eq(t, "--", lines("r", "kill", "--force", "--", "-5", "-x"), []string{"[--force][-5][-x]", "c=-5 s=-x e="})
-	eq(t, "two --", e.Run("r", "two", "--", "-a").Stdout, "2:-a B\n")
+	testkit.Contains(t, "-5", e.Run("r", "kill", "-5").Stderr, "missing <container>")
+	testkit.Eq(t, "--", lines("r", "kill", "--force", "--", "-5", "-x"), []string{"[--force][-5][-x]", "c=-5 s=-x e="})
+	testkit.Eq(t, "two --", e.Run("r", "two", "--", "-a").Stdout, "2:-a B\n")
 
 	// No `args` key: no checking, and -- passes through
-	eq(t, "free", e.Run("r", "free", "1", "2", "3").Stdout, "3\n")
-	eq(t, "free --", e.Run("r", "free", "--", "x").Stdout, "2\n")
+	testkit.Eq(t, "free", e.Run("r", "free", "1", "2", "3").Stdout, "3\n")
+	testkit.Eq(t, "free --", e.Run("r", "free", "--", "x").Stdout, "2\n")
 	shown := e.Run("show", "kill").Stdout
-	contains(t, "show", shown, "Usage:       shortcut r kill <container> [signal] [extra...]\n")
-	contains(t, "show", shown, "Arguments:\n  container  required       Which one\n  signal     default: TERM\n  extra...   optional\n")
+	testkit.Contains(t, "show", shown, "Usage:       shortcut r kill <container> [signal] [extra...]\n")
+	testkit.Contains(t, "show", shown, "Arguments:\n  container  required       Which one\n  signal     default: TERM\n  extra...   optional\n")
 	if strings.Contains(e.Run("show", "free").Stdout, "Arguments:") {
 		t.Errorf("show free lists arguments")
 	}
 }
 
-// py: test_running.py::test_a_closed_pipe_stops_quietly
 func TestRunning_AClosedPipeStopsQuietly(t *testing.T) {
 	e := testkit.New(t)
 	// More than a pipe holds, so shortcut is still writing when the reader goes
@@ -394,4 +346,13 @@ func TestRunning_AClosedPipeStopsQuietly(t *testing.T) {
 	if res.Code != 141 || res.Stderr != "" {
 		t.Errorf("exit %d stderr %q", res.Code, res.Stderr)
 	}
+}
+
+// Python prints the "-> cwd" line on stderr with backslashreplace: a 0xff in the directory name is \udcff.
+func TestRun_CwdLineEscapesNonUTF8(t *testing.T) {
+	e := testkit.New(t)
+	proj := e.Project(map[string]any{"hello": testkit.Inline("true")}, testkit.Name("p\xffroj"), testkit.Approved())
+	res := e.RunWith(testkit.Opts{Cwd: proj}, "run", "hello")
+	res.WantCode(t, 0)
+	testkit.Contains(t, "stderr", res.Stderr, "p\\udcffroj")
 }

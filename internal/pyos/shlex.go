@@ -25,7 +25,7 @@ func ShellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }
 
-// ShellJoin is shlex.join.
+// ShellJoin quotes each word and joins them with spaces, as shlex.join does.
 func ShellJoin(parts []string) string {
 	q := make([]string, len(parts))
 	for i, p := range parts {

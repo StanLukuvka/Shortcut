@@ -19,21 +19,20 @@ func TestCompletion(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", path, err)
 		}
-		got, ok := completionScripts[shell]
-		if !ok {
-			t.Errorf("completionScripts[%q] missing", shell)
+		got, err := completionFiles.ReadFile(path)
+		if err != nil {
+			t.Errorf("completionFiles %q missing: %v", path, err)
 			continue
 		}
-		if got == "" {
-			t.Errorf("completionScripts[%q] is empty", shell)
+		if len(got) == 0 {
+			t.Errorf("completion %q is empty", shell)
 		}
-		if got != string(want) {
-			t.Errorf("completionScripts[%q] differs from %s", shell, path)
+		if string(got) != string(want) {
+			t.Errorf("completion %q differs from %s", shell, path)
 		}
 	}
 }
 
-// py: test_completion.py::test_completion_bash
 func TestCompletion_Bash(t *testing.T) {
 	e := testkit.New(t)
 	res := e.Run("completion", "bash")
@@ -45,7 +44,7 @@ func TestCompletion_Bash(t *testing.T) {
 			t.Errorf("bash script lacks %q", want)
 		}
 	}
-	if res.Stdout != completionScripts["bash"] || e.Run("completion").Stdout != res.Stdout {
+	if bash, _ := completionFiles.ReadFile("completion/bash.txt"); res.Stdout != string(bash) || e.Run("completion").Stdout != res.Stdout {
 		t.Error("bash is the script of `completion bash` and of `completion`")
 	}
 	// The shell is a choice; argparse's message and exit 2 come from the parser (argparse_test.go).
@@ -54,7 +53,6 @@ func TestCompletion_Bash(t *testing.T) {
 	}
 }
 
-// py: test_completion.py::test_completion_zsh_and_fish
 func TestCompletion_ZshAndFish(t *testing.T) {
 	e := testkit.New(t)
 	zsh := e.Run("completion", "zsh")
@@ -67,12 +65,11 @@ func TestCompletion_ZshAndFish(t *testing.T) {
 	}
 }
 
-// py: test_completion.py::test_bash_completion_past_flags_and_into_namespaces
 func TestCompletion_BashPastFlagsAndIntoNamespaces(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"other": map[string]any{"inline": "true"}})
-	e.WriteImport(e.Store, "docker", map[string]any{"version": 2, "shortcuts": map[string]any{
-		"delete": map[string]any{"inline": "true"}, "ps": map[string]any{"inline": "true"}}})
+	e.WriteImport(e.Store, "docker", testkit.NS(map[string]any{
+		"delete": map[string]any{"inline": "true"}, "ps": map[string]any{"inline": "true"}}))
 	runOK(t, e, testkit.Opts{}, "update", "docker", "-y") // namespaces list once approved
 	check := func(want []string, words ...string) {
 		t.Helper()

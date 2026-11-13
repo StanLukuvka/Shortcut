@@ -4,6 +4,7 @@ package pyos
 
 import (
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
@@ -95,7 +96,7 @@ func Realpath(filename string) string {
 	return path
 }
 
-// Getwd is the physical cwd (C29): syscall.Getwd calls getcwd(2) and never reads $PWD, which os.Getwd prefers.
+// Getwd is the physical cwd: syscall.Getwd calls getcwd(2) and never reads $PWD, which os.Getwd prefers.
 // Nothing outside _test.go may call os.Getwd.
 func Getwd() (string, error) { return syscall.Getwd() }
 
@@ -104,7 +105,7 @@ func Abs(p string) string {
 	if !strings.HasPrefix(p, "/") {
 		// lazy: Python raises when the cwd is gone; here the path is only normalised, still relative. Upgrade: return an error.
 		if cwd, err := Getwd(); err == nil {
-			p = pyJoin(cwd, p)
+			p = Join(cwd, p)
 		}
 	}
 	return Normpath(p)
@@ -112,62 +113,21 @@ func Abs(p string) string {
 
 // Normpath is posixpath.normpath: collapses //, /./ and a/../ lexically; "" is "."; a leading // is kept, /// is /.
 func Normpath(p string) string {
-	if p == "" {
-		return "."
+	if strings.HasPrefix(p, "//") && !strings.HasPrefix(p, "///") {
+		return "/" + filepath.Clean(p)
 	}
-	slashes := 0
-	if strings.HasPrefix(p, "/") {
-		slashes = 1
-		if strings.HasPrefix(p, "//") && !strings.HasPrefix(p, "///") {
-			slashes = 2
-		}
-	}
-	var comps []string
-	for _, c := range strings.Split(p, "/") {
-		if c == "" || c == "." {
-			continue
-		}
-		if c != ".." || (slashes == 0 && len(comps) == 0) || (len(comps) > 0 && comps[len(comps)-1] == "..") {
-			comps = append(comps, c)
-		} else if len(comps) > 0 {
-			comps = comps[:len(comps)-1]
-		}
-	}
-	out := strings.Repeat("/", slashes) + strings.Join(comps, "/")
-	if out == "" {
-		return "."
-	}
-	return out
+	return filepath.Clean(p)
 }
 
 // Relpath is posixpath.relpath(path, start): both made absolute, then the shortest ../ walk between them.
-// lazy: Python raises ValueError for an empty path; here it is the cwd. Callers pass real paths.
+// lazy: Python raises ValueError for an empty path; here it is the cwd. Callers pass real paths. A path pair Rel
+// cannot relate (only when the cwd is gone, so one side stayed relative) comes back as Abs(path).
 func Relpath(path, start string) string {
-	startList := splitNonEmpty(Abs(start))
-	pathList := splitNonEmpty(Abs(path))
-	i := 0
-	for i < len(startList) && i < len(pathList) && startList[i] == pathList[i] {
-		i++
+	rel, err := filepath.Rel(Abs(start), Abs(path))
+	if err != nil {
+		return Abs(path)
 	}
-	rel := make([]string, 0, len(startList)-i+len(pathList)-i)
-	for j := i; j < len(startList); j++ {
-		rel = append(rel, "..")
-	}
-	rel = append(rel, pathList[i:]...)
-	if len(rel) == 0 {
-		return "."
-	}
-	return strings.Join(rel, "/")
-}
-
-func splitNonEmpty(p string) []string {
-	var out []string
-	for _, c := range strings.Split(p, "/") {
-		if c != "" {
-			out = append(out, c)
-		}
-	}
-	return out
+	return rel
 }
 
 // IsRelativeTo is pathlib.Path.is_relative_to: component-wise, so /ab is not under /a. Like pathlib it drops "."
@@ -198,9 +158,9 @@ func pathParts(p string) []string {
 	return out
 }
 
-// pyJoin is posixpath.join: a part starting with / restarts the path; join("", "a") = "a"; join("/", "a") = "/a";
+// Join is posixpath.join: a part starting with / restarts the path; join("", "a") = "a"; join("/", "a") = "/a";
 // join("a", "") = "a/".
-func pyJoin(a string, parts ...string) string {
+func Join(a string, parts ...string) string {
 	path := a
 	for _, b := range parts {
 		switch {
@@ -226,11 +186,8 @@ func pySplit(p string) (head, tail string) {
 	return head, tail
 }
 
-// Join is posixpath.join, for callers outside this package.
-func Join(a string, parts ...string) string { return pyJoin(a, parts...) }
-
-// Dirname is posixpath.dirname.
+// Dirname returns everything before the last slash, as posixpath.dirname does.
 func Dirname(p string) string { h, _ := pySplit(p); return h }
 
-// Basename is posixpath.basename.
+// Basename returns everything after the last slash, as posixpath.basename does.
 func Basename(p string) string { _, t := pySplit(p); return t }

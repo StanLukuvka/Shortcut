@@ -7,8 +7,8 @@ import (
 )
 
 // openPty is os.openpty without cgo: /dev/ptmx, grant (TIOCPTYGRANT), unlock (TIOCPTYUNLK), then the slave's
-// path (TIOCPTYGNAME into a 128-byte buffer). Not run in CI (no macOS runner while the repo is private, G16):
-// it is cross-vetted only. Fallback if it fails on a Mac: G15's pinned creack/pty.
+// path (TIOCPTYGNAME into a 128-byte buffer). It runs only on macOS.
+// If it fails there, github.com/creack/pty does the same job.
 func openPty() (master, slave *os.File, err error) {
 	master, err = os.OpenFile("/dev/ptmx", os.O_RDWR|syscall.O_NOCTTY, 0)
 	if err != nil {

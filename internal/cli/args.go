@@ -19,7 +19,7 @@ func argLabel(a *pyjson.Object) string {
 	return label
 }
 
-// usageLine is usage_line: shortcut r <display> <args>.
+// usageLine is the usage line: shortcut r <display> <args>.
 func usageLine(display string, spec []*pyjson.Object) string {
 	parts := []string{"shortcut r", display}
 	for _, a := range spec {
@@ -32,7 +32,7 @@ func usageLine(display string, spec []*pyjson.Object) string {
 	return strings.Join(parts, " ")
 }
 
-// argLines is arg_lines: one line per declared argument, its name, whether it's needed or its default, and its desc.
+// argLines returns one line per declared argument, its name, whether it's needed or its default, and its desc.
 func argLines(spec []*pyjson.Object) []string {
 	type row struct{ label, need, desc string }
 	rows := make([]row, len(spec))
@@ -58,7 +58,7 @@ func argLines(spec []*pyjson.Object) []string {
 
 func isFlag(token string) bool { return len(token) > 1 && strings.HasPrefix(token, "-") }
 
-// bindArgs is bind_args: check presence and count against the declared args, fill defaults. It returns the words the
+// bindArgs checks presence and count against the declared args, and fills defaults. It returns the words the
 // shortcut gets and its SC_ARG_* variables as "K=V". --flags are never parsed: they don't count and stay where they
 // are. A first -- is dropped, and every word after it counts, so a value can start with a dash. A failure is the
 // exit 2 of Python's fail(): the message, the usage line and, if any argument has a desc, the list.
@@ -135,7 +135,7 @@ func bindArgs(display string, spec []*pyjson.Object, argv []string) ([]string, [
 
 var positionalAt = regexp.MustCompile(`^\$(?:[1-9@*]|\{[1-9@*])`) // $1, $@, $*, ${1}: how a shell command reads its arguments
 
-// joinCommand is join_command: `-- cmd word word` as one inline command. Each word stays one word, as typed, and
+// joinCommand turns `-- cmd word word` into one inline command. Each word stays one word, as typed, and
 // only the shortcut's own arguments stay live, because $1 is why someone quoted it past their shell. Python's
 // (?!POSITIONAL)\$ lookahead is a check at each $, since Go's regexp has none.
 func joinCommand(words []string) string {

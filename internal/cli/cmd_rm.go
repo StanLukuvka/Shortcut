@@ -1,13 +1,10 @@
 package cli
 
 import (
-	"errors"
-	"os"
 	"strconv"
 	"strings"
 	"syscall"
 
-	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/pyjson"
 	"github.com/StanLukuvka/Shortcut/internal/pyos"
@@ -19,7 +16,7 @@ import (
 // is only reached through a link: unlinkFile never follows one, a symlinked scripts folder loses only the link, and
 // a copy is only deleted when its fully resolved path is inside the resolved scripts folder.
 
-// cmdRm is cmd_rm.
+// cmdRm removes a shortcut or a namespace.
 func cmdRm(s *textio.Streams, args []string) error {
 	ns, err := parsers["rm"].Parse(args)
 	if err != nil {
@@ -62,7 +59,7 @@ func cmdRm(s *textio.Streams, args []string) error {
 		return err
 	}
 	if len(found.Rest) > 0 {
-		return Die("too many names: " + pyos.ShellJoin(names))
+		return model.TooManyNames(names)
 	}
 	group, name := found.Group, found.Name
 	display := group.Display(name)
@@ -72,24 +69,14 @@ func cmdRm(s *textio.Streams, args []string) error {
 	}
 
 	cp := storedCopy(group, found.Raw)
-	ok, err := textio.Confirm{Question: "remove '" + display + "'?", NoTerminal: "remove '" + display + "' in a terminal, or pass -y",
-		Message: rmMessage(group, display, found.Raw, cp), TellOnYes: true}.Granted(s, ns.Bool("yes"))
-	if err != nil {
+	if err := confirmed(s, textio.Confirm{Question: "remove '" + display + "'?", NoTerminal: "remove '" + display + "' in a terminal, or pass -y",
+		Message: rmMessage(group, display, found.Raw, cp), TellOnYes: true}, ns.Bool("yes")); err != nil {
 		return err
 	}
-	if !ok {
-		return &ExitError{Code: 1}
-	}
 
-	var keep map[string]string
-	err = model.WithRegistryLock(group.StoreDir, func() error {
-		approved := namespaceIsApproved(group)
+	err = lockedGroupWrite(group, func() error {
 		// 1. Remove from registry
-		reg, err := model.LoadRegistryFile(group.File)
-		if err != nil {
-			return err
-		}
-		shortcuts, err := shortcutsOf(group.File, reg)
+		reg, shortcuts, err := loadForEdit(group.File, false)
 		if err != nil {
 			return err
 		}
@@ -103,25 +90,17 @@ func cmdRm(s *textio.Streams, args []string) error {
 		if cp != "" {
 			syscall.Unlink(cp) // Python's suppress(OSError)
 		}
-		if approved {
-			keep = approval.SharedFiles(model.ReloadGroup(group))
-		}
 		return nil
 	})
 	if err != nil {
 		return err
-	}
-	if keep != nil {
-		if err := approval.Save(group, keep, map[string]string{}); err != nil { // after the lock: for a namespace, Save takes the same one
-			return err
-		}
 	}
 	s.Out.WriteString("Removed shortcut '" + display + "'.\n")
 	noteIfUnapproved(s, group)
 	return nil
 }
 
-// rmLocal is rm_local: take a name out of .shortcuts.local, which also undoes an override or a hide. A name only in
+// rmLocal takes a name out of .shortcuts.local, which also undoes an override or a hide. A name only in
 // .shortcuts is hidden instead.
 func rmLocal(s *textio.Streams, ns Namespace) error {
 	if ns.Bool("skip_local") {
@@ -148,13 +127,9 @@ func rmLocal(s *textio.Streams, ns Namespace) error {
 	if inLocal {
 		verb = "remove"
 	}
-	ok, err := textio.Confirm{Question: verb + " '" + name + "'?", NoTerminal: verb + " '" + name + "' in a terminal, or pass -y",
-		Message: rmLocalMessage(group, name, unreadable), TellOnYes: true}.Granted(s, ns.Bool("yes"))
-	if err != nil {
+	if err := confirmed(s, textio.Confirm{Question: verb + " '" + name + "'?", NoTerminal: verb + " '" + name + "' in a terminal, or pass -y",
+		Message: rmLocalMessage(group, name, unreadable), TellOnYes: true}, ns.Bool("yes")); err != nil {
 		return err
-	}
-	if !ok {
-		return &ExitError{Code: 1}
 	}
 	after, err := writeLocal(group.StoreDir, func(shortcuts *pyjson.Object) error {
 		if _, has := shortcuts.Get(name); has {
@@ -176,7 +151,7 @@ func rmLocal(s *textio.Streams, ns Namespace) error {
 	return nil
 }
 
-// rmNamespace is rm_namespace: a global namespace, whole. One in imports/ goes with its scripts folder. One that
+// rmNamespace removes a global namespace, whole. One in imports/ goes with its scripts folder. One that
 // shortcuts.json imports from elsewhere is only no longer imported: its files are someone's own.
 func rmNamespace(s *textio.Streams, name string, assumeYes bool) error {
 	storeDir := model.GlobalStoreDir()
@@ -192,20 +167,16 @@ func rmNamespace(s *textio.Streams, name string, assumeYes bool) error {
 		lines = []string{"Stops importing '" + name + "' in " + store.Main.File, "Keeps its file: " + group.File}
 	} else {
 		lines = []string{"Removes namespace '" + name + "' (" + strconv.Itoa(len(group.Shortcuts().Keys)) + " shortcuts): " + group.File}
-		if _, err := os.Lstat(folder); err == nil {
+		if pyos.Lexists(folder) {
 			lines = append(lines, "Deletes its scripts folder: "+folder)
 		}
 	}
-	ok, err := textio.Confirm{Question: "remove namespace '" + name + "'?", NoTerminal: "remove namespace '" + name + "' in a terminal, or pass -y",
-		Message: strings.Join(lines, "\n"), TellOnYes: true}.Granted(s, assumeYes)
-	if err != nil {
+	if err := confirmed(s, textio.Confirm{Question: "remove namespace '" + name + "'?", NoTerminal: "remove namespace '" + name + "' in a terminal, or pass -y",
+		Message: strings.Join(lines, "\n"), TellOnYes: true}, assumeYes); err != nil {
 		return err
 	}
-	if !ok {
-		return &ExitError{Code: 1}
-	}
 	approvalFile := model.ApprovalPath(group) // its key needs the file, so before it goes
-	err = model.WithRegistryLock(storeDir, func() error {
+	err := model.WithRegistryLock(storeDir, func() error {
 		if listed {
 			reg, err := model.LoadRegistry(storeDir)
 			if err != nil {
@@ -232,47 +203,7 @@ func rmNamespace(s *textio.Streams, name string, assumeYes bool) error {
 	return nil
 }
 
-// unlinkFile is os.unlink with suppress(FileNotFoundError): it removes a file or a link and never a folder (os.Remove
-// would take an empty one), and a link only ever loses itself.
-// lazy: the error text is Go's, not Python's "[Errno 21] ..."; only a folder where a file should be reaches it.
-func unlinkFile(path string) error {
-	if err := syscall.Unlink(path); err != nil && !errors.Is(err, syscall.ENOENT) {
-		return &os.PathError{Op: "unlink", Path: path, Err: err}
-	}
-	return nil
-}
-
-// removeNamespaceFiles is remove_namespace_files: a namespace's file in imports/ and its scripts folder. A symlinked
-// folder loses only the link.
-func removeNamespaceFiles(group model.Group) error {
-	folder := group.ScriptsDir()
-	if err := unlinkFile(group.File); err != nil {
-		return err
-	}
-	switch {
-	case isLink(folder):
-		return unlinkFile(folder)
-	case isDirPath(folder):
-		return os.RemoveAll(folder) // does not follow a link inside it either
-	}
-	return nil
-}
-
-// isListedImport is is_listed_import: whether a namespace comes from the store file's "imports" rather than its
-// imports/ folder.
-func isListedImport(store model.Store, name string) bool {
-	if store.Main.Data == nil {
-		return false
-	}
-	imports, ok := store.Main.Data.Vals["imports"].(*pyjson.Object)
-	if !ok {
-		return false
-	}
-	_, has := imports.Get(name)
-	return has
-}
-
-// scriptField is raw_entry.get("script") when it is a non-empty string.
+// scriptField is the entry's "script" when it is a non-empty string.
 func scriptField(raw pyjson.Value) (string, bool) {
 	entry, ok := raw.(*pyjson.Object)
 	if !ok {
@@ -283,7 +214,7 @@ func scriptField(raw pyjson.Value) (string, bool) {
 	return script, ok && script != ""
 }
 
-// storedCopy is stored_copy: the copy shortcut keeps of an entry's script, which rm deletes with it: a relative path
+// storedCopy returns the copy shortcut keeps of an entry's script, which rm deletes with it: a relative path
 // inside the group's scripts folder. new --script never records one there as relative, so it's never one. "" is none.
 // The path is resolved, so it is where the file really is, and it must still be inside the resolved folder.
 func storedCopy(group model.Group, raw pyjson.Value) string {
@@ -298,7 +229,7 @@ func storedCopy(group model.Group, raw pyjson.Value) string {
 	return path
 }
 
-// keptScript is kept_script: the script an entry names, as a path, for saying it stays. "" is none.
+// keptScript returns the script an entry names, as a path, for saying it stays. "" is none.
 func keptScript(group model.Group, raw pyjson.Value) string {
 	script, ok := scriptField(raw)
 	if !ok {
@@ -310,7 +241,7 @@ func keptScript(group model.Group, raw pyjson.Value) string {
 	return script
 }
 
-// rmMessage is rm_message: what rm is about to change, shown above its question.
+// rmMessage returns what rm is about to change, shown above its question.
 func rmMessage(group model.Group, display string, raw pyjson.Value, cp string) string {
 	where := "your global shortcuts"
 	if group.Name != "" {
@@ -325,7 +256,7 @@ func rmMessage(group model.Group, display string, raw pyjson.Value, cp string) s
 	return strings.Join(lines, "\n")
 }
 
-// rmLocalMessage is rm_local_message: what rm --local is about to change in .shortcuts.local, shown above its question.
+// rmLocalMessage returns what rm --local is about to change in .shortcuts.local, shown above its question.
 func rmLocalMessage(group model.Group, name string, unreadable *string) string {
 	local := group.LocalFile
 	var lines []string

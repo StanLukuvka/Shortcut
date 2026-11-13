@@ -1,14 +1,13 @@
 package pyos
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-// tree is the plan's 4.5 tree (plus the 3.14 loop tree under w/): directory t/real/sub, links t/l -> real, t/m -> real/sub, a -> b, b -> a, plus
+// tree is a folder tree: directory t/real/sub, links t/l -> real, t/m -> real/sub, a -> b, b -> a, plus
 // a file, a link to a file, a link to a missing target and a link with an absolute target.
 func tree(t *testing.T) *testkit.Env {
 	e := testkit.New(t)
@@ -80,14 +79,7 @@ func TestRealpath_Vectors(t *testing.T) {
 
 func TestRealpath_RelativeInputUsesThePhysicalCwd(t *testing.T) {
 	e := tree(t)
-	old, err := Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.Chdir(old) })
-	if err := os.Chdir(filepath.Join(e.Tmp, "t/l")); err != nil { // through a link: the cwd is the real folder
-		t.Fatal(err)
-	}
+	t.Chdir(filepath.Join(e.Tmp, "t/l")) // through a link: the cwd is the real folder
 	want := filepath.Join(e.Tmp, "t/real")
 	if cwd, _ := Getwd(); cwd != want {
 		t.Fatalf("Getwd() = %q, want the physical %q", cwd, want)
@@ -143,8 +135,8 @@ func TestPaths_IsRelativeTo(t *testing.T) {
 }
 
 func TestPaths_JoinAndSplit(t *testing.T) { // posixpath.join / posixpath.split
-	if pyJoin("", "a") != "a" || pyJoin("/", "a") != "/a" || pyJoin("a", "") != "a/" || pyJoin("a", "/b", "c") != "/b/c" {
-		t.Error("pyJoin")
+	if Join("", "a") != "a" || Join("/", "a") != "/a" || Join("a", "") != "a/" || Join("a", "/b", "c") != "/b/c" {
+		t.Error("Join")
 	}
 	for in, want := range map[string][2]string{"/a": {"/", "a"}, "a/b/": {"a/b", ""}, "a//b": {"a", "b"}, "//a": {"//", "a"}, "a": {"", "a"}} {
 		if h, tl := pySplit(in); h != want[0] || tl != want[1] {

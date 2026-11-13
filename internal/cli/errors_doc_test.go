@@ -124,7 +124,6 @@ func goMessages(t *testing.T) [][]string {
 	return found
 }
 
-// py: test_errors.py::test_every_message_is_in_the_table
 func TestEveryMessageIsInTheTable(t *testing.T) {
 	raw, err := os.ReadFile("../../docs/errors.md")
 	if err != nil {

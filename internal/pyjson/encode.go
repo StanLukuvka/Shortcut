@@ -3,21 +3,20 @@ package pyjson
 import (
 	"fmt"
 	"math/big"
-	"sort"
+	"slices"
 	"strings"
 )
 
-// Opts mirrors json.dumps(indent=, sort_keys=, ensure_ascii=). Indent 0 is Python's indent=None (one line,
+// Opts mirrors json.dumps(indent=, sort_keys=) with ensure_ascii always on. Indent 0 is Python's indent=None (one line,
 // separators ", " and ": ").
 // lazy: Python's indent=0 (newlines without indentation) is not expressible; nothing in shortcut uses it.
 type Opts struct {
-	Indent      int
-	SortKeys    bool
-	EnsureASCII bool
+	Indent   int
+	SortKeys bool
 }
 
 // DumpsCompact is json.dumps(v) with the default separators and ensure_ascii.
-func DumpsCompact(v Value) string { return Dumps(v, Opts{EnsureASCII: true}) }
+func DumpsCompact(v Value) string { return Dumps(v, Opts{}) }
 
 // Dumps is json.dumps(v, ...) without a trailing newline. A Value of a type outside the model panics.
 func Dumps(v Value, o Opts) string {
@@ -37,7 +36,7 @@ func encode(b *strings.Builder, v Value, o Opts, level int) {
 			b.WriteString("false")
 		}
 	case string:
-		WriteString(b, x, o.EnsureASCII)
+		WriteString(b, x)
 	case *big.Int:
 		b.WriteString(x.String())
 	case float64:
@@ -60,13 +59,12 @@ func encode(b *strings.Builder, v Value, o Opts, level int) {
 		}
 		keys := x.Keys
 		if o.SortKeys {
-			keys = append([]string(nil), keys...)
-			sort.Slice(keys, func(i, j int) bool { return Less(keys[i], keys[j]) })
+			keys = SortStrings(slices.Clone(keys))
 		}
 		b.WriteByte('{')
 		for i, k := range keys {
 			separator(b, o, level+1, i)
-			WriteString(b, k, o.EnsureASCII)
+			WriteString(b, k)
 			b.WriteString(": ")
 			encode(b, x.Vals[k], o, level+1)
 		}
@@ -100,9 +98,9 @@ func closer(b *strings.Builder, o Opts, level int, c byte) {
 const hexDigits = "0123456789abcdef"
 
 // WriteString writes s as a JSON string literal the way Python does. s is read as Python's str: UTF-8, a WTF-8
-// surrogate triple as that surrogate, any other invalid byte 0xNN as U+DC00+NN (see Less). With ensureASCII, every
+// surrogate triple as that surrogate, any other invalid byte 0xNN as U+DC00+NN (see Compare). Every
 // code point outside space..~ except the escapes below becomes \uXXXX (lower hex, astral as a surrogate pair).
-func WriteString(b *strings.Builder, s string, ensureASCII bool) {
+func WriteString(b *strings.Builder, s string) {
 	b.WriteByte('"')
 	for i := 0; i < len(s); {
 		r, n := pyRune(s[i:])
@@ -123,9 +121,6 @@ func WriteString(b *strings.Builder, s string, ensureASCII bool) {
 			b.WriteString(`\t`)
 		case r < 0x20:
 			writeU(b, r)
-		case !ensureASCII:
-			// lazy: a lone surrogate or invalid byte is written as it is held (Python could not encode it on write).
-			b.WriteString(s[i : i+n])
 		case r >= 0x20 && r <= 0x7e:
 			b.WriteByte(byte(r))
 		case r >= 0x10000:

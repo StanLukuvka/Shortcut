@@ -18,8 +18,8 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
-// cmdInit is cmd_init: with --global, create the global store, or review a project's exported shortcuts, or a folder
-// of namespaces, and copy them there.
+// cmdInit runs init. With --global it creates the global store, or reviews a project's exported shortcuts, or a folder
+// of namespaces, and copies them there.
 func cmdInit(s *textio.Streams, args []string) error {
 	ns, err := parsers["init"].Parse(args)
 	if err != nil {
@@ -67,7 +67,7 @@ func cmdInit(s *textio.Streams, args []string) error {
 		sourceRoot = tmp
 	} else {
 		sourceRoot = pyos.Abs(pyos.ExpandUser(source))
-		if !isDirPath(sourceRoot) {
+		if !pyos.IsDir(sourceRoot) {
 			return Die("source directory does not exist: " + sourceRoot)
 		}
 	}
@@ -106,7 +106,7 @@ func initBundled(s *textio.Streams, destStoreDir string, assumeYes, replace bool
 	return importFromRoot(s, "the bundled shortcuts", dir, destStoreDir, assumeYes, replace)
 }
 
-// isGitSource is is_git_source.
+// isGitSource reports whether source is a git URL.
 func isGitSource(source string) bool {
 	for _, p := range []string{"http://", "https://", "git://", "git@", "ssh://", "file://"} {
 		if strings.HasPrefix(source, p) {
@@ -116,7 +116,7 @@ func isGitSource(source string) bool {
 	return strings.HasSuffix(source, ".git")
 }
 
-// cloneTemp is the git branch of cmd_init: `git clone --depth 1` into a fresh temporary folder, whose path it returns
+// cloneTemp runs `git clone --depth 1` into a fresh temporary folder, whose path it returns
 // with the function that removes it (see tempDir). cleanup is safe to call whatever the result, and also runs when the process is
 // told to stop (Ctrl-C, SIGTERM, SIGHUP): what was cloned has been read into memory by the time anything is asked,
 // so a stop at the question only drops the folder and lets Ask answer "no" for SIGINT; any other stop exits 128+signal.

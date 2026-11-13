@@ -51,7 +51,6 @@ func TestWalk_AFolderThatCannotBeReadIsSkipped(t *testing.T) {
 	Walk(top+"/missing", func(string, []string, []string) { t.Error("visited a missing folder") })
 }
 
-// py: test_symlink_safety.py::test_a_store_never_writes_through_a_symlink (the .lock half)
 func TestLock_ASymlinkedLockIsRefused(t *testing.T) {
 	e := testkit.New(t)
 	victim := e.WriteFile(filepath.Join(e.Tmp, "victim"), "keep\n", 0)

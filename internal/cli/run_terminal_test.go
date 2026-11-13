@@ -13,7 +13,6 @@ import (
 
 func y(text string) []byte { return []byte(text) }
 
-// py: test_running.py::test_confirm
 func TestRunning_Confirm(t *testing.T) {
 	e := testkit.New(t)
 	work := e.Folder("work")
@@ -24,7 +23,7 @@ func TestRunning_Confirm(t *testing.T) {
 		"plain":  map[string]any{"inline": "echo ran", "description": "echo ran", "confirm": true},
 		"noted":  map[string]any{"script": "scripts/none.sh", "description": "(no description)", "confirm": true},
 		"drop":   map[string]any{"inline": `echo "dropped $*"`, "description": "x", "confirm": true},
-		"echoes": inline(`echo "$@"`),
+		"echoes": testkit.Inline(`echo "$@"`),
 	})
 	o := in(work)
 
@@ -32,19 +31,17 @@ func TestRunning_Confirm(t *testing.T) {
 	if res.Code != 1 || res.Stdout != "" {
 		t.Errorf("no terminal: exit %d stdout %q", res.Code, res.Stdout)
 	}
-	contains(t, "no terminal", res.Stderr, "pass -y")
+	testkit.Contains(t, "no terminal", res.Stderr, "pass -y")
 	res = e.RunWith(o, "r", "-y", "danger")
-	if res.Code != 0 {
-		t.Errorf("-y: exit %d", res.Code)
-	}
-	contains(t, "-y", res.Stdout, "ran")
+	res.WantCode(t, 0)
+	testkit.Contains(t, "-y", res.Stdout, "ran")
 
 	prompt := "run 'danger' in " + work + "? [y/N]"
 	rc, out := e.InTerminal(o, []testkit.Key{{Wait: prompt, Send: y("y\n")}}, "r", "danger")
 	if rc != 0 {
 		t.Errorf("y: exit %d\n%s", rc, out)
 	}
-	contains(t, "y", out, "ran")
+	testkit.Contains(t, "y", out, "ran")
 	rc, out = e.InTerminal(o, []testkit.Key{{Wait: prompt, Send: y("n\n")}}, "r", "danger")
 	if rc != 1 || strings.Contains(out, "ran\r\n") {
 		t.Errorf("n: exit %d\n%s", rc, out)
@@ -56,7 +53,7 @@ func TestRunning_Confirm(t *testing.T) {
 	if rc != 1 {
 		t.Errorf("wipe: exit %d", rc)
 	}
-	contains(t, "wipe", out, "Wipes the cache\r\n")
+	testkit.Contains(t, "wipe", out, "Wipes the cache\r\n")
 	if strings.Index(out, "Wipes the cache") > strings.Index(out, "run 'wipe'") {
 		t.Errorf("the description is not above the question:\n%s", out)
 	}
@@ -72,11 +69,13 @@ func TestRunning_Confirm(t *testing.T) {
 	}
 	// The description and question go to the terminal even when stdout is a file
 	file := filepath.Join(e.Tmp, "out.txt")
-	rc, out = e.InTerminalStdoutTo(o, file, []testkit.Key{{Wait: "[y/N]", Send: y("y\n")}}, "r", "wipe")
+	toFile := o
+	toFile.StdoutTo = file
+	rc, out = e.InTerminal(toFile, []testkit.Key{{Wait: "[y/N]", Send: y("y\n")}}, "r", "wipe")
 	if rc != 0 {
 		t.Errorf("stdout to a file: exit %d", rc)
 	}
-	contains(t, "stdout to a file", out, "Wipes the cache")
+	testkit.Contains(t, "stdout to a file", out, "Wipes the cache")
 	if raw, _ := os.ReadFile(file); string(raw) != "ran\n" {
 		t.Errorf("out.txt: %q", raw)
 	}
@@ -87,7 +86,7 @@ func TestRunning_Confirm(t *testing.T) {
 		t.Errorf("drop: exit %d\n%s", rc, out)
 	}
 	res = e.RunWith(o, "r", "--global", "drop", "-f", "my db")
-	contains(t, "hint", res.Stderr, "pass -y (shortcut r -y --global drop -f 'my db')\n")
+	testkit.Contains(t, "hint", res.Stderr, "pass -y (shortcut r -y --global drop -f 'my db')\n")
 	if got := e.RunWith(o, "r", "-y", "--global", "drop", "-f", "my db").Stdout; got != "dropped -f my db\n" {
 		t.Errorf("drop -y: %q", got)
 	}
@@ -98,27 +97,25 @@ func TestRunning_Confirm(t *testing.T) {
 	}
 }
 
-// py: test_running.py::test_a_run_keeps_the_real_terminal
 func TestRunning_ARunKeepsTheRealTerminal(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"tty": inline(`[ -t 1 ] && echo "stdout:tty" || echo "stdout:pipe"; stty size; echo ready; read -r line; echo "got:$line"`)})
+	e.WriteStore(e.Store, map[string]any{"tty": testkit.Inline(`[ -t 1 ] && echo "stdout:tty" || echo "stdout:pipe"; stty size; echo ready; read -r line; echo "got:$line"`)})
 	rc, out := e.InTerminal(testkit.Opts{}, []testkit.Key{{Wait: "ready", Send: y("hello\r")}}, "run", "tty")
 	if rc != 0 {
 		t.Errorf("exit %d\n%s", rc, out)
 	}
 	for _, want := range []string{"stdout:tty", "30 100", "got:hello"} {
-		contains(t, "terminal", out, want)
+		testkit.Contains(t, "terminal", out, want)
 	}
 	input := "x\n"
 	res := e.RunWith(testkit.Opts{Input: &input}, "run", "tty")
-	contains(t, "pipe", res.Stdout, "stdout:pipe")
-	contains(t, "pipe", res.Stdout, "got:x")
+	testkit.Contains(t, "pipe", res.Stdout, "stdout:pipe")
+	testkit.Contains(t, "pipe", res.Stdout, "got:x")
 }
 
-// py: test_running.py::test_ctrl_c_reaches_the_shortcut
 func TestRunning_CtrlCReachesTheShortcut(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"sleep": inline("echo started; sleep 10")})
+	e.WriteStore(e.Store, map[string]any{"sleep": testkit.Inline("echo started; sleep 10")})
 	start := time.Now()
 	rc, out := e.InTerminal(testkit.Opts{}, []testkit.Key{{Wait: "started", Send: y("\x03")}}, "run", "sleep")
 	if rc != -int(syscall.SIGINT) {
@@ -129,7 +126,6 @@ func TestRunning_CtrlCReachesTheShortcut(t *testing.T) {
 	}
 }
 
-// py: test_approval.py::test_a_script_changed_while_confirm_waits_doesnt_run
 func TestApproval_AScriptChangedWhileConfirmWaitsDoesntRun(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(map[string]any{"d": map[string]any{"description": "d", "script": "d.sh", "confirm": true}},
@@ -139,7 +135,7 @@ func TestApproval_AScriptChangedWhileConfirmWaitsDoesntRun(t *testing.T) {
 	if rc != 1 {
 		t.Errorf("exit %d\n%s", rc, out)
 	}
-	contains(t, "output", out, "changed since you approved it")
+	testkit.Contains(t, "output", out, "changed since you approved it")
 	if strings.Contains(out, "swapped") {
 		t.Errorf("the swapped script ran:\n%s", out)
 	}

@@ -15,18 +15,12 @@ import (
 )
 
 // The test binary doubles as the program under test for what only a process can show: TEXTIO_HELPER names the job.
-func TestMain(m *testing.M) {
-	if job := os.Getenv("TEXTIO_HELPER"); job != "" {
-		helper(job)
-		os.Exit(0)
-	}
-	testkit.Main(m)
-}
+func TestMain(m *testing.M) { testkit.HelperMain(m, "TEXTIO_HELPER", helper) }
 
 func helper(job string) {
 	s := NewStreams(os.Stdin, os.Stdout, os.Stderr)
 	switch job {
-	case "closed": // started with fds 0, 1 and 2 closed: the runtime has reopened them, so nothing fails (C22)
+	case "closed": // started with fds 0, 1 and 2 closed: the runtime has reopened them, so nothing fails
 		code := 0
 		for fd := 0; fd < 3; fd++ {
 			if _, _, e := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), syscall.F_GETFD, 0); e != 0 {
@@ -40,13 +34,18 @@ func helper(job string) {
 		}
 		os.Exit(code)
 	case "ask":
-		fmt.Fprintf(s.Out, "answer=%v\n", Ask(s, "go on? ", nil))
+		s.Out.WriteString(fmt.Sprintf("answer=%v\n", Ask(s, "go on? ", nil)))
 	case "confirm":
 		ok, err := Confirm{Question: "run 'go'?", NoTerminal: "no terminal", Message: "will run \x1b[2Kit"}.Granted(s, false)
-		fmt.Fprintf(s.Out, "granted=%v err=%v\n", ok, err)
+		s.Out.WriteString(fmt.Sprintf("granted=%v err=%v\n", ok, err))
 	case "diffpipe": // stdout is a pipe whose reader has gone: ShowDiff's own flush must end the run with 141
 		signal.Notify(make(chan os.Signal, 1), syscall.SIGPIPE) // as cli.Main does: EPIPE comes back as an error
-		time.Sleep(300 * time.Millisecond)
+		// Wait until the reader is gone: probe writes succeed until `| true` has exited, then fail with EPIPE.
+		for stop := time.Now().Add(30 * time.Second); time.Now().Before(stop); time.Sleep(5 * time.Millisecond) {
+			if _, err := os.Stdout.Write([]byte{0}); err != nil {
+				break
+			}
+		}
 		ShowDiff(s, []string{"--- a/f", "+++ b/f", "+x"})
 		os.Exit(0) // no flush of ours: reaching here means ShowDiff swallowed the error
 	case "diff":
@@ -93,7 +92,7 @@ func TestStreams_BufferedOutSafeAndStyled(t *testing.T) {
 	if s.Out.IsTerminal() || s.Err.IsTerminal() {
 		t.Error("files are not terminals")
 	}
-	fmt.Fprint(s.Out, "a\x1b[2Kb\rc\n")
+	s.Out.WriteString("a\x1b[2Kb\rc\n")
 	if out() != "" {
 		t.Error("stdout is buffered when it is not a terminal")
 	}
@@ -118,7 +117,7 @@ func TestStreams_BufferedOutSafeAndStyled(t *testing.T) {
 	}
 }
 
-// C21: a reader that stopped ends the run with 141, nothing more written.
+// A reader that stopped ends the run with 141, nothing more written.
 func TestStreams_ABrokenPipeEnds141(t *testing.T) {
 	e := testkit.New(t)
 	r, w, err := os.Pipe()
@@ -156,25 +155,21 @@ func TestStreams_ABrokenPipeEnds141(t *testing.T) {
 	}
 }
 
-// C22, the probe the plan asks for: a process started with fds 0, 1 and 2 closed finds them open on /dev/null.
+// A process started with fds 0, 1 and 2 closed finds them open on /dev/null.
 func TestStreams_ClosedStdFdsAreReopenedByTheRuntime(t *testing.T) {
 	e := testkit.New(t)
 	res := e.RunCmd(testkit.Opts{Env: map[string]string{"TEXTIO_HELPER": "closed"}},
 		"sh", "-c", `exec "$0" -test.run='^$' <&- >&- 2>&-`, os.Args[0])
-	if res.Code != 0 {
-		t.Errorf("exit %d (bit 0-2: fd 0-2 found closed, bit 3: write failed)", res.Code)
-	}
+	res.WantCode(t, 0) // else the code's bits 0-2 say which of fd 0-2 was found closed, bit 3 that the write failed
 }
 
-// C21: ShowDiff's flush (small diff, buffer not full) on a pipe nobody reads exits 141, as Python's flush() raising
+// ShowDiff's flush (small diff, buffer not full) on a pipe nobody reads exits 141, as Python's flush() raising
 // BrokenPipeError does. `| true` is the reader that is gone before the child writes.
 func TestShowDiff_ABrokenPipeOnFlushEnds141(t *testing.T) {
 	e := testkit.New(t)
 	res := e.RunCmd(testkit.Opts{Env: map[string]string{"TEXTIO_HELPER": "diffpipe"}}, "bash", "-c",
 		`"$0" -test.run='^$' | true; exit ${PIPESTATUS[0]}`, os.Args[0])
-	if res.Code != 141 {
-		t.Errorf("exit %d, want 141; stderr %q", res.Code, res.Stderr)
-	}
+	res.WantCode(t, 141)
 }
 
 // Q-3: stdout escapes bytes that are not UTF-8 and lone surrogates like stderr, in Write and in WriteStyled.
@@ -184,7 +179,7 @@ func TestStreams_NonUTF8IsEscapedOnBothStreams(t *testing.T) {
 	const raw, want = "a\x9bb\xed\xa0\x80c\n", "a\\udc9bb\\ud800c\n"
 	s.Out.WriteString(raw)
 	s.Out.WriteStyled(raw)
-	fmt.Fprint(s.Out, raw)
+	s.Out.WriteString(raw)
 	s.Err.WriteString(raw)
 	s.Flush()
 	if out() != want+want+want || errs() != want {

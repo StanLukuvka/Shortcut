@@ -6,7 +6,7 @@ import (
 	"unicode/utf8"
 )
 
-// formatRange is _format_range_unified.
+// formatRange formats a hunk's line range for its @@ header.
 func formatRange(start, stop int) string {
 	beginning, length := start+1, stop-start
 	if length == 1 {

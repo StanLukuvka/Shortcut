@@ -3,6 +3,7 @@ package pyjson
 import (
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"strconv"
 	"strings"
@@ -88,7 +89,7 @@ func (d *decoder) skipWS(i int) int {
 	return i
 }
 
-// value is py_scanner's scan_once: the value at i and the offset after it.
+// value parses the value at i and returns it with the offset after it.
 func (d *decoder) value(i, depth int) (Value, int, error) {
 	s := d.s
 	if i >= len(s) {
@@ -109,16 +110,16 @@ func (d *decoder) value(i, depth int) (Value, int, error) {
 	case strings.HasPrefix(s[i:], "false"):
 		return false, i + 5, nil
 	case strings.HasPrefix(s[i:], "NaN"):
-		return nan(), i + 3, nil
+		return math.NaN(), i + 3, nil
 	case strings.HasPrefix(s[i:], "Infinity"):
-		return inf(1), i + 8, nil
+		return math.Inf(1), i + 8, nil
 	case strings.HasPrefix(s[i:], "-Infinity"):
-		return inf(-1), i + 9, nil
+		return math.Inf(-1), i + 9, nil
 	}
 	return d.number(i)
 }
 
-// number is _match_number_unicode.
+// number parses a number.
 func (d *decoder) number(start int) (Value, int, error) {
 	s := d.s
 	i := start
@@ -167,7 +168,7 @@ func (d *decoder) number(start int) (Value, int, error) {
 
 func isDigit(c byte) bool { return c >= '0' && c <= '9' }
 
-// object is _parse_object_unicode; i is just after the '{'.
+// object parses an object; i is just after the '{'.
 func (d *decoder) object(i, depth int) (Value, int, error) {
 	if depth > maxDepth {
 		return nil, 0, ErrDepth
@@ -210,7 +211,7 @@ func (d *decoder) object(i, depth int) (Value, int, error) {
 	return obj, i + 1, nil
 }
 
-// array is _parse_array_unicode; i is just after the '['.
+// array parses an array; i is just after the '['.
 func (d *decoder) array(i, depth int) (Value, int, error) {
 	if depth > maxDepth {
 		return nil, 0, ErrDepth
@@ -245,7 +246,7 @@ func (d *decoder) array(i, depth int) (Value, int, error) {
 	return arr, i + 1, nil
 }
 
-// str is scanstring_unicode (strict); i is just after the opening quote.
+// str parses a string (strict); i is just after the opening quote.
 func (d *decoder) str(i int) (string, int, error) {
 	s := d.s
 	begin := i - 1

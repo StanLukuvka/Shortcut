@@ -29,7 +29,6 @@ func TestDispatch_GoldenErrors(t *testing.T) {
 	}
 }
 
-// py: test_running.py::test_unknown_commands_point_to_run
 func TestRunning_UnknownCommandsPointToRun(t *testing.T) {
 	e := testkit.New(t)
 	for _, word := range []string{"nano", "activate", "version"} {
@@ -50,7 +49,6 @@ func TestRunning_UnknownCommandsPointToRun(t *testing.T) {
 	}
 }
 
-// py: test_running.py::test_run_without_a_name_is_an_error
 func TestRunning_RunWithoutANameIsAnError(t *testing.T) {
 	e := testkit.New(t)
 	res := e.Run("run")
@@ -59,7 +57,6 @@ func TestRunning_RunWithoutANameIsAnError(t *testing.T) {
 	}
 }
 
-// py: test_running.py::test_help_names_a_command
 func TestRunning_HelpNamesACommand(t *testing.T) {
 	e := testkit.New(t)
 	res := e.Run("help", "new")
@@ -127,5 +124,26 @@ func TestDispatch_ErrorsAreSafe(t *testing.T) {
 	res := e.Run("bad\x1b[31mword")
 	if res.Code != 2 || strings.Contains(res.Stderr, "\x1b") || !strings.Contains(res.Stderr, "bad^[[31mword") {
 		t.Errorf("exit %d stderr %q", res.Code, res.Stderr)
+	}
+}
+
+// Python decodes argv with surrogateescape and stderr prints with backslashreplace; expected text is from Python.
+func TestStderr_NonUTF8ArgvPrintsAsEscapes(t *testing.T) {
+	e := testkit.New(t)
+	runOK(t, e, testkit.Opts{}, "new", "hi", "--", "echo hi")
+	for _, c := range []struct {
+		args []string
+		code int
+		want string
+	}{
+		{[]string{"show", "\xff"}, 1, "error: shortcut '\\udcff' not found.\n"},
+		{[]string{"--j\xff"}, 2, "error: unrecognized option '--j\\udcff'\nTry 'shortcut --help' for more information.\n"},
+		{[]string{"list", "-", "\xff"}, 2, "usage: shortcut list [-h] [--names [NAMESPACE]]\nshortcut list: error: unrecognized arguments: - \\udcff\n"},
+		{[]string{"show", "hi", "\xff"}, 1, "error: too many names: hi '\\udcff'\n"},
+	} {
+		res := e.Run(c.args...)
+		if res.Code != c.code || res.Stdout != "" || res.Stderr != c.want {
+			t.Errorf("%q: exit %d stdout %q stderr %q, want exit %d stderr %q", c.args, res.Code, res.Stdout, res.Stderr, c.code, c.want)
+		}
 	}
 }

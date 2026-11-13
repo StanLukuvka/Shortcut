@@ -2,7 +2,7 @@ package difflib
 
 import (
 	"encoding/json"
-	"os"
+	"github.com/StanLukuvka/Shortcut/internal/testkit"
 	"reflect"
 	"sort"
 	"strconv"
@@ -19,10 +19,7 @@ type diffCase struct {
 
 func loadCases(t *testing.T) []diffCase {
 	t.Helper()
-	raw, err := os.ReadFile("../testdata/diff_cases.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := testkit.Golden(t, "diff_cases.json")
 	var f struct {
 		Cases []diffCase `json:"cases"`
 	}

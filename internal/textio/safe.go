@@ -8,7 +8,7 @@ import (
 	"unicode/utf8"
 )
 
-// Safe is helpers.safe: control characters are printed, never obeyed. Kept: tab and newline. Replaced: U+0000-0008,
+// Safe makes control characters safe: they are printed, never obeyed. Kept: tab and newline. Replaced: U+0000-0008,
 // U+000B-001F and U+007F as ^X (the character xor 0x40), U+0080-009F, U+2028, U+2029, U+202A-202E and U+2066-2069
 // as \uXXXX (lowercase hex). A byte that is not UTF-8 passes through untouched.
 func Safe(text string) string {
@@ -52,7 +52,7 @@ func control(first rune, rest string) bool {
 	return isControl(r)
 }
 
-// isControl is helpers.CONTROL_CHARS.
+// isControl reports whether r is a control character that Safe replaces.
 func isControl(r rune) bool {
 	switch {
 	case r <= 0x08, r >= 0x0b && r <= 0x1f, r >= 0x7f && r <= 0x9f:

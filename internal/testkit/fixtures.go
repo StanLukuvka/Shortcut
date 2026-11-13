@@ -20,7 +20,7 @@ var (
 	KubeGet  = map[string]any{"version": 2, "shortcuts": map[string]any{"get": map[string]any{"inline": "echo get"}}}
 )
 
-const BrokenJSON = "{not json"
+const brokenJSON = "{not json"
 
 // jsonText is json.dumps with a Go twist: keys come out sorted (use WriteRegistryRaw where order is the point),
 // and non-ASCII and <>& stay as they are.
@@ -71,7 +71,7 @@ func (e *Env) WriteFile(path string, content any, mode os.FileMode) string {
 	return path
 }
 
-func (e *Env) WriteFiles(root string, files map[string]any, mode os.FileMode) {
+func (e *Env) writeFiles(root string, files map[string]any, mode os.FileMode) {
 	e.T.Helper()
 	for rel, content := range files {
 		e.WriteFile(filepath.Join(root, rel), content, mode)
@@ -109,18 +109,18 @@ func (e *Env) Symlink(target, link string) {
 // shortcuts.json (the global store included).
 
 // WriteRegistry writes exactly this data as a store's file, valid or not.
-func (e *Env) WriteRegistry(storeDir string, data any) {
+func (e *Env) writeRegistry(storeDir string, data any) {
 	e.T.Helper()
-	e.WriteFile(e.RegistryPath(storeDir), e.jsonText(data), 0)
+	e.WriteFile(e.registryPath(storeDir), e.jsonText(data), 0)
 }
 
 func (e *Env) WriteRegistryRaw(storeDir, jsonText string) {
 	e.T.Helper()
-	e.WriteFile(e.RegistryPath(storeDir), jsonText, 0)
+	e.WriteFile(e.registryPath(storeDir), jsonText, 0)
 }
 
-// RegistryPath is a project's .shortcuts file, or <dir>/shortcuts.json.
-func (e *Env) RegistryPath(storeDir string) string {
+// registryPath is a project's .shortcuts file, or <dir>/shortcuts.json.
+func (e *Env) registryPath(storeDir string) string {
 	if filepath.Base(storeDir) == ".shortcuts" && filepath.Clean(storeDir) != e.Store {
 		return storeDir
 	}
@@ -138,7 +138,7 @@ func (e *Env) WriteStore(storeDir string, shortcuts map[string]any, extra ...map
 			data[k] = v
 		}
 	}
-	e.WriteRegistry(storeDir, data)
+	e.writeRegistry(storeDir, data)
 }
 
 // WriteImport writes a namespace file. A project lists it under "imports" in .shortcuts; the global store just finds it.
@@ -168,7 +168,7 @@ func (e *Env) WriteImport(storeDir, name string, data map[string]any) string {
 
 func (e *Env) CorruptStore(storeDir string) {
 	e.T.Helper()
-	e.WriteRegistryRaw(storeDir, BrokenJSON)
+	e.WriteRegistryRaw(storeDir, brokenJSON)
 }
 
 // LoadGlobal is the "shortcuts" object of the global shortcuts.json.
@@ -237,7 +237,7 @@ func (e *Env) Project(shortcuts map[string]any, opts ...ProjectOpt) string {
 			e.die(err)
 		}
 	}
-	e.WriteFiles(proj, c.files, c.mode)
+	e.writeFiles(proj, c.files, c.mode)
 	if shortcuts != nil {
 		e.WriteStore(filepath.Join(proj, ".shortcuts"), shortcuts, c.extra)
 	}
@@ -261,7 +261,7 @@ func (e *Env) Collection(shortcuts map[string]any, opts ...ProjectOpt) string {
 	e.T.Helper()
 	c := cfgOf("source", opts)
 	src := filepath.Join(e.Tmp, c.name)
-	e.WriteFiles(src, c.files, c.mode)
+	e.writeFiles(src, c.files, c.mode)
 	exported := map[string]any{}
 	for k, v := range shortcuts {
 		if m, ok := v.(map[string]any); ok {
@@ -296,13 +296,11 @@ func (e *Env) CommitToGit(repo string) {
 // InstallBundled imports templates/ with a `shortcut` on PATH for them to call, as after a real install.
 func (e *Env) InstallBundled() {
 	e.T.Helper()
-	e.ensureToolBin()
+	e.Shell(Opts{}, "true") // puts the `shortcut` link in ToolBin
 	e.Vars["PATH"] = e.ToolBin + ":" + e.Vars["PATH"]
-	r := e.Run("init", "--global", filepath.Join(moduleRoot(), "templates"), "-y")
-	if r.Code != 0 {
-		e.dief("init --global templates exited %d: %s", r.Code, r.Stderr)
+	res := e.Run("init", "--global", "--bundled", "-y")
+	if res.Code != 0 {
+		e.dief("init --global --bundled exited %d: %s", res.Code, res.Stderr)
 	}
-	if strings.Contains(r.Stdout, "Skipped") {
-		e.dief("init --global templates skipped something:\n%s", r.Stdout)
-	}
+	NotContains(e.T, "stdout", res.Stdout, "Skipped")
 }

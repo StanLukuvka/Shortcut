@@ -7,7 +7,7 @@ import (
 
 // confirm_review: a binary file not seen before has to be typed out; one that is unchanged is an ordinary question.
 func TestConfirmReview(t *testing.T) {
-	bin := BinaryMark + "aa"
+	bin := binaryMark + "aa"
 	c := ConfirmReview("approve", map[string]string{"t": "echo hi\n"}, map[string]string{"t": bin, "u": bin}, "no terminal")
 	if !slices.Equal(c.Accept, []string{"binary"}) || c.NoTerminal != "no terminal" {
 		t.Errorf("unseen binary: %+v", c)

@@ -1,7 +1,6 @@
 package textio
 
 import (
-	"os"
 	"strings"
 	"syscall"
 	"testing"
@@ -64,7 +63,7 @@ func TestConfirm_WithoutATerminalAndWithYes(t *testing.T) {
 func TestAsk_ATerminalSession(t *testing.T) {
 	e := testkit.New(t)
 	run := func(keys []testkit.Key) string {
-		code, out := e.InTerminalCmd(testkit.Opts{Env: map[string]string{"TEXTIO_HELPER": "confirm"}}, keys, os.Args[0], "-test.run=^$")
+		code, out := e.InTerminalCmd(testkit.Opts{Env: map[string]string{"TEXTIO_HELPER": "confirm"}}, keys, testkit.SelfArgs()...)
 		if code != 0 {
 			t.Fatalf("exit %d: %q", code, out)
 		}
@@ -83,7 +82,7 @@ func TestAsk_ATerminalSession(t *testing.T) {
 	if !strings.Contains(out, "\n\r\nAborted.") && !strings.Contains(out, "Aborted.") || !strings.Contains(out, "granted=false") {
 		t.Errorf("EOF: %q", out)
 	}
-	out = run([]testkit.Key{{Wait: "[y/N]", Signal: syscall.SIGINT}}) // C23: Ctrl-C answers no, the process lives
+	out = run([]testkit.Key{{Wait: "[y/N]", Signal: syscall.SIGINT}}) // Ctrl-C answers no, the process lives
 	if !strings.Contains(out, "Aborted.") || !strings.Contains(out, "granted=false") {
 		t.Errorf("Ctrl-C: %q", out)
 	}

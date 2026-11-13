@@ -13,7 +13,7 @@ import (
 // Store is a store's main group and its namespaces.
 type Store struct {
 	Main       Group
-	Namespaces []NamedGroup // sorted by name, as stores.py sorts them
+	Namespaces []NamedGroup // sorted by name
 	Problems   []string     // load errors: a name that is both a shortcut and a namespace
 }
 
@@ -40,7 +40,7 @@ func (s Store) Groups() []Group {
 	return out
 }
 
-// ResolveRunDir is resolve_run_dir: where a shortcut with this cwd runs.
+// ResolveRunDir returns where a shortcut with this cwd runs.
 func ResolveRunDir(cwd *string, g Group, callerCwd string) string {
 	if cwd == nil || *cwd == "" || *cwd == Caller {
 		return callerCwd
@@ -76,7 +76,7 @@ func LoadGroup(path, storeDir, name string) Group {
 		g.Error = &msg
 	default:
 		g.Data = data
-		if msg := FileError(path, data, name); msg != "" {
+		if msg := fileError(path, data, name); msg != "" {
 			g.Error = &msg
 		}
 	}
@@ -108,7 +108,7 @@ func entryError(g Group, name string, data pyjson.Value) error {
 		if err != nil {
 			return err
 		}
-		if !isFile(path) {
+		if !pyos.IsFile(path) {
 			return fmt.Errorf("'%s' is not a valid entry: script not found: %s", name, *e.Script)
 		}
 	}
@@ -149,13 +149,13 @@ func LoadStore(storeDir string) Store {
 	var problems []string
 	sources := map[string]string{}
 	importsDir := pyos.Join(storeDir, "imports")
-	if isGlobal && isDir(importsDir) {
+	if isGlobal && pyos.IsDir(importsDir) {
 		entries, _ := os.ReadDir(importsDir)
 		var names []string
 		for _, e := range entries {
 			names = append(names, e.Name())
 		}
-		for _, filename := range sortedLess(names) {
+		for _, filename := range pyjson.SortStrings(names) {
 			if strings.HasSuffix(filename, ImportSuffix) {
 				sources[strings.TrimSuffix(filename, ImportSuffix)] = pyos.Join(importsDir, filename)
 			}
@@ -171,7 +171,7 @@ func LoadStore(storeDir string) Store {
 			case !strings.HasSuffix(path, ImportSuffix):
 				problems = append(problems, fmt.Sprintf("import '%s' in %s must be a %s file", name, main.File, ImportSuffix))
 			case pyos.Basename(path) == ImportSuffix:
-				problems = append(problems, fmt.Sprintf("import '%s' in %s: %s", name, main.File, BareImport))
+				problems = append(problems, fmt.Sprintf("import '%s' in %s: %s", name, main.File, bareImport))
 			case taken:
 				problems = append(problems, fmt.Sprintf("namespace '%s' is imported twice in %s", name, storeDir))
 			default:
@@ -185,13 +185,13 @@ func LoadStore(storeDir string) Store {
 	}
 	var namespaces []NamedGroup
 	mainShortcuts := main.Shortcuts()
-	for _, name := range sortedLess(names) {
+	for _, name := range pyjson.SortStrings(names) {
 		path := sources[name]
 		g := LoadGroup(path, storeDir, name)
 		if err := ValidateName(name); err != nil {
 			msg := err.Error()
 			if name == "" {
-				msg = fmt.Sprintf("%s: %s", path, BareImport)
+				msg = fmt.Sprintf("%s: %s", path, bareImport)
 			}
 			g.Error = &msg
 		}
