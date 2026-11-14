@@ -343,11 +343,11 @@ fileError -> file_error
 lockPath -> registry_lock
 oldProjectFolder -> old_project_folder (lookup.py)
 
-[internal/pyjson]
+[internal/ordjson]
 Decode -> json.load
 Parse -> json.loads(s)
 
-[internal/pyos]
+[internal/osutil]
 Abs -> os.path.abspath
 ExecChild -> exec_child (os.execvpe)
 Exists -> os.path.exists

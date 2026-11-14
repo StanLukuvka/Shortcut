@@ -1,6 +1,6 @@
 //go:build linux || darwin
 
-package pyos
+package osutil
 
 import (
 	"syscall"

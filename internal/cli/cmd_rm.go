@@ -7,8 +7,8 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/ordjson"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -27,7 +27,7 @@ func cmdRm(s *textio.Streams, args []string) error {
 	if ns.Set("namespace") {
 		if len(names) > 0 {
 			return Die("--namespace takes the namespace alone: shortcut rm --namespace " + ns.Str("namespace") +
-				". To remove one entry: shortcut rm " + ns.Str("namespace") + " " + pyos.ShellJoin(names))
+				". To remove one entry: shortcut rm " + ns.Str("namespace") + " " + osutil.ShellJoin(names))
 		}
 		if ns.Bool("local") {
 			return Die("--namespace takes the namespace alone: shortcut rm --namespace " + ns.Str("namespace"))
@@ -42,7 +42,7 @@ func cmdRm(s *textio.Streams, args []string) error {
 	}
 
 	// A project that can't be read might hide the name, so rm doesn't reach past it to a global one
-	cwd, _ := pyos.Getwd()
+	cwd, _ := osutil.Getwd()
 	root := ""
 	if !ns.Bool("skipLocal") {
 		root = model.FindProjectRoot(cwd)
@@ -50,7 +50,7 @@ func cmdRm(s *textio.Streams, args []string) error {
 	if root != "" {
 		if broken := model.LoadProjectGroup(root).Error; broken != nil {
 			return Die(*broken + ". Inside this project rm only takes --local until it's fixed; " +
-				"for your own: shortcut rm --global " + pyos.ShellJoin(names))
+				"for your own: shortcut rm --global " + osutil.ShellJoin(names))
 		}
 	}
 
@@ -112,7 +112,7 @@ func rmLocal(s *textio.Streams, ns Namespace) error {
 		return Die("--local takes one name: namespaces aren't in " + model.LocalFile)
 	}
 	name := names[0]
-	cwd, _ := pyos.Getwd()
+	cwd, _ := osutil.Getwd()
 	root, err := model.LocalProjectRoot(cwd)
 	if err != nil {
 		return err
@@ -132,7 +132,7 @@ func rmLocal(s *textio.Streams, ns Namespace) error {
 		Message: rmLocalMessage(group, name, unreadable), TellOnYes: true}, ns.Bool("yes")); err != nil {
 		return err
 	}
-	after, err := writeLocal(group.StoreDir, func(shortcuts *pyjson.Object) error {
+	after, err := writeLocal(group.StoreDir, func(shortcuts *ordjson.Object) error {
 		if _, has := shortcuts.Get(name); has {
 			shortcuts.Delete(name)
 		} else {
@@ -159,7 +159,7 @@ func rmNamespace(s *textio.Streams, name string, assumeYes bool) error {
 	store := model.LoadStore(storeDir)
 	group, found := store.Namespace(name)
 	if !found {
-		return Die("no namespace named '" + name + "' in your global store (" + pyos.Join(storeDir, "imports") + ")")
+		return Die("no namespace named '" + name + "' in your global store (" + osutil.Join(storeDir, "imports") + ")")
 	}
 	listed := isListedImport(store, name)
 	folder := group.ScriptsDir()
@@ -168,7 +168,7 @@ func rmNamespace(s *textio.Streams, name string, assumeYes bool) error {
 		lines = []string{"Stops importing '" + name + "' in " + store.Main.File, "Keeps its file: " + group.File}
 	} else {
 		lines = []string{"Removes namespace '" + name + "' (" + strconv.Itoa(len(group.Shortcuts().Keys)) + " shortcuts): " + group.File}
-		if pyos.Lexists(folder) {
+		if osutil.Lexists(folder) {
 			lines = append(lines, "Deletes its scripts folder: "+folder)
 		}
 	}
@@ -183,7 +183,7 @@ func rmNamespace(s *textio.Streams, name string, assumeYes bool) error {
 			if err != nil {
 				return err
 			}
-			if imports, ok := reg.Vals["imports"].(*pyjson.Object); ok {
+			if imports, ok := reg.Vals["imports"].(*ordjson.Object); ok {
 				imports.Delete(name)
 				if len(imports.Keys) == 0 {
 					reg.Delete("imports")
@@ -205,8 +205,8 @@ func rmNamespace(s *textio.Streams, name string, assumeYes bool) error {
 }
 
 // scriptField is the entry's "script" when it is a non-empty string.
-func scriptField(raw pyjson.Value) (string, bool) {
-	entry, ok := raw.(*pyjson.Object)
+func scriptField(raw ordjson.Value) (string, bool) {
+	entry, ok := raw.(*ordjson.Object)
 	if !ok {
 		return "", false
 	}
@@ -218,20 +218,20 @@ func scriptField(raw pyjson.Value) (string, bool) {
 // storedCopy returns the copy shortcut keeps of an entry's script, which rm deletes with it: a relative path
 // inside the group's scripts folder. new --script never records one there as relative, so it's never one. "" is none.
 // The path is resolved, so it is where the file really is, and it must still be inside the resolved folder.
-func storedCopy(group model.Group, raw pyjson.Value) string {
+func storedCopy(group model.Group, raw ordjson.Value) string {
 	script, ok := scriptField(raw)
 	if !ok || strings.HasPrefix(script, "/") {
 		return ""
 	}
 	path, err := model.ResolveScriptPath(group.ScriptBase(), script)
-	if err != nil || !pyos.IsRelativeTo(path, pyos.Realpath(group.ScriptsDir())) {
+	if err != nil || !osutil.IsRelativeTo(path, osutil.Realpath(group.ScriptsDir())) {
 		return ""
 	}
 	return path
 }
 
 // keptScript returns the script an entry names, as a path, for saying it stays. "" is none.
-func keptScript(group model.Group, raw pyjson.Value) string {
+func keptScript(group model.Group, raw ordjson.Value) string {
 	script, ok := scriptField(raw)
 	if !ok {
 		return ""
@@ -243,7 +243,7 @@ func keptScript(group model.Group, raw pyjson.Value) string {
 }
 
 // rmMessage returns what rm is about to change, shown above its question.
-func rmMessage(group model.Group, display string, raw pyjson.Value, cp string) string {
+func rmMessage(group model.Group, display string, raw ordjson.Value, cp string) string {
 	where := "your global shortcuts"
 	if group.Name != "" {
 		where = "namespace " + group.Name

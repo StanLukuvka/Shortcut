@@ -3,8 +3,8 @@ package cli
 import (
 	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/ordjson"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -15,7 +15,7 @@ func cmdPromote(s *textio.Streams, args []string) error {
 	if err != nil {
 		return err
 	}
-	callerCwd, err := pyos.Getwd()
+	callerCwd, err := osutil.Getwd()
 	if err != nil {
 		return err
 	}
@@ -70,10 +70,10 @@ func cmdPromote(s *textio.Streams, args []string) error {
 		fields.Set("script", path)
 	}
 	if model.IsRelativeCwd(entry.Cwd) {
-		fields.Set("cwd", pyos.Realpath(model.ResolveRunDir(entry.Cwd, group, callerCwd)))
+		fields.Set("cwd", osutil.Realpath(model.ResolveRunDir(entry.Cwd, group, callerCwd)))
 	}
-	from := &pyjson.Object{}
-	from.Set("source", pyos.Realpath(group.StoreDir))
+	from := &ordjson.Object{}
+	from.Set("source", osutil.Realpath(group.StoreDir))
 	from.Set("name", name)
 	fields.Set("from", from)
 	newEntry, err := model.EntryFromValue(newName, fields)
@@ -81,9 +81,9 @@ func cmdPromote(s *textio.Streams, args []string) error {
 		return err
 	}
 
-	shown := &pyjson.Object{}
+	shown := &ordjson.Object{}
 	shown.Set(newName, fields)
-	text, err := pyjson.MarshalIndent(shown)
+	text, err := ordjson.MarshalIndent(shown)
 	if err != nil {
 		return err
 	}

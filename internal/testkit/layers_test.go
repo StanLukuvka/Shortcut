@@ -17,15 +17,15 @@ import (
 var layers = map[string][]string{
 	".":                     {},
 	"cmd/shortcut":          {"internal/cli"},
-	"internal/pyjson":       {},
-	"internal/pyos":         {},
+	"internal/ordjson":      {},
+	"internal/osutil":       {},
 	"internal/difflib":      {},
-	"internal/model":        {"internal/pyjson", "internal/pyos"},
-	"internal/textio":       {"internal/pyos"},
-	"internal/approval":     {"internal/model", "internal/textio", "internal/difflib", "internal/pyjson", "internal/pyos"},
-	"internal/cli/argparse": {"internal/pyjson", "internal/pyos"},
-	"internal/cli": {".", "internal/cli/argparse", "internal/approval", "internal/model", "internal/textio", "internal/pyjson",
-		"internal/pyos", "internal/difflib"},
+	"internal/model":        {"internal/ordjson", "internal/osutil"},
+	"internal/textio":       {"internal/osutil"},
+	"internal/approval":     {"internal/model", "internal/textio", "internal/difflib", "internal/ordjson", "internal/osutil"},
+	"internal/cli/argparse": {},
+	"internal/cli": {".", "internal/cli/argparse", "internal/approval", "internal/model", "internal/textio", "internal/ordjson",
+		"internal/osutil", "internal/difflib"},
 	"internal/testkit": {},
 }
 

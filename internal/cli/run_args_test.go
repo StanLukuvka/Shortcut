@@ -5,13 +5,13 @@ import (
 	"testing"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
+	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 )
 
-func argSpec(fields ...map[string]any) []*pyjson.Object {
-	var spec []*pyjson.Object
+func argSpec(fields ...map[string]any) []*ordjson.Object {
+	var spec []*ordjson.Object
 	for _, f := range fields {
-		o := &pyjson.Object{Vals: map[string]pyjson.Value{}}
+		o := &ordjson.Object{Vals: map[string]ordjson.Value{}}
 		for k, v := range f {
 			o.Keys = append(o.Keys, k)
 			o.Vals[k] = v

@@ -9,14 +9,14 @@ import (
 	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/ordjson"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
 // displayPath returns the path relative to the group's script base, or the path itself when that string
 // starts with ".." (a literal string test, so a file named "..x" counts as outside).
 func displayPath(g model.Group, path string) string {
-	rel := pyos.Relpath(path, g.ScriptBase())
+	rel := osutil.Relpath(path, g.ScriptBase())
 	if strings.HasPrefix(rel, "..") {
 		return path
 	}
@@ -26,15 +26,15 @@ func displayPath(g model.Group, path string) string {
 // entryFiles returns what entries point at, as {path: content}. A relative cwd adds where it really leads, so
 // a symlink moved under it needs approving; the leading ./ keeps that key apart from any script, whose path is
 // normalised. origin keeps two entries of the same name apart.
-func entryFiles(g model.Group, shortcuts *pyjson.Object, origin string) map[string]string {
+func entryFiles(g model.Group, shortcuts *ordjson.Object, origin string) map[string]string {
 	files := map[string]string{}
 	for _, name := range shortcuts.Keys {
-		data, ok := shortcuts.Vals[name].(*pyjson.Object)
+		data, ok := shortcuts.Vals[name].(*ordjson.Object)
 		if !ok {
 			continue
 		}
 		if cwd, ok := data.Vals["cwd"].(string); ok && model.IsRelativeCwd(&cwd) {
-			files["./cwd of "+name+origin] = pyos.Realpath(model.ResolveRunDir(&cwd, g, "")) + "\n"
+			files["./cwd of "+name+origin] = osutil.Realpath(model.ResolveRunDir(&cwd, g, "")) + "\n"
 		}
 		script, ok := data.Vals["script"].(string)
 		if !ok {
@@ -63,18 +63,18 @@ func folderFiles(g model.Group) map[string]string {
 	if g.Name == "" {
 		return files
 	}
-	pyos.Walk(g.ScriptsDir(), func(dir string, dirs, names []string) {
-		real := pyos.Realpath(dir) // as entryFiles resolves a script's path
+	osutil.Walk(g.ScriptsDir(), func(dir string, dirs, names []string) {
+		real := osutil.Realpath(dir) // as entryFiles resolves a script's path
 		for _, name := range dirs {
-			link := pyos.Join(dir, name)
+			link := osutil.Join(dir, name)
 			if st, err := os.Lstat(link); err == nil && st.Mode()&os.ModeSymlink != 0 {
 				if target, err := os.Readlink(link); err == nil {
-					files[displayPath(g, pyos.Join(real, name))] = "symlink to " + target + "\n"
+					files[displayPath(g, osutil.Join(real, name))] = "symlink to " + target + "\n"
 				}
 			}
 		}
 		for _, name := range names {
-			path := pyos.Join(real, name)
+			path := osutil.Join(real, name)
 			if st, err := os.Stat(path); err == nil && st.Mode().IsRegular() { // a FIFO or device would block or never end
 				if raw, err := os.ReadFile(path); err == nil {
 					files[displayPath(g, path)] = Reviewable(raw)
@@ -85,8 +85,8 @@ func folderFiles(g model.Group) map[string]string {
 	return files
 }
 
-func jsonFile(g model.Group, path string, data *pyjson.Object) (map[string]string, error) {
-	text, err := pyjson.MarshalIndent(data.Sorted())
+func jsonFile(g model.Group, path string, data *ordjson.Object) (map[string]string, error) {
+	text, err := ordjson.MarshalIndent(data.Sorted())
 	if err != nil {
 		return nil, fmt.Errorf("cannot approve: %q: %w", displayPath(g, path), err)
 	}
@@ -106,7 +106,7 @@ func merge(maps ...map[string]string) map[string]string {
 // SharedFiles is the group's own file and what it names, the JSON normalised, and for a namespace its scripts
 // folder: exactly what is compared, snapshotted and diffed. A project may have no .shortcuts; then this is empty.
 func SharedFiles(g model.Group) (map[string]string, error) {
-	if g.LocalFile != "" && !pyos.Exists(g.File) {
+	if g.LocalFile != "" && !osutil.Exists(g.File) {
 		return map[string]string{}, nil
 	}
 	own, err := jsonFile(g, g.File, g.Data)
@@ -118,7 +118,7 @@ func SharedFiles(g model.Group) (map[string]string, error) {
 
 // LocalFiles is the same for .shortcuts.local.
 func LocalFiles(g model.Group) (map[string]string, error) {
-	if g.LocalFile == "" || !pyos.Exists(g.LocalFile) {
+	if g.LocalFile == "" || !osutil.Exists(g.LocalFile) {
 		return map[string]string{}, nil
 	}
 	own, err := jsonFile(g, g.LocalFile, g.LocalData)
@@ -163,9 +163,9 @@ func CheckKey(g model.Group) error {
 	if !g.NeedsApproval() {
 		return nil
 	}
-	parts := []string{pyos.Realpath(g.StoreDir)}
+	parts := []string{osutil.Realpath(g.StoreDir)}
 	if g.Name != "" {
-		parts = append(parts, pyos.Realpath(g.File))
+		parts = append(parts, osutil.Realpath(g.File))
 	}
 	for _, p := range parts {
 		if !utf8.ValidString(p) {

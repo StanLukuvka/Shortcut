@@ -1,4 +1,4 @@
-package pyjson
+package ordjson
 
 import (
 	"bytes"

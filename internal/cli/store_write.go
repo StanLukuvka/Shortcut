@@ -13,8 +13,8 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/ordjson"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -59,8 +59,8 @@ func targetGroup(ns Namespace, cwd string) (model.Group, error) {
 		}
 		var ok bool
 		if group, ok = store.Namespace(namespace); !ok {
-			group = model.Group{Name: namespace, File: pyos.Join(storeDir, "imports", namespace+model.ImportSuffix),
-				StoreDir: storeDir, Data: &pyjson.Object{}}
+			group = model.Group{Name: namespace, File: osutil.Join(storeDir, "imports", namespace+model.ImportSuffix),
+				StoreDir: storeDir, Data: &ordjson.Object{}}
 		}
 	}
 	if group.Error != nil {
@@ -71,11 +71,11 @@ func targetGroup(ns Namespace, cwd string) (model.Group, error) {
 
 // loadForEdit is the registry at path, or a fresh one when isNew, with its "shortcuts" object. A "shortcuts" that is
 // not an object is refused.
-func loadForEdit(path string, isNew bool) (*pyjson.Object, *pyjson.Object, error) {
-	reg := &pyjson.Object{}
+func loadForEdit(path string, isNew bool) (*ordjson.Object, *ordjson.Object, error) {
+	reg := &ordjson.Object{}
 	if isNew {
 		reg.Set("version", json.Number(strconv.Itoa(model.RegistryVersion)))
-		reg.Set("shortcuts", &pyjson.Object{})
+		reg.Set("shortcuts", &ordjson.Object{})
 	} else {
 		var err error
 		if reg, err = model.LoadRegistryFile(path); err != nil {
@@ -84,11 +84,11 @@ func loadForEdit(path string, isNew bool) (*pyjson.Object, *pyjson.Object, error
 	}
 	v, has := reg.Get("shortcuts")
 	if !has {
-		o := &pyjson.Object{}
+		o := &ordjson.Object{}
 		reg.Set("shortcuts", o)
 		return reg, o, nil
 	}
-	o, ok := v.(*pyjson.Object)
+	o, ok := v.(*ordjson.Object)
 	if !ok {
 		return nil, nil, fmt.Errorf("corrupt registry %s: 'shortcuts' must be an object", path)
 	}
@@ -135,7 +135,7 @@ func lockedGroupWrite(group model.Group, mutate func() error) error {
 func register(s *textio.Streams, group model.Group, entry *model.Entry, writeScript func() error) error {
 	storeDir := group.StoreDir
 	if group.LocalFile != "" {
-		change := func(shortcuts *pyjson.Object) error {
+		change := func(shortcuts *ordjson.Object) error {
 			if v, _ := shortcuts.Get(entry.Name); v != nil { // a null is a hidden shared entry: it is replaced
 				return Die("shortcut '" + entry.Name + "' already exists in " + group.LocalFile)
 			}
@@ -161,7 +161,7 @@ func register(s *textio.Streams, group model.Group, entry *model.Entry, writeScr
 		}
 	}
 	err := lockedGroupWrite(group, func() error {
-		reg, shortcuts, err := loadForEdit(group.File, group.Name != "" && !pyos.Exists(group.File))
+		reg, shortcuts, err := loadForEdit(group.File, group.Name != "" && !osutil.Exists(group.File))
 		if err != nil {
 			return err
 		}
@@ -195,13 +195,13 @@ func register(s *textio.Streams, group model.Group, entry *model.Entry, writeScr
 // whether the file matches its approval. Only then does the approval follow the write, as writeLocal does, so a hand
 // edit still needs update.
 func namespaceIsApproved(g model.Group) bool {
-	return g.Name != "" && pyos.Exists(g.File) && approval.State(model.ReloadGroup(g)) == "ok"
+	return g.Name != "" && osutil.Exists(g.File) && approval.State(model.ReloadGroup(g)) == "ok"
 }
 
 // writeLocal changes .shortcuts.local through change(shortcuts), the only way shortcut writes to a
 // project. The approval record follows, but only if .local matched it first: a hand edit, or anything in .shortcuts,
 // must not get approved by the way.
-func writeLocal(root string, change func(*pyjson.Object) error) (model.Group, error) {
+func writeLocal(root string, change func(*ordjson.Object) error) (model.Group, error) {
 	var after model.Group
 	err := model.WithRegistryLock(root, func() error {
 		before := model.LoadProjectGroup(root)
@@ -211,7 +211,7 @@ func writeLocal(root string, change func(*pyjson.Object) error) (model.Group, er
 		record := approval.Load(before)
 		approved := approval.LocalIsApproved(before, record)
 		path := before.LocalFile
-		isNewFile := !pyos.Exists(path)
+		isNewFile := !osutil.Exists(path)
 		reg, shortcuts, err := loadForEdit(path, isNewFile)
 		if err != nil {
 			return err
@@ -251,14 +251,14 @@ func excludeFromGit(root string) {
 	if err != nil {
 		return
 	}
-	path := pyos.Join(root, strings.TrimSpace(string(out))) // an absolute result stays as it is
+	path := osutil.Join(root, strings.TrimSpace(string(out))) // an absolute result stays as it is
 	if os.MkdirAll(filepath.Dir(path), 0o777) != nil {
 		return
 	}
 	var text string
 	if raw, err := os.ReadFile(path); err == nil {
 		text = string(raw)
-	} else if pyos.Exists(path) {
+	} else if osutil.Exists(path) {
 		return
 	}
 	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
@@ -284,12 +284,12 @@ func storedCwd(value *string, g model.Group) (*string, error) {
 	if value == nil || *value == model.Caller {
 		return value, nil
 	}
-	path := pyos.Realpath(pyos.ExpandUser(*value))
-	if !pyos.IsDir(path) {
+	path := osutil.Realpath(osutil.ExpandUser(*value))
+	if !osutil.IsDir(path) {
 		return nil, Die("--cwd directory does not exist: " + path)
 	}
-	if !model.IsGlobalStore(g.StoreDir) && pyos.IsRelativeTo(path, pyos.Realpath(g.StoreDir)) {
-		rel := pyos.Relpath(path, pyos.Realpath(g.Folder()))
+	if !model.IsGlobalStore(g.StoreDir) && osutil.IsRelativeTo(path, osutil.Realpath(g.StoreDir)) {
+		rel := osutil.Relpath(path, osutil.Realpath(g.Folder()))
 		return &rel, nil
 	}
 	return &path, nil
@@ -298,8 +298,8 @@ func storedCwd(value *string, g model.Group) (*string, error) {
 // storedScriptField returns (registry field, absolute path) for a copy kept in the group's scripts
 // folder.
 func storedScriptField(g model.Group, filename string) (string, string) {
-	abs := pyos.Join(g.ScriptsDir(), filename)
-	return pyos.Relpath(abs, g.ScriptBase()), abs
+	abs := osutil.Join(g.ScriptsDir(), filename)
+	return osutil.Relpath(abs, g.ScriptBase()), abs
 }
 
 // refuseSymlinks refuses symlinks: a repo can commit scripts/, or one script, as a symlink to a file of yours.
@@ -308,7 +308,7 @@ func refuseSymlinks(g model.Group, path string) error {
 	if !g.NeedsApproval() {
 		return nil
 	}
-	if link := firstLinkUnder(g.ScriptBase(), pyos.Relpath(path, g.ScriptBase())); link != "" {
+	if link := firstLinkUnder(g.ScriptBase(), osutil.Relpath(path, g.ScriptBase())); link != "" {
 		return errors.New(link + " is a symlink, so this would write somewhere else")
 	}
 	return nil
@@ -321,8 +321,8 @@ func firstLinkUnder(base, rel string) string {
 		if part == "" || part == "." {
 			continue
 		}
-		cur = pyos.Join(cur, part)
-		if pyos.IsLink(cur) {
+		cur = osutil.Join(cur, part)
+		if osutil.IsLink(cur) {
 			return cur
 		}
 	}
@@ -358,9 +358,9 @@ func removeNamespaceFiles(group model.Group) error {
 		return err
 	}
 	switch {
-	case pyos.IsLink(folder):
+	case osutil.IsLink(folder):
 		return unlinkFile(folder)
-	case pyos.IsDir(folder):
+	case osutil.IsDir(folder):
 		return os.RemoveAll(folder) // does not follow a link inside it either
 	}
 	return nil
@@ -372,7 +372,7 @@ func isListedImport(store model.Store, name string) bool {
 	if store.Main.Data == nil {
 		return false
 	}
-	imports, ok := store.Main.Data.Vals["imports"].(*pyjson.Object)
+	imports, ok := store.Main.Data.Vals["imports"].(*ordjson.Object)
 	if !ok {
 		return false
 	}

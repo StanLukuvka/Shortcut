@@ -224,7 +224,7 @@ PAGER                 pages long update and init --global diffs
 - [CHANGELOG.md](CHANGELOG.md): what changed in each version.
 - [docs/](docs/): diagrams, the JSON Schema for shortcut files, and every error message.
 - [examples/podman](examples/podman/): a namespace for podman containers.
-- Code, in Go: [cmd/shortcut](cmd/shortcut/) is the entry point. `internal/cli` has the commands, one `cmd_*.go` file each, with `usage.go` and the completion scripts in `completion/`. `internal/model` has the store files, entries and lookup; `internal/approval` the approval records and review; `internal/textio` terminal output and prompts. `internal/pyos` and `internal/difflib` reproduce the file and diff behaviour that shortcut's output depends on, and `internal/pyjson` is ordered JSON on encoding/json; `internal/testkit` is the test sandbox. [installer/](installer/) is the install script. [bundled.go](bundled.go) embeds [templates/](templates/) in the binary.
+- Code, in Go: [cmd/shortcut](cmd/shortcut/) is the entry point. `internal/cli` has the commands, one `cmd_*.go` file each, with `usage.go` and the completion scripts in `completion/`. `internal/model` has the store files, entries and lookup; `internal/approval` the approval records and review; `internal/textio` terminal output and prompts. `internal/osutil` and `internal/difflib` reproduce the file and diff behaviour that shortcut's output depends on, and `internal/ordjson` is ordered JSON on encoding/json; `internal/testkit` is the test sandbox. [installer/](installer/) is the install script. [bundled.go](bundled.go) embeds [templates/](templates/) in the binary.
 
 ## License
 
