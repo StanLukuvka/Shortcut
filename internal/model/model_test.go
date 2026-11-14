@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,6 +34,16 @@ func TestEntry_FromValueMessages(t *testing.T) {
 		{`{"inline": "a", "description": null}`, "'x' is not a valid entry: 'description' must be a string"},
 		{`{"inline": 1}`, "'x' is not a valid entry: 'inline' must be a string"},
 		{`{"inline": "a", "cwd": 5}`, "'x' is not a valid entry: 'cwd' must be a string"},
+		{`{"inline": "a", "cwd": null}`, "'x' is not a valid entry: 'cwd' must be a string"},
+		{`{"inline": null}`, "'x' is not a valid entry: 'inline' must be a string"},
+		{`{"script": null}`, "'x' is not a valid entry: 'script' must be a string"},
+		{`{"inline": "a", "icon": null}`, "'x' is not a valid entry: 'icon' must be a string"},
+		{`{"inline": "a", "created_by": null}`, "'x' is not a valid entry: 'created_by' must be a string"},
+		{`{"inline": "a", "created": null}`, "'x' is not a valid entry: 'created' must be a string"},
+		{`{"inline": "a", "args": null}`, "'x' is not a valid entry: 'args' must be a list"},
+		{`{"inline": "a", "from": null}`, "'x' is not a valid entry: 'from' must be an object with a string 'source' and 'name'"},
+		{`{"inline": "a", "args": [{"name": "a", "default": null}]}`, "'x' is not a valid entry: args 'default' must be a string"},
+		{`{"inline": "a", "args": [{"name": "a", "desc": null}]}`, "'x' is not a valid entry: args 'desc' must be a string"},
 		{`{"inline": "a", "confirm": "yes"}`, "'x' is not a valid entry: 'confirm' must be a boolean"},
 		{`{"inline": "a", "export": null}`, "'x' is not a valid entry: 'export' must be a boolean"},
 		{`{}`, "'x' is not a valid entry: it needs exactly one of 'inline' and 'script'"},
@@ -142,6 +153,12 @@ func TestRegistry_LoadRegistryFile(t *testing.T) {
 	p := filepath.Join(env.Tmp, "r.json")
 	cases := []struct{ file, want string }{
 		{`[]`, "corrupt registry " + p + ": root must be a JSON object"},
+		{`{}`, p + ` needs "version": 1`},
+		{`{"shortcuts": {}}`, p + ` needs "version": 1`},
+		{`{"version": 0}`, p + ` needs "version": 1`},
+		{`{"version": -1}`, p + ` needs "version": 1`},
+		{`{"version": -5}`, p + ` needs "version": 1`},
+		{`{"version": "1"}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 1"},
 		{`{"version": "2"}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 1"},
 		{`{"version": 1.0}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 1"},
 		{`{"version": null}`, "corrupt registry " + p + ": 'version' must be a whole number, such as 1"},
@@ -176,7 +193,7 @@ func TestRegistry_LoadRegistryFile(t *testing.T) {
 	if _, err := LoadRegistryFile(p); err != nil {
 		t.Errorf("a CRLF registry: %v", err)
 	}
-	for _, ok := range []string{`{}`, `{"version": 0}`, `{"version": 1, "x": 1}`, `{"version": -5}`} {
+	for _, ok := range []string{`{"version": 1}`, `{"version": 1, "x": 1}`} {
 		env.WriteFile(p, ok, 0)
 		if _, err := LoadRegistryFile(p); err != nil {
 			t.Errorf("%s: %v", ok, err)
@@ -198,8 +215,6 @@ func TestRegistry_FileError(t *testing.T) {
 		{`{"zed": 1, "bar": 1, "shortcuts": {}}`, "", "P has an unknown field: bar, zed"},
 		{`{"version": 1, "shortcuts": {}}`, "ns", ""},
 		{`{"version": 1, "shortcuts": {}, "imports": {}}`, "ns", "P has its own 'imports', but namespaces don't nest"},
-		{`{"shortcuts": {}}`, "ns", `P needs "version": 1`},
-		{`{"version": 2, "shortcuts": {}}`, "ns", `P needs "version": 1`},
 		{`{"version": 1}`, "ns", "P needs 'shortcuts'"},
 	}
 	for _, c := range cases {
@@ -306,9 +321,6 @@ func TestStores_ProjectRootViaLocalFileOnlyAndNearest(t *testing.T) {
 	old := env.Project(nil, testkit.Name("old"), testkit.Dirs(".shortcuts"))
 	if got := FindProjectRoot(old); got != "" {
 		t.Errorf("1.x folder: %q", got)
-	}
-	if got := oldProjectFolder(old); got != filepath.Join(old, ".shortcuts") {
-		t.Errorf("oldProjectFolder: %q", got)
 	}
 }
 
@@ -455,9 +467,8 @@ func TestGroup_ShortcutsOverlaySourceAndHiding(t *testing.T) {
 	if g.DefiningFile("b") != "/p/.shortcuts.local" || g.DefiningFile("a") != "/p/.shortcuts" {
 		t.Error("DefiningFile")
 	}
-	var zero Group // a Group with no data reads as empty
-	if len(zero.Shortcuts().Keys) != 0 {
-		t.Error("zero group")
+	if len(newGroup().Shortcuts().Keys) != 0 { // no LocalData (a namespace) and an empty file read as empty
+		t.Error("empty group")
 	}
 	// a non-object "shortcuts" is empty, not a crash
 	if n := len((Group{Data: obj(t, `{"shortcuts": []}`)}).Shortcuts().Keys); n != 0 {
@@ -691,3 +702,60 @@ func TestWriteJSONAtomic_RefusesInvalidUTF8AndKeepsTheOldFile(t *testing.T) {
 		t.Errorf("temp files left: %v", left)
 	}
 }
+
+// A store's shortcuts.json, a project's .shortcuts and .shortcuts.local, and a namespace .shortcut all need
+// "version": 1.
+func TestStores_VersionRequiredInEveryFile(t *testing.T) {
+	env := testkit.New(t)
+	need := func(f string) string { return f + ` needs "version": 1` }
+	newer := func(f, n string) string {
+		return f + " is format version " + n + ", newer than this shortcut reads; upgrade shortcut"
+	}
+	whole := func(f string) string {
+		return "corrupt registry " + f + ": 'version' must be a whole number, such as 1"
+	}
+	cases := []struct {
+		body string
+		want func(string) string // "" = loads
+	}{
+		{`{"shortcuts": {}}`, need},
+		{`{"version": 0, "shortcuts": {}}`, need},
+		{`{"version": -1, "shortcuts": {}}`, need},
+		{`{"version": 1, "shortcuts": {}}`, nil},
+		{`{"version": 2, "shortcuts": {}}`, func(f string) string { return newer(f, "2") }},
+		{`{"version": 3, "shortcuts": {}}`, func(f string) string { return newer(f, "3") }},
+		{`{"version": "1", "shortcuts": {}}`, whole},
+		{`{"version": 1.0, "shortcuts": {}}`, whole},
+		{`{"version": null, "shortcuts": {}}`, whole},
+	}
+	for i, c := range cases {
+		proj := env.Project(nil, testkit.Name(fmt.Sprintf("p%d", i)))
+		shared, local := filepath.Join(proj, ".shortcuts"), filepath.Join(proj, ".shortcuts.local")
+		store := env.Store
+		ns := filepath.Join(store, "imports", "n.shortcut")
+		for _, f := range []string{shared, local, ns, filepath.Join(store, "shortcuts.json")} {
+			env.WriteFile(f, c.body, 0)
+			_, err := LoadRegistryFile(f)
+			switch {
+			case c.want == nil && err != nil:
+				t.Errorf("%s in %s: %v", c.body, f, err)
+			case c.want != nil && (err == nil || err.Error() != c.want(f)):
+				t.Errorf("%s in %s: got %v, want %q", c.body, f, err, c.want(f))
+			}
+		}
+		// the project and namespace loaders report the same text
+		env.WriteFile(shared, `{"version": 1, "shortcuts": {}}`, 0)
+		g := LoadProjectGroup(proj)
+		if c.want == nil && g.Error != nil || c.want != nil && (g.Error == nil || *g.Error != c.want(local)) {
+			t.Errorf("project %s: %v", c.body, g.Error)
+		}
+		env.WriteFile(filepath.Join(store, "shortcuts.json"), `{"version": 1, "shortcuts": {}, "imports": {"n": "`+ns+`"}}`, 0)
+		g, _ = LoadStore(store).Namespace("n")
+		if c.want == nil && g.Error != nil || c.want != nil && (g.Error == nil || *g.Error != c.want(ns)) {
+			t.Errorf("namespace %s: %v", c.body, g.Error)
+		}
+	}
+}
+
+// newGroup is a Group with an empty file, as LoadGroup gives for a missing one.
+func newGroup() Group { return Group{Data: &pyjson.Object{}} }

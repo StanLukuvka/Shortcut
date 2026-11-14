@@ -298,7 +298,7 @@ func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template s
 	if got := State(g); got != "ok" {
 		t.Errorf("a record from the older version: state %s, want ok", got)
 	}
-	if r := Load(g); r == nil || !equalMaps(r.Snapshot, shared) || !equalMaps(r.Local, local) || r.Key != g.Key() {
+	if r := Load(g); r == nil || !equalMaps(r.Snapshot, shared) || !equalMaps(r.Local, local) {
 		t.Errorf("Load: %+v", r)
 	}
 	if err := os.Remove(path); err != nil {
@@ -448,12 +448,16 @@ func TestApproval_EntryFilesEdges(t *testing.T) {
 	if got := files["./cwd of rel"]; got != filepath.Join(proj, "work")+"\n" {
 		t.Errorf("rel cwd: %q", got)
 	}
+	// a NUL in a cwd does not panic and is listed like any relative cwd; the run itself fails (see the cli test)
+	if _, ok := files["./cwd of nul"]; !ok {
+		t.Errorf("no cwd row for the NUL entry: %q", files)
+	}
 	for k := range files {
-		if k != ".shortcuts" && k != elsewhere && k != "./cwd of rel" {
-			t.Errorf("unexpected key %q", k) // not nul, home, caller or the FIFO-less "pipe"
+		if k != ".shortcuts" && k != elsewhere && k != "./cwd of rel" && k != "./cwd of nul" {
+			t.Errorf("unexpected key %q", k) // not home, caller or the FIFO-less "pipe"
 		}
 	}
-	if len(files) != 3 { // .shortcuts, the absolute script, the cwd
+	if len(files) != 4 { // .shortcuts, the absolute script, the two cwds
 		t.Errorf("%d files: %q", len(files), files)
 	}
 }

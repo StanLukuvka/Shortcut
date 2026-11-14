@@ -17,7 +17,7 @@ type Group struct {
 	Name      string // "" = main group
 	File      string
 	StoreDir  string
-	Data      *pyjson.Object // empty object when the file is missing or unreadable; nil is read as empty too
+	Data      *pyjson.Object // empty object when the file is missing or unreadable
 	Error     *string        // why the file can't be used
 	LocalFile string         // only a project's own group has one
 	LocalData *pyjson.Object
@@ -25,10 +25,8 @@ type Group struct {
 
 // shortcutsIn is data["shortcuts"] when it is an object, else an empty one.
 func shortcutsIn(data *pyjson.Object) *pyjson.Object {
-	if data != nil {
-		if o, ok := data.Vals["shortcuts"].(*pyjson.Object); ok {
-			return o
-		}
+	if o, ok := data.Vals["shortcuts"].(*pyjson.Object); ok {
+		return o
 	}
 	return &pyjson.Object{}
 }
@@ -36,7 +34,13 @@ func shortcutsIn(data *pyjson.Object) *pyjson.Object {
 func (g Group) SharedShortcuts() *pyjson.Object { return shortcutsIn(g.Data) }
 
 // LocalShortcuts is raw, so a null that hides a shared entry is still there.
-func (g Group) LocalShortcuts() *pyjson.Object { return shortcutsIn(g.LocalData) }
+// A namespace or the global store has no LocalData, so nil is empty here.
+func (g Group) LocalShortcuts() *pyjson.Object {
+	if g.LocalData == nil {
+		return &pyjson.Object{}
+	}
+	return shortcutsIn(g.LocalData)
+}
 
 // Shortcuts is what can run: the shared entries, each replaced or hidden by .shortcuts.local.
 func (g Group) Shortcuts() *pyjson.Object {

@@ -71,8 +71,8 @@ func EntryFromValue(name string, v pyjson.Value) (*Entry, error) {
 	}
 	texts := map[string]*string{}
 	for _, f := range textFields {
-		val, _ := data.Get(f)
-		if val == nil {
+		val, present := data.Get(f)
+		if !present {
 			continue
 		}
 		s, isStr := val.(string)
@@ -94,7 +94,7 @@ func EntryFromValue(name string, v pyjson.Value) (*Entry, error) {
 	if (texts["inline"] == nil) == (texts["script"] == nil) {
 		return nil, bad("it needs exactly one of 'inline' and 'script'")
 	}
-	if args, _ := data.Get("args"); args != nil {
+	if args, present := data.Get("args"); present {
 		if err := ValidateArgs(name, args); err != nil {
 			return nil, err
 		}
@@ -104,7 +104,7 @@ func EntryFromValue(name string, v pyjson.Value) (*Entry, error) {
 			e.Args[i] = a.(*pyjson.Object)
 		}
 	}
-	if o, _ := data.Get("from"); o != nil {
+	if o, present := data.Get("from"); present {
 		obj, isObj := o.(*pyjson.Object)
 		var src, nm string
 		okFrom := isObj && len(obj.Keys) == 2
@@ -192,7 +192,7 @@ func ValidateArgs(name string, args pyjson.Value) error {
 			return bad("unknown args field: " + strings.Join(slices.Sorted(slices.Values(unknown)), ", "))
 		}
 		for _, f := range []string{"default", "desc"} {
-			if v, _ := arg.Get(f); v != nil {
+			if v, present := arg.Get(f); present {
 				if _, isStr := v.(string); !isStr {
 					return bad(fmt.Sprintf("args '%s' must be a string", f))
 				}
@@ -211,7 +211,7 @@ func ValidateArgs(name string, args pyjson.Value) error {
 		if flag["rest"] && i != len(list)-1 {
 			return bad("only the last entry in 'args' can be 'rest'")
 		}
-		if def, _ := arg.Get("default"); flag["required"] && def != nil {
+		if _, hasDefault := arg.Get("default"); flag["required"] && hasDefault {
 			return bad(fmt.Sprintf("arg '%s' can't be both 'required' and have a 'default'", argN))
 		}
 		for _, other := range list[:i] {
