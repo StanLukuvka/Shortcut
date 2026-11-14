@@ -50,11 +50,13 @@ func TestHidingAndNotFound_ANameInAnOuterProjectIsPointedAt(t *testing.T) {
 	testkit.WantErr(t, err, "The project in "+outer+" has a 'outer', but only the nearest project, "+inner+", is used here.")
 }
 
-func TestHidingAndNotFound_AOneXProjectFolderIsNamed(t *testing.T) {
+func TestHidingAndNotFound_AOneXProjectFolderGetsThePlainMessage(t *testing.T) {
 	e := testkit.New(t)
 	old := e.Project(nil, testkit.Name("old"), testkit.Dirs(".shortcuts"))
 	_, err := FindEntry([]string{"x"}, old, false, false)
-	testkit.WantErr(t, err, filepath.Join(old, ".shortcuts")+" is a folder, which is how shortcut 1.x kept a project.")
+	if err == nil || err.Error() != "shortcut 'x' not found." {
+		t.Errorf("got %v", err)
+	}
 }
 
 func TestLookup_NamespacesAndNotFound(t *testing.T) {

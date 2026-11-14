@@ -91,15 +91,10 @@ main() {
 
   # install: write next to the target, then rename, so a running shortcut is never half replaced
   mkdir -p "$bin_dir"
-  was_link=0
-  if [ -L "$bin_dir/shortcut" ]; then was_link=1; fi
   new="$bin_dir/.shortcut.new.$$"
   install -m 0755 "$tmp/shortcut" "$new" || die "could not write to $bin_dir"
   mv -f "$new" "$bin_dir/shortcut" || { rm -f "$new"; die "could not replace $bin_dir/shortcut"; }
   say "Installed shortcut $version to $bin_dir/shortcut"
-  if [ "$was_link" = 1 ]; then
-    say "Note: $bin_dir/shortcut was a link (uv or pipx?) and is replaced. Run 'uv tool uninstall shortcut' or 'pipx uninstall shortcut' to clean up."
-  fi
 
   # completions
   mkdir -p "$data/bash-completion/completions"

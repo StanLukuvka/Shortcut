@@ -33,7 +33,7 @@ _shortcut() {
                     run|r) flags="--global -y" ;;
                     rm) flags="--global --local --namespace -y" ;;
                     promote) flags="--as -y --force" ;;
-                    show) flags="--global --json" ;;
+                    show) flags="--global --json --field" ;;
                 esac
                 COMPREPLY=( $(compgen -W "${flags}" -- "$cur") )
             elif [ "${#typed[@]}" -le 1 ]; then

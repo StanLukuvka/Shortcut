@@ -50,8 +50,8 @@ A word that starts with `-` is an option. To pass one as a name or a value, put 
 | `corrupt registry <path>: 'description' must be a string` | |
 | `cannot overwrite corrupt registry <path>: <json error>` | shortcut won't write over a file it can't read, including one that isn't valid UTF-8. Fix or move it |
 | `<path> is format version <n>, newer than this shortcut reads; upgrade shortcut` | |
-| `corrupt registry <path>: 'version' must be a whole number, such as 1` | `"version"` is a string, a fraction, `null` or `true` |
-| `<path> needs "version": 1` | |
+| `corrupt registry <path>: 'version' must be a whole number, such as 1` | `"version"` is a string, a fraction (`1.0`), `null` or `true` |
+| `<path> needs "version": 1` | No `version`, or one below 1, in any store, project or namespace file |
 | `<path> needs 'shortcuts'` | |
 | `<path> has an unknown field: <fields>` | |
 | `<path> has its own 'imports', but namespaces don't nest` | Only a store's main file can import namespaces |
@@ -72,15 +72,15 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `expected a dictionary` | The entry is a string or list, not `{...}` |
 | `unknown field: <fields>` | |
 | `'description' must be a string` | |
-| `'<field>' must be a string` | `inline`, `script`, `cwd`, `icon`, `created_by` or `created` |
+| `'<field>' must be a string` | `inline`, `script`, `cwd`, `icon`, `created_by` or `created`. A `null` counts as the wrong type |
 | `'<field>' must be a boolean` | `confirm` or `export` |
 | `it needs exactly one of 'inline' and 'script'` | |
-| `'from' must be an object with a string 'source' and 'name'` | |
+| `'from' must be an object with a string 'source' and 'name'` | A `null` counts as the wrong type |
 | `script not found: <script>` | The entry's script file is missing |
-| `'args' must be a list` | |
+| `'args' must be a list` | A `null` counts as the wrong type |
 | `every entry in 'args' needs a 'name' (letters, digits, _ and -)` | |
 | `unknown args field: <fields>` | |
-| `args '<field>' must be a string` | `default` or `desc` |
+| `args '<field>' must be a string` | `default` or `desc`. A `null` counts as the wrong type |
 | `args '<field>' must be a boolean` | `required` or `rest` |
 | `only the last entry in 'args' can be 'rest'` | |
 | `arg '<arg>' can't be both 'required' and have a 'default'` | |
@@ -101,7 +101,6 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `shortcut or namespace '<name>' not found. A global namespace is the file <store>/imports/<name>.shortcut.` | The same, with words after the name, so it may be meant as a namespace |
 | `... The project in <dir> has its own '<name>': leave out --global to use it.` | Added to either one above when `--global` skipped a project entry by that name |
 | `... The project in <outer> has a '<name>', but only the nearest project, <dir>, is used here.` | Added when a project holds another, and only the outer one has the name |
-| `... <dir>/.shortcuts is a folder, which is how shortcut 1.x kept a project. This version reads a .shortcuts file, so nothing in that folder is used.` | Added outside any project when a folder above has the 1.x layout |
 | `'<name>' not found in namespace '<ns>'. It has: <names>` | When the project's namespace hides a global one that has the name, `. Your global '<ns>' has it: shortcut r --global <ns> <name>` follows |
 | `'<ns>' is a namespace; run one of its shortcuts: <names>` | |
 | `too many names: <words>` | `show`, `location` and `rm` take a name, or a namespace and a name |
@@ -129,11 +128,12 @@ A shortcut that declares `args` checks them before it runs. These print `error: 
 | `command expected after '--'` | |
 | `--script and --copy need a file name` | |
 | `use one of: '-- CMD', --script, --copy` | |
+| `--desc can't be empty` | `new` |
+| `--namespace can't be empty` | `new` |
 | `--copy can't be used with --local: .shortcuts.local is one file. Use --script` | |
 | `a local shortcut needs a command after '--', or --script PATH` | |
 | `script file not found: <path>` | The file given to `--script` or `--copy` |
 | `stdin is closed` | `new --copy -` with no standard input |
-| `stdin is not valid UTF-8` | `new --copy -` was given bytes that are not UTF-8 |
 | `'<src>' and '<dst>' are the same file` | `new --copy` of the file the store already holds under that name |
 | `--cwd directory does not exist: <dir>` | |
 | `--namespace can't be used with --local: .shortcuts.local is one file, and .shortcuts is yours to edit` | |
@@ -159,6 +159,8 @@ A new local shortcut needs a project folder:
 | Message | Meaning |
 |---|---|
 | ``'<name>' is an inline shortcut, so it has no file. Change it in the file `shortcut show` names.`` | `location` |
+| `unknown field '<key>' (one of: <list>)` | `show --field` takes a top-level key of `show --json`, or `description`, `icon`, `created_by`, `created`, `inline`, `script` |
+| `--field and --json can't be used together` | |
 
 ## rm
 
@@ -184,14 +186,16 @@ A new local shortcut needs a project folder:
 | `'<name>' is marked project-only; promote anyway with --force` | The entry has no `"export": true` |
 | `you already have a global '<name>'; give this one another name: shortcut promote <name> --as NEW` | |
 | `you already have a global '<new>'` | The name given to `--as` is taken |
+| `--as can't be empty` | |
 | `promote '<name>' in a terminal, or pass -y` | |
 
 ## update
 
-These print `error: cannot approve <group>: <reason>`, where the reason is a store file or entry error above.
+`update <group>` and `update .` print `error: cannot approve <group>: <reason>` and exit 1, where the reason is a store file or entry error above.
 
 | Message | Meaning |
 |---|---|
+| `warning: skipped <group>: <reason>` | `update` or `update -y` with no group named found a group whose file or entries have errors. It is skipped and the exit status stays 0 |
 | `no project shortcuts here: no .shortcuts or .shortcuts.local in this folder or its parents` | `update .` outside a project |
 | `no namespace named '<ns>' here` | |
 | `approve <group> in a terminal, or pass -y` | No terminal to show the review in |

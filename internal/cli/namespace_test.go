@@ -213,7 +213,7 @@ func TestStores_BrokenProjectStopsEveryRunInsideIt(t *testing.T) {
 		t.Error("rm --global left it")
 	}
 	testkit.Contains(t, "list", e.RunWith(in(proj), "list").Stderr, "corrupt registry")
-	if code := e.RunWith(in(proj), "update").Code; code != 1 {
+	if code := e.RunWith(in(proj), "update", ".").Code; code != 1 {
 		t.Errorf("update: exit %d", code)
 	}
 }

@@ -28,3 +28,14 @@
 - An executable script with no `#!` is run directly, so a Mach-O or other binary works. Only an executable text file the kernel refuses is run with bash.
 - A shortcut's environment lists `SHORTCUT_NAME`, `SHORTCUT_NAMESPACE`, `SHORTCUT_CALLER_CWD` and its `SC_ARG_` variables after the caller's own variables.
 - The pager shows the diff once: if it ran, shortcut does not print the diff again, whatever the pager's exit status. `$LINES` is no longer read; the row count comes from the terminal (24 if unknown).
+- `update` and `update -y` with no group named skip a broken group with `warning: skipped <group>: <reason>` and exit 0. `update <group>` still exits 1 for it.
+- `show --field KEY <name>` prints one field, bare, and only reads. The bundled `edit` and `desktop` use it, so they no longer need python3.
+- `show` prints `Confirm:     yes` and `Export:      yes` where it printed `True`.
+- An empty `--desc`, `--namespace` or `--as` is an error. Before, it counted as not given.
+- `new --copy` gives the copy the source's permission bits plus execute, without setuid, setgid or sticky, and does not copy the modification time. `new --copy -` takes stdin bytes as they are, valid UTF-8 or not.
+- Every registry file (the store's `shortcuts.json`, a project's `.shortcuts` and `.shortcuts.local`, and namespace `.shortcut` files) needs `"version": 1`. A missing, 0 or negative version is an error: `<path> needs "version": 1`.
+- A `null` for a text field, `args`, `from` or an arg's `default` or `desc` is an error (the wrong type), no longer read as absent. A `null` entry in `.shortcuts.local` still hides a shared entry.
+- A leftover 1.x `.shortcuts/` folder gets the plain "not found" message, without the extra hint.
+- An entry whose `cwd` contains a NUL byte is listed in the approval snapshot like any relative cwd. Its run is refused because the directory does not exist.
+- `~name` is no longer expanded in paths; only `~` and `~/...` are, using $HOME. A path with an unset or empty HOME is left as typed.
+- The installer no longer prints the uv/pipx note when it replaces a link at the install path.

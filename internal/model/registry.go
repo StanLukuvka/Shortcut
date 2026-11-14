@@ -77,25 +77,6 @@ func FindProjectRoot(start string) string {
 	}
 }
 
-// oldProjectFolder returns the nearest .shortcuts folder above the caller that isn't the
-// global store. "" = none.
-func oldProjectFolder(callerCwd string) string {
-	if callerCwd == "" {
-		callerCwd, _ = pyos.Getwd()
-	}
-	for cur := pyos.Realpath(callerCwd); ; {
-		path := pyos.Join(cur, ProjectFile)
-		if pyos.IsDir(path) && !neverAProject(pyos.Realpath(path)) {
-			return path
-		}
-		parent := filepath.Dir(cur)
-		if parent == cur {
-			return ""
-		}
-		cur = parent
-	}
-}
-
 // LocalProjectRoot returns where --local writes, this folder and never a parent. Its errors are
 // the messages die prints.
 func LocalProjectRoot(cwd string) (string, error) {
@@ -164,15 +145,20 @@ func LoadRegistryFile(path string) (*pyjson.Object, error) {
 	if !ok {
 		return nil, fmt.Errorf("corrupt registry %s: root must be a JSON object", path)
 	}
-	if version, present := data.Get("version"); present {
-		num, _ := version.(json.Number)
-		n, isInt := new(big.Int).SetString(string(num), 10) // a whole number as written: not 1.0, 1e0, a string or null
-		if !isInt {
-			return nil, fmt.Errorf("corrupt registry %s: 'version' must be a whole number, such as %d", path, RegistryVersion)
-		}
-		if n.Cmp(big.NewInt(RegistryVersion)) > 0 {
-			return nil, fmt.Errorf("%s is format version %s, newer than this shortcut reads; upgrade shortcut", path, n)
-		}
+	version, present := data.Get("version")
+	if !present {
+		return nil, fmt.Errorf("%s needs \"version\": %d", path, RegistryVersion)
+	}
+	num, isNum := version.(json.Number)
+	n, isInt := new(big.Int).SetString(string(num), 10) // a whole number as written: not 1.0, 1e0, a string or null
+	if !isNum || !isInt {
+		return nil, fmt.Errorf("corrupt registry %s: 'version' must be a whole number, such as %d", path, RegistryVersion)
+	}
+	switch n.Cmp(big.NewInt(RegistryVersion)) {
+	case 1:
+		return nil, fmt.Errorf("%s is format version %s, newer than this shortcut reads; upgrade shortcut", path, n)
+	case -1:
+		return nil, fmt.Errorf("%s needs \"version\": %d", path, RegistryVersion)
 	}
 	return data, nil
 }
@@ -230,10 +216,6 @@ func fileError(path string, data *pyjson.Object, name string) string {
 		if _, has := data.Get("imports"); has {
 			return path + " has its own 'imports', but namespaces don't nest"
 		}
-		// load_registry_file has already refused a version that isn't a whole number
-		if v, _ := data.Get("version"); !isVersion(v) {
-			return fmt.Sprintf("%s needs \"version\": %d", path, RegistryVersion)
-		}
 		if _, has := data.Get("shortcuts"); !has {
 			return path + " needs 'shortcuts'"
 		}
@@ -260,9 +242,4 @@ func fileError(path string, data *pyjson.Object, name string) string {
 		return fmt.Sprintf("%s has an unknown field: %s", path, strings.Join(slices.Sorted(slices.Values(unknown)), ", "))
 	}
 	return ""
-}
-
-func isVersion(v pyjson.Value) bool {
-	n, ok := v.(json.Number)
-	return ok && n.String() == strconv.Itoa(RegistryVersion)
 }

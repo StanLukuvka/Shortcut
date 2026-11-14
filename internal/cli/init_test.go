@@ -461,7 +461,7 @@ func TestStores_InitGlobalLeavesAnExistingStoreAlone(t *testing.T) {
 func TestStores_MalformedEntriesNeverCrash(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(map[string]any{"bad": "echo hi"}, testkit.Name("proj_a5"))
-	res := e.RunWith(in(proj), "update", "-y")
+	res := e.RunWith(in(proj), "update", ".", "-y")
 	testkit.Eq(t, "update exit", res.Code, 1)
 	testkit.Contains(t, "update", res.Stderr, "expected a dictionary")
 

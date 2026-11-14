@@ -546,22 +546,60 @@ func TestNew_CreatedMessageNamesTheNamespace(t *testing.T) {
 	testkit.Contains(t, "script", res.Stdout, "Created script shortcut 'docker up'.")
 }
 
-// An explicit empty --desc is kept on a plain new, not replaced by the default (the check is `is not None`).
-func TestNew_EmptyDescOnPlainNewIsKept(t *testing.T) {
-	e := testkit.New(t)
-	runOK(t, e, testkit.Opts{}, "new", "plain", "--desc", "")
-	runOK(t, e, testkit.Opts{}, "new", "dflt")
-	got := e.LoadGlobal()
-	testkit.Eq(t, "empty desc", got["plain"].(map[string]any)["description"], "")
-	testkit.Eq(t, "no desc", got["dflt"].(map[string]any)["description"], "(no description)")
-}
-
-// On --copy an empty --desc counts as none and gets the default description.
-func TestNew_EmptyDescOnCopyIsReplaced(t *testing.T) {
+// An empty --desc, --namespace or --as is an error, not "absent", and nothing is written.
+func TestNew_EmptyFlagsAreErrors(t *testing.T) {
 	e := testkit.New(t)
 	script := e.Script("f.sh", "#!/bin/sh\necho hi\n")
-	runOK(t, e, testkit.Opts{}, "new", "x", "--copy", script, "--desc", "")
-	testkit.Eq(t, "desc", e.LoadGlobal()["x"].(map[string]any)["description"], "(no description)")
+	for _, c := range []struct {
+		args []string
+		msg  string
+	}{
+		{[]string{"new", "plain", "--desc", ""}, "error: --desc can't be empty\n"},
+		{[]string{"new", "x", "--desc=", "--", "true"}, "error: --desc can't be empty\n"},
+		{[]string{"new", "x", "--copy", script, "--desc", ""}, "error: --desc can't be empty\n"},
+		{[]string{"new", "x", "--namespace", "", "--", "true"}, "error: --namespace can't be empty\n"},
+		{[]string{"new", "x", "--namespace=", "--desc", "d"}, "error: --namespace can't be empty\n"},
+	} {
+		res := e.Run(c.args...)
+		if res.Code != 1 || res.Stdout != "" || res.Stderr != c.msg {
+			t.Errorf("%v: exit %d stdout %q stderr %q", c.args, res.Code, res.Stdout, res.Stderr)
+		}
+	}
+	testkit.NotExist(t, filepath.Join(e.Store, "shortcuts.json"))
+	runOK(t, e, testkit.Opts{}, "new", "dflt")
+	testkit.Eq(t, "no desc", e.LoadGlobal()["dflt"].(map[string]any)["description"], "(no description)")
+}
+
+// A copy keeps the source's permission bits, made executable, and nothing else: no setuid, no old mtime.
+func TestNew_CopyModeAndTime(t *testing.T) {
+	e := testkit.New(t)
+	src := e.Script("src.sh", "#!/bin/sh\necho hi\n")
+	if err := os.Chmod(src, 0o4755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(src, old, old); err != nil {
+		t.Fatal(err)
+	}
+	runOK(t, e, testkit.Opts{}, "new", "c", "--copy", src, "--desc", "d")
+	st, err := os.Stat(filepath.Join(e.Store, "scripts", "c.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Mode() != 0o755 || time.Since(st.ModTime()) > time.Hour {
+		t.Errorf("mode %v, mtime %v", st.Mode(), st.ModTime())
+	}
+	os.Chmod(src, 0o640)
+	runOK(t, e, testkit.Opts{}, "new", "d", "--copy", src, "--desc", "d")
+	st, _ = os.Stat(filepath.Join(e.Store, "scripts", "d.sh"))
+	testkit.Eq(t, "mode", st.Mode().String(), os.FileMode(0o751).String())
+}
+
+// stdin bytes are taken as they come, valid UTF-8 or not.
+func TestNew_CopyFromStdinTakesAnyBytes(t *testing.T) {
+	e := testkit.New(t)
+	runOK(t, e, testkit.Opts{Input: inputOf("\xe9\n")}, "new", "x", "--copy", "-", "--desc", "d")
+	testkit.Eq(t, "script", testkit.ReadFile(t, filepath.Join(e.Store, "scripts", "x.sh")), "\xe9\n")
 }
 
 func TestNew_LocalInAFolderThatCannotBeApprovedWritesNothing(t *testing.T) {

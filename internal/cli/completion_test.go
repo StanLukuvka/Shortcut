@@ -88,7 +88,7 @@ func TestCompletion_BashPastFlagsAndIntoNamespaces(t *testing.T) {
 	}
 	// Flags: the script offers them without asking the binary.
 	check([]string{"--global", "-y"}, "r", "-")
-	check([]string{"--global", "--json"}, "show", "-")
+	check([]string{"--global", "--json", "--field"}, "show", "-")
 	check([]string{"--global"}, "location", "--")
 	check(nil, "r", "other", "--")
 	// Names: the script runs `shortcut list --names`.

@@ -17,7 +17,6 @@ import (
 // Records live in the global store, never next to what they approve. Older records also hold a "hash" field; it is
 // ignored, since the snapshot is compared exactly.
 type Record struct {
-	Key      string
 	Snapshot map[string]string // shared files: path -> reviewable text
 	Local    map[string]string // .shortcuts.local half; absent in old records = empty
 }
@@ -55,7 +54,6 @@ func Load(g model.Group) *Record {
 		return nil
 	}
 	r := &Record{Snapshot: snap, Local: map[string]string{}}
-	r.Key, _ = o.Vals["key"].(string)
 	if l, present := o.Get("local"); present {
 		if r.Local, ok = stringMap(l); !ok {
 			return nil

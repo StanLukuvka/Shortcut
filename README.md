@@ -40,7 +40,7 @@ Requirements:
 - bash: inline shortcuts run with `bash -c`.
 - `curl` or `wget`, and `sha256sum` or `shasum`, for the installer.
 - git, for `init --global <git URL>`.
-- python3, for the bundled `edit` and `desktop`. `edit` also needs `$EDITOR` (`$VISUAL` first if set, nano if neither).
+- `$EDITOR` for the bundled `edit` (`$VISUAL` first if set, nano if neither).
 - The bundled `desktop` is for Linux only.
 
 ## Quick start
@@ -98,6 +98,7 @@ shortcut list                         everything visible; warns about invalid en
 shortcut list --names [ns]            bare names
 shortcut show <name>                  details and script
 shortcut show --json <name>           entry and where it resolves, as JSON
+shortcut show --field KEY <name>       one field, bare, for scripts
 shortcut location <name>              script path
 
 shortcut rm <name> [-y]               remove a global or namespace shortcut; says what goes, with -y too
@@ -138,7 +139,7 @@ Flags for `new`:
 
 `show`, `location` and `rm` take `--global` too. In a project, `--local` works only from the project root.
 
-`show --json` prints one object: `name`, `namespace`, `scope`, `defined_in`, `source`, `hides_global`, `approval`, `cwd`, `run_cwd`, `script_path`, `error`, and `entry` as written. A field that can't be worked out is null.
+`show --field KEY` prints one field of that object bare, or of the entry (`description`, `icon`, `created_by`, `created`, `inline`, `script`); `true` and `false` print as words, and a null or absent field prints nothing. It only reads: it never approves. `show --json` prints one object: `name`, `namespace`, `scope`, `defined_in`, `source`, `hides_global`, `approval`, `cwd`, `run_cwd`, `script_path`, `error`, and `entry` as written. A field that can't be worked out is null.
 
 `promote` copies the entry, not its script. A relative `script` or `cwd` becomes its absolute path in this checkout, and `from` records the project and the original name. It runs the checkout's files as they are now. If the checkout moves or is deleted, it fails with script not found or run directory does not exist.
 

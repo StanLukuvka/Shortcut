@@ -235,7 +235,7 @@ func TestFrom_ShowPrintsWhereItCameFrom(t *testing.T) {
 func TestFrom_IsRefusedInAProjectAndANamespace(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(map[string]any{"tool": map[string]any{"inline": "echo tool", "from": fromOrigin}})
-	res := e.RunWith(in(proj), "update", "-y")
+	res := e.RunWith(in(proj), "update", ".", "-y")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "'tool' is not a valid entry: 'from' is only for the global store's shortcuts.json")
 
@@ -266,4 +266,14 @@ func TestFrom_OriginIsNotAJSONField(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"tool": map[string]any{"inline": "echo tool", "origin": fromOrigin}})
 	testkit.Contains(t, "stderr", e.Run("r", "tool").Stderr, "unknown field: origin")
+}
+
+func TestPromote_EmptyAsIsAnError(t *testing.T) {
+	e := testkit.New(t)
+	proj := toolProject(e, true)
+	res := e.RunWith(in(proj), "promote", "tool", "--as", "", "-y")
+	if res.Code != 1 || res.Stderr != "error: --as can't be empty\n" {
+		t.Errorf("exit %d stderr %q", res.Code, res.Stderr)
+	}
+	noGlobalRegistry(t, e)
 }

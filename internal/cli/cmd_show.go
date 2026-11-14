@@ -2,6 +2,7 @@ package cli
 
 import (
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/approval"
@@ -34,6 +35,12 @@ func cmdShow(s *textio.Streams, args []string) error {
 	if err != nil {
 		return err
 	}
+	if ns.Set("field") {
+		if ns.Bool("json") {
+			return Die("--field and --json can't be used together")
+		}
+		return showField(s, ns.List("name"), ns.Bool("skipLocal"), ns.Str("field"))
+	}
 	if ns.Bool("json") {
 		return showJSON(s, ns.List("name"), ns.Bool("skipLocal"))
 	}
@@ -65,10 +72,10 @@ func cmdShow(s *textio.Streams, args []string) error {
 		}
 	}
 	if entry.Confirm {
-		out("Confirm:     True")
+		out("Confirm:     yes")
 	}
 	if entry.Export {
-		out("Export:      True")
+		out("Export:      yes")
 	}
 	if entry.Origin != nil {
 		out("From:        '" + entry.Origin.Name + "' in " + entry.Origin.Source)
@@ -115,12 +122,63 @@ func cmdShow(s *textio.Streams, args []string) error {
 // showJSON prints one JSON object, the entry as written plus where it resolves. A broken entry still prints,
 // with its error and null for what can't be worked out.
 func showJSON(s *textio.Streams, words []string, skipLocal bool) error {
-	f, err := model.FindEntry(words, "", skipLocal, false)
+	out, err := showObject(words, skipLocal)
 	if err != nil {
 		return err
 	}
+	text, jerr := pyjson.MarshalIndent(out)
+	if jerr != nil {
+		return jerr
+	}
+	s.Out.WriteString(string(text) + "\n")
+	return nil
+}
+
+// showObjectFields are the top-level keys of `show --json`, showEntryFields the entry's own fields `--field` also reads.
+var (
+	showObjectFields = []string{"name", "namespace", "scope", "defined_in", "source", "hides_global", "approval", "cwd", "run_cwd", "script_path", "error"}
+	showEntryFields  = []string{"description", "icon", "created_by", "created", "inline", "script"}
+)
+
+// showField prints one field of what `show --json` describes, bare. It only reads: nothing is written or approved.
+func showField(s *textio.Streams, words []string, skipLocal bool, key string) error {
+	if !slices.Contains(showObjectFields, key) && !slices.Contains(showEntryFields, key) {
+		return Die("unknown field '" + key + "' (one of: " + strings.Join(slices.Concat(showObjectFields, showEntryFields), ", ") + ")")
+	}
+	obj, err := showObject(words, skipLocal)
+	if err != nil {
+		return err
+	}
+	v, ok := obj.Get(key)
+	if !ok { // an entry field; absent, or a broken entry that isn't an object, prints nothing
+		if entry, isObj := obj.Vals["entry"].(*pyjson.Object); isObj {
+			v, _ = entry.Get(key)
+		}
+	}
+	switch t := v.(type) {
+	case nil:
+		return nil
+	case string:
+		_, err = s.Out.WriteString(t + "\n")
+	default:
+		b, merr := pyjson.Marshal(t)
+		if merr != nil {
+			return merr
+		}
+		_, err = s.Out.WriteString(string(b) + "\n")
+	}
+	return err
+}
+
+// showObject is the entry as written plus where it resolves. A broken entry still gives an object,
+// with its error and null for what can't be worked out.
+func showObject(words []string, skipLocal bool) (*pyjson.Object, error) {
+	f, err := model.FindEntry(words, "", skipLocal, false)
+	if err != nil {
+		return nil, err
+	}
 	if len(f.Rest) > 0 {
-		return model.TooManyNames(words)
+		return nil, model.TooManyNames(words)
 	}
 	g, name := f.Group, f.Name
 	nullable := func(s string) pyjson.Value {
@@ -162,10 +220,5 @@ func showJSON(s *textio.Streams, words []string, skipLocal bool) error {
 	if err != nil {
 		out.Set("error", err.Error())
 	}
-	text, jerr := pyjson.MarshalIndent(out)
-	if jerr != nil {
-		return jerr
-	}
-	s.Out.WriteString(string(text) + "\n")
-	return nil
+	return out, nil
 }

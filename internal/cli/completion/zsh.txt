@@ -17,7 +17,7 @@ _shortcut() {
                 case $words[2] in
                     run|r) compadd -- --global -y ;;
                     rm) compadd -- --global --local --namespace -y ;;
-                    show) compadd -- --global --json ;;
+                    show) compadd -- --global --json --field ;;
                     promote) compadd -- --as -y --force ;;
                     *) compadd -- --global ;;
                 esac

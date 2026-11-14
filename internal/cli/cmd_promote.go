@@ -24,8 +24,11 @@ func cmdPromote(s *textio.Streams, args []string) error {
 	}
 	name, asGiven := ns.Str("name"), ns.Set("newName")
 	newName := name
-	if v := ns.Str("newName"); v != "" { // `parsed.new_name or parsed.name`: an empty --as is no --as
-		newName = v
+	if asGiven {
+		if ns.Str("newName") == "" {
+			return Die("--as can't be empty")
+		}
+		newName = ns.Str("newName")
 	}
 	if err := model.ValidateName(newName); err != nil {
 		return err

@@ -104,10 +104,6 @@ func FindEntry(words []string, callerCwd string, skipLocal, strict bool) (Found,
 		if outer := FindProjectRoot(filepath.Dir(root)); outer != "" && outer != root && hasName(LoadStore(outer), first) {
 			notes = append(notes, fmt.Sprintf("The project in %s has a '%s', but only the nearest project, %s, is used here.", outer, first, root))
 		}
-	default:
-		if old := oldProjectFolder(callerCwd); old != "" {
-			notes = append(notes, fmt.Sprintf("%s is a folder, which is how shortcut 1.x kept a project. This version reads a %s file, so nothing in that folder is used.", old, ProjectFile))
-		}
 	}
 	return Found{}, errors.New(strings.Join(notes, " "))
 }

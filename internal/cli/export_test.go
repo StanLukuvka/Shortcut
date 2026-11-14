@@ -31,7 +31,7 @@ func TestExport_UpdateDoesntWarnAboutOtherCwds(t *testing.T) {
 		t.Errorf("warning: %q", res.Stderr)
 	}
 	testkit.Eq(t, "run", e.RunWith(in(proj), "r", "abs").Stdout, "abs\n")
-	testkit.Contains(t, "show", e.RunWith(in(proj), "show", "abs").Stdout, "Export:      True")
+	testkit.Contains(t, "show", e.RunWith(in(proj), "show", "abs").Stdout, "Export:      yes")
 }
 
 func TestExport_TheLocalFileCanExport(t *testing.T) {
@@ -61,7 +61,7 @@ func TestExport_IsRefusedInTheGlobalStoreAndNamespaces(t *testing.T) {
 func TestExport_MustBeABoolean(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(map[string]any{"x": map[string]any{"inline": "echo x", "export": "yes"}})
-	res := e.RunWith(in(proj), "update", "-y")
+	res := e.RunWith(in(proj), "update", ".", "-y")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "'export' must be a boolean")
 }

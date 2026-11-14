@@ -36,7 +36,7 @@ func targetGroup(ns Namespace, cwd string) (model.Group, error) {
 	if err := model.ValidateName(ns.Str("name")); err != nil {
 		return model.Group{}, err
 	}
-	local, namespace := ns.Bool("local"), ns.Str("namespace") // "" is no namespace
+	local, namespace := ns.Bool("local"), ns.Str("namespace")
 	if local && namespace != "" {
 		return model.Group{}, Die("--namespace can't be used with --local: " + model.LocalFile + " is one file, and " +
 			model.ProjectFile + " is yours to edit")
