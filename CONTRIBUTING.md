@@ -34,8 +34,6 @@ CI also checks `gofmt` and runs `go vet ./...`.
 
 [internal/testkit](internal/testkit/) is the hub. Each test gets its own sandbox from `testkit.New(t)`: a temp dir with `home/` as `HOME` and `home/.shortcuts` as `SHORTCUTS_HOME`. `XDG_DATA_HOME`, `XDG_CONFIG_HOME` and `BIN_DIR` are under the same home. Before any child process starts, `RefuseUnlessSandboxed` checks its environment and working directory, and refuses if they reach outside the temp dir. Tests start processes and make temp dirs only through testkit: `rules_test.go` fails a test file that imports `os/exec`, or calls `t.TempDir`, `t.Setenv`, `os.Setenv` or `os.MkdirTemp`.
 
-[docs/py-port-map.txt](docs/py-port-map.txt) maps each Go test and function to the Python test or function it was ported from. The Python version is at the `python-final` commit (9b132af): `git show 9b132af:tests/<file>`.
-
 ## What a change updates
 
 - A new error or warning: a row in [docs/errors.md](docs/errors.md). `internal/cli/errors_doc_test.go` fails without one.
