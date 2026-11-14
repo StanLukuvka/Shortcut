@@ -34,7 +34,7 @@ func newMatcher(a, b []string) *matcher {
 }
 
 // budget bounds the inner-loop steps of one whole match. Without autojunk, a file where old and new share only
-// frequent lines costs cubic time. Past the budget the rest is not matched and shows as one replace.
+// frequent lines costs cubic time. Past the budget, the lines not yet matched are reported as replaced; blocks matched before then stay.
 const budget = 10_000_000
 
 // longest finds the longest matching block in a[alo:ahi] and b[blo:bhi]. With no junk set, only the popular-element

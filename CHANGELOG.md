@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Diffs split lines on `\n` only, so a `\r`, form feed or U+2028 stays inside its line. A very large diff with few matching lines is shown as one hunk that replaces the whole file.
+- Diffs split lines on `\n` only, so a `\r`, form feed or U+2028 stays inside its line. When a very large diff has few matching lines, the part not yet matched is shown as replaced.
 - A single binary, no Python needed.
 - `init --global --bundled` installs the bundled shortcuts.
 - Windows is not supported. Use WSL.
