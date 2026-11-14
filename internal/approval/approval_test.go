@@ -128,7 +128,7 @@ func TestApproval_GoldenKeysAndRecordNames(t *testing.T) {
 			}
 			want := str(c, "record_name")
 			if _, python := c.Get("python_error"); python {
-				// the old version could not name a record for this key; Go names the record after the key's raw bytes (os.fsencode).
+				// a non-UTF-8 key cannot be saved; its record is still named the record after the key's raw bytes.
 				if utf8.ValidString(g.Key()) {
 					t.Fatal("python_error on a valid key")
 				}
@@ -282,7 +282,7 @@ func equalMaps(a, b map[string]string) bool {
 	return true
 }
 
-// checkRecord: a record from the older version reads as ok; one written now parses to the same object.
+// checkRecord: a record in the stored form reads as ok; one written now parses to the same object.
 func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template string, shared, local map[string]string) {
 	t.Helper()
 	text := strings.ReplaceAll(template, "@ROOT@", root)
@@ -296,7 +296,7 @@ func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template s
 	}
 	env.WriteFile(path, text, 0)
 	if got := State(g); got != "ok" {
-		t.Errorf("a record from the older version: state %s, want ok", got)
+		t.Errorf("a stored record: state %s, want ok", got)
 	}
 	if r := Load(g); r == nil || !equalMaps(r.Snapshot, shared) || !equalMaps(r.Local, local) {
 		t.Errorf("Load: %+v", r)
@@ -410,7 +410,7 @@ func TestApproval_LoadRefusesWhatIsNotARecord(t *testing.T) {
 	proj := env.Project(map[string]any{})
 	g := model.LoadStore(proj).Main
 	path := model.ApprovalPath(g)
-	for _, bad := range []string{`{not json`, `[]`, `{"hash": "x"}`, `{"snapshot": []}`, `{"snapshot": {"a": 1}}`, `{"snapshot": {}, "local": []}`} {
+	for _, bad := range []string{`{not json`, `[]`, `{"hash": "x"}`, `{"snapshot": []}`, `{"snapshot": {"a": 1}}`, `{"snapshot": {}, "local": []}`, `{"snapshot": {}}`} {
 		env.WriteFile(path, bad, 0)
 		if r := Load(g); r != nil {
 			t.Errorf("%s loaded as %+v", bad, r)
@@ -419,11 +419,11 @@ func TestApproval_LoadRefusesWhatIsNotARecord(t *testing.T) {
 			t.Errorf("%s: state %s", bad, State(g))
 		}
 	}
-	env.WriteFile(path, `{"snapshot": {}}`, 0) // an old record with no "local" and no hash
+	env.WriteFile(path, `{"snapshot": {}, "local": {}}`, 0)
 	if r := Load(g); r == nil || len(r.Local) != 0 {
 		t.Errorf("%+v", r)
 	}
-	env.WriteFile(path, "{\r\n\"snapshot\": {}\r\n}", 0)
+	env.WriteFile(path, "{\r\n\"snapshot\": {},\r\n\"local\": {}\r\n}", 0)
 	if Load(g) == nil {
 		t.Error("CRLF record")
 	}
@@ -586,12 +586,12 @@ func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
 	}
 }
 
-func TestApproval_ARecordHoldingALoneSurrogateIsNoRecord(t *testing.T) {
+func TestApproval_ARecordWithNonUTF8TextIsNoRecord(t *testing.T) {
 	env := testkit.New(t)
 	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
 	g := model.LoadStore(proj).Main
-	// what the older version wrote for a file named caf<0xe9>: a lone surrogate escape
-	env.WriteFile(model.ApprovalPath(g), `{"snapshot": {"caf\udce9.sh": "x"}, "local": {}}`, 0)
+	// a record whose file name is not valid UTF-8 is no record
+	env.WriteFile(model.ApprovalPath(g), "{\"snapshot\": {\"caf\xe9.sh\": \"x\"}, \"local\": {}}", 0)
 	if Load(g) != nil || State(g) != "new" {
 		t.Errorf("loaded as a record: %+v, state %s", Load(g), State(g))
 	}
@@ -693,14 +693,10 @@ func TestApproval_RecordWithoutSnapshotOrLocal(t *testing.T) {
 	if got := State(g); got != "new" {
 		t.Errorf("no snapshot: %s", got)
 	}
-	// no "local" (written before .shortcuts.local existed): empty, so it approves while no local file exists
+	// no "local": not a record either (fail closed)
 	env.WriteFile(rec, `{"snapshot": {".shortcuts": "{\n  \"shortcuts\": {\n    \"t\": {\n      \"script\": \"bin/t\"\n    }\n  },\n  \"version\": 1\n}\n", "bin/t": "echo one\n"}}`, 0)
-	if got := State(g); got != "ok" {
-		t.Fatalf("no local: %s", got)
-	}
-	env.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"m": {"inline": "x"}}}`, 0)
-	if got := State(model.LoadStore(proj).Main); got != "changed" {
-		t.Errorf("local file appeared: %s", got)
+	if got := State(g); got != "new" {
+		t.Errorf("no local: %s", got)
 	}
 }
 
