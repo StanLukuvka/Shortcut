@@ -640,10 +640,10 @@ func TestApproval_FolderFilesNamespace(t *testing.T) {
 	}
 }
 
-// An approval record as an earlier version wrote it, with its "hash" field, hand-written (ASCII only).
-const oldRecord = `{
+// An approval record with an unknown field, "extra", which is ignored. Hand-written (ASCII only).
+const recordWithExtraField = `{
   "key": "@ROOT@",
-  "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "extra": 1,
   "snapshot": {
     ".shortcuts": "{\n  \"shortcuts\": {\n    \"t\": {\n      \"script\": \"bin/t\"\n    }\n  },\n  \"version\": 1\n}\n",
     "bin/t": "echo one\n"
@@ -652,21 +652,16 @@ const oldRecord = `{
 }
 `
 
-func TestApproval_OldRecordWithAHashStillApproves(t *testing.T) {
+func TestApproval_RecordWithAnUnknownFieldStillApproves(t *testing.T) {
 	env := testkit.New(t)
 	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
 	g := model.LoadStore(proj).Main
 	rec := model.ApprovalPath(g)
-	env.WriteFile(rec, strings.ReplaceAll(oldRecord, "@ROOT@", proj), 0)
+	env.WriteFile(rec, strings.ReplaceAll(recordWithExtraField, "@ROOT@", proj), 0)
 	if got := State(g); got != "ok" {
 		t.Fatalf("unchanged files: %s", got)
 	}
-	// the hash is ignored: a record whose hash is not even a string is just as good
-	env.WriteFile(rec, strings.Replace(strings.ReplaceAll(oldRecord, "@ROOT@", proj), `"hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"`, `"hash": 7`, 1), 0)
-	if got := State(g); got != "ok" {
-		t.Errorf("non-string hash: %s", got)
-	}
-	env.WriteFile(rec, strings.ReplaceAll(oldRecord, "@ROOT@", proj), 0)
+	env.WriteFile(rec, strings.ReplaceAll(recordWithExtraField, "@ROOT@", proj), 0)
 	env.WriteFile(filepath.Join(proj, "bin", "t"), "echo two\n", 0)
 	if got := State(model.LoadStore(proj).Main); got != "changed" {
 		t.Errorf("text changed: %s", got)
