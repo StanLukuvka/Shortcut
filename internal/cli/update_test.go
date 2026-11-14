@@ -95,7 +95,7 @@ func TestApproval_BlocksUntilApprovedAndAfterAnyChange(t *testing.T) {
 	if code := e.RunWith(o, "r", "there").Code; code != 1 {
 		t.Errorf("script gone: exit %d", code)
 	}
-	res = e.RunWith(o, "update", "-y")
+	res = e.RunWith(o, "update", ".", "-y")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "update", res.Stderr, "script not found")
 }
@@ -313,11 +313,16 @@ func TestUpdate_Refusals(t *testing.T) {
 	if res = e.Run("update"); res.Code != 0 || res.Stdout != "Nothing to approve here.\n" {
 		t.Errorf("update: exit %d stdout %q", res.Code, res.Stdout)
 	}
-	// an entry that can't run is not approved, and says so for each
+	// an entry that can't run is not approved, and says so for each; unnamed, that is a warning and exit 0
 	proj := e.Project(map[string]any{"a": map[string]any{"script": "none.sh"}, "b": map[string]any{"inline": "true", "cwd": 1}})
 	res = e.RunWith(in(proj), "update", "-y")
-	if res.Code != 1 || strings.Count(res.Stderr, "error: cannot approve "+proj+": ") != 2 {
+	if res.Code != 0 || strings.Count(res.Stderr, "warning: skipped "+proj+": ") != 2 || strings.Contains(res.Stderr, "error:") {
 		t.Errorf("update -y: exit %d stderr %q", res.Code, res.Stderr)
+	}
+	// named with ".", it is an error
+	res = e.RunWith(in(proj), "update", ".", "-y")
+	if res.Code != 1 || strings.Count(res.Stderr, "error: cannot approve "+proj+": ") != 2 {
+		t.Errorf("update . -y: exit %d stderr %q", res.Code, res.Stderr)
 	}
 	// the exported-but-relative-cwd warning and the local-over-shared line
 	proj = e.Project(map[string]any{"x": map[string]any{"inline": "true", "cwd": "sub", "export": true}, "y": testkit.Inline("true")}, testkit.Name("p2"))
@@ -378,7 +383,7 @@ func TestStores_AVersionThatIsntAWholeNumberIsRefused(t *testing.T) {
 		testkit.Contains(t, version, res.Stderr, "'version' must be a whole number, such as 1")
 	}
 	proj := e.Project(testkit.GO, testkit.Extra(map[string]any{"version": "3"}))
-	res := e.RunWith(in(proj), "update", "-y")
+	res := e.RunWith(in(proj), "update", ".", "-y")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "project", res.Stderr, "'version' must be a whole number")
 }
@@ -392,5 +397,21 @@ func TestStores_ArgsNeedANameThatIsAString(t *testing.T) {
 		raw, _ := json.Marshal(arg)
 		res.WantCode(t, 1)
 		testkit.Contains(t, string(raw), res.Stderr, "needs a 'name'")
+	}
+}
+
+// C9: `update -y` approves the good namespace and skips an unrelated broken one; naming the broken one fails.
+func TestUpdate_UnnamedSkipsABrokenNamespace(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteImport(e.Store, "good", testkit.NS(map[string]any{"ps": testkit.Inline("echo ps")}))
+	e.WriteImport(e.Store, "bad", testkit.NS(map[string]any{"a": map[string]any{"script": "none.sh"}}))
+	res := e.Run("update", "-y")
+	if res.Code != 0 || !strings.Contains(res.Stdout, "Approved good.") || !strings.Contains(res.Stderr, "warning: skipped bad: ") ||
+		strings.Contains(res.Stderr, "error:") {
+		t.Errorf("update -y: exit %d stdout %q stderr %q", res.Code, res.Stdout, res.Stderr)
+	}
+	res = e.Run("update", "bad", "-y")
+	if res.Code != 1 || !strings.Contains(res.Stderr, "error: cannot approve bad: ") {
+		t.Errorf("update bad -y: exit %d stderr %q", res.Code, res.Stderr)
 	}
 }

@@ -61,7 +61,7 @@ func TestExport_IsRefusedInTheGlobalStoreAndNamespaces(t *testing.T) {
 func TestExport_MustBeABoolean(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(map[string]any{"x": map[string]any{"inline": "echo x", "export": "yes"}})
-	res := e.RunWith(in(proj), "update", "-y")
+	res := e.RunWith(in(proj), "update", ".", "-y")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "'export' must be a boolean")
 }

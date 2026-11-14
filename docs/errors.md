@@ -188,10 +188,11 @@ A new local shortcut needs a project folder:
 
 ## update
 
-These print `error: cannot approve <group>: <reason>`, where the reason is a store file or entry error above.
+`update <group>` and `update .` print `error: cannot approve <group>: <reason>` and exit 1, where the reason is a store file or entry error above.
 
 | Message | Meaning |
 |---|---|
+| `warning: skipped <group>: <reason>` | `update` or `update -y` with no group named found a group whose file or entries have errors. It is skipped and the exit status stays 0 |
 | `no project shortcuts here: no .shortcuts or .shortcuts.local in this folder or its parents` | `update .` outside a project |
 | `no namespace named '<ns>' here` | |
 | `approve <group> in a terminal, or pass -y` | No terminal to show the review in |

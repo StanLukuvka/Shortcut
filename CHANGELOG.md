@@ -28,3 +28,4 @@
 - An executable script with no `#!` is run directly, so a Mach-O or other binary works. Only an executable text file the kernel refuses is run with bash.
 - A shortcut's environment lists `SHORTCUT_NAME`, `SHORTCUT_NAMESPACE`, `SHORTCUT_CALLER_CWD` and its `SC_ARG_` variables after the caller's own variables.
 - The pager shows the diff once: if it ran, shortcut does not print the diff again, whatever the pager's exit status. `$LINES` is no longer read; the row count comes from the terminal (24 if unknown).
+- `update` and `update -y` with no group named skip a broken group with `warning: skipped <group>: <reason>` and exit 0. `update <group>` still exits 1 for it.

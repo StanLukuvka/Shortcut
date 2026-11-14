@@ -235,7 +235,7 @@ func TestFrom_ShowPrintsWhereItCameFrom(t *testing.T) {
 func TestFrom_IsRefusedInAProjectAndANamespace(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(map[string]any{"tool": map[string]any{"inline": "echo tool", "from": fromOrigin}})
-	res := e.RunWith(in(proj), "update", "-y")
+	res := e.RunWith(in(proj), "update", ".", "-y")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "'tool' is not a valid entry: 'from' is only for the global store's shortcuts.json")
 

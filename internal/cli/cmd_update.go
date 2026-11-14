@@ -59,8 +59,9 @@ func cmdUpdate(s *textio.Streams, args []string) error {
 	}
 	globalNames := globalNamesOf(stores)
 	code := 0
+	named := ns.Str("group") != ""
 	for _, g := range groups {
-		rc, err := approveGroup(s, g, ns.Bool("yes"), globalNames)
+		rc, err := approveGroup(s, g, ns.Bool("yes"), globalNames, named)
 		if err != nil {
 			return err
 		}
@@ -74,11 +75,16 @@ func cmdUpdate(s *textio.Streams, args []string) error {
 
 // approveGroup shows what changed since the last approval and asks. What is shown is what gets
 // hashed. globalNames are your global shortcuts and namespaces, which a project's names hide inside it. It returns
-// the exit code; an error is a die (no terminal to ask on, or the record can't be written).
-func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames map[string]bool) (int, error) {
+// the exit code; an error is a die (no terminal to ask on, or the record can't be written). A broken group
+// is skipped with a warning (exit 0) unless the group was named, then it is an error (exit 1).
+func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames map[string]bool, named bool) (int, error) {
+	prefix, rc := "warning: skipped ", 0
+	if named {
+		prefix, rc = "error: cannot approve ", 1
+	}
 	if g.Error != nil {
-		s.Err.WriteString("error: cannot approve " + g.Label() + ": " + *g.Error + "\n")
-		return 1, nil
+		s.Err.WriteString(prefix + g.Label() + ": " + *g.Error + "\n")
+		return rc, nil
 	}
 	if err := approval.Check(g); err != nil {
 		s.Err.WriteString("error: " + err.Error() + "\n")
@@ -86,9 +92,9 @@ func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames 
 	}
 	if errs := model.EntryErrors(g); len(errs) > 0 {
 		for _, e := range errs {
-			s.Err.WriteString("error: cannot approve " + g.Label() + ": " + e + "\n")
+			s.Err.WriteString(prefix + g.Label() + ": " + e + "\n")
 		}
-		return 1, nil
+		return rc, nil
 	}
 	shared, err := approval.SharedFiles(g)
 	if err != nil {
