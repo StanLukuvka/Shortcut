@@ -50,8 +50,8 @@ A word that starts with `-` is an option. To pass one as a name or a value, put 
 | `corrupt registry <path>: 'description' must be a string` | |
 | `cannot overwrite corrupt registry <path>: <json error>` | shortcut won't write over a file it can't read, including one that isn't valid UTF-8. Fix or move it |
 | `<path> is format version <n>, newer than this shortcut reads; upgrade shortcut` | |
-| `corrupt registry <path>: 'version' must be a whole number, such as 1` | `"version"` is a string, a fraction, `null` or `true` |
-| `<path> needs "version": 1` | |
+| `corrupt registry <path>: 'version' must be a whole number, such as 1` | `"version"` is a string, a fraction (`1.0`), `null` or `true` |
+| `<path> needs "version": 1` | No `version`, or one below 1, in any store, project or namespace file |
 | `<path> needs 'shortcuts'` | |
 | `<path> has an unknown field: <fields>` | |
 | `<path> has its own 'imports', but namespaces don't nest` | Only a store's main file can import namespaces |
@@ -72,15 +72,15 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `expected a dictionary` | The entry is a string or list, not `{...}` |
 | `unknown field: <fields>` | |
 | `'description' must be a string` | |
-| `'<field>' must be a string` | `inline`, `script`, `cwd`, `icon`, `created_by` or `created` |
+| `'<field>' must be a string` | `inline`, `script`, `cwd`, `icon`, `created_by` or `created`. A `null` counts as the wrong type |
 | `'<field>' must be a boolean` | `confirm` or `export` |
 | `it needs exactly one of 'inline' and 'script'` | |
-| `'from' must be an object with a string 'source' and 'name'` | |
+| `'from' must be an object with a string 'source' and 'name'` | A `null` counts as the wrong type |
 | `script not found: <script>` | The entry's script file is missing |
-| `'args' must be a list` | |
+| `'args' must be a list` | A `null` counts as the wrong type |
 | `every entry in 'args' needs a 'name' (letters, digits, _ and -)` | |
 | `unknown args field: <fields>` | |
-| `args '<field>' must be a string` | `default` or `desc` |
+| `args '<field>' must be a string` | `default` or `desc`. A `null` counts as the wrong type |
 | `args '<field>' must be a boolean` | `required` or `rest` |
 | `only the last entry in 'args' can be 'rest'` | |
 | `arg '<arg>' can't be both 'required' and have a 'default'` | |
