@@ -111,42 +111,44 @@ func TestApproval_GoldenReviewable(t *testing.T) {
 	t.Logf("%d reviewable cases", len(cases))
 }
 
-func TestApproval_GoldenKeysAndRecordNames(t *testing.T) {
-	if osutil.Realpath("/tmp") != "/tmp" {
-		t.Skip("/tmp is a link here; the golden keys name /tmp paths")
-	}
-	cases := golden(t, "key_cases")
-	for _, c := range cases {
-		store, name := text(t, c, "store"), text(t, c, "name")
-		g := model.Group{Name: name, File: text(t, c, "file"), StoreDir: store}
-		if str(c, "kind") == "project" {
-			g = model.Group{StoreDir: store, File: store + "/.shortcuts", LocalFile: store + "/.shortcuts.local"}
+func TestApproval_KeysAndRecordNames(t *testing.T) {
+	base := testkit.New(t).Tmp
+	names := map[string]string{}
+	seen := func(g model.Group, what string) {
+		t.Helper()
+		sum := sha256.Sum256([]byte(g.Key()))
+		if want := hex.EncodeToString(sum[:]) + ".json"; model.RecordName(g.Key()) != want {
+			t.Errorf("%s: record name %s, want %s", what, model.RecordName(g.Key()), want)
 		}
-		t.Run(str(c, "kind")+" "+strconv.QuoteToASCII(store)+" "+name, func(t *testing.T) {
-			if got := g.Key(); got != text(t, c, "key") {
-				t.Errorf("key %q, want %q", got, text(t, c, "key"))
-			}
-			want := str(c, "record_name")
-			if _, python := c.Get("python_error"); python {
-				// a non-UTF-8 key cannot be saved; its record is still named the record after the key's raw bytes.
-				if utf8.ValidString(g.Key()) {
-					t.Fatal("python_error on a valid key")
-				}
-				sum := sha256.Sum256([]byte(text(t, c, "key")))
-				want = hex.EncodeToString(sum[:]) + ".json"
-			}
-			if want == "" {
-				t.Fatal("no record name")
-			}
-			if got := model.RecordName(g.Key()); got != want {
-				t.Errorf("record name %s, want %s", got, want)
-			}
-		})
+		if prev, dup := names[model.RecordName(g.Key())]; dup {
+			t.Errorf("%s and %s share a record", prev, what)
+		}
+		names[model.RecordName(g.Key())] = what
 	}
-	if len(cases) < 12 {
-		t.Errorf("only %d cases", len(cases))
+	for _, d := range []string{"plain", "café", "😀", "a b/c", "p\xffroj"} {
+		dir := filepath.Join(base, d)
+		if err := os.MkdirAll(dir, 0o777); err != nil {
+			t.Logf("this filesystem refuses %q: %v", d, err)
+			continue
+		}
+		g := model.Group{StoreDir: dir, File: dir + "/.shortcuts", LocalFile: dir + "/.shortcuts.local"}
+		if g.Key() != osutil.Realpath(dir) {
+			t.Errorf("project key %q, want %q", g.Key(), osutil.Realpath(dir))
+		}
+		seen(g, "project "+d)
 	}
-	t.Logf("%d key cases", len(cases))
+	store := osutil.Realpath(base)
+	for _, c := range []struct{ name, file string }{{"ns", "a.sh"}, {"ns", "b.sh"}, {"other", "a.sh"}, {"ns", "café.sh"}, {"ns", "caf\xe9.sh"}, {"ns", `caf\xe9.sh`}, {"n\"s", "a\\b"}} {
+		g := model.Group{Name: c.name, StoreDir: base, File: filepath.Join(base, c.file)}
+		want := "[" + strconv.QuoteToASCII(store) + ", " + strconv.QuoteToASCII(c.name) + ", " + strconv.QuoteToASCII(osutil.Realpath(g.File)) + "]"
+		if g.Key() != want {
+			t.Errorf("namespace key %s, want %s", g.Key(), want)
+		}
+		seen(g, "namespace "+c.name+" "+c.file)
+	}
+	if k := (model.Group{Name: "n", StoreDir: "/s", File: "/s/é"}).Key(); k != `["/s", "n", "/s/\u00e9"]` {
+		t.Errorf("example key %s", k)
+	}
 }
 
 func TestApproval_ApprovalPathIsInTheGlobalStore(t *testing.T) {

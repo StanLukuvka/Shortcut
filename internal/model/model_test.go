@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -317,10 +318,10 @@ func TestStores_ProjectRootViaLocalFileOnlyAndNearest(t *testing.T) {
 	if got := FindProjectRoot(outer); got != outer {
 		t.Errorf("local only: %q", got)
 	}
-	// a .shortcuts that is a folder (shortcut 1.x) is no project
+	// a .shortcuts that is a folder is no project
 	old := env.Project(nil, testkit.Name("old"), testkit.Dirs(".shortcuts"))
 	if got := FindProjectRoot(old); got != "" {
-		t.Errorf("1.x folder: %q", got)
+		t.Errorf("a .shortcuts folder: %q", got)
 	}
 }
 
@@ -664,9 +665,19 @@ func TestKey_TellsNonUTF8NamesApart(t *testing.T) {
 	if len(names) != len(keys) {
 		t.Errorf("%d record names for %d keys", len(names), len(keys))
 	}
-	// the key text itself is as the old store wrote it: ASCII, \u escapes, lower hex
-	if got, want := keyJSON("a", "é😀\xff"), `["a", "\u00e9\ud83d\ude00\udcff"]`; got != want {
+	if got, want := keyText("a", "é😀\xff"), "["+strconv.QuoteToASCII("a")+", "+strconv.QuoteToASCII("é😀\xff")+"]"; got != want {
 		t.Errorf("got %s want %s", got, want)
+	}
+	if got, want := keyText("a", "x"), `["a", "x"]`; got != want {
+		t.Errorf("got %s want %s", got, want)
+	}
+	if got, want := keyText("é😀\xff"), `["\u00e9\U0001f600\xff"]`; got != want {
+		t.Errorf("got %s want %s", got, want)
+	}
+	// U+FFFD written out is not the raw byte it replaces
+	a, b := Group{Name: "ns", StoreDir: store, File: filepath.Join(store, "caf\xe9.shortcut")}, Group{Name: "ns", StoreDir: store, File: filepath.Join(store, "caf\xef\xbf\xbd.shortcut")}
+	if a.Key() == b.Key() || RecordName(a.Key()) == RecordName(b.Key()) {
+		t.Errorf("%s and %s share a record", a.Key(), b.Key())
 	}
 }
 
