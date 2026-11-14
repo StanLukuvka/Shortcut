@@ -50,8 +50,8 @@ func Unified(a, b []string, from, to string) []string {
 	return out
 }
 
-// SplitLinesKeepEnds splits after each \n; a last line without one is kept. A \r, form feed, U+2028 and so on stay inside
-// their line (textio.Safe makes them harmless when shown).
+// SplitLinesKeepEnds splits after each \n; a last line without one is kept. A \r, form feed, U+2028 and so on stay
+// inside their line (textio.Safe makes them harmless when shown).
 func SplitLinesKeepEnds(s string) []string {
 	if s == "" {
 		return nil

@@ -406,6 +406,4 @@ Safe -> helpers.safe
 ShowDiff -> helpers.show_diff
 Streams -> SafeOutput over sys.std*
 WriteStyled -> write_styled
-bufSize -> io.DEFAULT_BUFFER_SIZE
-flushOrAbort -> sys.stdout.flush()
 isControl -> helpers.CONTROL_CHARS
