@@ -33,7 +33,7 @@ func entryFiles(g model.Group, shortcuts *pyjson.Object, origin string) map[stri
 		if !ok {
 			continue
 		}
-		if cwd, ok := data.Vals["cwd"].(string); ok && model.IsRelativeCwd(&cwd) && !strings.Contains(cwd, "\x00") { // a NUL can't run, and the JSON already shows it
+		if cwd, ok := data.Vals["cwd"].(string); ok && model.IsRelativeCwd(&cwd) {
 			files["./cwd of "+name+origin] = pyos.Realpath(model.ResolveRunDir(&cwd, g, "")) + "\n"
 		}
 		script, ok := data.Vals["script"].(string)
@@ -86,9 +86,6 @@ func folderFiles(g model.Group) map[string]string {
 }
 
 func jsonFile(g model.Group, path string, data *pyjson.Object) (map[string]string, error) {
-	if data == nil {
-		data = &pyjson.Object{}
-	}
 	text, err := pyjson.MarshalIndent(data.Sorted())
 	if err != nil {
 		return nil, fmt.Errorf("cannot approve: %q: %w", displayPath(g, path), err)

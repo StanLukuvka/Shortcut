@@ -101,7 +101,6 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `shortcut or namespace '<name>' not found. A global namespace is the file <store>/imports/<name>.shortcut.` | The same, with words after the name, so it may be meant as a namespace |
 | `... The project in <dir> has its own '<name>': leave out --global to use it.` | Added to either one above when `--global` skipped a project entry by that name |
 | `... The project in <outer> has a '<name>', but only the nearest project, <dir>, is used here.` | Added when a project holds another, and only the outer one has the name |
-| `... <dir>/.shortcuts is a folder, which is how shortcut 1.x kept a project. This version reads a .shortcuts file, so nothing in that folder is used.` | Added outside any project when a folder above has the 1.x layout |
 | `'<name>' not found in namespace '<ns>'. It has: <names>` | When the project's namespace hides a global one that has the name, `. Your global '<ns>' has it: shortcut r --global <ns> <name>` follows |
 | `'<ns>' is a namespace; run one of its shortcuts: <names>` | |
 | `too many names: <words>` | `show`, `location` and `rm` take a name, or a namespace and a name |

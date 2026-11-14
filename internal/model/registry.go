@@ -77,25 +77,6 @@ func FindProjectRoot(start string) string {
 	}
 }
 
-// oldProjectFolder returns the nearest .shortcuts folder above the caller that isn't the
-// global store. "" = none.
-func oldProjectFolder(callerCwd string) string {
-	if callerCwd == "" {
-		callerCwd, _ = pyos.Getwd()
-	}
-	for cur := pyos.Realpath(callerCwd); ; {
-		path := pyos.Join(cur, ProjectFile)
-		if pyos.IsDir(path) && !neverAProject(pyos.Realpath(path)) {
-			return path
-		}
-		parent := filepath.Dir(cur)
-		if parent == cur {
-			return ""
-		}
-		cur = parent
-	}
-}
-
 // LocalProjectRoot returns where --local writes, this folder and never a parent. Its errors are
 // the messages die prints.
 func LocalProjectRoot(cwd string) (string, error) {

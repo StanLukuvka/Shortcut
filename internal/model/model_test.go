@@ -322,9 +322,6 @@ func TestStores_ProjectRootViaLocalFileOnlyAndNearest(t *testing.T) {
 	if got := FindProjectRoot(old); got != "" {
 		t.Errorf("1.x folder: %q", got)
 	}
-	if got := oldProjectFolder(old); got != filepath.Join(old, ".shortcuts") {
-		t.Errorf("oldProjectFolder: %q", got)
-	}
 }
 
 func TestStores_LocalProjectRoot(t *testing.T) {
@@ -470,9 +467,8 @@ func TestGroup_ShortcutsOverlaySourceAndHiding(t *testing.T) {
 	if g.DefiningFile("b") != "/p/.shortcuts.local" || g.DefiningFile("a") != "/p/.shortcuts" {
 		t.Error("DefiningFile")
 	}
-	var zero Group // a Group with no data reads as empty
-	if len(zero.Shortcuts().Keys) != 0 {
-		t.Error("zero group")
+	if len(newGroup().Shortcuts().Keys) != 0 { // no LocalData (a namespace) and an empty file read as empty
+		t.Error("empty group")
 	}
 	// a non-object "shortcuts" is empty, not a crash
 	if n := len((Group{Data: obj(t, `{"shortcuts": []}`)}).Shortcuts().Keys); n != 0 {
@@ -760,3 +756,6 @@ func TestStores_VersionRequiredInEveryFile(t *testing.T) {
 		}
 	}
 }
+
+// newGroup is a Group with an empty file, as LoadGroup gives for a missing one.
+func newGroup() Group { return Group{Data: &pyjson.Object{}} }
