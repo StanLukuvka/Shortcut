@@ -1,5 +1,5 @@
 // Package difflib is a port of the parts of CPython's Lib/difflib.py (3.14) that
-// unified_diff needs: SequenceMatcher(None, a, b) with autojunk on.
+// unified_diff needs: SequenceMatcher(None, a, b) with autojunk off.
 //
 // lazy: no isjunk, no ratio/quick_ratio, no context/ndiff; only what shortcut's
 // diff_files calls. Upgrade path: port the rest from the same file if needed.
@@ -19,46 +19,60 @@ type match struct{ A, B, Size int }
 type matcher struct {
 	a, b []string
 	b2j  map[string][]int
+	// rowA, rowB are the scratch rows of longest; steps counts work against budget.
+	rowA, rowB []int
+	steps      int
 }
 
-// newMatcher indexes b by line, with no junk function and autojunk on.
+// newMatcher indexes b by line, with no junk function and no autojunk.
 func newMatcher(a, b []string) *matcher {
-	m := &matcher{a: a, b: b, b2j: map[string][]int{}}
+	m := &matcher{a: a, b: b, b2j: map[string][]int{}, rowA: make([]int, len(b)+1), rowB: make([]int, len(b)+1)}
 	for i, s := range b {
 		m.b2j[s] = append(m.b2j[s], i)
-	}
-	if n := len(b); n >= 200 {
-		ntest := n/100 + 1
-		for s, idx := range m.b2j {
-			if len(idx) > ntest {
-				delete(m.b2j, s)
-			}
-		}
 	}
 	return m
 }
 
+// budget bounds the inner-loop steps of one whole match. Without autojunk, a file where old and new share only
+// frequent lines costs cubic time. Past the budget, the lines not yet matched are reported as replaced; blocks matched before then stay.
+const budget = 10_000_000
+
 // longest finds the longest matching block in a[alo:ahi] and b[blo:bhi]. With no junk set, only the popular-element
-// extension loops of the original remain.
+// extension loops of the original remain. It returns a zero-size match once the budget is spent.
 func (m *matcher) longest(alo, ahi, blo, bhi int) match {
 	besti, bestj, bestsize := alo, blo, 0
-	j2len := map[int]int{}
+	// j2len[j+1] is the length of the match ending at b[j] for the previous line of a; two slices swap each row.
+	j2len, newj2len := m.rowA, m.rowB
+	var prev []int
 	for i := alo; i < ahi; i++ {
-		newj2len := map[int]int{}
-		for _, j := range m.b2j[m.a[i]] {
+		cur := m.b2j[m.a[i]]
+		m.steps += 1 + len(cur) + len(prev)
+		if m.steps > budget {
+			clear(j2len)
+			clear(newj2len)
+			return match{alo, blo, 0}
+		}
+		for _, j := range cur {
 			if j < blo {
 				continue
 			}
 			if j >= bhi {
 				break
 			}
-			k := j2len[j-1] + 1
-			newj2len[j] = k
+			k := j2len[j] + 1
+			newj2len[j+1] = k
 			if k > bestsize {
 				besti, bestj, bestsize = i-k+1, j-k+1, k
 			}
 		}
-		j2len = newj2len
+		for _, j := range prev {
+			j2len[j+1] = 0
+		}
+		prev = cur
+		j2len, newj2len = newj2len, j2len
+	}
+	for _, j := range prev {
+		j2len[j+1] = 0
 	}
 	for besti > alo && bestj > blo && m.a[besti-1] == m.b[bestj-1] {
 		besti, bestj, bestsize = besti-1, bestj-1, bestsize+1

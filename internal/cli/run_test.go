@@ -53,6 +53,13 @@ func TestRunning_TheEnvironmentSaysWhatRunsAndFromWhere(t *testing.T) {
 	}
 }
 
+func TestRunning_APresetShortcutNameIsReplacedOnce(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"cnt": testkit.Inline(`env | grep -c '^SHORTCUT_NAME='; echo "$SHORTCUT_NAME"`)})
+	res := e.RunWith(testkit.Opts{Env: map[string]string{"SHORTCUT_NAME": "outer"}}, "r", "cnt")
+	testkit.Eq(t, "stdout", res.Stdout, "1\ncnt\n")
+}
+
 func TestRunning_ANameAloneNeverRunsAShortcut(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"hello": testkit.Inline("echo hello")})
@@ -95,6 +102,44 @@ func TestRunning_ScriptShebangWithoutExecAndElf(t *testing.T) {
 		if res.Code != 0 || !strings.Contains(res.Stdout, want) {
 			t.Errorf("%s: exit %d stdout %q stderr %q", name, res.Code, res.Stdout, res.Stderr)
 		}
+	}
+}
+
+// An executable with no #! is exec'd as it is; only an executable text file the kernel refuses (ENOEXEC) goes to bash.
+func TestRunning_ExecutableWithoutShebang(t *testing.T) {
+	e := testkit.New(t)
+	scripts := filepath.Join(e.Store, "scripts")
+	var bin []byte
+	for _, p := range []string{"/usr/bin/true", "/bin/true"} {
+		if b, err := os.ReadFile(p); err == nil {
+			bin = b
+			break
+		}
+	}
+	if bin == nil {
+		t.Skip("no true binary")
+	}
+	e.WriteFile(filepath.Join(scripts, "text.sh"), "echo hi\n", 0o755)
+	e.WriteFile(filepath.Join(scripts, "bin"), bin, 0o755)
+	e.WriteFile(filepath.Join(scripts, "macho"), append([]byte("\xcf\xfa\xed\xfe"), make([]byte, 64)...), 0o755)
+	e.WriteStore(e.Store, map[string]any{
+		"text":  map[string]any{"script": "scripts/text.sh"},
+		"bin":   map[string]any{"script": "scripts/bin"},
+		"macho": map[string]any{"script": "scripts/macho"},
+	})
+	if res := e.Run("run", "text"); res.Code != 0 || res.Stdout != "hi\n" {
+		t.Errorf("text: exit %d stdout %q stderr %q", res.Code, res.Stdout, res.Stderr)
+	}
+	if res := e.Run("run", "bin"); res.Code != 0 || res.Stdout != "" {
+		t.Errorf("bin: exit %d stdout %q stderr %q", res.Code, res.Stdout, res.Stderr)
+	}
+	// A binary the kernel will not run (another system's format) is not handed to bash.
+	res := e.Run("run", "macho")
+	testkit.Eq(t, "macho exit", res.Code, 1)
+	testkit.Eq(t, "macho stdout", res.Stdout, "")
+	testkit.Contains(t, "macho stderr", res.Stderr, "exec format error")
+	if strings.Contains(res.Stderr, "bash") || strings.Contains(res.Stderr, "line ") {
+		t.Errorf("macho was run by bash: %q", res.Stderr)
 	}
 }
 

@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"fmt"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
@@ -178,4 +180,30 @@ func TestStores_ListSurvivesNonStringDescription(t *testing.T) {
 		t.Fatalf("list panicked:\n%s", res.Stderr)
 	}
 	testkit.Matches(t, res.Stdout, `g +caller +5`)
+}
+
+// manyEntries is n inline shortcuts with 40-character names.
+func manyEntries(n int) map[string]any {
+	m := map[string]any{}
+	for i := 0; i < n; i++ {
+		m[fmt.Sprintf("%040d", i)] = map[string]any{"inline": "true", "description": "d"}
+	}
+	return m
+}
+
+// Far more than the pipe holds: head reads one line and leaves, shortcut ends by SIGPIPE (141) and prints nothing.
+func TestList_APipeToHeadEndsQuietly(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, manyEntries(3000))
+	res := e.Shell(testkit.Opts{Timeout: 30 * time.Second}, `shortcut list | head -n 1; echo "${PIPESTATUS[0]}" >&2`)
+	if strings.Count(res.Stdout, "\n") != 1 || res.Stderr != "141\n" {
+		t.Errorf("stdout %q stderr %q", res.Stdout, res.Stderr)
+	}
+}
+
+// stdout is not buffered: a line to stdout and a note to stderr reach one pipe in the order they were written.
+func TestNew_StdoutAndStderrKeepTheirOrderInOnePipe(t *testing.T) {
+	e := testkit.New(t)
+	res := e.Shell(testkit.Opts{}, `shortcut new ord -- true 2>&1 | cat`)
+	testkit.Eq(t, "output", res.Stdout, "note: 'ord' won't see any arguments you give it; add \"$@\" to pass them on\nCreated inline shortcut 'ord'.\n")
 }

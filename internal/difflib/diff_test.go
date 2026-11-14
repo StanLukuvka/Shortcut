@@ -1,85 +1,68 @@
 package difflib
 
 import (
-	"encoding/json"
-	"github.com/StanLukuvka/Shortcut/internal/testkit"
 	"reflect"
-	"sort"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
-type diffCase struct {
-	Name  string            `json:"name"`
-	Old   map[string]string `json:"old"`
-	New   map[string]string `json:"new"`
-	Lines []string          `json:"lines"`
+type diffRow struct {
+	name, old, new string
+	want           []string
 }
 
-func loadCases(t *testing.T) []diffCase {
-	t.Helper()
-	raw := testkit.Golden(t, "diff_cases.json")
-	var f struct {
-		Cases []diffCase `json:"cases"`
+var hdr = []string{"--- a/f", "+++ b/f"}
+
+func rows() []diffRow {
+	many := func(change bool) string {
+		var b strings.Builder
+		for i := 0; i < 300; i++ {
+			switch {
+			case change && i == 150:
+				b.WriteString("changed\n")
+			case i%2 == 0:
+				b.WriteString("same\n")
+			default:
+				b.WriteString("line " + strconv.Itoa(i%7) + "\n")
+			}
+		}
+		return b.String()
 	}
-	if err := json.Unmarshal(raw, &f); err != nil {
-		t.Fatal(err)
+	return []diffRow{
+		{"identical", "a\nb\n", "a\nb\n", nil},
+		{"add", "a\nb\n", "a\nb\nc\n", []string{"@@ -1,2 +1,3 @@", " a", " b", "+c"}},
+		{"delete", "a\nb\nc\n", "a\nc\n", []string{"@@ -1,3 +1,2 @@", " a", "-b", " c"}},
+		{"change", "a\nb\nc\n", "a\nX\nc\n", []string{"@@ -1,3 +1,3 @@", " a", "-b", "+X", " c"}},
+		{"empty to text", "", "a\nb\n", []string{"@@ -0,0 +1,2 @@", "+a", "+b"}},
+		{"text to empty", "a\nb\n", "", []string{"@@ -1,2 +0,0 @@", "-a", "-b"}},
+		{"no trailing newline", "a\nb", "a\nc", []string{"@@ -1,2 +1,2 @@", " a", "-b", "+c"}},
+		{"two hunks", "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n", "1\nX\n3\n4\n5\n6\n7\n8\n9\n10\n11\nY\n",
+			[]string{"@@ -1,5 +1,5 @@", " 1", "-2", "+X", " 3", " 4", " 5", "@@ -9,4 +9,4 @@", " 9", " 10", " 11", "-12", "+Y"}},
+		{"form feed stays in its line", "a\fb\nc\n", "a\fX\nc\n", []string{"@@ -1,2 +1,2 @@", "-a\fb", "+a\fX", " c"}},
+		{"carriage return stays in its line", "a\rb\nc\n", "a\rX\nc\n", []string{"@@ -1,2 +1,2 @@", "-a\rb", "+a\rX", " c"}},
+		{"U+2028 stays in its line", "a\u2028b\n", "a\u2028X\n", []string{"@@ -1 +1 @@", "-a\u2028b", "+a\u2028X"}},
+		{"300 lines, one changed, no autojunk", many(false), many(true), nil}, // want checked by the apply test only
 	}
-	if len(f.Cases) == 0 {
-		t.Fatal("no cases")
-	}
-	return f.Cases
 }
 
-const binaryMark = "\x00binary:"
-
-// diffFiles ports helpers.py diff_files so the corpus can be checked end to end.
-func diffFiles(old, new map[string]string) []string {
-	paths := map[string]bool{}
-	for p := range old {
-		paths[p] = true
-	}
-	for p := range new {
-		paths[p] = true
-	}
-	var sorted []string
-	for p := range paths {
-		sorted = append(sorted, p)
-	}
-	sort.Strings(sorted) // lazy: byte order equals code point order for UTF-8; fine for the corpus
-	lines := []string{}
-	for _, path := range sorted {
-		before, inOld := old[path]
-		after, inNew := new[path]
-		if inOld && inNew && before == after {
-			continue
+func TestDifflib_Table(t *testing.T) {
+	for _, r := range rows() {
+		if r.want == nil && r.name != "identical" {
+			continue // no fixed expected diff; TestDifflib_DiffAppliedToOldGivesNew covers it
 		}
-		if strings.HasPrefix(after, binaryMark) {
-			lines = append(lines, "Binary file "+path+" changed")
-			continue
-		}
-		if strings.HasPrefix(before, binaryMark) {
-			before = ""
-		}
-		shown := strings.TrimPrefix(path, "./")
-		changed := Unified(SplitLinesKeepEnds(before), SplitLinesKeepEnds(after), "a/"+shown, "b/"+shown)
-		for _, l := range changed {
-			lines = append(lines, strings.TrimRight(l, "\r\n"))
-		}
-		if len(changed) == 0 {
-			lines = append(lines, "--- a/"+shown, "+++ b/"+shown)
-		}
-	}
-	return lines
-}
-
-func TestDifflib_GoldenCases(t *testing.T) {
-	for _, c := range loadCases(t) {
-		t.Run(c.Name, func(t *testing.T) {
-			got := diffFiles(c.Old, c.New)
-			if !reflect.DeepEqual(got, c.Lines) && !(len(got) == 0 && len(c.Lines) == 0) {
-				t.Errorf("got  %q\nwant %q", got, c.Lines)
+		t.Run(r.name, func(t *testing.T) {
+			var got []string
+			for _, l := range Unified(SplitLinesKeepEnds(r.old), SplitLinesKeepEnds(r.new), "a/f", "b/f") {
+				got = append(got, strings.TrimRight(l, "\r\n"))
+			}
+			want := r.want
+			if want != nil {
+				want = append(append([]string{}, hdr...), want...)
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("got  %q\nwant %q", got, want)
 			}
 		})
 	}
@@ -87,14 +70,13 @@ func TestDifflib_GoldenCases(t *testing.T) {
 
 func TestDifflib_SplitLinesKeepEnds(t *testing.T) {
 	cases := map[string][]string{
-		"":                       nil,
-		"a":                      {"a"},
-		"a\n":                    {"a\n"},
-		"a\r\nb":                 {"a\r\n", "b"},
-		"a\r\rb\r\n\n":           {"a\r", "\r", "b\r\n", "\n"},
-		"a\vb\fc\x1cd\x1de\x1ef": {"a\v", "b\f", "c\x1c", "d\x1d", "e\x1e", "f"},
-		"a\u0085b\u2028c\u2029d": {"a\u0085", "b\u2028", "c\u2029", "d"},
-		"\u00e9\u0085x":          {"\u00e9\u0085", "x"},
+		"":               nil,
+		"a":              {"a"},
+		"a\n":            {"a\n"},
+		"a\r\nb":         {"a\r\n", "b"},
+		"a\r\rb\r\n\n":   {"a\r\rb\r\n", "\n"},
+		"a\fb\vc\u2028d": {"a\fb\vc\u2028d"},
+		"\n\n":           {"\n", "\n"},
 	}
 	for in, want := range cases {
 		if got := SplitLinesKeepEnds(in); !reflect.DeepEqual(got, want) {
@@ -164,25 +146,65 @@ func rng(s string) (start, length int) {
 }
 
 func TestDifflib_DiffAppliedToOldGivesNew(t *testing.T) {
-	for _, c := range loadCases(t) {
-		t.Run(c.Name, func(t *testing.T) {
-			for path := range c.Old {
-				if _, ok := c.New[path]; !ok {
-					c.New[path] = ""
-				}
+	for _, r := range rows() {
+		t.Run(r.name, func(t *testing.T) {
+			a, b := SplitLinesKeepEnds(r.old), SplitLinesKeepEnds(r.new)
+			got, msg := apply(a, Unified(a, b, "a", "b"))
+			if msg != "" {
+				t.Fatal(msg)
 			}
-			for path, after := range c.New {
-				before := c.Old[path]
-				a, b := SplitLinesKeepEnds(before), SplitLinesKeepEnds(after)
-				d := Unified(a, b, "a", "b")
-				got, msg := apply(a, d)
-				if msg != "" {
-					t.Fatalf("%s: %s", path, msg)
-				}
-				if len(got) != len(b) || (len(b) > 0 && !reflect.DeepEqual(got, b)) {
-					t.Errorf("%s: applying the diff gave %q, want %q", path, got, b)
-				}
+			if len(got) != len(b) || (len(b) > 0 && !reflect.DeepEqual(got, b)) {
+				t.Errorf("applying the diff gave %q, want %q", got, b)
 			}
 		})
+	}
+}
+
+// worst builds a file whose lines are mostly equal-looking filler with a blank every 6th line, so old and new share
+// only frequent lines.
+func worst(n int, tag string) []string {
+	out := make([]string, n)
+	for i := range out {
+		if i%6 == 0 {
+			out[i] = "\n"
+		} else {
+			out[i] = tag + strconv.Itoa(i) + "\n"
+		}
+	}
+	return out
+}
+
+func TestDifflib_WorstCaseIsBounded(t *testing.T) {
+	a, b := worst(10000, "old "), worst(10000, "new ")
+	start := time.Now()
+	d := Unified(a, b, "a", "b")
+	if el := time.Since(start); el > 5*time.Second {
+		t.Errorf("took %v", el)
+	}
+	got, msg := apply(a, d)
+	if msg != "" {
+		t.Fatal(msg)
+	}
+	if !reflect.DeepEqual(got, b) {
+		t.Error("applying the diff did not give the new text")
+	}
+}
+
+func TestDifflib_OneLineChangeInBigFileStaysSmall(t *testing.T) {
+	a := make([]string, 10000)
+	for i := range a {
+		a[i] = "line " + strconv.Itoa(i%50) + "\n"
+	}
+	b := append([]string{}, a...)
+	b[5000] = "changed\n"
+	d := Unified(a, b, "a", "b")
+	hunks := 0
+	for _, l := range d {
+		if strings.HasPrefix(l, "@@") {
+			hunks++
+		}
+	}
+	if hunks != 1 || len(d) > 12 {
+		t.Errorf("want one small hunk, got %d hunks and %d lines", hunks, len(d))
 	}
 }

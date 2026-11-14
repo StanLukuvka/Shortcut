@@ -11,7 +11,7 @@ In the tables, `<word>` stands for a value filled in when the error happens. A m
 | 0 | Done |
 | 1 | Any error below, or no to a question; `Aborted.` is printed. Ctrl-C at a question counts as no |
 | 2 | A usage error: an unknown command or option, a bad flag for a command, or the wrong arguments for a shortcut that declares `args` |
-| 141 | What shortcut was printing to stopped reading, as in `shortcut list \| head -1`. Nothing more is printed |
+| 141 | shortcut was ended by SIGPIPE because what it was printing to stopped reading, as in `shortcut list \| head -1`. A shell shows this as 141. Nothing more is printed |
 | anything else | `run` passes the shortcut's own exit code through, and a signal that kills it |
 
 Usage errors, which exit 2:

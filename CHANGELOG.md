@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Diffs split lines on `\n` only, so a `\r`, form feed or U+2028 stays inside its line. When a very large diff has few matching lines, the part not yet matched is shown as replaced.
 - A single binary, no Python needed.
 - `init --global --bundled` installs the bundled shortcuts.
 - Windows is not supported. Use WSL.
@@ -23,3 +24,7 @@
 - `$PAGER` is split on blanks; quotes in it are not interpreted.
 - A failed `git clone` in `init --global` reports `git clone exited with status N`.
 - Unreadable-file errors use Go's wording, such as `open /p: permission denied`.
+- `list | head` ends shortcut by SIGPIPE (a shell shows 141). stdout is no longer buffered, so stdout and stderr keep their order.
+- An executable script with no `#!` is run directly, so a Mach-O or other binary works. Only an executable text file the kernel refuses is run with bash.
+- A shortcut's environment lists `SHORTCUT_NAME`, `SHORTCUT_NAMESPACE`, `SHORTCUT_CALLER_CWD` and its `SC_ARG_` variables after the caller's own variables.
+- The pager shows the diff once: if it ran, shortcut does not print the diff again, whatever the pager's exit status. `$LINES` is no longer read; the row count comes from the terminal (24 if unknown).

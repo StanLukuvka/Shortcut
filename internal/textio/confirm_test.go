@@ -25,7 +25,6 @@ func TestAsk_Answers(t *testing.T) {
 		if got := Ask(s, "go on? \x1b[2K", c.accept); got != c.want {
 			t.Errorf("Ask(%q, %q) = %v", c.input, c.accept, got)
 		}
-		s.Flush()
 		if errs() != "go on? ^[[2K" || out() != c.out { // the prompt cannot carry an escape
 			t.Errorf("Ask(%q): stderr %q stdout %q", c.input, errs(), out())
 		}
@@ -46,7 +45,6 @@ func TestConfirm_WithoutATerminalAndWithYes(t *testing.T) {
 	if ok, err := c.Granted(s, true); !ok || err != nil {
 		t.Errorf("-y: %v, %v", ok, err)
 	}
-	s.Flush()
 	if out() != "" || errs() != "" {
 		t.Errorf("-y without TellOnYes prints nothing: %q %q", out(), errs())
 	}
@@ -54,7 +52,6 @@ func TestConfirm_WithoutATerminalAndWithYes(t *testing.T) {
 	if ok, _ := c.Granted(s, true); !ok {
 		t.Error("-y")
 	}
-	s.Flush()
 	if out() != "this changes things\n" {
 		t.Errorf("TellOnYes: %q", out())
 	}
