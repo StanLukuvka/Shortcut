@@ -23,7 +23,7 @@ var layers = map[string][]string{
 	"internal/model":        {"internal/ordjson", "internal/osutil"},
 	"internal/textio":       {"internal/osutil"},
 	"internal/approval":     {"internal/model", "internal/textio", "internal/difflib", "internal/ordjson", "internal/osutil"},
-	"internal/cli/argparse": {"internal/osutil"},
+	"internal/cli/argparse": {},
 	"internal/cli": {".", "internal/cli/argparse", "internal/approval", "internal/model", "internal/textio", "internal/ordjson",
 		"internal/osutil", "internal/difflib"},
 	"internal/testkit": {},
