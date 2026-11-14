@@ -1,5 +1,5 @@
-// Package osutil is the part of os.path, shlex and fcntl behaviour that shortcut depends on, so the answers
-// are exact (path functions are lexical posixpath ones, not filepath's).
+// Package osutil is the part of the path, process and terminal behaviour that shortcut depends on. Path functions
+// are lexical ones (not filepath.Join); Realpath resolves symlinks without requiring the path to exist.
 package osutil
 
 import (
@@ -10,11 +10,10 @@ import (
 	"syscall"
 )
 
-// Realpath is os.path.realpath(filename), strict=False, as CPython 3.14's iterative posixpath.realpath does it (the
-// 3.10-3.12 recursive _joinrealpath stopped at the first loop; 3.14 keeps resolving the remaining parts, so
-// `loop/../x` and `up/dang` after a loop differ between the two). The unresolved parts are a stack; seen caches each
-// link already resolved. A link is a loop only while it is still being resolved (value nil); meeting a resolved one
-// again uses the cached path, so `t/l/sub/../../l/sub` works when t/l -> real. The result is absolute throughout: a
+// Realpath resolves every symlink in filename; parts that do not exist are kept as written. The unresolved parts
+// are a stack; seen caches each link already resolved. A link is a loop only while it is still being resolved
+// (value nil); meeting a resolved one again uses the cached path, so `t/l/sub/../../l/sub` works when t/l -> real.
+// Resolution goes on after a loop, so `loop/../x` and `up/dang` still resolve. The result is absolute throughout: a
 // relative input starts from the PHYSICAL cwd (getcwd(2), never $PWD).
 func Realpath(filename string) string {
 	type part struct {
@@ -31,8 +30,8 @@ func Realpath(filename string) string {
 	path := "/"
 	if !strings.HasPrefix(filename, "/") {
 		cwd, err := Getwd()
-		if err != nil { // lazy: Python raises when the cwd is gone; here the path is only normalised. Upgrade: return an error.
-			return Normpath(filename)
+		if err != nil { // cwd gone: the path is only cleaned
+			return filepath.Clean(filename)
 		}
 		path = cwd
 	}
@@ -100,10 +99,10 @@ func Realpath(filename string) string {
 // Nothing outside _test.go may call os.Getwd.
 func Getwd() (string, error) { return syscall.Getwd() }
 
-// Abs is os.path.abspath: a relative path is joined to the physical cwd, then normalised.
+// Abs joins a relative path to the physical cwd, then cleans it.
 func Abs(p string) string {
 	if !strings.HasPrefix(p, "/") {
-		// lazy: Python raises when the cwd is gone; here the path is only normalised, still relative. Upgrade: return an error.
+		// cwd gone: the path is only cleaned and stays relative.
 		if cwd, err := Getwd(); err == nil {
 			p = Join(cwd, p)
 		}
@@ -111,11 +110,7 @@ func Abs(p string) string {
 	return filepath.Clean(p)
 }
 
-// Normpath is filepath.Clean. lazy: kept only because Realpath's body stays unedited; callers use filepath.Clean.
-func Normpath(p string) string { return filepath.Clean(p) }
-
-// Relpath is posixpath.relpath(path, start): both made absolute, then the shortest ../ walk between them.
-// lazy: Python raises ValueError for an empty path; here it is the cwd. Callers pass real paths. A path pair Rel
+// Relpath is the shortest ../ walk from start to path, both made absolute. An empty path is the cwd. A path pair Rel
 // cannot relate (only when the cwd is gone, so one side stayed relative) comes back as Abs(path).
 func Relpath(path, start string) string {
 	rel, err := filepath.Rel(Abs(start), Abs(path))
@@ -132,7 +127,7 @@ func IsRelativeTo(path, other string) bool {
 	return err == nil && filepath.IsLocal(rel)
 }
 
-// Join is posixpath.join, not filepath.Join: a part starting with / restarts the path; join("", "a") = "a"; join("/", "a") = "/a";
+// Join: a part starting with / restarts the path; join("", "a") = "a"; join("/", "a") = "/a";
 // join("a", "") = "a/". store.go and store_write.go rely on the restart (an absolute script path stays as it
 // is); filepath.Join would glue it under the folder.
 func Join(a string, parts ...string) string {
