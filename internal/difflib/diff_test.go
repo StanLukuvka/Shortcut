@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 type diffRow struct {
@@ -49,7 +50,7 @@ func rows() []diffRow {
 func TestDifflib_Table(t *testing.T) {
 	for _, r := range rows() {
 		if r.want == nil && r.name != "identical" {
-			continue
+			continue // no fixed expected diff; TestDifflib_DiffAppliedToOldGivesNew covers it
 		}
 		t.Run(r.name, func(t *testing.T) {
 			var got []string
@@ -156,5 +157,54 @@ func TestDifflib_DiffAppliedToOldGivesNew(t *testing.T) {
 				t.Errorf("applying the diff gave %q, want %q", got, b)
 			}
 		})
+	}
+}
+
+// worst builds a file whose lines are mostly equal-looking filler with a blank every 6th line, so old and new share
+// only frequent lines.
+func worst(n int, tag string) []string {
+	out := make([]string, n)
+	for i := range out {
+		if i%6 == 0 {
+			out[i] = "\n"
+		} else {
+			out[i] = tag + strconv.Itoa(i) + "\n"
+		}
+	}
+	return out
+}
+
+func TestDifflib_WorstCaseIsBounded(t *testing.T) {
+	a, b := worst(10000, "old "), worst(10000, "new ")
+	start := time.Now()
+	d := Unified(a, b, "a", "b")
+	if el := time.Since(start); el > 5*time.Second {
+		t.Errorf("took %v", el)
+	}
+	got, msg := apply(a, d)
+	if msg != "" {
+		t.Fatal(msg)
+	}
+	if !reflect.DeepEqual(got, b) {
+		t.Error("applying the diff did not give the new text")
+	}
+}
+
+func TestDifflib_OneLineChangeInBigFileStaysSmall(t *testing.T) {
+	a := make([]string, 10000)
+	for i := range a {
+		a[i] = "line " + strconv.Itoa(i%50) + "\n"
+	}
+	b := append([]string{}, a...)
+	b[5000] = "changed\n"
+	d := Unified(a, b, "a", "b")
+	hunks := 0
+	for _, l := range d {
+		if strings.HasPrefix(l, "@@") {
+			hunks++
+		}
+	}
+	if hunks != 1 || len(d) > 12 {
+		t.Errorf("want one small hunk, got %d hunks and %d lines", hunks, len(d))
 	}
 }
