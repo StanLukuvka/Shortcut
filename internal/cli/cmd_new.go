@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -239,7 +240,7 @@ func newFromCopy(s *textio.Streams, ns Namespace, group model.Group, fields *mod
 		if !osutil.IsFile(src) {
 			return Die("script file not found: " + src)
 		}
-		ext = orSh(osutil.Suffix(src))
+		ext = orSh(filepath.Ext(src))
 	}
 	name := fields.Name
 	rel, abs := storedScriptField(group, name+ext)

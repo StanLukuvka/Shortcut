@@ -242,7 +242,7 @@ func planImport(sourceBase, destStoreDir string, destRegistry, sourceRegistry *o
 				skipped = append(skipped, name+" (missing source script: "+scriptField+")")
 				continue
 			}
-			destRel, destAbs := storedScriptField(dest.Main, name+orSh(osutil.Suffix(scriptField)))
+			destRel, destAbs := storedScriptField(dest.Main, name+orSh(filepath.Ext(scriptField)))
 			if _, err := os.Lstat(destAbs); err == nil || slices.ContainsFunc(scripts, func(sc storedScript) bool { return sc.path == destAbs }) {
 				skipped = append(skipped, name+" (would replace "+destRel+")")
 				continue

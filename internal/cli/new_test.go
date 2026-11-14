@@ -595,6 +595,16 @@ func TestNew_CopyModeAndTime(t *testing.T) {
 	testkit.Eq(t, "mode", st.Mode().String(), os.FileMode(0o751).String())
 }
 
+// The stored copy keeps the source's extension; a dotfile's whole name counts as one, a name with none gets .sh.
+func TestNew_CopyKeepsTheSourceExtension(t *testing.T) {
+	e := testkit.New(t)
+	for _, c := range []struct{ src, name, stored string }{{"notes.txt", "x0", "x0.txt"}, {".bashrc", "x1", "x1.bashrc"}, {"tool", "x2", "x2.sh"}} {
+		src := e.Script(c.src, "echo hi\n")
+		runOK(t, e, testkit.Opts{}, "new", c.name, "--copy", src, "--desc", "d")
+		testkit.Eq(t, c.src, testkit.ReadFile(t, filepath.Join(e.Store, "scripts", c.stored)), "echo hi\n")
+	}
+}
+
 // stdin bytes are taken as they come, valid UTF-8 or not.
 func TestNew_CopyFromStdinTakesAnyBytes(t *testing.T) {
 	e := testkit.New(t)
