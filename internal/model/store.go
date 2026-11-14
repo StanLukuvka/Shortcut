@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/ordjson"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
 // Store is a store's main group and its namespaces.
@@ -47,11 +47,11 @@ func ResolveRunDir(cwd *string, g Group, callerCwd string) string {
 	if cwd == nil || *cwd == "" || *cwd == Caller {
 		return callerCwd
 	}
-	return filepath.Clean(pyos.Join(g.Folder(), pyos.ExpandUser(*cwd)))
+	return filepath.Clean(osutil.Join(g.Folder(), osutil.ExpandUser(*cwd)))
 }
 
 // LoadEntry is an entry as its group allows it: EntryFromValue, plus where 'export' and 'from' can be.
-func LoadEntry(g Group, name string, v pyjson.Value) (*Entry, error) {
+func LoadEntry(g Group, name string, v ordjson.Value) (*Entry, error) {
 	e, err := EntryFromValue(name, v)
 	if err != nil {
 		return nil, err
@@ -64,7 +64,7 @@ func LoadEntry(g Group, name string, v pyjson.Value) (*Entry, error) {
 
 // LoadGroup reads one file into a Group. It never fails: why a file can't be used is on the Group.
 func LoadGroup(path, storeDir, name string) Group {
-	g := Group{Name: name, File: path, StoreDir: storeDir, Data: &pyjson.Object{}}
+	g := Group{Name: name, File: path, StoreDir: storeDir, Data: &ordjson.Object{}}
 	data, err := LoadRegistryFile(path)
 	var missing *RegistryNotFoundError
 	switch {
@@ -97,7 +97,7 @@ func EntryErrors(g Group) []string {
 	return errs
 }
 
-func entryError(g Group, name string, data pyjson.Value) error {
+func entryError(g Group, name string, data ordjson.Value) error {
 	if err := ValidateName(name); err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func entryError(g Group, name string, data pyjson.Value) error {
 		if err != nil {
 			return err
 		}
-		if !pyos.IsFile(path) {
+		if !osutil.IsFile(path) {
 			return fmt.Errorf("'%s' is not a valid entry: script not found: %s", name, *e.Script)
 		}
 	}
@@ -119,8 +119,8 @@ func entryError(g Group, name string, data pyjson.Value) error {
 
 // LoadProjectGroup is a project's .shortcuts with .shortcuts.local over it.
 func LoadProjectGroup(root string) Group {
-	shared := LoadGroup(pyos.Join(root, ProjectFile), root, "")
-	localPath := pyos.Join(root, LocalFile)
+	shared := LoadGroup(osutil.Join(root, ProjectFile), root, "")
+	localPath := osutil.Join(root, LocalFile)
 	local := LoadGroup(localPath, root, "")
 	g := shared
 	g.LocalFile, g.LocalData = localPath, local.Data
@@ -144,14 +144,14 @@ func LoadStore(storeDir string) Store {
 	isGlobal := IsGlobalStore(storeDir)
 	var main Group
 	if isGlobal {
-		main = LoadGroup(pyos.Join(storeDir, "shortcuts.json"), storeDir, "")
+		main = LoadGroup(osutil.Join(storeDir, "shortcuts.json"), storeDir, "")
 	} else {
 		main = LoadProjectGroup(storeDir)
 	}
 	var problems []string
 	sources := map[string]string{}
-	importsDir := pyos.Join(storeDir, "imports")
-	if isGlobal && pyos.IsDir(importsDir) {
+	importsDir := osutil.Join(storeDir, "imports")
+	if isGlobal && osutil.IsDir(importsDir) {
 		entries, _ := os.ReadDir(importsDir)
 		var names []string
 		for _, e := range entries {
@@ -159,11 +159,11 @@ func LoadStore(storeDir string) Store {
 		}
 		for _, filename := range slices.Sorted(slices.Values(names)) {
 			if strings.HasSuffix(filename, ImportSuffix) {
-				sources[strings.TrimSuffix(filename, ImportSuffix)] = pyos.Join(importsDir, filename)
+				sources[strings.TrimSuffix(filename, ImportSuffix)] = osutil.Join(importsDir, filename)
 			}
 		}
 	}
-	if imports, ok := main.Data.Vals["imports"].(*pyjson.Object); ok {
+	if imports, ok := main.Data.Vals["imports"].(*ordjson.Object); ok {
 		for _, name := range imports.Keys {
 			path, isStr := imports.Vals[name].(string)
 			_, taken := sources[name]
@@ -177,7 +177,7 @@ func LoadStore(storeDir string) Store {
 			case taken:
 				problems = append(problems, fmt.Sprintf("namespace '%s' is imported twice in %s", name, storeDir))
 			default:
-				sources[name] = filepath.Clean(pyos.Join(main.Folder(), pyos.ExpandUser(path)))
+				sources[name] = filepath.Clean(osutil.Join(main.Folder(), osutil.ExpandUser(path)))
 			}
 		}
 	}

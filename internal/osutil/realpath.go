@@ -1,6 +1,6 @@
-// Package pyos is the part of os.path, shlex and fcntl behaviour that shortcut depends on, so the answers
+// Package osutil is the part of os.path, shlex and fcntl behaviour that shortcut depends on, so the answers
 // are exact (path functions are lexical posixpath ones, not filepath's).
-package pyos
+package osutil
 
 import (
 	"os"

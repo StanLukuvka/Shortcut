@@ -6,8 +6,8 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/ordjson"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -119,7 +119,7 @@ func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames 
 	}
 	where := ""
 	if g.Name != "" {
-		where = " (" + pyos.Realpath(g.File) + ")" // the real place, wherever it points
+		where = " (" + osutil.Realpath(g.File) + ")" // the real place, wherever it points
 	}
 	head := "New to you:"
 	if len(old) > 0 {
@@ -146,7 +146,7 @@ func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames 
 		}
 	}
 	for _, name := range slices.Sorted(slices.Values(shortcuts.Keys)) {
-		data, ok := shortcuts.Vals[name].(*pyjson.Object)
+		data, ok := shortcuts.Vals[name].(*ordjson.Object)
 		if !ok {
 			continue
 		}

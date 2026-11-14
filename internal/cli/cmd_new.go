@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/ordjson"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -50,7 +50,7 @@ func cmdNew(s *textio.Streams, args []string) error {
 		return Die("a local shortcut needs a command after '--', or --script PATH")
 	}
 
-	cwd, err := pyos.Getwd()
+	cwd, err := osutil.Getwd()
 	if err != nil {
 		return err
 	}
@@ -119,7 +119,7 @@ func descOr(ns Namespace, def string) string {
 
 // refuseExisting stops new from replacing a script file no entry registers (a link counts, dangling or not).
 func refuseExisting(path string) error {
-	if pyos.Lexists(path) {
+	if osutil.Lexists(path) {
 		return Die(path + " already exists; remove it or pick another name")
 	}
 	return nil
@@ -135,13 +135,13 @@ func writeExecutable(path, content string) error {
 
 // entryFields returns the parts of an entry the flags of new set, and the --arg/--arg-desc rules.
 func entryFields(name string, ns Namespace, g model.Group) (*model.Entry, error) {
-	var args []*pyjson.Object
+	var args []*ordjson.Object
 	if flags := ns.List("arg"); len(flags) > 0 {
-		args = []*pyjson.Object{}
-		list := make([]pyjson.Value, 0, len(flags))
+		args = []*ordjson.Object{}
+		list := make([]ordjson.Value, 0, len(flags))
 		for _, flag := range flags {
 			argName, def, hasDef := strings.Cut(flag, "=")
-			a := &pyjson.Object{}
+			a := &ordjson.Object{}
 			a.Set("name", strings.TrimSuffix(argName, "..."))
 			rest := strings.HasSuffix(argName, "...")
 			if rest {
@@ -161,7 +161,7 @@ func entryFields(name string, ns Namespace, g model.Group) (*model.Entry, error)
 	}
 	for _, flag := range ns.List("argDesc") {
 		argName, text, hasText := strings.Cut(flag, "=")
-		var match *pyjson.Object
+		var match *ordjson.Object
 		for _, a := range args {
 			if a.Vals["name"] == strings.TrimSuffix(argName, "...") {
 				match = a
@@ -199,16 +199,16 @@ func entryFields(name string, ns Namespace, g model.Group) (*model.Entry, error)
 // move. One in the scripts folder stays absolute: a relative path there is a copy, which rm deletes.
 func newFromScript(s *textio.Streams, ns Namespace, group model.Group, fields *model.Entry) error {
 	path := ns.Str("script")
-	abs := pyos.Abs(pyos.ExpandUser(path))
-	if path == "-" || !pyos.IsFile(abs) {
+	abs := osutil.Abs(osutil.ExpandUser(path))
+	if path == "-" || !osutil.IsFile(abs) {
 		return Die("script file not found: " + path)
 	}
-	base := pyos.Realpath(group.ScriptBase())
-	real := pyos.Realpath(abs)
-	copies := pyos.Realpath(group.ScriptsDir())
+	base := osutil.Realpath(group.ScriptBase())
+	real := osutil.Realpath(abs)
+	copies := osutil.Realpath(group.ScriptsDir())
 	field := abs
-	if pyos.IsRelativeTo(real, base) && !pyos.IsRelativeTo(real, copies) {
-		field = pyos.Relpath(real, base)
+	if osutil.IsRelativeTo(real, base) && !osutil.IsRelativeTo(real, copies) {
+		field = osutil.Relpath(real, base)
 	}
 	entry := *fields
 	entry.Script = &field
@@ -235,11 +235,11 @@ func newFromCopy(s *textio.Streams, ns Namespace, group model.Group, fields *mod
 		}
 		ext = ".sh"
 	} else {
-		src = pyos.Abs(pyos.ExpandUser(from))
-		if !pyos.IsFile(src) {
+		src = osutil.Abs(osutil.ExpandUser(from))
+		if !osutil.IsFile(src) {
 			return Die("script file not found: " + src)
 		}
-		ext = orSh(pyos.Suffix(src))
+		ext = orSh(osutil.Suffix(src))
 	}
 	name := fields.Name
 	rel, abs := storedScriptField(group, name+ext)

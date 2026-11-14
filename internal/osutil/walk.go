@@ -1,4 +1,4 @@
-package pyos
+package osutil
 
 import (
 	"io/fs"

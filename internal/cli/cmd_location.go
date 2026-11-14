@@ -2,7 +2,7 @@ package cli
 
 import (
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -24,6 +24,6 @@ func cmdLocation(s *textio.Streams, args []string) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.Out.WriteString(pyos.Abs(path) + "\n")
+	_, err = s.Out.WriteString(osutil.Abs(path) + "\n")
 	return err
 }

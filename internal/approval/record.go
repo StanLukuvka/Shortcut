@@ -9,7 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
+	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 )
 
 // Record is approvals/<sha256(key)>.json, written by Python today and still readable and writable: the snapshot
@@ -21,8 +21,8 @@ type Record struct {
 	Local    map[string]string // .shortcuts.local half; absent in old records = empty
 }
 
-func stringMap(v pyjson.Value) (map[string]string, bool) {
-	o, ok := v.(*pyjson.Object)
+func stringMap(v ordjson.Value) (map[string]string, bool) {
+	o, ok := v.(*ordjson.Object)
 	if !ok {
 		return nil, false
 	}
@@ -45,7 +45,7 @@ func Load(g model.Group) *Record {
 	if err != nil {
 		return nil
 	}
-	o, ok := v.(*pyjson.Object)
+	o, ok := v.(*ordjson.Object)
 	if !ok {
 		return nil
 	}
@@ -62,8 +62,8 @@ func Load(g model.Group) *Record {
 	return r
 }
 
-func sortedObject(m map[string]string) *pyjson.Object {
-	o := &pyjson.Object{}
+func sortedObject(m map[string]string) *ordjson.Object {
+	o := &ordjson.Object{}
 	for _, k := range slices.Sorted(maps.Keys(m)) { // readers sort, so the order is free; sorted is stable
 		o.Set(k, m[k])
 	}
@@ -89,7 +89,7 @@ func Save(g model.Group, shared, local map[string]string) error {
 		if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 			return err
 		}
-		rec := &pyjson.Object{}
+		rec := &ordjson.Object{}
 		rec.Set("key", g.Key())
 		rec.Set("snapshot", sortedObject(shared))
 		rec.Set("local", sortedObject(local))

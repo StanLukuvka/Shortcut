@@ -12,37 +12,37 @@ import (
 	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/ordjson"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
 // golden reads ../testdata/approval.json.
-func golden(t *testing.T, set string) []*pyjson.Object {
+func golden(t *testing.T, set string) []*ordjson.Object {
 	t.Helper()
 	raw := testkit.Golden(t, "approval.json")
-	v, err := pyjson.Decode(raw)
+	v, err := ordjson.Decode(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cases, ok := v.(*pyjson.Object).Get(set)
+	cases, ok := v.(*ordjson.Object).Get(set)
 	if !ok {
 		t.Fatalf("approval.json has no %s", set)
 	}
-	var out []*pyjson.Object
-	for _, c := range cases.([]pyjson.Value) {
-		out = append(out, c.(*pyjson.Object))
+	var out []*ordjson.Object
+	for _, c := range cases.([]ordjson.Value) {
+		out = append(out, c.(*ordjson.Object))
 	}
 	return out
 }
 
-func str(o *pyjson.Object, k string) string {
+func str(o *ordjson.Object, k string) string {
 	s, _ := o.Vals[k].(string)
 	return s
 }
 
 // text is the field k, or the bytes of k+"_hex" when the name is not valid UTF-8 and so is given as hex.
-func text(t *testing.T, o *pyjson.Object, k string) string {
+func text(t *testing.T, o *ordjson.Object, k string) string {
 	t.Helper()
 	if h, ok := o.Get(k + "_hex"); ok {
 		b, err := hex.DecodeString(h.(string))
@@ -54,7 +54,7 @@ func text(t *testing.T, o *pyjson.Object, k string) string {
 	return str(o, k)
 }
 
-func strMap(t *testing.T, v pyjson.Value) map[string]string {
+func strMap(t *testing.T, v ordjson.Value) map[string]string {
 	t.Helper()
 	m, ok := stringMap(v)
 	if !ok {
@@ -63,10 +63,10 @@ func strMap(t *testing.T, v pyjson.Value) map[string]string {
 	return m
 }
 
-func sameJSON(a, b pyjson.Value) bool {
+func sameJSON(a, b ordjson.Value) bool {
 	switch x := a.(type) {
-	case *pyjson.Object:
-		y, ok := b.(*pyjson.Object)
+	case *ordjson.Object:
+		y, ok := b.(*ordjson.Object)
 		if !ok || len(x.Keys) != len(y.Keys) {
 			return false
 		}
@@ -77,8 +77,8 @@ func sameJSON(a, b pyjson.Value) bool {
 			}
 		}
 		return true
-	case []pyjson.Value:
-		y, ok := b.([]pyjson.Value)
+	case []ordjson.Value:
+		y, ok := b.([]ordjson.Value)
 		if !ok || len(x) != len(y) {
 			return false
 		}
@@ -89,8 +89,8 @@ func sameJSON(a, b pyjson.Value) bool {
 		}
 		return true
 	}
-	x, err1 := pyjson.Marshal(a)
-	y, err2 := pyjson.Marshal(b)
+	x, err1 := ordjson.Marshal(a)
+	y, err2 := ordjson.Marshal(b)
 	return err1 == nil && err2 == nil && string(x) == string(y)
 }
 
@@ -112,7 +112,7 @@ func TestApproval_GoldenReviewable(t *testing.T) {
 }
 
 func TestApproval_GoldenKeysAndRecordNames(t *testing.T) {
-	if pyos.Realpath("/tmp") != "/tmp" {
+	if osutil.Realpath("/tmp") != "/tmp" {
 		t.Skip("/tmp is a link here; the golden keys name /tmp paths")
 	}
 	cases := golden(t, "key_cases")
@@ -158,10 +158,10 @@ func TestApproval_ApprovalPathIsInTheGlobalStore(t *testing.T) {
 }
 
 // buildTree writes a golden tree under root. It skips the test on a filesystem that refuses non-UTF-8 names.
-func buildTree(t *testing.T, env *testkit.Env, root string, tree []pyjson.Value) {
+func buildTree(t *testing.T, env *testkit.Env, root string, tree []ordjson.Value) {
 	t.Helper()
 	for _, item := range tree {
-		e := item.(*pyjson.Object)
+		e := item.(*ordjson.Object)
 		if p := text(t, e, "path"); !utf8.ValidString(p) {
 			probe := filepath.Join(env.Tmp, "probe\xff")
 			if err := os.WriteFile(probe, nil, 0o644); err != nil {
@@ -212,18 +212,18 @@ func TestApproval_GoldenTrees(t *testing.T) {
 		t.Run(str(c, "name"), func(t *testing.T) {
 			env := testkit.New(t)
 			root := env.Folder("tree")
-			buildTree(t, env, root, c.Vals["tree"].([]pyjson.Value))
+			buildTree(t, env, root, c.Vals["tree"].([]ordjson.Value))
 			store := model.LoadStore(root)
-			want := c.Vals["groups"].([]pyjson.Value)
+			want := c.Vals["groups"].([]ordjson.Value)
 			got := store.Groups()
 			if len(got) != len(want) {
 				t.Fatalf("%d groups, want %d", len(got), len(want))
 			}
-			if wp := c.Vals["problems"].([]pyjson.Value); len(store.Problems) != len(wp) {
+			if wp := c.Vals["problems"].([]ordjson.Value); len(store.Problems) != len(wp) {
 				t.Errorf("problems %q, want %v", store.Problems, wp)
 			}
 			for i, g := range got {
-				w := want[i].(*pyjson.Object)
+				w := want[i].(*ordjson.Object)
 				groups++
 				if g.Name != str(w, "name") {
 					t.Fatalf("group %d is %q, want %q", i, g.Name, str(w, "name"))
@@ -237,8 +237,8 @@ func TestApproval_GoldenTrees(t *testing.T) {
 						if State(g) != "invalid" || Require(g) == nil {
 							t.Errorf("state %s, require %v", State(g), Require(g))
 						}
-						for _, e := range c.Vals["tree"].([]pyjson.Value) { // the message shows the offending path
-							if _, bad := e.(*pyjson.Object).Get("path_hex"); bad && !strings.Contains(msg, strconv.Quote(text(t, e.(*pyjson.Object), "path"))) {
+						for _, e := range c.Vals["tree"].([]ordjson.Value) { // the message shows the offending path
+							if _, bad := e.(*ordjson.Object).Get("path_hex"); bad && !strings.Contains(msg, strconv.Quote(text(t, e.(*ordjson.Object), "path"))) {
 								t.Errorf("%q does not name the path", msg)
 							}
 						}
@@ -286,7 +286,7 @@ func equalMaps(a, b map[string]string) bool {
 func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template string, shared, local map[string]string) {
 	t.Helper()
 	text := strings.ReplaceAll(template, "@ROOT@", root)
-	want, err := pyjson.Parse(text)
+	want, err := ordjson.Parse(text)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +311,7 @@ func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template s
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := pyjson.Decode(raw)
+	got, err := ordjson.Decode(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -483,7 +483,7 @@ func TestApproval_AScriptCannotStandInForACwdRecord(t *testing.T) {
 	if files["cwd of go"] != "x" {
 		t.Errorf("script: %q", files["cwd of go"])
 	}
-	if want := pyos.Realpath(filepath.Join(proj, "safe")) + "\n"; files["./cwd of go"] != want {
+	if want := osutil.Realpath(filepath.Join(proj, "safe")) + "\n"; files["./cwd of go"] != want {
 		t.Errorf("cwd record %q, want %q", files["./cwd of go"], want)
 	}
 }

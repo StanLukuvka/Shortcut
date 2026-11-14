@@ -11,7 +11,7 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -37,7 +37,7 @@ func cmdRun(s *textio.Streams, args []string) error {
 // runShortcut handles approval, the confirmation, arguments and the child process, which replaces this one.
 // It returns only when something stops the run.
 func runShortcut(s *textio.Streams, words []string, skipLocal, assumeYes bool) error {
-	callerCwd, err := pyos.Getwd()
+	callerCwd, err := osutil.Getwd()
 	if err != nil {
 		return err
 	}
@@ -59,12 +59,12 @@ func runShortcut(s *textio.Streams, words []string, skipLocal, assumeYes bool) e
 			return err
 		}
 	}
-	if !pyos.IsDir(resolved.RunCwd) {
+	if !osutil.IsDir(resolved.RunCwd) {
 		return errors.New("run directory does not exist: " + resolved.RunCwd)
 	}
 	withArgs := ""
 	if len(typed) > 0 {
-		withArgs = " with " + oneLine(pyos.ShellJoin(typed))
+		withArgs = " with " + oneLine(osutil.ShellJoin(typed))
 	}
 	again := []string{"shortcut", "r", "-y"}
 	if skipLocal {
@@ -76,7 +76,7 @@ func runShortcut(s *textio.Streams, words []string, skipLocal, assumeYes bool) e
 		s.Err.WriteString("note: '" + first + "' here is this project's; your global '" + first + "' runs with: " +
 			"shortcut run --global " + name + "\n")
 	}
-	realCwd := pyos.Realpath(resolved.RunCwd)
+	realCwd := osutil.Realpath(resolved.RunCwd)
 	if entry.Confirm {
 		message := oneLine(entry.Description)
 		if entry.Description == "(no description)" || (entry.Inline != nil && entry.Description == *entry.Inline) {
@@ -84,7 +84,7 @@ func runShortcut(s *textio.Streams, words []string, skipLocal, assumeYes bool) e
 		}
 		if err := confirmed(s, textio.Confirm{
 			Question:   "run '" + name + "'" + withArgs + " in " + realCwd + "?",
-			NoTerminal: "'" + name + "' asks for confirmation: run it in a terminal, or pass -y (" + oneLine(pyos.ShellJoin(again)) + ")",
+			NoTerminal: "'" + name + "' asks for confirmation: run it in a terminal, or pass -y (" + oneLine(osutil.ShellJoin(again)) + ")",
 			Message:    message,
 		}, assumeYes); err != nil {
 			return err
@@ -115,10 +115,10 @@ func runShortcut(s *textio.Streams, words []string, skipLocal, assumeYes bool) e
 	})
 	env = append(env, "SHORTCUT_NAME="+name, "SHORTCUT_NAMESPACE="+resolved.Group.Name, "SHORTCUT_CALLER_CWD="+callerCwd)
 	env = append(env, argEnv...)
-	err = pyos.ExecChild(plan.argv, resolved.RunCwd, env)
+	err = osutil.ExecChild(plan.argv, resolved.RunCwd, env)
 	if plan.direct && errors.Is(err, syscall.ENOEXEC) && !bytes.Contains(plan.header, []byte{0}) {
 		// An executable text file with no #!: exec says "exec format error", a shell would run it with itself.
-		return pyos.ExecChild(append([]string{"bash", plan.path}, args...), resolved.RunCwd, env)
+		return osutil.ExecChild(append([]string{"bash", plan.path}, args...), resolved.RunCwd, env)
 	}
 	return err
 }
@@ -157,7 +157,7 @@ func childCommand(resolved *model.ResolvedShortcut, entry *model.Entry, name str
 	firstLine, _, _ := strings.Cut(string(header), "\n")
 	if hasShebang && strings.HasSuffix(firstLine, "\r") {
 		return childPlan{}, fmt.Errorf("%s has Windows line endings, so its #! line can't start it. Convert it: sed -i 's/\\r$//' %s",
-			path, pyos.ShellQuote(path))
+			path, osutil.ShellQuote(path))
 	}
 	switch {
 	case isExec && hasShebang:

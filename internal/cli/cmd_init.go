@@ -14,7 +14,7 @@ import (
 
 	shortcut "github.com/StanLukuvka/Shortcut"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -66,8 +66,8 @@ func cmdInit(s *textio.Streams, args []string) error {
 		}
 		sourceRoot = tmp
 	} else {
-		sourceRoot = pyos.Abs(pyos.ExpandUser(source))
-		if !pyos.IsDir(sourceRoot) {
+		sourceRoot = osutil.Abs(osutil.ExpandUser(source))
+		if !osutil.IsDir(sourceRoot) {
 			return Die("source directory does not exist: " + sourceRoot)
 		}
 	}

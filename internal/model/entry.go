@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/ordjson"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
 const (
@@ -33,7 +33,7 @@ type Entry struct {
 	Script                        *string
 	Cwd, Icon, CreatedBy, Created *string
 	Confirm, Export               bool
-	Args                          []*pyjson.Object // nil = field absent; kept raw so key order round-trips
+	Args                          []*ordjson.Object // nil = field absent; kept raw so key order round-trips
 	Origin                        *Origin
 }
 
@@ -45,9 +45,9 @@ var knownFields = map[string]bool{
 var textFields = []string{"inline", "script", "cwd", "icon", "created_by", "created"}
 
 // EntryFromValue builds an Entry from a decoded value, with fixed messages and check order.
-func EntryFromValue(name string, v pyjson.Value) (*Entry, error) {
+func EntryFromValue(name string, v ordjson.Value) (*Entry, error) {
 	bad := func(problem string) error { return fmt.Errorf("'%s' is not a valid entry: %s", name, problem) }
-	data, ok := v.(*pyjson.Object)
+	data, ok := v.(*ordjson.Object)
 	if !ok {
 		return nil, bad("expected a dictionary")
 	}
@@ -98,14 +98,14 @@ func EntryFromValue(name string, v pyjson.Value) (*Entry, error) {
 		if err := ValidateArgs(name, args); err != nil {
 			return nil, err
 		}
-		list := args.([]pyjson.Value)
-		e.Args = make([]*pyjson.Object, len(list))
+		list := args.([]ordjson.Value)
+		e.Args = make([]*ordjson.Object, len(list))
 		for i, a := range list {
-			e.Args[i] = a.(*pyjson.Object)
+			e.Args[i] = a.(*ordjson.Object)
 		}
 	}
 	if o, present := data.Get("from"); present {
-		obj, isObj := o.(*pyjson.Object)
+		obj, isObj := o.(*ordjson.Object)
 		var src, nm string
 		okFrom := isObj && len(obj.Keys) == 2
 		if okFrom {
@@ -125,8 +125,8 @@ func EntryFromValue(name string, v pyjson.Value) (*Entry, error) {
 }
 
 // ToObject returns the entry as an object: description, then the text fields that are set, confirm, export, args, from.
-func (e *Entry) ToObject() *pyjson.Object {
-	o := &pyjson.Object{}
+func (e *Entry) ToObject() *ordjson.Object {
+	o := &ordjson.Object{}
 	o.Set("description", e.Description)
 	for i, p := range []*string{e.Inline, e.Script, e.Cwd, e.Icon, e.CreatedBy, e.Created} {
 		if p != nil {
@@ -140,14 +140,14 @@ func (e *Entry) ToObject() *pyjson.Object {
 		o.Set("export", true)
 	}
 	if e.Args != nil {
-		list := make([]pyjson.Value, len(e.Args))
+		list := make([]ordjson.Value, len(e.Args))
 		for i, a := range e.Args {
 			list[i] = a
 		}
 		o.Set("args", list)
 	}
 	if e.Origin != nil {
-		from := &pyjson.Object{}
+		from := &ordjson.Object{}
 		from.Set("source", e.Origin.Source)
 		from.Set("name", e.Origin.Name)
 		o.Set("from", from)
@@ -163,14 +163,14 @@ func ArgVar(name string) string {
 }
 
 // ValidateArgs checks a declared args list, with fixed messages and check order.
-func ValidateArgs(name string, args pyjson.Value) error {
+func ValidateArgs(name string, args ordjson.Value) error {
 	bad := func(msg string) error { return fmt.Errorf("'%s' is not a valid entry: %s", name, msg) }
-	list, ok := args.([]pyjson.Value)
+	list, ok := args.([]ordjson.Value)
 	if !ok {
 		return bad("'args' must be a list")
 	}
 	for i, item := range list {
-		arg, isObj := item.(*pyjson.Object)
+		arg, isObj := item.(*ordjson.Object)
 		var argN string
 		if isObj {
 			n, _ := arg.Get("name")
@@ -215,12 +215,12 @@ func ValidateArgs(name string, args pyjson.Value) error {
 			return bad(fmt.Sprintf("arg '%s' can't be both 'required' and have a 'default'", argN))
 		}
 		for _, other := range list[:i] {
-			if n, _ := other.(*pyjson.Object).Get("name"); n == argN {
+			if n, _ := other.(*ordjson.Object).Get("name"); n == argN {
 				return bad(fmt.Sprintf("arg '%s' is declared twice", argN))
 			}
 		}
 		for _, other := range list[:i] {
-			on, _ := other.(*pyjson.Object).Get("name")
+			on, _ := other.(*ordjson.Object).Get("name")
 			if ArgVar(on.(string)) == ArgVar(argN) {
 				return bad(fmt.Sprintf("args '%s' and '%s' would both be %s", on, argN, ArgVar(argN)))
 			}
@@ -231,7 +231,7 @@ func ValidateArgs(name string, args pyjson.Value) error {
 
 // IsRelativeCwd: a cwd that means a folder next to the file defining it, so it's only right in that checkout.
 func IsRelativeCwd(cwd *string) bool {
-	return cwd != nil && *cwd != "" && *cwd != Caller && !strings.HasPrefix(pyos.ExpandUser(*cwd), "/")
+	return cwd != nil && *cwd != "" && *cwd != Caller && !strings.HasPrefix(osutil.ExpandUser(*cwd), "/")
 }
 
 // PlacementError reports fields only some files can have ('export' a project's own, 'from' the global

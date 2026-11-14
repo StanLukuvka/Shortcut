@@ -8,7 +8,7 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
+	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -120,7 +120,7 @@ func cmdList(s *textio.Streams, args []string) error {
 		type row struct{ name, mode, source, desc string }
 		var rows []row
 		shared, runnable := g.SharedShortcuts(), g.Shortcuts()
-		merged := &pyjson.Object{}
+		merged := &ordjson.Object{}
 		for _, k := range shared.Keys {
 			merged.Set(k, shared.Vals[k])
 		}
@@ -128,9 +128,9 @@ func cmdList(s *textio.Streams, args []string) error {
 			merged.Set(k, runnable.Vals[k])
 		}
 		for _, name := range slices.Sorted(slices.Values(merged.Keys)) {
-			data, _ := merged.Vals[name].(*pyjson.Object)
+			data, _ := merged.Vals[name].(*ordjson.Object)
 			if data == nil {
-				data = &pyjson.Object{}
+				data = &ordjson.Object{}
 			}
 			desc := textOf(data.Vals["description"])
 			if globalNames[name] && g.NeedsApproval() && g.Name == "" {
@@ -204,7 +204,7 @@ func usable(g model.Group) bool { return g.Error == nil || *g.Error == "" }
 
 // textOf is a field's text. A global store entry is not validated before it is listed, so a field that is not a string
 // shows as it was written (a number as its digits) instead of failing.
-func textOf(v pyjson.Value) string {
+func textOf(v ordjson.Value) string {
 	switch x := v.(type) {
 	case nil:
 		return ""

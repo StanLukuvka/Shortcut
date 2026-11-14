@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"os"
 
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
 // Streams is shortcut's stdin, stdout and stderr. Out and Err run every Write through
@@ -19,8 +19,8 @@ type Streams struct {
 // NewStreams wraps the three files, usually os.Stdin, os.Stdout, os.Stderr.
 func NewStreams(in, out, errw *os.File) *Streams {
 	s := &Streams{In: in}
-	s.Out = &Writer{s: s, f: out, tty: pyos.IsTerminal(int(out.Fd()))}
-	s.Err = &Writer{s: s, f: errw, tty: pyos.IsTerminal(int(errw.Fd()))}
+	s.Out = &Writer{s: s, f: out, tty: osutil.IsTerminal(int(out.Fd()))}
+	s.Err = &Writer{s: s, f: errw, tty: osutil.IsTerminal(int(errw.Fd()))}
 	return s
 }
 

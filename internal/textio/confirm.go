@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
 var yes = []string{"y", "yes"}
@@ -73,7 +73,7 @@ func (c Confirm) Granted(s *Streams, assumeYes bool) (bool, error) {
 		}
 		return true, nil
 	}
-	if !pyos.IsTerminal(int(s.In.Fd())) {
+	if !osutil.IsTerminal(int(s.In.Fd())) {
 		return false, errors.New(c.NoTerminal)
 	}
 	if c.Message != "" {

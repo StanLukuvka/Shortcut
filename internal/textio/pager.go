@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
 // ShowDiff shows a diff: each line made Safe; on a terminal added lines green and removed red (the +++ and
@@ -28,7 +28,7 @@ func ShowDiff(s *Streams, lines []string) {
 		shown[i] = line
 	}
 	text := backslashReplace(strings.Join(shown, "\n") + "\n") // the pager gets the same escapes as a Writer, so no raw 0x9b reaches the terminal
-	if pager := os.Getenv("PAGER"); tty && pager != "" && len(shown) >= pyos.TerminalRows() {
+	if pager := os.Getenv("PAGER"); tty && pager != "" && len(shown) >= osutil.TerminalRows() {
 		if runPager(s, pager, text) {
 			return
 		}

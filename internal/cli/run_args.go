@@ -5,13 +5,13 @@ import (
 	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/ordjson"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
 func oneLine(text string) string { return strings.ReplaceAll(text, "\n", "\\n") }
 
-func argLabel(a *pyjson.Object) string {
+func argLabel(a *ordjson.Object) string {
 	label, _ := a.Vals["name"].(string)
 	if a.Vals["rest"] == true {
 		label += "..."
@@ -20,7 +20,7 @@ func argLabel(a *pyjson.Object) string {
 }
 
 // usageLine is the usage line: shortcut r <display> <args>.
-func usageLine(display string, spec []*pyjson.Object) string {
+func usageLine(display string, spec []*ordjson.Object) string {
 	parts := []string{"shortcut r", display}
 	for _, a := range spec {
 		if a.Vals["required"] == true {
@@ -33,7 +33,7 @@ func usageLine(display string, spec []*pyjson.Object) string {
 }
 
 // argLines returns one line per declared argument, its name, whether it's needed or its default, and its desc.
-func argLines(spec []*pyjson.Object) []string {
+func argLines(spec []*ordjson.Object) []string {
 	type row struct{ label, need, desc string }
 	rows := make([]row, len(spec))
 	width, needWidth := 0, 0
@@ -42,7 +42,7 @@ func argLines(spec []*pyjson.Object) []string {
 		if a.Vals["required"] == true {
 			need = "required"
 		} else if d, ok := a.Vals["default"].(string); ok {
-			need = "default: " + oneLine(pyos.ShellQuote(d))
+			need = "default: " + oneLine(osutil.ShellQuote(d))
 		}
 		desc, _ := a.Vals["desc"].(string)
 		rows[i] = row{argLabel(a), need, oneLine(desc)}
@@ -62,7 +62,7 @@ func isFlag(token string) bool { return len(token) > 1 && strings.HasPrefix(toke
 // shortcut gets and its SC_ARG_* variables as "K=V". --flags are never parsed: they don't count and stay where they
 // are. A first -- is dropped, and every word after it counts, so a value can start with a dash. A failure is the
 // exit 2 of fail(): the message, the usage line and, if any argument has a desc, the list.
-func bindArgs(display string, spec []*pyjson.Object, argv []string) ([]string, []string, error) {
+func bindArgs(display string, spec []*ordjson.Object, argv []string) ([]string, []string, error) {
 	fail := func(msg string) error {
 		text := "error: " + msg + "\nusage: " + usageLine(display, spec) + "\n"
 		for _, a := range spec {
@@ -122,7 +122,7 @@ func bindArgs(display string, spec []*pyjson.Object, argv []string) ([]string, [
 		}
 		value := strings.Join(values, "")
 		if isRest {
-			value = pyos.ShellJoin(values)
+			value = osutil.ShellJoin(values)
 		}
 		env = append(env, model.ArgVar(name)+"="+value)
 	}
@@ -152,7 +152,7 @@ func joinCommand(words []string) string {
 			}
 		}
 		if !live {
-			quoted[i] = pyos.ShellQuote(word)
+			quoted[i] = osutil.ShellQuote(word)
 			continue
 		}
 		var b strings.Builder

@@ -14,8 +14,8 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/ordjson"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -47,12 +47,12 @@ type nsPlan struct {
 // is what the review says the files came from (the source as typed, or "the bundled shortcuts"). A "no" is
 // exit 1, with nothing written.
 func importFromRoot(s *textio.Streams, label, sourceRoot, destStoreDir string, assumeYes, replace bool) error {
-	sourceFile := pyos.Join(sourceRoot, model.ProjectFile)
+	sourceFile := osutil.Join(sourceRoot, model.ProjectFile)
 	names, err := listDir(sourceRoot)
 	if err != nil {
 		return err
 	}
-	if !pyos.IsFile(sourceFile) {
+	if !osutil.IsFile(sourceFile) {
 		for _, name := range names {
 			if strings.HasSuffix(name, model.ImportSuffix) {
 				return initNamespaces(s, label, sourceRoot, destStoreDir, assumeYes, replace)
@@ -68,7 +68,7 @@ func importFromRoot(s *textio.Streams, label, sourceRoot, destStoreDir string, a
 	if err != nil {
 		return err
 	}
-	dest := &pyjson.Object{}
+	dest := &ordjson.Object{}
 	if model.RegistryExists(destStoreDir) {
 		if dest, err = model.LoadRegistry(destStoreDir); err != nil {
 			return err
@@ -84,7 +84,7 @@ func importFromRoot(s *textio.Streams, label, sourceRoot, destStoreDir string, a
 			skipped = append(skipped, name+" (a namespace file: a source with a "+model.ProjectFile+" brings only its exported shortcuts)")
 		}
 	}
-	if listed, ok := sourceRegistry.Vals["imports"].(*pyjson.Object); ok && len(listed.Keys) > 0 {
+	if listed, ok := sourceRegistry.Vals["imports"].(*ordjson.Object); ok && len(listed.Keys) > 0 {
 		keys := slices.Sorted(slices.Values(listed.Keys))
 		skipped = append(skipped, "imports: "+strings.Join(keys, ", ")+" (namespaces a "+model.ProjectFile+" imports aren't copied)")
 	}
@@ -94,13 +94,13 @@ func importFromRoot(s *textio.Streams, label, sourceRoot, destStoreDir string, a
 	}
 
 	// Global shortcuts have no approval step, so an import is reviewed here or never
-	text, err := pyjson.MarshalIndent(entries.Sorted())
+	text, err := ordjson.MarshalIndent(entries.Sorted())
 	if err != nil {
 		return err
 	}
 	files := map[string]string{"shortcuts.json": string(text) + "\n"}
 	for _, sc := range scripts {
-		files[pyos.Relpath(sc.path, destStoreDir)] = approval.Reviewable(sc.raw)
+		files[osutil.Relpath(sc.path, destStoreDir)] = approval.Reviewable(sc.raw)
 	}
 	s.Out.WriteString("New from " + label + ":\n")
 	textio.ShowDiff(s, approval.DiffFiles(map[string]string{}, files))
@@ -163,16 +163,16 @@ func listDir(dir string) ([]string, error) {
 
 // planImport works out what a source's .shortcuts would add to the global store, changing nothing: the
 // entries, the script copies (bytes read once here), and what was skipped and why. Only exported entries come.
-func planImport(sourceBase, destStoreDir string, destRegistry, sourceRegistry *pyjson.Object) (*pyjson.Object, []storedScript, []string, error) {
-	entries := &pyjson.Object{}
+func planImport(sourceBase, destStoreDir string, destRegistry, sourceRegistry *ordjson.Object) (*ordjson.Object, []storedScript, []string, error) {
+	entries := &ordjson.Object{}
 	var scripts []storedScript
 	var skipped []string
-	destShortcuts, _ := destRegistry.Vals["shortcuts"].(*pyjson.Object)
+	destShortcuts, _ := destRegistry.Vals["shortcuts"].(*ordjson.Object)
 	if destShortcuts == nil {
-		destShortcuts = &pyjson.Object{}
+		destShortcuts = &ordjson.Object{}
 	}
 	dest := model.LoadStore(destStoreDir)
-	sourceShortcuts, ok := sourceRegistry.Vals["shortcuts"].(*pyjson.Object)
+	sourceShortcuts, ok := sourceRegistry.Vals["shortcuts"].(*ordjson.Object)
 	if !ok {
 		return entries, scripts, skipped, nil
 	}
@@ -189,7 +189,7 @@ func planImport(sourceBase, destStoreDir string, destRegistry, sourceRegistry *p
 			skipped = append(skipped, name+" (invalid entry: "+err.Error()+")")
 			continue
 		}
-		entryData := data.(*pyjson.Object)
+		entryData := data.(*ordjson.Object)
 		if !entry.Export {
 			skipped = append(skipped, name+" (project-only)")
 			continue
@@ -217,12 +217,12 @@ func planImport(sourceBase, destStoreDir string, destRegistry, sourceRegistry *p
 			skipped = append(skipped, name+" (exported, but its cwd '"+*entry.Cwd+"' only exists in the project)")
 			continue
 		}
-		if d := entry.Cwd; d != nil && *d != "" && *d != model.Caller && !pyos.IsDir(pyos.ExpandUser(*d)) {
+		if d := entry.Cwd; d != nil && *d != "" && *d != model.Caller && !osutil.IsDir(osutil.ExpandUser(*d)) {
 			skipped = append(skipped, name+" (cwd not found here: "+*d+")")
 			continue
 		}
 
-		newEntry := &pyjson.Object{}
+		newEntry := &ordjson.Object{}
 		for _, k := range entryData.Keys {
 			if k != "export" { // a global entry can't export
 				newEntry.Set(k, entryData.Vals[k])
@@ -238,11 +238,11 @@ func planImport(sourceBase, destStoreDir string, destRegistry, sourceRegistry *p
 				skipped = append(skipped, name+" (script path escapes the source: "+scriptField+")")
 				continue
 			}
-			if !pyos.IsFile(srcPath) {
+			if !osutil.IsFile(srcPath) {
 				skipped = append(skipped, name+" (missing source script: "+scriptField+")")
 				continue
 			}
-			destRel, destAbs := storedScriptField(dest.Main, name+orSh(pyos.Suffix(scriptField)))
+			destRel, destAbs := storedScriptField(dest.Main, name+orSh(osutil.Suffix(scriptField)))
 			if _, err := os.Lstat(destAbs); err == nil || slices.ContainsFunc(scripts, func(sc storedScript) bool { return sc.path == destAbs }) {
 				skipped = append(skipped, name+" (would replace "+destRel+")")
 				continue
@@ -273,7 +273,7 @@ func planNamespaces(sourceRoot, destStoreDir string, replace bool) ([]nsPlan, []
 	var plans []nsPlan
 	var skipped []string
 	dest := model.LoadStore(destStoreDir)
-	importsDir := pyos.Join(destStoreDir, "imports")
+	importsDir := osutil.Join(destStoreDir, "imports")
 	names, err := listDir(sourceRoot)
 	if err != nil {
 		return nil, nil, err
@@ -283,8 +283,8 @@ func planNamespaces(sourceRoot, destStoreDir string, replace bool) ([]nsPlan, []
 			continue
 		}
 		ns := strings.TrimSuffix(filename, model.ImportSuffix)
-		path := pyos.Join(sourceRoot, filename)
-		folder := pyos.Join("scripts", ns)
+		path := osutil.Join(sourceRoot, filename)
+		folder := osutil.Join("scripts", ns)
 		if err := model.ValidateName(ns); err != nil { // untrusted source
 			skipped = append(skipped, filename+" ("+err.Error()+")")
 			continue
@@ -294,19 +294,19 @@ func planNamespaces(sourceRoot, destStoreDir string, replace bool) ([]nsPlan, []
 		replacing := replace && isInstalled && !listed
 		_, isShortcut := dest.Main.Shortcuts().Get(ns)
 		switch {
-		case pyos.IsLink(path) || !pyos.IsFile(path):
+		case osutil.IsLink(path) || !osutil.IsFile(path):
 			skipped = append(skipped, ns+" (not a regular file: "+filename+")")
 			continue
 		case replace && listed:
 			skipped = append(skipped, ns+" (imported from "+installed.File+", so it isn't replaced)")
 			continue
-		case !replacing && (isInstalled || pyos.Lexists(pyos.Join(importsDir, filename))):
+		case !replacing && (isInstalled || osutil.Lexists(osutil.Join(importsDir, filename))):
 			skipped = append(skipped, ns+" (already a namespace; --replace puts this one in its place)")
 			continue
 		case isShortcut:
 			skipped = append(skipped, ns+" (already a shortcut)")
 			continue
-		case !replacing && pyos.Lexists(pyos.Join(importsDir, folder)):
+		case !replacing && osutil.Lexists(osutil.Join(importsDir, folder)):
 			skipped = append(skipped, ns+" (would replace imports/"+folder+")")
 			continue
 		}
@@ -325,14 +325,14 @@ func planNamespaces(sourceRoot, destStoreDir string, replace bool) ([]nsPlan, []
 		}
 		plan := nsPlan{name: ns, files: []nsFile{{filename, raw, false}}}
 		var walkErr error
-		pyos.Walk(pyos.Join(sourceRoot, folder), func(dir string, _, files []string) {
+		osutil.Walk(osutil.Join(sourceRoot, folder), func(dir string, _, files []string) {
 			for _, name := range files {
-				file := pyos.Join(dir, name)
+				file := osutil.Join(dir, name)
 				raw, err := os.ReadFile(file)
 				if err != nil && walkErr == nil {
 					walkErr = err
 				}
-				plan.files = append(plan.files, nsFile{pyos.Relpath(file, sourceRoot), raw, syscall.Access(file, 1) == nil})
+				plan.files = append(plan.files, nsFile{osutil.Relpath(file, sourceRoot), raw, syscall.Access(file, 1) == nil})
 			}
 		})
 		if walkErr != nil {
@@ -348,7 +348,7 @@ func planNamespaces(sourceRoot, destStoreDir string, replace bool) ([]nsPlan, []
 func namespaceFolderProblem(group model.Group, sourceRoot, folder string) string {
 	shared := group.SharedShortcuts()
 	for _, name := range shared.Keys {
-		data, ok := shared.Vals[name].(*pyjson.Object)
+		data, ok := shared.Vals[name].(*ordjson.Object)
 		if !ok {
 			continue
 		}
@@ -359,19 +359,19 @@ func namespaceFolderProblem(group model.Group, sourceRoot, folder string) string
 		if !strings.HasPrefix(filepath.Clean(script), folder+"/") {
 			return "'" + name + "' has its script outside " + folder + "/: " + script
 		}
-		if !pyos.IsFile(pyos.Join(sourceRoot, script)) {
+		if !osutil.IsFile(osutil.Join(sourceRoot, script)) {
 			return "'" + name + "' has a missing script: " + script
 		}
 	}
-	parts := []string{pyos.Join(sourceRoot, "scripts"), pyos.Join(sourceRoot, folder)}
-	pyos.Walk(pyos.Join(sourceRoot, folder), func(dir string, dirs, names []string) {
+	parts := []string{osutil.Join(sourceRoot, "scripts"), osutil.Join(sourceRoot, folder)}
+	osutil.Walk(osutil.Join(sourceRoot, folder), func(dir string, dirs, names []string) {
 		for _, n := range slices.Concat(dirs, names) {
-			parts = append(parts, pyos.Join(dir, n))
+			parts = append(parts, osutil.Join(dir, n))
 		}
 	})
 	for _, p := range parts {
-		if pyos.IsLink(p) {
-			return "symlink in source: " + pyos.Relpath(p, sourceRoot)
+		if osutil.IsLink(p) {
+			return "symlink in source: " + osutil.Relpath(p, sourceRoot)
 		}
 	}
 	return ""
@@ -381,18 +381,18 @@ func namespaceFolderProblem(group model.Group, sourceRoot, folder string) string
 // imports/.
 func installedFiles(group model.Group, importsDir string) map[string]string {
 	paths := []string{group.File}
-	pyos.Walk(group.ScriptsDir(), func(dir string, _, names []string) {
+	osutil.Walk(group.ScriptsDir(), func(dir string, _, names []string) {
 		for _, n := range names {
-			paths = append(paths, pyos.Join(dir, n))
+			paths = append(paths, osutil.Join(dir, n))
 		}
 	})
 	files := map[string]string{}
 	for _, path := range paths {
-		if !pyos.IsFile(path) {
+		if !osutil.IsFile(path) {
 			continue
 		}
 		if raw, err := os.ReadFile(path); err == nil { // a read error counts as no file
-			files[pyos.Join("imports", pyos.Relpath(path, importsDir))] = approval.Reviewable(raw)
+			files[osutil.Join("imports", osutil.Relpath(path, importsDir))] = approval.Reviewable(raw)
 		}
 	}
 	return files
@@ -406,7 +406,7 @@ func initNamespaces(s *textio.Streams, label, sourceRoot, destStoreDir string, a
 		return err
 	}
 	installed := model.LoadStore(destStoreDir)
-	importsDir := pyos.Join(destStoreDir, "imports")
+	importsDir := osutil.Join(destStoreDir, "imports")
 	old := map[string]string{}
 	var keep []nsPlan
 	for _, plan := range plans {
@@ -461,7 +461,7 @@ func initNamespaces(s *textio.Streams, label, sourceRoot, destStoreDir string, a
 func planFiles(plan nsPlan) map[string]string {
 	m := map[string]string{}
 	for _, f := range plan.files {
-		m[pyos.Join("imports", f.rel)] = approval.Reviewable(f.raw)
+		m[osutil.Join("imports", f.rel)] = approval.Reviewable(f.raw)
 	}
 	return m
 }
@@ -497,7 +497,7 @@ func writeNew(path string, raw []byte, executable bool) error {
 // applyImport writes the script copies (executable), then the entries, in the registry under its lock.
 // This refuses to write over one that appeared since the review, which is what the
 // "would replace" check is for.
-func applyImport(storeDir string, entries *pyjson.Object, scripts []storedScript) error {
+func applyImport(storeDir string, entries *ordjson.Object, scripts []storedScript) error {
 	if err := model.InitStore(storeDir); err != nil {
 		return err
 	}
@@ -507,7 +507,7 @@ func applyImport(storeDir string, entries *pyjson.Object, scripts []storedScript
 		}
 	}
 	return model.WithRegistryLock(storeDir, func() error {
-		reg, shortcuts, err := loadForEdit(pyos.Join(storeDir, "shortcuts.json"), false)
+		reg, shortcuts, err := loadForEdit(osutil.Join(storeDir, "shortcuts.json"), false)
 		if err != nil {
 			return err
 		}
@@ -524,7 +524,7 @@ func applyNamespaces(storeDir string, plans []nsPlan, replaced []model.Group) er
 	if err := model.InitStore(storeDir); err != nil {
 		return err
 	}
-	importsDir := pyos.Join(storeDir, "imports")
+	importsDir := osutil.Join(storeDir, "imports")
 	return model.WithRegistryLock(storeDir, func() error {
 		for _, g := range replaced {
 			if err := removeNamespaceFiles(g); err != nil {
@@ -533,7 +533,7 @@ func applyNamespaces(storeDir string, plans []nsPlan, replaced []model.Group) er
 		}
 		for _, plan := range plans {
 			for _, f := range plan.files {
-				if err := writeNew(pyos.Join(importsDir, f.rel), f.raw, f.exec); err != nil {
+				if err := writeNew(osutil.Join(importsDir, f.rel), f.raw, f.exec); err != nil {
 					return err
 				}
 			}

@@ -8,23 +8,23 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/ordjson"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-func parse(t *testing.T, s string) pyjson.Value {
+func parse(t *testing.T, s string) ordjson.Value {
 	t.Helper()
-	v, err := pyjson.Parse(s)
+	v, err := ordjson.Parse(s)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return v
 }
 
-func obj(t *testing.T, s string) *pyjson.Object {
+func obj(t *testing.T, s string) *ordjson.Object {
 	t.Helper()
-	return parse(t, s).(*pyjson.Object)
+	return parse(t, s).(*ordjson.Object)
 }
 
 func TestEntry_FromValueMessages(t *testing.T) {
@@ -88,9 +88,9 @@ func TestEntry_ValidateArgsMessages(t *testing.T) {
 }
 
 // compact is v on one line, as the JSON encoder writes it.
-func compact(t *testing.T, v pyjson.Value) string {
+func compact(t *testing.T, v ordjson.Value) string {
 	t.Helper()
-	b, err := pyjson.Marshal(v)
+	b, err := ordjson.Marshal(v)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,7 +300,7 @@ func TestStores_StoreDiscoverySkipsGlobalRoot(t *testing.T) {
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := FindProjectRoot(sub); got != pyos.Realpath(proj) {
+	if got := FindProjectRoot(sub); got != osutil.Realpath(proj) {
 		t.Errorf("sub: %q", got)
 	}
 }
@@ -390,7 +390,7 @@ func TestStores_WriteJSONAtomicLeavesNoTempFileOnError(t *testing.T) {
 	dir := env.Folder("d")
 	target := filepath.Join(dir, "x.json")
 	os.Mkdir(target, 0o755) // a rename of a file over a folder fails
-	if err := WriteJSONAtomic(target, &pyjson.Object{}); err == nil {
+	if err := WriteJSONAtomic(target, &ordjson.Object{}); err == nil {
 		t.Fatal("want an error")
 	}
 	entries, _ := os.ReadDir(dir)
@@ -690,9 +690,9 @@ func TestWriteJSONAtomic_RefusesInvalidUTF8AndKeepsTheOldFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	o := &pyjson.Object{}
+	o := &ordjson.Object{}
 	o.Set("name", "caf\xe9")
-	if err := WriteJSONAtomic(path, o); !errors.Is(err, pyjson.ErrNotUTF8) {
+	if err := WriteJSONAtomic(path, o); !errors.Is(err, ordjson.ErrNotUTF8) {
 		t.Fatalf("got %v", err)
 	}
 	if got, _ := os.ReadFile(path); string(got) != old {
@@ -758,4 +758,4 @@ func TestStores_VersionRequiredInEveryFile(t *testing.T) {
 }
 
 // newGroup is a Group with an empty file, as LoadGroup gives for a missing one.
-func newGroup() Group { return Group{Data: &pyjson.Object{}} }
+func newGroup() Group { return Group{Data: &ordjson.Object{}} }

@@ -7,17 +7,17 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/ordjson"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
 // Found is what FindEntry finds, before anyone judges the entry.
 type Found struct {
 	Group Group
 	Name  string
-	Raw   pyjson.Value // the entry as written; LoadEntry judges it
-	Rest  []string     // the words left over, a run's arguments
-	Hides bool         // a project's name hides a global one of either kind
+	Raw   ordjson.Value // the entry as written; LoadEntry judges it
+	Rest  []string      // the words left over, a run's arguments
+	Hides bool          // a project's name hides a global one of either kind
 }
 
 // FindEntry finds `name` or `namespace name` in the project, then the global store, without judging
@@ -45,7 +45,7 @@ func FindEntry(words []string, callerCwd string, skipLocal, strict bool) (Found,
 		if _, ns := store.Namespace(first); ns {
 			named = true
 		}
-		if imports, ok := store.Main.Data.Vals["imports"].(*pyjson.Object); ok && has(imports, first) {
+		if imports, ok := store.Main.Data.Vals["imports"].(*ordjson.Object); ok && has(imports, first) {
 			named = true
 		}
 		if strict && len(problems) > 0 && named {
@@ -86,7 +86,7 @@ func FindEntry(words []string, callerCwd string, skipLocal, strict bool) (Found,
 	var missing string
 	if len(rest) > 0 { // `first` may be meant as a namespace
 		missing = fmt.Sprintf("shortcut or namespace '%s' not found. A global namespace is the file %s.",
-			first, pyos.Join(home.Main.StoreDir, "imports", first+ImportSuffix))
+			first, osutil.Join(home.Main.StoreDir, "imports", first+ImportSuffix))
 	} else {
 		missing = fmt.Sprintf("shortcut '%s' not found.", first)
 	}
@@ -108,7 +108,7 @@ func FindEntry(words []string, callerCwd string, skipLocal, strict bool) (Found,
 	return Found{}, errors.New(strings.Join(notes, " "))
 }
 
-func has(o *pyjson.Object, k string) bool { _, ok := o.Get(k); return ok }
+func has(o *ordjson.Object, k string) bool { _, ok := o.Get(k); return ok }
 
 func hasName(s Store, name string) bool {
 	_, ns := s.Namespace(name)
@@ -119,7 +119,7 @@ func hasName(s Store, name string) bool {
 // arguments. An empty callerCwd is the physical cwd.
 func ResolveShortcut(words []string, callerCwd string, skipLocal, strict bool) (*ResolvedShortcut, []string, error) {
 	if callerCwd == "" {
-		callerCwd, _ = pyos.Getwd()
+		callerCwd, _ = osutil.Getwd()
 	}
 	f, err := FindEntry(words, callerCwd, skipLocal, strict)
 	if err != nil {
@@ -146,7 +146,7 @@ func ResolveName(words []string, skipLocal bool) (*ResolvedShortcut, error) {
 
 // TooManyNames is the error of a command that was given more words than a name.
 func TooManyNames(words []string) error {
-	return fmt.Errorf("too many names: %s", pyos.ShellJoin(words))
+	return fmt.Errorf("too many names: %s", osutil.ShellJoin(words))
 }
 
 // ResolvedShortcut is a name looked up: the entry, its group and where it runs.

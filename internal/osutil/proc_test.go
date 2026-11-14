@@ -1,4 +1,4 @@
-package pyos
+package osutil
 
 import (
 	"errors"
@@ -40,7 +40,7 @@ func TestGetwd_IsPhysical(t *testing.T) {
 	e.Symlink(real, filepath.Join(e.Tmp, "link"))
 	res := e.RunCmd(testkit.Opts{Cwd: filepath.Join(e.Tmp, "link"), Env: map[string]string{"PYOS_HELPER": "cwd", "PWD": filepath.Join(e.Tmp, "link")}}, testkit.SelfArgs()...)
 	if want := filepath.Join(e.Tmp, "link") + "\n" + real + "\n"; res.Stdout != want {
-		t.Errorf("stdout %q, want %q (os.Getwd then pyos.Getwd)", res.Stdout, want)
+		t.Errorf("stdout %q, want %q (os.Getwd then osutil.Getwd)", res.Stdout, want)
 	}
 }
 

@@ -15,8 +15,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/ordjson"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
 // RegistryNotFoundError is the error for a missing registry file: a store without a registry is empty,
@@ -37,35 +37,37 @@ func GlobalStoreDir() string {
 	if home == "" {
 		home = "~/.shortcuts"
 	}
-	return pyos.Abs(pyos.ExpandUser(home))
+	return osutil.Abs(osutil.ExpandUser(home))
 }
 
-func RegistryExists(storeDir string) bool { return pyos.IsFile(pyos.Join(storeDir, "shortcuts.json")) }
+func RegistryExists(storeDir string) bool {
+	return osutil.IsFile(osutil.Join(storeDir, "shortcuts.json"))
+}
 
 // IsGlobalStore: Path(store_dir).resolve() == Path(global).resolve().
 func IsGlobalStore(storeDir string) bool {
-	return pyos.Realpath(storeDir) == pyos.Realpath(GlobalStoreDir())
+	return osutil.Realpath(storeDir) == osutil.Realpath(GlobalStoreDir())
 }
 
 // neverAProject: ~/.shortcuts is never a project, also when SHORTCUTS_HOME points the global store elsewhere.
 func neverAProject(p string) bool {
-	return p == pyos.Realpath(GlobalStoreDir()) || p == pyos.Realpath(pyos.Join(pyos.ExpandUser("~"), ProjectFile))
+	return p == osutil.Realpath(GlobalStoreDir()) || p == osutil.Realpath(osutil.Join(osutil.ExpandUser("~"), ProjectFile))
 }
 
 func isProjectRoot(folder string) bool {
-	if neverAProject(pyos.Realpath(pyos.Join(folder, ProjectFile))) {
+	if neverAProject(osutil.Realpath(osutil.Join(folder, ProjectFile))) {
 		return false
 	}
-	return pyos.IsFile(pyos.Join(folder, ProjectFile)) || pyos.IsFile(pyos.Join(folder, LocalFile))
+	return osutil.IsFile(osutil.Join(folder, ProjectFile)) || osutil.IsFile(osutil.Join(folder, LocalFile))
 }
 
 // FindProjectRoot returns the nearest folder at or above start (default the cwd) with a .shortcuts or
 // .shortcuts.local that is not the global store. "" = none.
 func FindProjectRoot(start string) string {
 	if start == "" {
-		start, _ = pyos.Getwd()
+		start, _ = osutil.Getwd()
 	}
-	for cur := pyos.Realpath(start); ; {
+	for cur := osutil.Realpath(start); ; {
 		if isProjectRoot(cur) {
 			return cur
 		}
@@ -80,18 +82,18 @@ func FindProjectRoot(start string) string {
 // LocalProjectRoot returns where --local writes, this folder and never a parent. Its errors are
 // the messages die prints.
 func LocalProjectRoot(cwd string) (string, error) {
-	here := pyos.Realpath(cwd)
+	here := osutil.Realpath(cwd)
 	if root := FindProjectRoot(here); root != "" && root != here {
 		return "", fmt.Errorf("%s is inside the project at %s. Run this from there.", here, root)
 	}
-	if neverAProject(pyos.Realpath(pyos.Join(here, ProjectFile))) {
+	if neverAProject(osutil.Realpath(osutil.Join(here, ProjectFile))) {
 		return "", fmt.Errorf("%s holds the global store, so it can't hold local shortcuts. Run this inside a project folder.", here)
 	}
-	if pyos.IsRelativeTo(here, pyos.Realpath(GlobalStoreDir())) {
+	if osutil.IsRelativeTo(here, osutil.Realpath(GlobalStoreDir())) {
 		return "", fmt.Errorf("%s is inside the global store, so it can't hold local shortcuts. Run this inside a project folder.", here)
 	}
-	if st, err := os.Lstat(pyos.Join(here, LocalFile)); err == nil && st.Mode()&os.ModeSymlink != 0 {
-		return "", fmt.Errorf("%s is a symlink, so writing it would go somewhere else.", pyos.Join(here, LocalFile))
+	if st, err := os.Lstat(osutil.Join(here, LocalFile)); err == nil && st.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("%s is a symlink, so writing it would go somewhere else.", osutil.Join(here, LocalFile))
 	}
 	return here, nil
 }
@@ -100,16 +102,16 @@ func LocalProjectRoot(cwd string) (string, error) {
 // <global>/locks/<sha256(realpath(store))>.lock. The same names as the older version, so the two exclude each other.
 func lockPath(storeDir string) string {
 	if IsGlobalStore(storeDir) {
-		return pyos.Join(storeDir, ".lock")
+		return osutil.Join(storeDir, ".lock")
 	}
-	sum := sha256.Sum256([]byte(pyos.Realpath(storeDir)))
-	return pyos.Join(GlobalStoreDir(), "locks", hex.EncodeToString(sum[:])+".lock")
+	sum := sha256.Sum256([]byte(osutil.Realpath(storeDir)))
+	return osutil.Join(GlobalStoreDir(), "locks", hex.EncodeToString(sum[:])+".lock")
 }
 
 // WithRegistryLock serializes read-modify-write of a store's registry across processes. Not reentrant: never nest
 // it, and never call InitStore inside it.
 func WithRegistryLock(storeDir string, fn func() error) error {
-	return pyos.WithLock(lockPath(storeDir), fn)
+	return osutil.WithLock(lockPath(storeDir), fn)
 }
 
 // InitStore creates the global store's empty registry if it has none.
@@ -122,16 +124,16 @@ func InitStore(storeDir string) error {
 	})
 }
 
-func emptyRegistry() *pyjson.Object {
-	o := &pyjson.Object{}
+func emptyRegistry() *ordjson.Object {
+	o := &ordjson.Object{}
 	o.Set("version", json.Number(strconv.Itoa(RegistryVersion)))
-	o.Set("shortcuts", &pyjson.Object{})
+	o.Set("shortcuts", &ordjson.Object{})
 	return o
 }
 
 // LoadRegistryFile reads a registry file, with fixed messages.
-func LoadRegistryFile(path string) (*pyjson.Object, error) {
-	if !pyos.IsFile(path) {
+func LoadRegistryFile(path string) (*ordjson.Object, error) {
+	if !osutil.IsFile(path) {
 		return nil, &RegistryNotFoundError{path}
 	}
 	v, err := ReadJSONFile(path)
@@ -141,7 +143,7 @@ func LoadRegistryFile(path string) (*pyjson.Object, error) {
 		}
 		return nil, err
 	}
-	data, ok := v.(*pyjson.Object)
+	data, ok := v.(*ordjson.Object)
 	if !ok {
 		return nil, fmt.Errorf("corrupt registry %s: root must be a JSON object", path)
 	}
@@ -163,13 +165,13 @@ func LoadRegistryFile(path string) (*pyjson.Object, error) {
 	return data, nil
 }
 
-func LoadRegistry(storeDir string) (*pyjson.Object, error) {
-	return LoadRegistryFile(pyos.Join(storeDir, "shortcuts.json"))
+func LoadRegistry(storeDir string) (*ordjson.Object, error) {
+	return LoadRegistryFile(osutil.Join(storeDir, "shortcuts.json"))
 }
 
 // SaveRegistryFile refuses to write over a file it can't read.
-func SaveRegistryFile(path string, data *pyjson.Object) error {
-	if pyos.IsFile(path) {
+func SaveRegistryFile(path string, data *ordjson.Object) error {
+	if osutil.IsFile(path) {
 		if _, err := ReadJSONFile(path); err != nil {
 			return fmt.Errorf("cannot overwrite corrupt registry %s: %s", path, err)
 		}
@@ -177,11 +179,11 @@ func SaveRegistryFile(path string, data *pyjson.Object) error {
 	return WriteJSONAtomic(path, data)
 }
 
-func SaveRegistryAtomic(storeDir string, data *pyjson.Object) error {
+func SaveRegistryAtomic(storeDir string, data *ordjson.Object) error {
 	if err := os.MkdirAll(storeDir, 0o777); err != nil {
 		return err
 	}
-	return SaveRegistryFile(pyos.Join(storeDir, "shortcuts.json"), data)
+	return SaveRegistryFile(osutil.Join(storeDir, "shortcuts.json"), data)
 }
 
 var namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`) // Go's $ is end of text: no trailing newline, as fullmatch
@@ -200,9 +202,9 @@ func ResolveScriptPath(baseDir, scriptField string) (string, error) {
 	if strings.HasPrefix(scriptField, "/") {
 		return scriptField, nil
 	}
-	base := pyos.Realpath(baseDir)
-	target := pyos.Realpath(pyos.Join(base, scriptField))
-	if !pyos.IsRelativeTo(target, base) {
+	base := osutil.Realpath(baseDir)
+	target := osutil.Realpath(osutil.Join(base, scriptField))
+	if !osutil.IsRelativeTo(target, base) {
 		return "", fmt.Errorf("path traversal detected: '%s' resolves to '%s', outside '%s'.", scriptField, target, base)
 	}
 	return target, nil
@@ -210,7 +212,7 @@ func ResolveScriptPath(baseDir, scriptField string) (string, error) {
 
 // fileError returns what's wrong with a file as a whole ("" = nothing); EntryErrors checks what's inside
 // 'shortcuts'. name is the namespace's, or "" for a main file.
-func fileError(path string, data *pyjson.Object, name string) string {
+func fileError(path string, data *ordjson.Object, name string) string {
 	known := map[string]bool{"version": true, "description": true, "shortcuts": true}
 	if name != "" {
 		if _, has := data.Get("imports"); has {
@@ -223,7 +225,7 @@ func fileError(path string, data *pyjson.Object, name string) string {
 		known["imports"] = true
 	}
 	if s, has := data.Get("shortcuts"); has {
-		if _, isObj := s.(*pyjson.Object); !isObj {
+		if _, isObj := s.(*ordjson.Object); !isObj {
 			return fmt.Sprintf("corrupt registry %s: 'shortcuts' must be an object", path)
 		}
 	}

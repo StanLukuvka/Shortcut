@@ -7,8 +7,8 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/pyjson"
-	"github.com/StanLukuvka/Shortcut/internal/pyos"
+	"github.com/StanLukuvka/Shortcut/internal/ordjson"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -105,7 +105,7 @@ func cmdShow(s *textio.Streams, args []string) error {
 		return err
 	}
 	out("\nScript (" + path + "):")
-	if pyos.IsFile(path) {
+	if osutil.IsFile(path) {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -126,7 +126,7 @@ func showJSON(s *textio.Streams, words []string, skipLocal bool) error {
 	if err != nil {
 		return err
 	}
-	text, jerr := pyjson.MarshalIndent(out)
+	text, jerr := ordjson.MarshalIndent(out)
 	if jerr != nil {
 		return jerr
 	}
@@ -151,7 +151,7 @@ func showField(s *textio.Streams, words []string, skipLocal bool, key string) er
 	}
 	v, ok := obj.Get(key)
 	if !ok { // an entry field; absent, or a broken entry that isn't an object, prints nothing
-		if entry, isObj := obj.Vals["entry"].(*pyjson.Object); isObj {
+		if entry, isObj := obj.Vals["entry"].(*ordjson.Object); isObj {
 			v, _ = entry.Get(key)
 		}
 	}
@@ -161,7 +161,7 @@ func showField(s *textio.Streams, words []string, skipLocal bool, key string) er
 	case string:
 		_, err = s.Out.WriteString(t + "\n")
 	default:
-		b, merr := pyjson.Marshal(t)
+		b, merr := ordjson.Marshal(t)
 		if merr != nil {
 			return merr
 		}
@@ -172,7 +172,7 @@ func showField(s *textio.Streams, words []string, skipLocal bool, key string) er
 
 // showObject is the entry as written plus where it resolves. A broken entry still gives an object,
 // with its error and null for what can't be worked out.
-func showObject(words []string, skipLocal bool) (*pyjson.Object, error) {
+func showObject(words []string, skipLocal bool) (*ordjson.Object, error) {
 	f, err := model.FindEntry(words, "", skipLocal, false)
 	if err != nil {
 		return nil, err
@@ -181,13 +181,13 @@ func showObject(words []string, skipLocal bool) (*pyjson.Object, error) {
 		return nil, model.TooManyNames(words)
 	}
 	g, name := f.Group, f.Name
-	nullable := func(s string) pyjson.Value {
+	nullable := func(s string) ordjson.Value {
 		if s == "" {
 			return nil
 		}
 		return s
 	}
-	out := &pyjson.Object{}
+	out := &ordjson.Object{}
 	out.Set("name", name)
 	out.Set("namespace", nullable(g.Name))
 	out.Set("scope", scopeOf(g))
@@ -208,7 +208,7 @@ func showObject(words []string, skipLocal bool) (*pyjson.Object, error) {
 		if entry.Cwd != nil {
 			out.Set("cwd", *entry.Cwd)
 		}
-		cwd, _ := pyos.Getwd()
+		cwd, _ := osutil.Getwd()
 		out.Set("run_cwd", model.ResolveRunDir(entry.Cwd, g, cwd))
 		if entry.Script != nil {
 			var path string

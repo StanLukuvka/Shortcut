@@ -66,8 +66,8 @@ func goMessages(t *testing.T) [][]string {
 			return err
 		}
 		if d.IsDir() {
-			// pyos and pyjson re-create stdlib text (shlex, json); the latter reaches the user only inside "<json error>"
-			if d.Name() == "testkit" || d.Name() == "testdata" || d.Name() == "pyos" || d.Name() == "pyjson" {
+			// osutil and ordjson re-create stdlib text (shlex, json); the latter reaches the user only inside "<json error>"
+			if d.Name() == "testkit" || d.Name() == "testdata" || d.Name() == "osutil" || d.Name() == "ordjson" {
 				return filepath.SkipDir
 			}
 			return nil
