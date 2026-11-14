@@ -1,8 +1,7 @@
 // Package ordjson is an ordered, number-preserving JSON value model on encoding/json: the decoder keeps key order
 // and number text, and refuses text that is not valid UTF-8, on the way in and on the way out.
 //
-// Strings are Go strings holding valid UTF-8. A string from the old Python-written store that held a lone surrogate
-// escape (a non-UTF-8 file name) is refused when it is read.
+// Strings are Go strings holding valid UTF-8; a lone surrogate escape in a file is refused when it is read (ErrNotUTF8).
 package ordjson
 
 import "slices"

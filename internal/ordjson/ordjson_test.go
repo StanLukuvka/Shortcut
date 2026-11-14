@@ -38,7 +38,7 @@ func marshal(t *testing.T, v Value) string {
 
 func TestDecode_RefusesWhatIsNotValidUTF8(t *testing.T) {
 	for _, src := range []string{
-		`{"a": "\udce9"}`,   // what the older version wrote for a file name caf<0xe9>
+		`{"a": "\udce9"}`,   // a lone low surrogate, as a bad file name would have been escaped
 		`["\ud800"]`,        // lone high surrogate
 		`["\ud800\u0041"]`,  // high surrogate followed by something that is not a low one
 		`["\ud800 \udc00"]`, // a pair needs the escapes side by side

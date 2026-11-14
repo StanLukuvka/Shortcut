@@ -1,8 +1,4 @@
-// Package difflib is a port of the parts of CPython's Lib/difflib.py (3.14) that
-// unified_diff needs: SequenceMatcher(None, a, b) with autojunk off.
-//
-// lazy: no isjunk, no ratio/quick_ratio, no context/ndiff; only what shortcut's
-// diff_files calls. Upgrade path: port the rest from the same file if needed.
+// Package difflib is a line diff in unified format (a sequence matcher and the hunk writer); nothing else of difflib is needed.
 package difflib
 
 import "sort"

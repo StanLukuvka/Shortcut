@@ -35,8 +35,7 @@ func hex4At(raw []byte, i int) (rune, bool) {
 }
 
 // checkText refuses invalid UTF-8 and every surrogate escape that is not a proper high+low pair. A proper pair
-// (what ensure_ascii wrote for an emoji) decodes to the right rune and is allowed; a lone one (\udcNN is a
-// non-UTF-8 file name written by the Python version) would decode to U+FFFD and merge distinct names.
+// decodes to the right rune and is allowed; a lone one (such as \udcNN) would decode to U+FFFD and merge distinct names.
 func checkText(raw []byte) error {
 	if !utf8.Valid(raw) {
 		return ErrNotUTF8
