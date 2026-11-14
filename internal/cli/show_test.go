@@ -2,6 +2,7 @@ package cli
 
 import (
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -82,7 +83,7 @@ Arguments:
   a     required        first\nline
   b     default: 'x y'
   r...  optional
-Confirm:     True
+Confirm:     yes
 Created:     2026-01-02
 Created by:  me
 Icon:        wrench
@@ -282,4 +283,65 @@ func TestShow_ReadsPastABrokenProject(t *testing.T) {
 	res.WantCode(t, 0)
 	testkit.Contains(t, "show inside", res.Stdout, "Scope:       project")
 	testkit.Contains(t, "show inside", res.Stdout, "Approval:    not approved (run: shortcut update)")
+}
+
+// show --field prints one field bare, reads only, and says which fields exist.
+func TestShow_Field(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{
+		"line": map[string]any{"description": "A line", "inline": "echo hi", "confirm": true},
+		"tool": map[string]any{"description": "A tool", "script": "scripts/tool.sh", "icon": "wrench"},
+	})
+	e.WriteFile(filepath.Join(e.Store, "scripts", "tool.sh"), "#!/bin/sh\n", 0)
+	store := filepath.Join(e.Store, "shortcuts.json")
+	list := "name, namespace, scope, defined_in, source, hides_global, approval, cwd, run_cwd, script_path, error, description, icon, created_by, created, inline, script"
+	cases := []struct {
+		args   []string
+		code   int
+		stdout string
+		stderr string
+	}{
+		{[]string{"show", "--field", "name", "line"}, 0, "line\n", ""},
+		{[]string{"show", "--field=scope", "line"}, 0, "global\n", ""},
+		{[]string{"show", "--field", "defined_in", "line"}, 0, store + "\n", ""},
+		{[]string{"show", "--field", "script_path", "line"}, 0, "", ""},
+		{[]string{"show", "--field", "script_path", "tool"}, 0, filepath.Join(e.Store, "scripts", "tool.sh") + "\n", ""},
+		{[]string{"show", "--field", "hides_global", "line"}, 0, "false\n", ""},
+		{[]string{"show", "--field", "description", "line"}, 0, "A line\n", ""},
+		{[]string{"show", "--field", "inline", "line"}, 0, "echo hi\n", ""},
+		{[]string{"show", "--field", "script", "tool"}, 0, "scripts/tool.sh\n", ""},
+		{[]string{"show", "--field", "icon", "tool"}, 0, "wrench\n", ""},
+		{[]string{"show", "--field", "icon", "line"}, 0, "", ""},
+		{[]string{"show", "--field", "error", "line"}, 0, "", ""},
+		{[]string{"show", "--field", "confirm", "line"}, 1, "", "error: unknown field 'confirm' (one of: " + list + ")\n"},
+		{[]string{"show", "--field", "name", "--json", "line"}, 1, "", "error: --field and --json can't be used together\n"},
+		{[]string{"show", "--field", "name", "nothing"}, 1, "", "error: shortcut 'nothing' not found.\n"},
+		{[]string{"show", "--field", "name", "a", "b", "c"}, 1, "", ""},
+	}
+	for _, c := range cases {
+		res := e.Run(c.args...)
+		if c.stderr == "" && c.code == 1 { // only the code and a one-line error
+			if res.Code != 1 || res.Stdout != "" || strings.Count(res.Stderr, "\n") != 1 {
+				t.Errorf("%v: exit %d stdout %q stderr %q", c.args, res.Code, res.Stdout, res.Stderr)
+			}
+			continue
+		}
+		if res.Code != c.code || res.Stdout != c.stdout || res.Stderr != c.stderr {
+			t.Errorf("%v: exit %d stdout %q stderr %q; want exit %d stdout %q stderr %q", c.args, res.Code, res.Stdout, res.Stderr, c.code, c.stdout, c.stderr)
+		}
+	}
+}
+
+// show --field never approves and writes nothing, even for a project entry that was never approved.
+func TestShow_FieldIsReadOnly(t *testing.T) {
+	e := testkit.New(t)
+	proj := e.Project(map[string]any{"x": testkit.Inline("echo x")})
+	before := treeOf(t, e.Tmp)
+	res := e.RunWith(in(proj), "show", "--field", "approval", "x")
+	if res.Code != 0 || res.Stdout != "new\n" || res.Stderr != "" {
+		t.Errorf("exit %d stdout %q stderr %q", res.Code, res.Stdout, res.Stderr)
+	}
+	if after := treeOf(t, e.Tmp); !reflect.DeepEqual(after, before) {
+		t.Errorf("show --field changed the tree:\n%v\n--- now\n%v", before, after)
+	}
 }

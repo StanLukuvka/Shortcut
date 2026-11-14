@@ -55,7 +55,6 @@ func TestBundled_Templates(t *testing.T) {
 }
 
 func TestBundled_NanoLoggedAndDesktop(t *testing.T) {
-	testkit.Need(t, "python3")
 	e := testkit.New(t)
 	e.InstallBundled()
 	runOK(t, e, testkit.Opts{}, "new", "job", "--desc", "A job", "--", "echo job output")
@@ -85,7 +84,6 @@ func TestBundled_NanoLoggedAndDesktop(t *testing.T) {
 }
 
 func TestBundled_DesktopEntryQuoting(t *testing.T) {
-	testkit.Need(t, "python3")
 	e := testkit.New(t)
 	e.InstallBundled()
 	runOK(t, e, testkit.Opts{}, "new", "desk_test", "--desc", "Run 100% \"special\" `app` with $VAR", "--", "echo", "desktop_ok")
@@ -124,7 +122,6 @@ func TestBundled_DesktopEntryQuoting(t *testing.T) {
 }
 
 func TestBundled_EditOpensTheScriptOrTheDefiningFile(t *testing.T) {
-	testkit.Need(t, "python3")
 	e := testkit.New(t)
 	e.InstallBundled()
 	script := e.Script("tool.sh", "#!/usr/bin/env bash\n")
@@ -150,24 +147,18 @@ func TestBundled_EditOpensTheScriptOrTheDefiningFile(t *testing.T) {
 	testkit.Contains(t, "stderr", res.Stderr, "not found")
 }
 
-func TestBundled_ScriptsDontImportFromTheCallersFolder(t *testing.T) {
-	testkit.Need(t, "python3")
-	// python3 -c puts the current folder first on sys.path; a json.py there would run unapproved
-	e := testkit.New(t)
-	e.InstallBundled()
-	runOK(t, e, testkit.Opts{}, "new", "job", "--", "true")
-	here := filepath.Join(e.Tmp, "planted")
-	marker := filepath.Join(e.Tmp, "imported")
-	e.WriteFile(filepath.Join(here, "json.py"), "open("+"'"+marker+"'"+", 'w').close()\n", 0)
-	e.WriteFile(filepath.Join(e.ToolBin, "opener"), "#!/bin/sh\necho \"opened $1\"\n", 0o755)
-
-	runOK(t, e, testkit.Opts{Cwd: here, Env: map[string]string{"VISUAL": "opener"}}, "r", "edit", "job")
-	runOK(t, e, in(here), "r", "desktop", "job")
-	testkit.NotExist(t, marker)
+// edit and desktop read show --field; neither needs python3.
+func TestBundled_ScriptsDontUsePython(t *testing.T) {
+	for _, name := range []string{"edit.sh", "desktop.sh"} {
+		raw, err := os.ReadFile(filepath.Join(templatesDir, "scripts", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		testkit.NotContains(t, name, string(raw), "python3")
+	}
 }
 
 func TestBundled_DesktopRefusesAProjectShortcut(t *testing.T) {
-	testkit.Need(t, "python3")
 	e := testkit.New(t)
 	e.InstallBundled()
 	proj := e.Project(nil)
@@ -179,7 +170,6 @@ func TestBundled_DesktopRefusesAProjectShortcut(t *testing.T) {
 }
 
 func TestBundled_DesktopRemoveDeletesOnlyItsOwnLauncher(t *testing.T) {
-	testkit.Need(t, "python3")
 	e := testkit.New(t)
 	e.InstallBundled()
 	runOK(t, e, testkit.Opts{}, "new", "app", "--desc", "An app", "--", "echo", "app")
@@ -204,7 +194,6 @@ func TestBundled_DesktopRemoveDeletesOnlyItsOwnLauncher(t *testing.T) {
 }
 
 func TestBundledDesktop_TakesANamespaceMember(t *testing.T) {
-	testkit.Need(t, "python3")
 	e := testkit.New(t)
 	e.InstallBundled()
 	runOK(t, e, testkit.Opts{}, "new", "--namespace", "ns", "job", "--desc", "NS job", "--", "echo", "ns_ok")

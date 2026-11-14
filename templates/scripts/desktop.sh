@@ -24,13 +24,10 @@ if [ "$remove" = 1 ]; then
 fi
 
 # A launcher runs outside any project, so it needs a global shortcut; show fails if there is none.
-info="$(shortcut show --global --json "$@")"
-field() {
-    python3 -I -c '
-import json, sys
-value = json.loads(sys.argv[2])["entry"].get(sys.argv[1]) or ""
-print(" ".join(str(value).split()))
-' "$1" "$info"
+names=("$@")
+shortcut show --global --field name "${names[@]}" >/dev/null
+field() { # one line, white space collapsed
+    shortcut show --global --field "$1" "${names[@]}" | tr -s ' \t\n' ' ' | sed 's/^ //; s/ $//'
 }
 
 # Desktop sessions often lack ~/.local/bin in PATH, so the launcher uses the absolute path.

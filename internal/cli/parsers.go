@@ -8,7 +8,7 @@ var parsers = map[string]*argparse.Parser{
 		argparse.Value("cwd", "--cwd"), argparse.Flag("local", "--local"), argparse.Value("namespace", "--namespace"), argparse.Value("by", "--by"),
 		argparse.Repeated("arg", "--arg"), argparse.Repeated("argDesc", "--arg-desc"), argparse.Flag("confirm", "--confirm")).Exclusive("script", "copy"),
 	"list":     argparse.New("list", helpText, argparse.Optional("names", "--names")),
-	"show":     argparse.New("show", helpText, argparse.Positional("name", '+'), argparse.Flag("json", "--json"), argparse.Flag("skipLocal", "--global")),
+	"show":     argparse.New("show", helpText, argparse.Positional("name", '+'), argparse.Flag("json", "--json"), argparse.Value("field", "--field"), argparse.Flag("skipLocal", "--global")),
 	"location": argparse.New("location", helpText, argparse.Positional("name", '+'), argparse.Flag("skipLocal", "--global")),
 	"rm": argparse.New("rm", helpText, argparse.Positional("name", '*'), argparse.Value("namespace", "--namespace"), argparse.Flag("yes", "-y", "--yes"),
 		argparse.Flag("local", "--local"), argparse.Flag("skipLocal", "--global")),

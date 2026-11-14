@@ -159,6 +159,8 @@ A new local shortcut needs a project folder:
 | Message | Meaning |
 |---|---|
 | ``'<name>' is an inline shortcut, so it has no file. Change it in the file `shortcut show` names.`` | `location` |
+| `unknown field '<key>' (one of: <list>)` | `show --field` takes a top-level key of `show --json`, or `description`, `icon`, `created_by`, `created`, `inline`, `script` |
+| `--field and --json can't be used together` | |
 
 ## rm
 

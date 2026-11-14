@@ -31,7 +31,7 @@ func TestExport_UpdateDoesntWarnAboutOtherCwds(t *testing.T) {
 		t.Errorf("warning: %q", res.Stderr)
 	}
 	testkit.Eq(t, "run", e.RunWith(in(proj), "r", "abs").Stdout, "abs\n")
-	testkit.Contains(t, "show", e.RunWith(in(proj), "show", "abs").Stdout, "Export:      True")
+	testkit.Contains(t, "show", e.RunWith(in(proj), "show", "abs").Stdout, "Export:      yes")
 }
 
 func TestExport_TheLocalFileCanExport(t *testing.T) {
