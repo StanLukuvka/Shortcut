@@ -98,7 +98,7 @@ shortcut list                         everything visible; warns about invalid en
 shortcut list --names [ns]            bare names
 shortcut show <name>                  details and script
 shortcut show --json <name>           entry and where it resolves, as JSON
-shortcut show --field KEY <name>       one field, bare, for scripts
+shortcut show --field KEY <name>      one field, bare, for scripts
 shortcut location <name>              script path
 
 shortcut rm <name> [-y]               remove a global or namespace shortcut; says what goes, with -y too

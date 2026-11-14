@@ -369,9 +369,6 @@ func removeNamespaceFiles(group model.Group) error {
 // isListedImport reports whether a namespace comes from the store file's "imports" rather than its
 // imports/ folder.
 func isListedImport(store model.Store, name string) bool {
-	if store.Main.Data == nil {
-		return false
-	}
 	imports, ok := store.Main.Data.Vals["imports"].(*ordjson.Object)
 	if !ok {
 		return false
