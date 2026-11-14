@@ -129,11 +129,12 @@ A shortcut that declares `args` checks them before it runs. These print `error: 
 | `command expected after '--'` | |
 | `--script and --copy need a file name` | |
 | `use one of: '-- CMD', --script, --copy` | |
+| `--desc can't be empty` | `new` |
+| `--namespace can't be empty` | `new` |
 | `--copy can't be used with --local: .shortcuts.local is one file. Use --script` | |
 | `a local shortcut needs a command after '--', or --script PATH` | |
 | `script file not found: <path>` | The file given to `--script` or `--copy` |
 | `stdin is closed` | `new --copy -` with no standard input |
-| `stdin is not valid UTF-8` | `new --copy -` was given bytes that are not UTF-8 |
 | `'<src>' and '<dst>' are the same file` | `new --copy` of the file the store already holds under that name |
 | `--cwd directory does not exist: <dir>` | |
 | `--namespace can't be used with --local: .shortcuts.local is one file, and .shortcuts is yours to edit` | |
@@ -186,6 +187,7 @@ A new local shortcut needs a project folder:
 | `'<name>' is marked project-only; promote anyway with --force` | The entry has no `"export": true` |
 | `you already have a global '<name>'; give this one another name: shortcut promote <name> --as NEW` | |
 | `you already have a global '<new>'` | The name given to `--as` is taken |
+| `--as can't be empty` | |
 | `promote '<name>' in a terminal, or pass -y` | |
 
 ## update

@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -398,4 +399,17 @@ func TestRm_NamespaceWithANameSaysHowToRemoveOneEntry(t *testing.T) {
 	res := e.Run("rm", "--namespace", "podman", "top")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "--namespace takes the namespace alone: shortcut rm --namespace podman. To remove one entry: shortcut rm podman top")
+}
+
+func TestRm_EmptyNamespaceIsAnErrorAndRemovesNothing(t *testing.T) {
+	e := testkit.New(t)
+	runOK(t, e, testkit.Opts{}, "new", "ps", "--namespace", "dk", "--", "echo ps")
+	before := treeOf(t, e.Tmp)
+	res := e.Run("rm", "--namespace", "", "-y")
+	if res.Code != 1 || res.Stdout != "" || res.Stderr == "" {
+		t.Errorf("exit %d stdout %q stderr %q", res.Code, res.Stdout, res.Stderr)
+	}
+	if !reflect.DeepEqual(treeOf(t, e.Tmp), before) {
+		t.Error("rm --namespace '' changed the store")
+	}
 }

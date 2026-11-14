@@ -31,3 +31,5 @@
 - `update` and `update -y` with no group named skip a broken group with `warning: skipped <group>: <reason>` and exit 0. `update <group>` still exits 1 for it.
 - `show --field KEY <name>` prints one field, bare, and only reads. The bundled `edit` and `desktop` use it, so they no longer need python3.
 - `show` prints `Confirm:     yes` and `Export:      yes` where it printed `True`.
+- An empty `--desc`, `--namespace` or `--as` is an error. Before, it counted as not given.
+- `new --copy` gives the copy the source's permission bits plus execute, without setuid, setgid or sticky, and does not copy the modification time. `new --copy -` takes stdin bytes as they are, valid UTF-8 or not.

@@ -267,3 +267,13 @@ func TestFrom_OriginIsNotAJSONField(t *testing.T) {
 	e.WriteStore(e.Store, map[string]any{"tool": map[string]any{"inline": "echo tool", "origin": fromOrigin}})
 	testkit.Contains(t, "stderr", e.Run("r", "tool").Stderr, "unknown field: origin")
 }
+
+func TestPromote_EmptyAsIsAnError(t *testing.T) {
+	e := testkit.New(t)
+	proj := toolProject(e, true)
+	res := e.RunWith(in(proj), "promote", "tool", "--as", "", "-y")
+	if res.Code != 1 || res.Stderr != "error: --as can't be empty\n" {
+		t.Errorf("exit %d stderr %q", res.Code, res.Stderr)
+	}
+	noGlobalRegistry(t, e)
+}

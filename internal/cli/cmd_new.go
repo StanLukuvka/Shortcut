@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/pyjson"
@@ -39,6 +38,10 @@ func cmdNew(s *textio.Streams, args []string) error {
 		return Die("command expected after '--'")
 	case (ns.Set("script") && script == "") || (ns.Set("copy") && copyFrom == ""):
 		return Die("--script and --copy need a file name")
+	case ns.Set("desc") && ns.Str("desc") == "":
+		return Die("--desc can't be empty")
+	case ns.Set("namespace") && ns.Str("namespace") == "":
+		return Die("--namespace can't be empty")
 	case hasInline && (script != "" || copyFrom != ""):
 		return Die("use one of: '-- CMD', --script, --copy")
 	case ns.Bool("local") && copyFrom != "":
@@ -106,10 +109,10 @@ func cmdNew(s *textio.Streams, args []string) error {
 	return err
 }
 
-// descOr returns the --desc, or def when it is empty: an empty --desc counts as none.
+// descOr returns the --desc, or def when there is none.
 func descOr(ns Namespace, def string) string {
-	if d := ns.Str("desc"); d != "" {
-		return d
+	if ns.Set("desc") {
+		return ns.Str("desc")
 	}
 	return def
 }
@@ -230,9 +233,6 @@ func newFromCopy(s *textio.Streams, ns Namespace, group model.Group, fields *mod
 		if content, err = io.ReadAll(s.In); err != nil {
 			return err
 		}
-		if !utf8.Valid(content) { // stdin must be UTF-8
-			return errors.New("stdin is not valid UTF-8")
-		}
 		ext = ".sh"
 	} else {
 		src = pyos.Abs(pyos.ExpandUser(from))
@@ -262,9 +262,8 @@ func newFromCopy(s *textio.Streams, ns Namespace, group model.Group, fields *mod
 	return err
 }
 
-// copyScript is shutil.copy2 + chmod(mode | 0o111): the content, the source's mode and modification time, made
-// executable. The destination is written where it is, a link included.
-// lazy: the access time is set to the modification time; nothing reads it.
+// copyScript copies the content and the source's permission bits, made executable (no setuid, setgid or sticky
+// bit, no modification time). The destination is written where it is, a link included.
 func copyScript(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -289,8 +288,5 @@ func copyScript(src, dst string) error {
 	if err := out.Close(); err != nil {
 		return err
 	}
-	if err := os.Chtimes(dst, st.ModTime(), st.ModTime()); err != nil {
-		return err
-	}
-	return os.Chmod(dst, st.Mode()&(os.ModePerm|os.ModeSetuid|os.ModeSetgid|os.ModeSticky)|0o111)
+	return os.Chmod(dst, st.Mode().Perm()|0o111)
 }
