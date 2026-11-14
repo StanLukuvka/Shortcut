@@ -1,6 +1,7 @@
 package pyos
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -145,13 +146,20 @@ func TestPaths_Join(t *testing.T) { // posixpath.join: an absolute part restarts
 func TestExpandUser(t *testing.T) {
 	e := testkit.New(t) // HOME is e.Home
 	for in, want := range map[string]string{
-		"~": e.Home, "~/x": e.Home + "/x", "x/~": "x/~", "": "", "~nosuchuser_zz9/x": "~nosuchuser_zz9/x",
+		"~": e.Home, "~/x": e.Home + "/x", "x/~": "x/~", "": "", "~bob/x": "~bob/x", "~root": "~root",
 	} {
 		if got := ExpandUser(in); got != want {
 			t.Errorf("ExpandUser(%q) = %q, want %q", in, got, want)
 		}
 	}
-	if got := ExpandUser("~root"); got == "~root" || got == "" { // an account that exists on every unix
-		t.Errorf("ExpandUser(~root) = %q", got)
+	home := func(h string, err error) func() (string, error) { return func() (string, error) { return h, err } }
+	if got := expandWith("~/x", home("", errors.New("$HOME is not defined"))); got != "~/x" { // os.UserHomeDir fails on unset or empty HOME
+		t.Errorf("no HOME: %q", got)
+	}
+	if got := expandWith("~/x", home("/", nil)); got != "/x" {
+		t.Errorf("HOME=/: %q", got)
+	}
+	if got := expandWith("~", home("/", nil)); got != "/" {
+		t.Errorf("~ with HOME=/: %q", got)
 	}
 }
