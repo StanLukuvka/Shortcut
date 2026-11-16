@@ -99,6 +99,9 @@ func entryError(g Group, it Item) error {
 		if !platform.IsFile(path) {
 			return fmt.Errorf("'%s' is not a valid entry: script not found: %s", it.Name, *e.Script)
 		}
+		if err := platform.CheckExecutable(path); err != nil {
+			return fmt.Errorf("'%s' is not a valid entry: %w", it.Name, err)
+		}
 	}
 	return nil
 }

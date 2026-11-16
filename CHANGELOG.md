@@ -20,7 +20,7 @@
 - Options are spelled in full; `-yh` is not `-y -h`. A usage error reads `error: <message>` and a `Try 'shortcut <command> -h'` line, and exits 2.
 - `~` and `~/...` are expanded in paths, using $HOME; `~name` is not.
 - An empty `--desc` or `--namespace` is an error. A `null` for a text field is an error.
-- An executable script with no `#!` is run directly; only an executable text file the kernel refuses is run with bash.
+- A script runs as it is, never through a `#!` line `run` reads itself or through bash. One that is not executable is refused by `run`, `new --script` and `update`, and `list` warns about it, each with `chmod +x PATH`.
 - A shortcut's environment lists `SHORTCUT_NAME`, `SHORTCUT_NAMESPACE`, `SHORTCUT_CALLER_CWD` after the caller's own variables.
 - An empty or `.` PATH entry does not find commands in the current directory.
 - Files shortcut writes come out with keys sorted; approval hashes each file's bytes as they are, so reformatting a file by hand needs `shortcut update`.

@@ -49,7 +49,7 @@ func TestStores_LocalShortcutHidingGlobalWarns(t *testing.T) {
 func TestStores_NamespaceDispatch(t *testing.T) {
 	e := testkit.New(t)
 	imports := filepath.Join(e.Store, "imports")
-	e.WriteFile(filepath.Join(imports, "scripts", "del.sh"), "#!/usr/bin/env bash\necho \"deleting $1\"\n", 0)
+	e.WriteFile(filepath.Join(imports, "scripts", "del.sh"), "#!/usr/bin/env bash\necho \"deleting $1\"\n", 0o755)
 	e.WriteImport(e.Store, "docker", testkit.NS(map[string]any{
 		"delete": map[string]any{"script": "scripts/del.sh"},
 		"where":  map[string]any{"inline": "pwd", "cwd": "."},
@@ -294,7 +294,7 @@ func TestStores_BrokenGlobalStoreStillReports(t *testing.T) {
 
 func TestStores_AFifoScriptNeverBlocks(t *testing.T) {
 	e := testkit.New(t)
-	proj := e.Project(map[string]any{"p": map[string]any{"script": "pipe"}, "q": testkit.Inline("true")}, testkit.Files(map[string]any{"pipe": "#!/bin/sh\n"}))
+	proj := e.Project(map[string]any{"p": map[string]any{"script": "pipe"}, "q": testkit.Inline("true")}, testkit.Files(map[string]any{"pipe": "#!/bin/sh\n"}), testkit.Mode(0o755))
 	runOK(t, e, in(proj), "update", ".", "-y")
 	os.Remove(filepath.Join(proj, "pipe"))
 	if err := syscall.Mkfifo(filepath.Join(proj, "pipe"), 0o644); err != nil {

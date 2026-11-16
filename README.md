@@ -131,7 +131,7 @@ Flags for `new`:
 
 ## What a shortcut runs with
 
-- An inline shortcut runs as `bash -c CMD <name> ARGS...`, so `$0` is its name. A script runs by its shebang. An executable file with no shebang runs as it is (a binary, or a text file the kernel refuses, which bash then runs); a file that is not executable runs with bash.
+- An inline shortcut runs as `bash -c CMD <name> ARGS...`, so `$0` is its name. A script runs as it is, so it must be executable and start with a `#!` line, or be a binary. A script that is not executable is refused with the `chmod +x` command; `new --script` and `list` say so too.
 - It runs in its `cwd`, the caller's directory by default.
 - Every word after the name reaches it as `$1`, `$2`..., flags included. A first `--` is passed on as it is.
 - Its exit code is shortcut's.

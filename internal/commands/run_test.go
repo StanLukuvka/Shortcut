@@ -82,31 +82,9 @@ func TestRunning_RIsShortForRun(t *testing.T) {
 	testkit.Contains(t, "r --help", e.Run("r", "--help").Stdout, "shortcut run|r [--global] [-y] <name>")
 }
 
-// The same branches (a #! line on a file that can't be executed, no #! line, a #! line
-// on an executable) are run with sh and bash scripts.
-func TestRunning_ScriptShebangWithoutExecAndElf(t *testing.T) {
-	e := testkit.New(t)
-	scripts := filepath.Join(e.Store, "scripts")
-	e.WriteFile(filepath.Join(scripts, "py_script.sh"), "#!/usr/bin/env sh\necho \"py $((1 + 1))\"\n", 0o644)
-	e.WriteFile(filepath.Join(scripts, "no_shebang.sh"), "echo nonexec\n", 0o644)
-	e.WriteFile(filepath.Join(scripts, "exec.sh"), "#!/usr/bin/env bash\necho exec_shebang\n", 0o755)
-	e.WriteFile(filepath.Join(scripts, "blank.sh"), "#! \t \necho blank_shebang\n", 0o644)
-	e.WriteStore(e.Store, map[string]any{
-		"blank":     map[string]any{"script": "scripts/blank.sh"},
-		"py":        map[string]any{"script": "scripts/py_script.sh", "description": "python"},
-		"noshebang": map[string]any{"script": "scripts/no_shebang.sh", "description": "noshebang"},
-		"exec":      map[string]any{"script": "scripts/exec.sh", "description": "exec"},
-	})
-	for name, want := range map[string]string{"blank": "blank_shebang", "py": "py 2", "noshebang": "nonexec", "exec": "exec_shebang"} {
-		res := e.Run("run", name)
-		if res.Code != 0 || !strings.Contains(res.Stdout, want) {
-			t.Errorf("%s: exit %d stdout %q stderr %q", name, res.Code, res.Stdout, res.Stderr)
-		}
-	}
-}
-
-// An executable with no #! is exec'd as it is; only an executable text file the kernel refuses (ENOEXEC) goes to bash.
-func TestRunning_ExecutableWithoutShebang(t *testing.T) {
+// A script is handed to the kernel as it is: its #! line runs it, a binary runs, a file the kernel refuses says so,
+// and one that is not executable stops with the chmod command.
+func TestRunning_AScriptRunsAsItIs(t *testing.T) {
 	e := testkit.New(t)
 	scripts := filepath.Join(e.Store, "scripts")
 	var bin []byte
@@ -119,22 +97,29 @@ func TestRunning_ExecutableWithoutShebang(t *testing.T) {
 	if bin == nil {
 		t.Skip("no true binary")
 	}
-	e.WriteFile(filepath.Join(scripts, "text.sh"), "echo hi\n", 0o755)
+	e.WriteFile(filepath.Join(scripts, "exec.sh"), "#!/usr/bin/env bash\necho exec_shebang\n", 0o755)
+	e.WriteFile(filepath.Join(scripts, "plain.sh"), "#!/usr/bin/env sh\necho plain\n", 0o644)
 	e.WriteFile(filepath.Join(scripts, "bin"), bin, 0o755)
 	e.WriteFile(filepath.Join(scripts, "macho"), append([]byte("\xcf\xfa\xed\xfe"), make([]byte, 64)...), 0o755)
 	e.WriteStore(e.Store, map[string]any{
-		"text":  map[string]any{"script": "scripts/text.sh"},
+		"exec":  map[string]any{"script": "scripts/exec.sh"},
+		"plain": map[string]any{"script": "scripts/plain.sh"},
 		"bin":   map[string]any{"script": "scripts/bin"},
 		"macho": map[string]any{"script": "scripts/macho"},
 	})
-	if res := e.Run("run", "text"); res.Code != 0 || res.Stdout != "hi\n" {
-		t.Errorf("text: exit %d stdout %q stderr %q", res.Code, res.Stdout, res.Stderr)
+	if res := e.Run("run", "exec"); res.Code != 0 || res.Stdout != "exec_shebang\n" {
+		t.Errorf("exec: exit %d stdout %q stderr %q", res.Code, res.Stdout, res.Stderr)
 	}
 	if res := e.Run("run", "bin"); res.Code != 0 || res.Stdout != "" {
 		t.Errorf("bin: exit %d stdout %q stderr %q", res.Code, res.Stdout, res.Stderr)
 	}
+	res := e.Run("run", "plain")
+	testkit.Eq(t, "plain exit", res.Code, 1)
+	testkit.Eq(t, "plain stdout", res.Stdout, "")
+	path := filepath.Join(scripts, "plain.sh")
+	testkit.Contains(t, "plain stderr", res.Stderr, "error: "+path+" is not executable. Make it so: chmod +x "+path)
 	// A binary the kernel will not run (another system's format) is not handed to bash.
-	res := e.Run("run", "macho")
+	res = e.Run("run", "macho")
 	testkit.Eq(t, "macho exit", res.Code, 1)
 	testkit.Eq(t, "macho stdout", res.Stdout, "")
 	testkit.Contains(t, "macho stderr", res.Stderr, "exec format error")

@@ -84,7 +84,7 @@ func TestProjectFiles_NewLocalOverridesASharedNameAndSaysSo(t *testing.T) {
 
 func TestProjectFiles_NewLocalTakesACommandAndAddRecordsThePath(t *testing.T) {
 	e := testkit.New(t)
-	proj := e.Project(map[string]any{}, testkit.Files(map[string]any{"tools/run.sh": "#!/usr/bin/env bash\n"}))
+	proj := e.Project(map[string]any{}, testkit.Files(map[string]any{"tools/run.sh": "#!/usr/bin/env bash\n"}), testkit.Mode(0o755))
 	outside := e.Script("outside.sh", "#!/usr/bin/env bash\n")
 	res := e.RunWith(in(proj), "new", "x", "--local", "--desc", "d")
 	res.WantCode(t, 2)
