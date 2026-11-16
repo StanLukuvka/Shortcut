@@ -12,17 +12,49 @@ import (
 	"testing"
 )
 
-// layers is the import table: for each package (a path from the module root, "." for the root), the module-internal
-// packages its non-test files may import. Stdlib is always allowed. A package not listed fails, so a new one gets placed here.
+// Imports only point down this tree. Each key of layers is a package, as a path from the module root, and its value
+// is the module-internal packages its non-test files may import; stdlib is always allowed. A package not listed
+// fails, so a new one gets placed here.
+//
+//	cmd/shortcut
+//	internal/commands            the table, dispatch, usage text
+//	internal/commands/<cmd>      one package per command; none imports another, none imports commands
+//	internal/store/write         everything that changes a store
+//	internal/store/approval      approval records and hashing
+//	internal/store               files, entries, groups, lookup, the context
+//	internal/term                output, prompts, the command description; term/argparse is its parser
+//	internal/platform            paths, exec, locks, JSON; imports nothing internal
+const (
+	platform = "internal/platform"
+	argparse = "internal/term/argparse"
+	term     = "internal/term"
+	store    = "internal/store"
+	approval = "internal/store/approval"
+	write    = "internal/store/write"
+	commands = "internal/commands"
+)
+
+// below is what a command may import: the store, term and platform trees. A command is never in it.
+var below = []string{write, approval, store, argparse, term, platform}
+
 var layers = map[string][]string{
-	"cmd/shortcut":            {"internal/cli"},
-	"internal/platform":       {},
-	"internal/store":          {"internal/platform"},
-	"internal/term":           {"internal/term/argparse", "internal/platform"},
-	"internal/store/approval": {"internal/store", "internal/platform"},
-	"internal/term/argparse":  {},
-	"internal/cli":            {"internal/term/argparse", "internal/store/approval", "internal/store", "internal/term", "internal/platform"},
-	"internal/testkit":        {},
+	"cmd/shortcut": {commands},
+	commands: {commands + "/completion", commands + "/list", commands + "/new", commands + "/rm", commands + "/run",
+		commands + "/show", commands + "/update", store, term, platform},
+	commands + "/completion": below,
+	commands + "/list":       below,
+	commands + "/new":        below,
+	commands + "/rm":         below,
+	commands + "/run":        below,
+	commands + "/show":       below,
+	commands + "/update":     below,
+	write:                    {approval, store, term, platform},
+	approval:                 {store, platform},
+	store:                    {platform},
+	term:                     {argparse, platform},
+	argparse:                 {},
+	platform:                 {},
+	"internal/testkit":       {},
 }
 
 // The packages may only import what the table says, read from the import lines of their non-test files.
