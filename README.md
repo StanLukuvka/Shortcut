@@ -116,7 +116,7 @@ Flags for `new`:
 
 `show` and `rm` take `--global` too. In a project, `--local` works only from the project root.
 
-`show --field KEY` prints one field of that object bare, or of the entry (`description`, `inline`, `script`); `true` and `false` print as words, and a null or absent field prints nothing. It only reads: it never approves. `show --json` prints one object: `name`, `namespace`, `scope`, `defined_in`, `source`, `hides_global`, `approval`, `cwd`, `run_cwd`, `script_path`, `error`, and `entry` as written. A field that can't be worked out is null.
+`show --field KEY` prints one field of that object bare, or of the entry (`description`, `inline`, `script`); `true` and `false` print as words, and a null or absent field prints nothing. It only reads: it never approves. `show --json` prints one object: `name`, `namespace`, `scope`, `defined_in`, `source`, `hides_global`, `approval`, `cwd`, `run_cwd`, `script_path`, `error` and `entry`, with its own keys and the entry's sorted. A field that can't be worked out is null.
 
 ## Projects and approval
 

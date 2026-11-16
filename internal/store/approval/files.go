@@ -83,8 +83,9 @@ func folderFiles(g store.Group) map[string]string {
 	return files
 }
 
-func jsonFile(g store.Group, path string, d *platform.Doc) (map[string]string, error) {
-	text, err := d.Normal()
+// jsonFile is the SHA-256 of the file's bytes exactly as they are on disk.
+func jsonFile(g store.Group, path string) (map[string]string, error) {
+	text, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("cannot approve: %q: %w", displayPath(g, path), err)
 	}
@@ -107,16 +108,15 @@ func Files(g store.Group) (map[string]string, error) {
 	files := merge(folderFiles(g), entryFiles(g, g.Shared, ""), entryFiles(g, g.Local, " in "+store.LocalFile))
 	for _, f := range []struct {
 		path string
-		doc  *platform.Doc
 		ok   bool
 	}{
-		{g.File, g.Doc, g.Kind != store.KindProject || platform.Exists(g.File)},
-		{g.LocalFile, g.LocalDoc, g.Kind == store.KindProject && platform.Exists(g.LocalFile)},
+		{g.File, g.Kind != store.KindProject || platform.Exists(g.File)},
+		{g.LocalFile, g.Kind == store.KindProject && platform.Exists(g.LocalFile)},
 	} {
 		if !f.ok {
 			continue
 		}
-		own, err := jsonFile(g, f.path, f.doc)
+		own, err := jsonFile(g, f.path)
 		if err != nil {
 			return nil, err
 		}

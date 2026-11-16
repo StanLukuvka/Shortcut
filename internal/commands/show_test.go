@@ -67,73 +67,73 @@ Script (TMP/home/.shortcuts/scripts/tool.sh):
 echo hi
 `, ""},
 		{[]string{"show", "--json", "tool"}, 0, `{
-  "name": "tool",
-  "namespace": null,
-  "scope": "global",
-  "defined_in": "TMP/home/.shortcuts/shortcuts.json",
-  "source": null,
-  "hides_global": false,
   "approval": "ok",
   "cwd": null,
-  "run_cwd": "TMP/home",
-  "script_path": "TMP/home/.shortcuts/scripts/tool.sh",
-  "error": null,
+  "defined_in": "TMP/home/.shortcuts/shortcuts.json",
   "entry": {
+    "confirm": true,
     "description": "A tool: é",
-    "script": "scripts/tool.sh",
-    "confirm": true
-  }
+    "script": "scripts/tool.sh"
+  },
+  "error": null,
+  "hides_global": false,
+  "name": "tool",
+  "namespace": null,
+  "run_cwd": "TMP/home",
+  "scope": "global",
+  "script_path": "TMP/home/.shortcuts/scripts/tool.sh",
+  "source": null
 }
 `, ""},
 		{[]string{"show", "--json", "bad"}, 0, `{
-  "name": "bad",
-  "namespace": null,
-  "scope": "global",
-  "defined_in": "TMP/home/.shortcuts/shortcuts.json",
-  "source": null,
-  "hides_global": false,
   "approval": "ok",
   "cwd": null,
-  "run_cwd": null,
-  "script_path": null,
-  "error": "'bad' is not a valid entry: 'cwd' must be a string",
+  "defined_in": "TMP/home/.shortcuts/shortcuts.json",
   "entry": {
-    "inline": "x",
     "cwd": 5,
-    "description": "bd"
-  }
+    "description": "bd",
+    "inline": "x"
+  },
+  "error": "'bad' is not a valid entry: 'cwd' must be a string",
+  "hides_global": false,
+  "name": "bad",
+  "namespace": null,
+  "run_cwd": null,
+  "scope": "global",
+  "script_path": null,
+  "source": null
 }
 `, ""},
 		{[]string{"show", "--json", "trav"}, 0, `{
-  "name": "trav",
-  "namespace": null,
-  "scope": "global",
-  "defined_in": "TMP/home/.shortcuts/shortcuts.json",
-  "source": null,
-  "hides_global": false,
   "approval": "ok",
   "cwd": null,
-  "run_cwd": "TMP/home",
-  "script_path": null,
-  "error": "path traversal detected: '../../etc/passwd' resolves to 'TMP/etc/passwd', outside 'TMP/home/.shortcuts'.",
+  "defined_in": "TMP/home/.shortcuts/shortcuts.json",
   "entry": {
     "script": "../../etc/passwd"
-  }
+  },
+  "error": "path traversal detected: '../../etc/passwd' resolves to 'TMP/etc/passwd', outside 'TMP/home/.shortcuts'.",
+  "hides_global": false,
+  "name": "trav",
+  "namespace": null,
+  "run_cwd": "TMP/home",
+  "scope": "global",
+  "script_path": null,
+  "source": null
 }
 `, ""},
 		{[]string{"show", "--json", "nul"}, 0, `{
-  "name": "nul",
-  "namespace": null,
-  "scope": "global",
-  "defined_in": "TMP/home/.shortcuts/shortcuts.json",
-  "source": null,
-  "hides_global": false,
   "approval": "ok",
   "cwd": null,
-  "run_cwd": null,
-  "script_path": null,
+  "defined_in": "TMP/home/.shortcuts/shortcuts.json",
+  "entry": null,
   "error": "'nul' is not a valid entry: expected a JSON object",
-  "entry": null
+  "hides_global": false,
+  "name": "nul",
+  "namespace": null,
+  "run_cwd": null,
+  "scope": "global",
+  "script_path": null,
+  "source": null
 }
 `, ""},
 		{[]string{"show", "gone"}, 0, `Name:        gone

@@ -90,40 +90,45 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	return nil
 }
 
-// showTop are the top-level keys of `show --json`, in order.
+// showTop are the top-level keys of `show --json`.
 func showTop() []string {
 	return []string{"name", "namespace", "scope", "defined_in", "source", "hides_global", "approval", "cwd", "run_cwd", "script_path", "error"}
 }
 
 // setOpt writes null for nil, else the string. A string that is not valid UTF-8 is refused (platform.ErrNotUTF8).
-func setOpt(d *platform.Doc, key string, val *string) error {
+func setOpt(d platform.Doc, key string, val *string) error {
 	if val == nil {
-		d.Set(key, []byte("null"))
+		d[key] = []byte("null")
 		return nil
 	}
 	return d.SetString(key, *val)
 }
 
-// showJSON prints one JSON object, the entry as written plus where it resolves.
+// showJSON prints one JSON object, the entry plus where it resolves.
 func showJSON(c *store.Context, s *term.Streams, words []string, lk store.Lookup) error {
 	vals, entry, err := showObject(c, words, lk)
 	if err != nil {
 		return err
 	}
-	d := &platform.Doc{}
+	d := platform.Doc{}
 	for _, k := range showTop() {
 		if k == "hides_global" {
-			d.Set(k, []byte(*vals[k])) // true or false
+			d[k] = []byte(*vals[k]) // true or false
 		} else if err := setOpt(d, k, vals[k]); err != nil {
 			return err
 		}
 	}
-	d.Set("entry", entry)
+	if o, ok := platform.ObjectOf(entry); ok { // an object's fields come out sorted, whatever the file's order
+		if entry, err = o.Bytes(); err != nil {
+			return err
+		}
+	}
+	d["entry"] = entry
 	text, err := d.Pretty()
 	if err != nil {
 		return err
 	}
-	_, err = s.Out.WriteString(string(text) + "\n")
+	_, err = s.Out.WriteString(string(text))
 	return err
 }
 
@@ -153,7 +158,7 @@ func showField(c *store.Context, s *term.Streams, words []string, lk store.Looku
 		if d, err := platform.ParseDoc(entry); err == nil {
 			if str, ok := d.String(key); ok {
 				text = &str
-			} else if raw := string(d.Raw[key]); raw != "" && raw != "null" {
+			} else if raw := string(d[key]); raw != "" && raw != "null" {
 				text = &raw
 			}
 		}

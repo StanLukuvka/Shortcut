@@ -77,7 +77,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 			return err
 		}
 		if shortcuts.Has(name) {
-			shortcuts.Delete(name)
+			delete(shortcuts, name)
 			if err := write.SaveEdited(group.File, reg, shortcuts); err != nil {
 				return err
 			}
@@ -117,8 +117,8 @@ func rmLocal(c *store.Context, s *term.Streams, ns term.Namespace) error {
 		Message: rmLocalMessage(group, name), TellOnYes: true}, ns.Bool("yes")); err != nil {
 		return err
 	}
-	err = write.WriteLocal(c, group.StoreDir, func(shortcuts *platform.Doc) error {
-		shortcuts.Delete(name)
+	err = write.WriteLocal(c, group.StoreDir, func(shortcuts platform.Doc) error {
+		delete(shortcuts, name)
 		return nil
 	})
 	if err != nil {
@@ -161,15 +161,15 @@ func rmNamespace(c *store.Context, s *term.Streams, name string, assumeYes bool)
 				return err
 			}
 			if imports, ok := reg.Object("imports"); ok {
-				imports.Delete(name)
-				if len(imports.Keys) == 0 {
-					reg.Delete("imports")
+				delete(imports, name)
+				if len(imports) == 0 {
+					delete(reg, "imports")
 				} else {
 					raw, err := imports.Bytes()
 					if err != nil {
 						return err
 					}
-					reg.Set("imports", raw)
+					reg["imports"] = raw
 				}
 			}
 			if err := store.SaveRegistryAtomic(storeDir, reg); err != nil {

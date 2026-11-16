@@ -57,11 +57,11 @@ func TestApproval_BlocksUntilApprovedAndAfterAnyChange(t *testing.T) {
 	testkit.Contains(t, "update .", e.RunWith(o, "update", ".").Stdout, "already approved")
 	testkit.Contains(t, "update", e.RunWith(o, "update").Stdout, "Nothing to approve here")
 
-	// Reordered keys and reformatting change nothing
+	// Reformatting the file needs `update`: approval hashes the file as it is
 	e.WriteRegistryRaw(registry, "{\n       \"shortcuts\": {\n       \"there\": {\"description\": \"There\", \"inline\": \"echo there\"},\n"+
 		"       \"hi\": {\"description\": \"Say hi\", \"script\": \"scripts/hi.sh\"}},\n       \"version\": 1}")
-	if code := e.RunWith(o, "r", "hi").Code; code != 0 {
-		t.Errorf("reordered: exit %d", code)
+	if code := e.RunWith(o, "r", "hi").Code; code == 0 {
+		t.Errorf("reformatted: exit %d", code)
 	}
 
 	// A change to the JSON blocks, also the shortcuts that didn't change

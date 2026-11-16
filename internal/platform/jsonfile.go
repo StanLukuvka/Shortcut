@@ -19,7 +19,7 @@ func ReadJSONFile(path string) ([]byte, error) {
 
 // WriteJSONAtomic writes a whole file or none of it. A symlinked file is written
 // where the link leads, with the mode it had. The temporary file is hidden, named after it, and removed on error.
-func WriteJSONAtomic(path string, doc *Doc) error {
+func WriteJSONAtomic(path string, doc Doc) error {
 	text, err := doc.Pretty() // before anything is created: a refused write leaves the old file as it was
 	if err != nil {
 		return err
@@ -44,7 +44,7 @@ func WriteJSONAtomic(path string, doc *Doc) error {
 			os.Remove(tmp.Name())
 		}
 	}()
-	if _, err = tmp.Write(append(text, '\n')); err != nil {
+	if _, err = tmp.Write(text); err != nil {
 		tmp.Close()
 		return err
 	}

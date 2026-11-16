@@ -13,7 +13,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-func doc(t *testing.T, s string) *platform.Doc {
+func doc(t *testing.T, s string) platform.Doc {
 	t.Helper()
 	d, err := platform.ParseDoc([]byte(s))
 	if err != nil {
@@ -47,30 +47,8 @@ func TestEntry_FromValueMessages(t *testing.T) {
 	}
 }
 
-// compactOf is d on one line, as the JSON encoder writes it.
-func compactOf(t *testing.T, d *platform.Doc) string {
-	t.Helper()
-	b, err := d.Bytes()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(b)
-}
-
-func TestEntry_RoundTripKeepsOrder(t *testing.T) {
-	src := `{"description": "d", "script": "s.sh", "cwd": "c", "confirm": true}`
-	e, err := DecodeEntry("x", []byte(src))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if raw, err := e.Raw(); err != nil || string(raw) != compactOf(t, doc(t, src)) {
-		t.Errorf("got  %s, %v\nwant %s", raw, err, compactOf(t, doc(t, src)))
-	}
-	if e.Inline != nil || *e.Script != "s.sh" || !e.Confirm {
-		t.Errorf("fields: %+v", e)
-	}
-	// An empty inline is still set.
-	e, err = DecodeEntry("y", []byte(`{"inline": ""}`))
+func TestEntry_EmptyInlineIsStillSet(t *testing.T) {
+	e, err := DecodeEntry("y", []byte(`{"inline": ""}`))
 	if err != nil || e.Inline == nil {
 		t.Fatalf("%+v %v", e, err)
 	}
@@ -309,7 +287,7 @@ func TestStores_WriteJSONAtomic(t *testing.T) {
 		t.Error("the link was replaced")
 	}
 	got, _ := os.ReadFile(target)
-	want := "{\n  \"version\": 1,\n  \"shortcuts\": {\n    \"hi\": {\n      \"description\": \"é\",\n      \"n\": 1.0\n    }\n  }\n}\n"
+	want := "{\n  \"shortcuts\": {\n    \"hi\": {\n      \"description\": \"é\",\n      \"n\": 1.0\n    }\n  },\n  \"version\": 1\n}\n"
 	if string(got) != want {
 		t.Errorf("got %q", got)
 	}
@@ -335,7 +313,7 @@ func TestStores_WriteJSONAtomicLeavesNoTempFileOnError(t *testing.T) {
 	dir := env.Folder("d")
 	target := filepath.Join(dir, "x.json")
 	os.Mkdir(target, 0o755) // a rename of a file over a folder fails
-	if err := platform.WriteJSONAtomic(target, &platform.Doc{}); err == nil {
+	if err := platform.WriteJSONAtomic(target, platform.Doc{}); err == nil {
 		t.Fatal("want an error")
 	}
 	entries, _ := os.ReadDir(dir)
@@ -369,7 +347,7 @@ func TestStores_InitStoreCreatesOnlyAMissingRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(filepath.Join(env.Store, "shortcuts.json"))
-	if string(b) != "{\n  \"version\": 1,\n  \"shortcuts\": {}\n}\n" {
+	if string(b) != "{\n  \"shortcuts\": {},\n  \"version\": 1\n}\n" {
 		t.Errorf("got %q", b)
 	}
 	env.WriteStore(env.Store, map[string]any{"keep": map[string]any{"inline": "x"}})
@@ -391,7 +369,7 @@ func TestGroup_ShortcutsOverlayAndSource(t *testing.T) {
 	if got := strings.Join(g.Shortcuts().Names(), ","); got != "a,b,c,d" {
 		t.Errorf("keys %s", got)
 	}
-	if it, _ := g.Shortcuts().Get("b"); string(it.Raw) != `{"inline":"B"}` {
+	if it, _ := g.Shortcuts().Get("b"); string(it.Raw) != `{"inline": "B"}` {
 		t.Error("b not overridden")
 	}
 	for name, want := range map[string]string{"a": "shared", "b": "overridden", "c": "shared", "d": "local"} {
@@ -471,9 +449,9 @@ func TestStores_LoadStoreImportProblems(t *testing.T) {
 	env.WriteRegistryRaw(file, `{"version": 1, "shortcuts": {}, "imports": {"num": 5, "plain": "x.json", "bare": "dir/.shortcut", "ok": "~/x.shortcut", "Bad Name": "w.shortcut"}}`)
 	store := NewContext(env.Home, nil).Store(proj)
 	want := []string{
+		"import 'bare' in " + file + ": a namespace file needs a name, e.g. docker.shortcut",
 		"import 'num' in " + file + " must be a path",
 		"import 'plain' in " + file + " must be a .shortcut file",
-		"import 'bare' in " + file + ": a namespace file needs a name, e.g. docker.shortcut",
 	}
 	if strings.Join(store.Problems, "|") != strings.Join(want, "|") {
 		t.Errorf("problems\n%q\nwant\n%q", store.Problems, want)
@@ -629,8 +607,8 @@ func TestWriteJSONAtomic_RefusesInvalidUTF8AndKeepsTheOldFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	d := &platform.Doc{}
-	d.Set("name", []byte("\"caf\xe9\""))
+	d := platform.Doc{}
+	d["name"] = []byte("\"caf\xe9\"")
 	if err := platform.WriteJSONAtomic(path, d); !errors.Is(err, platform.ErrNotUTF8) {
 		t.Fatalf("got %v", err)
 	}
@@ -697,7 +675,7 @@ func TestStores_VersionRequiredInEveryFile(t *testing.T) {
 }
 
 // newGroup is a Group with an empty file, as LoadGroup gives for a missing one.
-func newGroup() Group { return Group{Doc: &platform.Doc{}} }
+func newGroup() Group { return Group{Doc: platform.Doc{}} }
 
 func TestGroup_KindFromLoaders(t *testing.T) {
 	e := testkit.New(t)
@@ -720,4 +698,14 @@ func TestGroup_KindFromLoaders(t *testing.T) {
 	if g, ok := c.Store(e.Store).Namespace("n"); !ok || g.Kind != KindNamespace || g.InProject {
 		t.Errorf("global namespace: %+v", g)
 	}
+}
+
+// compactOf is d on one line, as the JSON encoder writes it.
+func compactOf(t *testing.T, d platform.Doc) string {
+	t.Helper()
+	b, err := d.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }

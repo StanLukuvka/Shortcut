@@ -23,5 +23,6 @@
 - An executable script with no `#!` is run directly; only an executable text file the kernel refuses is run with bash.
 - A shortcut's environment lists `SHORTCUT_NAME`, `SHORTCUT_NAMESPACE`, `SHORTCUT_CALLER_CWD` after the caller's own variables.
 - An empty or `.` PATH entry does not find commands in the current directory.
+- Files shortcut writes come out with keys sorted; approval hashes each file's bytes as they are, so reformatting a file by hand needs `shortcut update`.
 - `update` and `update -y` with no group named skip a broken group with `warning: skipped <group>: <reason>` and exit 0; `update <group>` exits 1 for it.
 - `list | head` ends shortcut by SIGPIPE (a shell shows 141); stdout is not buffered.

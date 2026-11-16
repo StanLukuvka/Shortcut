@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"unicode/utf8"
@@ -16,21 +17,17 @@ var ErrNotUTF8 = errors.New("contains text that is not valid UTF-8 (invalid byte
 
 var errNotObject = errors.New("root must be a JSON object")
 
-// Doc is one JSON object as written: keys in first-seen order, each value as compact text with strings as
-// characters, numbers as written and every nested object's keys in first-seen order. The zero value is the empty
-// object. Object returns a copy; to change a nested object, change the copy and write it back with Set.
-type Doc struct {
-	Keys []string
-	Raw  map[string][]byte
-}
+// Doc is one JSON object: each value is its raw text, as it was read. The zero value reads as the empty object;
+// write to a Doc{}. Files are written with keys sorted. Object returns a copy; to change a nested object, change
+// the copy and write it back with SetString or Bytes.
+type Doc map[string]json.RawMessage
 
-// ParseDoc reads a JSON object. Text that is not valid UTF-8 is refused (ErrNotUTF8). A repeated key keeps its
-// first place and takes the last value.
-func ParseDoc(text []byte) (*Doc, error) {
+// ParseDoc reads a JSON object. Text that is not valid UTF-8 is refused (ErrNotUTF8). A repeated key takes the last value.
+func ParseDoc(text []byte) (Doc, error) {
 	if err := checkJSON(text); err != nil {
 		return nil, err
 	}
-	d, ok := ObjectOf(bytes.TrimLeft(text, " \t\r\n"))
+	d, ok := ObjectOf(text)
 	if !ok {
 		return nil, errNotObject
 	}
@@ -38,186 +35,74 @@ func ParseDoc(text []byte) (*Doc, error) {
 }
 
 // ObjectOf reads text that is already known to be valid JSON, if it is an object.
-func ObjectOf(text []byte) (*Doc, bool) {
-	if len(text) == 0 || text[0] != '{' {
+func ObjectOf(text []byte) (Doc, bool) {
+	var d Doc
+	if json.Unmarshal(text, &d) != nil || d == nil { // null is no object
 		return nil, false
 	}
-	dec := json.NewDecoder(bytes.NewReader(text))
-	dec.UseNumber()
-	dec.Token() // '{'
-	d, err := readMembers(dec)
-	return d, err == nil
+	return d, true
 }
 
-// readMembers reads the rest of an object whose '{' is consumed.
-func readMembers(dec *json.Decoder) (*Doc, error) {
-	d := &Doc{}
-	for dec.More() {
-		k, err := dec.Token()
-		if err != nil {
-			return nil, err
-		}
-		v, err := readValue(dec)
-		if err != nil {
-			return nil, err
-		}
-		d.Set(k.(string), v)
-	}
-	_, err := dec.Token() // '}'
-	return d, err
-}
-
-// readValue returns the next value as compact text. The text is valid UTF-8 (checkJSON), so nothing here refuses it.
-func readValue(dec *json.Decoder) ([]byte, error) {
-	tok, err := dec.Token()
-	if err != nil {
-		return nil, err
-	}
-	switch t := tok.(type) {
-	case json.Delim:
-		if t == '{' {
-			d, err := readMembers(dec)
-			if err != nil {
-				return nil, err
-			}
-			return d.Bytes()
-		}
-		out := []byte{'['}
-		for dec.More() {
-			v, err := readValue(dec)
-			if err != nil {
-				return nil, err
-			}
-			if len(out) > 1 {
-				out = append(out, ',')
-			}
-			out = append(out, v...)
-		}
-		_, err = dec.Token() // ']'
-		return append(out, ']'), err
-	case json.Number:
-		return []byte(t), nil
-	case string:
-		return quote(t)
-	}
-	return json.Marshal(tok) // true, false, null
-}
-
-func (d *Doc) Has(k string) bool {
-	_, ok := d.Raw[k]
+func (d Doc) Has(k string) bool {
+	_, ok := d[k]
 	return ok
 }
 
-// Set appends a new key; a known key keeps its place.
-func (d *Doc) Set(k string, raw []byte) {
-	if d.Raw == nil {
-		d.Raw = map[string][]byte{}
-	}
-	if _, ok := d.Raw[k]; !ok {
-		d.Keys = append(d.Keys, k)
-	}
-	d.Raw[k] = raw
-}
-
-func (d *Doc) SetString(k, s string) error {
+func (d Doc) SetString(k, s string) error {
 	raw, err := quote(s)
 	if err != nil {
 		return err
 	}
-	d.Set(k, raw)
+	d[k] = raw
 	return nil
 }
 
-func (d *Doc) Delete(k string) {
-	if i := slices.Index(d.Keys, k); i >= 0 {
-		delete(d.Raw, k)
-		d.Keys = slices.Delete(d.Keys, i, i+1)
-	}
-}
-
 // Object is the value of k when it is an object; otherwise an empty Doc and false.
-func (d *Doc) Object(k string) (*Doc, bool) {
-	if o, ok := ObjectOf(d.Raw[k]); ok {
+func (d Doc) Object(k string) (Doc, bool) {
+	if o, ok := ObjectOf(d[k]); ok {
 		return o, true
 	}
-	return &Doc{}, false
+	return Doc{}, false
 }
 
 // String is the value of k when it is a string.
-func (d *Doc) String(k string) (string, bool) {
-	raw := d.Raw[k]
+func (d Doc) String(k string) (string, bool) {
 	var s string
-	if len(raw) == 0 || raw[0] != '"' || json.Unmarshal(raw, &s) != nil {
+	if raw := d[k]; len(raw) == 0 || raw[0] != '"' || json.Unmarshal(raw, &s) != nil {
 		return "", false
 	}
 	return s, true
 }
 
-// Bytes is the object on one line. A key or value that is not valid UTF-8 is an error (ErrNotUTF8).
-func (d *Doc) Bytes() ([]byte, error) {
-	out := []byte{'{'}
-	for i, k := range d.Keys {
+// Bytes is the object on one line, keys sorted. A key or value that is not valid UTF-8 is an error (ErrNotUTF8).
+func (d Doc) Bytes() ([]byte, error) {
+	out, err := d.encode("")
+	return bytes.TrimSuffix(out, []byte("\n")), err
+}
+
+// Pretty is the object as a store file is written: two-space indentation, keys sorted, a final newline.
+func (d Doc) Pretty() ([]byte, error) { return d.encode("  ") }
+
+func (d Doc) encode(indent string) ([]byte, error) {
+	for _, k := range slices.Sorted(maps.Keys(d)) {
 		if !utf8.ValidString(k) {
 			return nil, fmt.Errorf("%w: key %q", ErrNotUTF8, k)
 		}
-		if !utf8.Valid(d.Raw[k]) {
-			return nil, fmt.Errorf("%w: %q", ErrNotUTF8, d.Raw[k])
+		if !utf8.Valid(d[k]) {
+			return nil, fmt.Errorf("%w: %q", ErrNotUTF8, d[k])
 		}
-		if i > 0 {
-			out = append(out, ',')
-		}
-		kb, _ := quote(k)
-		out = append(append(append(out, kb...), ':'), d.Raw[k]...)
 	}
-	return append(out, '}'), nil
+	return encode(d, indent)
 }
 
-// Pretty is Bytes with two-space indentation, as a store file is written (without the final newline).
-func (d *Doc) Pretty() ([]byte, error) {
-	raw, err := d.Bytes()
-	if err != nil {
-		return nil, err
-	}
-	return indent(raw)
-}
-
-// Normal is what approval hashes: the object with its keys sorted at every depth, two-space indentation and a
-// final newline. Formatting and key order in the file do not change it.
-func (d *Doc) Normal() ([]byte, error) {
-	raw, err := d.Bytes()
-	if err != nil {
-		return nil, err
-	}
-	var v any
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.UseNumber()
-	if err := dec.Decode(&v); err != nil {
-		return nil, err
-	}
-	text, err := encode(v) // maps write their keys sorted
-	if err != nil {
-		return nil, err
-	}
-	text, err = indent(text)
-	return append(text, '\n'), err
-}
-
-// indent is json.Indent with two spaces. Unlike json.MarshalIndent it does not escape < > & again.
-func indent(raw []byte) ([]byte, error) {
-	var out bytes.Buffer
-	err := json.Indent(&out, raw, "", "  ")
-	return out.Bytes(), err
-}
-
-// encode is json.Marshal without the escaping of < > & that encoding/json does by default.
-func encode(v any) ([]byte, error) {
+// encode is json.Marshal without the escaping of < > & that encoding/json does by default, with a final newline.
+func encode(v any, indent string) ([]byte, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)
-	if err := enc.Encode(v); err != nil {
-		return nil, err
-	}
-	return bytes.TrimSuffix(b.Bytes(), []byte("\n")), nil
+	enc.SetIndent("", indent)
+	err := enc.Encode(v)
+	return b.Bytes(), err
 }
 
 // quote is s as a JSON string; text that is not valid UTF-8 is an error (ErrNotUTF8).
@@ -225,7 +110,8 @@ func quote(s string) ([]byte, error) {
 	if !utf8.ValidString(s) {
 		return nil, fmt.Errorf("%w: %q", ErrNotUTF8, s)
 	}
-	return encode(s)
+	raw, err := encode(s, "")
+	return bytes.TrimSuffix(raw, []byte("\n")), err
 }
 
 // checkJSON refuses text that is not valid UTF-8, then text that is not valid JSON, with the decoder's message.

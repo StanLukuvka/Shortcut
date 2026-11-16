@@ -10,22 +10,6 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-func TestDoc_Order(t *testing.T) {
-	d := doc(t, `{"b": 1, "a": 2, "b": 3}`)
-	if got := compactOf(t, d); strings.Join(d.Keys, ",") != "b,a" || got != `{"b":3,"a":2}` {
-		t.Fatalf("keys %v, %s", d.Keys, got)
-	}
-	d.Set("c", []byte("null"))
-	d.Delete("b")
-	d.Delete("zz")
-	if got := compactOf(t, d); got != `{"a":2,"c":null}` {
-		t.Fatal(got)
-	}
-	if d.Has("b") {
-		t.Fatal("b not deleted")
-	}
-}
-
 func TestDoc_RefusesWhatIsNotValidUTF8(t *testing.T) {
 	for _, src := range []string{
 		`{"k": "\udce9"}`,        // a lone low surrogate, as a bad file name would have been escaped
@@ -61,23 +45,9 @@ func TestDoc_RefusesWhatIsNotValidUTF8(t *testing.T) {
 	}
 }
 
-func TestDoc_KeepsOrderAndNumberText(t *testing.T) {
-	d := doc(t, `{"zed": 1, "version": 1, "n": [1.0, 12345678901234567890, 1e400, 0, -0, 2E2], "alpha": {}, "list": [], "a": {"k": 1, "b": [], "c": {}}}`)
-	if got := strings.Join(d.Keys, ","); got != "zed,version,n,alpha,list,a" {
-		t.Errorf("key order %s", got)
-	}
-	for k, want := range map[string]string{
-		"n": `[1.0,12345678901234567890,1e400,0,-0,2E2]`, "alpha": `{}`, "list": `[]`, "a": `{"k":1,"b":[],"c":{}}`,
-	} {
-		if got := string(d.Raw[k]); got != want {
-			t.Errorf("%s: %s, want %s", k, got, want)
-		}
-	}
-}
-
 func TestDoc_DuplicatesDepthAndWhatIsNotJSON(t *testing.T) {
 	d := doc(t, `{"b": 1, "a": 2, "b": 3}`)
-	if strings.Join(d.Keys, ",") != "b,a" || string(d.Raw["b"]) != "3" { // first place, last value
+	if len(d) != 2 || string(d["b"]) != "3" { // last value
 		t.Errorf("%v", d)
 	}
 	for _, src := range []string{
@@ -93,12 +63,8 @@ func TestDoc_DuplicatesDepthAndWhatIsNotJSON(t *testing.T) {
 
 func TestDoc_RefusesInvalidUTF8OnWrite(t *testing.T) {
 	bad := "caf\xe9"
-	with := func(k, raw string) *Doc {
-		d := &Doc{}
-		d.Set(k, []byte(raw))
-		return d
-	}
-	for name, d := range map[string]*Doc{
+	with := func(k, raw string) Doc { return Doc{k: []byte(raw)} }
+	for name, d := range map[string]Doc{
 		"key":           with(bad, `"x"`),
 		"value":         with("k", `"`+bad+`"`),
 		"in an array":   with("k", `["ok","`+bad+`"]`),
@@ -112,34 +78,36 @@ func TestDoc_RefusesInvalidUTF8OnWrite(t *testing.T) {
 		}
 	}
 	for _, s := range []string{bad, "\xff\xfe", "\xe2\x82", "\xed\xa0\x80"} {
-		if err := (&Doc{}).SetString("k", s); !errors.Is(err, ErrNotUTF8) {
+		if err := (Doc{}).SetString("k", s); !errors.Is(err, ErrNotUTF8) {
 			t.Errorf("SetString(%q): %v", s, err)
 		}
 	}
 }
 
 func TestDoc_RoundTripsAnOldStore(t *testing.T) {
-	// indent 2, key order as written (not sorted), numbers as written, empty containers on one line
+	// top-level keys come out sorted; values keep their text (numbers as written, nested objects as they were)
 	src := "{\n  \"zed\": 1,\n  \"version\": 1,\n  \"n\": [\n    1.0,\n    12345678901234567890,\n    1e400,\n    -0,\n    2E2\n  ],\n" +
 		"  \"alpha\": {},\n  \"list\": [],\n  \"a\": {\n    \"k\": null,\n    \"b\": [],\n    \"c\": {},\n    \"t\": true\n  }\n}"
+	want := "{\n  \"a\": {\n    \"k\": null,\n    \"b\": [],\n    \"c\": {},\n    \"t\": true\n  },\n  \"alpha\": {},\n  \"list\": [],\n" +
+		"  \"n\": [\n    1.0,\n    12345678901234567890,\n    1e400,\n    -0,\n    2E2\n  ],\n  \"version\": 1,\n  \"zed\": 1\n}\n"
 	path := filepath.Join(testkit.New(t).Tmp, "s.json")
 	if err := WriteJSONAtomic(path, doc(t, src)); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := os.ReadFile(path); string(got) != src+"\n" {
-		t.Errorf("got %s\nwant %s", got, src)
+	if got, _ := os.ReadFile(path); string(got) != want {
+		t.Errorf("got %s\nwant %s", got, want)
 	}
 }
 
 func TestDoc_WritesTextAsTheCharacters(t *testing.T) {
-	d := &Doc{}
+	d := Doc{}
 	for _, kv := range [][2]string{{"html", "<a href=\"x\">&</a>"}, {"accent", "café 中文 😀"}, {"quote", "a\"b\\c\nd\te"}} {
 		if err := d.SetString(kv[0], kv[1]); err != nil {
 			t.Fatal(err)
 		}
 	}
 	got := compactOf(t, d)
-	want := `{"html":"<a href=\"x\">&</a>","accent":"café 中文 😀","quote":"a\"b\\c\nd\te"}`
+	want := `{"accent":"café 中文 😀","html":"<a href=\"x\">&</a>","quote":"a\"b\\c\nd\te"}`
 	if got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
 	}
@@ -148,19 +116,7 @@ func TestDoc_WritesTextAsTheCharacters(t *testing.T) {
 	}
 }
 
-func TestDoc_Normal(t *testing.T) {
-	d := doc(t, `{"b": {"z": 1, "a": [{"y": 1, "x": 2}]}, "a": 1}`)
-	got, err := d.Normal()
-	want := "{\n  \"a\": 1,\n  \"b\": {\n    \"a\": [\n      {\n        \"x\": 2,\n        \"y\": 1\n      }\n    ],\n    \"z\": 1\n  }\n}\n"
-	if err != nil || string(got) != want {
-		t.Errorf("got %q, %v", got, err)
-	}
-	if first := compactOf(t, d); first != `{"b":{"z":1,"a":[{"y":1,"x":2}]},"a":1}` {
-		t.Errorf("Normal changed the original: %s", first)
-	}
-}
-
-func doc(t *testing.T, s string) *Doc {
+func doc(t *testing.T, s string) Doc {
 	t.Helper()
 	d, err := ParseDoc([]byte(s))
 	if err != nil {
@@ -169,7 +125,7 @@ func doc(t *testing.T, s string) *Doc {
 	return d
 }
 
-func compactOf(t *testing.T, d *Doc) string {
+func compactOf(t *testing.T, d Doc) string {
 	t.Helper()
 	b, err := d.Bytes()
 	if err != nil {
