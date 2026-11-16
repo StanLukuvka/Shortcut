@@ -1,7 +1,6 @@
 package store
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -104,7 +103,6 @@ func TestRegistry_LoadRegistryFile(t *testing.T) {
 		{"{\r\n  \"a\": 1,\r\n}", "invalid character '}'"},
 		{`{"a": NaN}`, "invalid character 'N'"},
 		{"{\"a\": \"\xff\"}", "not valid UTF-8"},
-		{`{"a": "\udce9"}`, "not valid UTF-8"},
 	} {
 		env.WriteFile(p, c.file, 0)
 		_, err := LoadRegistryFile(p)
@@ -598,25 +596,6 @@ func TestResolveScriptPath_NonUTF8DirectoriesStayApart(t *testing.T) {
 	b, errB := ResolveScriptPath(base, "d\xea/run.sh")
 	if errA != nil || errB != nil || a == b || !strings.HasSuffix(a, "d\xe9/run.sh") || !strings.HasSuffix(b, "d\xea/run.sh") {
 		t.Errorf("%q %v / %q %v", a, errA, b, errB)
-	}
-}
-
-func TestWriteJSONAtomic_RefusesInvalidUTF8AndKeepsTheOldFile(t *testing.T) {
-	path := filepath.Join(testkit.New(t).Tmp, "s.json")
-	old := "{\n  \"version\": 1\n}\n"
-	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	d := platform.Doc{}
-	d["name"] = []byte("\"caf\xe9\"")
-	if err := platform.WriteJSONAtomic(path, d); !errors.Is(err, platform.ErrNotUTF8) {
-		t.Fatalf("got %v", err)
-	}
-	if got, _ := os.ReadFile(path); string(got) != old {
-		t.Errorf("file changed: %q", got)
-	}
-	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(path), ".*.tmp")); len(left) != 0 {
-		t.Errorf("temp files left: %v", left)
 	}
 }
 

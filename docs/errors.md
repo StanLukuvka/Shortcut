@@ -43,7 +43,7 @@ A word that starts with `-` is an option. To pass one as a name or a value, put 
 |---|---|
 | `registry not found: <path>` | A namespace file that's imported doesn't exist |
 | `corrupt registry <path>: <json error>` | The file isn't valid JSON. The text after the path is Go's; for a syntax error it ends with `(at byte N)`, the byte where it went wrong |
-| `corrupt registry <path>: contains text that is not valid UTF-8 (invalid bytes or a lone surrogate escape)` | A string in the file is not valid UTF-8: a bad byte, or a `\udNNN` escape for a lone surrogate. Shortcut won't guess which name it meant; rename the file and edit the entry |
+| `corrupt registry <path>: contains text that is not valid UTF-8` | The file has a byte sequence that is not valid UTF-8. Shortcut won't guess which name it meant; fix or replace the bytes |
 | `corrupt registry <path>: root must be a JSON object` | The file is JSON, but not `{...}` |
 | `corrupt registry <path>: 'shortcuts' must be an object` | |
 | `corrupt registry <path>: 'description' must be a string` | |

@@ -5,7 +5,6 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
@@ -69,33 +68,20 @@ func Load(c *store.Context, g store.Group) *Record {
 func mapDoc(m map[string]string) ([]byte, error) {
 	d := platform.Doc{}
 	for k, v := range m {
-		if err := d.SetString(k, v); err != nil {
-			return nil, err
-		}
+		d.SetString(k, v)
 	}
 	return d.Bytes()
 }
 
-// Save records what was shown and approved, under the global store's lock.
+// Save records what was shown and approved (what Files returned, which refused paths that JSON cannot hold), under the global store's lock.
 func Save(c *store.Context, g store.Group, files map[string]string) error {
-	if err := checkPaths(files); err != nil {
-		return err
-	}
-	if err := CheckKey(c, g); err != nil {
-		return err
-	}
-	if !utf8.ValidString(g.Key()) { // a project in a folder whose name is not valid UTF-8: the record could not hold its key
-		return fmt.Errorf("cannot approve: %q is not valid UTF-8; rename it", g.Key())
-	}
 	path := c.ApprovalPath(g)
 	return c.WithLock(func() error {
 		if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 			return err
 		}
 		rec := platform.Doc{}
-		if err := rec.SetString("key", g.Key()); err != nil {
-			return err
-		}
+		rec.SetString("key", g.Key())
 		doc, err := mapDoc(files)
 		if err != nil {
 			return err
@@ -120,7 +106,7 @@ func computeState(c *store.Context, g store.Group) store.ApprovalState {
 	if !g.NeedsApproval() {
 		return store.StateOK
 	}
-	files, err := snapshot(c, g)
+	files, err := Files(g)
 	if err != nil {
 		return store.StateInvalid
 	}

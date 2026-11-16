@@ -12,14 +12,8 @@ import (
 
 func TestDoc_RefusesWhatIsNotValidUTF8(t *testing.T) {
 	for _, src := range []string{
-		`{"k": "\udce9"}`,        // a lone low surrogate, as a bad file name would have been escaped
-		`{"k": ["\ud800"]}`,      // lone high surrogate
-		`{"k": "\ud800\u0041"}`,  // high surrogate followed by something that is not a low one
-		`{"k": "\ud800 \udc00"}`, // a pair needs the escapes side by side
-		`{"k": "\udc00"}`,        // lone low surrogate
-		`{"k": "\udc00\ud800"}`,  // low before high
-		`{"\udcff": 1}`,          // in a key too
-		"{\"k\": \"\xe9\"}",      // a raw invalid byte
+		"{\"k\": \"\xe9\"}", // a raw invalid byte
+		"{\"\xff\": 1}",     // in a key too
 	} {
 		_, err := ParseDoc([]byte(src))
 		if !errors.Is(err, ErrNotUTF8) {
@@ -61,29 +55,6 @@ func TestDoc_DuplicatesDepthAndWhatIsNotJSON(t *testing.T) {
 	}
 }
 
-func TestDoc_RefusesInvalidUTF8OnWrite(t *testing.T) {
-	bad := "caf\xe9"
-	with := func(k, raw string) Doc { return Doc{k: []byte(raw)} }
-	for name, d := range map[string]Doc{
-		"key":           with(bad, `"x"`),
-		"value":         with("k", `"`+bad+`"`),
-		"in an array":   with("k", `["ok","`+bad+`"]`),
-		"in an object":  with("a", `{"b":[{"c":"`+bad+`"}]}`),
-		"two bad bytes": with("k", "\"\xff\xfe\""),
-		"half a rune":   with("k", "\"\xe2\x82\""),
-		"WTF-8 triple":  with("k", "\"\xed\xa0\x80\""), // an encoded surrogate is not UTF-8 either
-	} {
-		if out, err := d.Bytes(); !errors.Is(err, ErrNotUTF8) || out != nil {
-			t.Errorf("%s: got %q, %v", name, out, err)
-		}
-	}
-	for _, s := range []string{bad, "\xff\xfe", "\xe2\x82", "\xed\xa0\x80"} {
-		if err := (Doc{}).SetString("k", s); !errors.Is(err, ErrNotUTF8) {
-			t.Errorf("SetString(%q): %v", s, err)
-		}
-	}
-}
-
 func TestDoc_RoundTripsAnOldStore(t *testing.T) {
 	// top-level keys come out sorted; values keep their text (numbers as written, nested objects as they were)
 	src := "{\n  \"zed\": 1,\n  \"version\": 1,\n  \"n\": [\n    1.0,\n    12345678901234567890,\n    1e400,\n    -0,\n    2E2\n  ],\n" +
@@ -102,9 +73,7 @@ func TestDoc_RoundTripsAnOldStore(t *testing.T) {
 func TestDoc_WritesTextAsTheCharacters(t *testing.T) {
 	d := Doc{}
 	for _, kv := range [][2]string{{"html", "<a href=\"x\">&</a>"}, {"accent", "café 中文 😀"}, {"quote", "a\"b\\c\nd\te"}} {
-		if err := d.SetString(kv[0], kv[1]); err != nil {
-			t.Fatal(err)
-		}
+		d.SetString(kv[0], kv[1])
 	}
 	got := compactOf(t, d)
 	want := `{"accent":"café 中文 😀","html":"<a href=\"x\">&</a>","quote":"a\"b\\c\nd\te"}`

@@ -95,13 +95,13 @@ func showTop() []string {
 	return []string{"name", "namespace", "scope", "defined_in", "source", "hides_global", "approval", "cwd", "run_cwd", "script_path", "error"}
 }
 
-// setOpt writes null for nil, else the string. A string that is not valid UTF-8 is refused (platform.ErrNotUTF8).
-func setOpt(d platform.Doc, key string, val *string) error {
+// setOpt writes null for nil, else the string.
+func setOpt(d platform.Doc, key string, val *string) {
 	if val == nil {
 		d[key] = []byte("null")
-		return nil
+		return
 	}
-	return d.SetString(key, *val)
+	d.SetString(key, *val)
 }
 
 // showJSON prints one JSON object, the entry plus where it resolves.
@@ -114,8 +114,8 @@ func showJSON(c *store.Context, s *term.Streams, words []string, lk store.Lookup
 	for _, k := range showTop() {
 		if k == "hides_global" {
 			d[k] = []byte(*vals[k]) // true or false
-		} else if err := setOpt(d, k, vals[k]); err != nil {
-			return err
+		} else {
+			setOpt(d, k, vals[k])
 		}
 	}
 	if o, ok := platform.ObjectOf(entry); ok { // an object's fields come out sorted, whatever the file's order

@@ -303,13 +303,9 @@ func TestApproval_ProjectInANonUTF8FolderCannotBeApproved(t *testing.T) {
 	if got := filepath.Base(ctx.ApprovalPath(g)); got != hex.EncodeToString(sum[:])+".json" {
 		t.Errorf("record %s", got)
 	}
-	// but the record would have to hold the key as JSON text, which cannot hold it: refused, nothing written
-	err := Save(ctx, g, must(Files(g)))
-	if err == nil || !strings.Contains(err.Error(), "not valid UTF-8") {
-		t.Fatalf("Save: %v", err)
-	}
-	if _, err := os.Stat(ctx.ApprovalPath(g)); err == nil {
-		t.Error("a record was written")
+	// but the record would have to hold the key as JSON text, which cannot hold it: the snapshot refuses it
+	if _, err := Files(g); err == nil || !strings.Contains(err.Error(), "not valid UTF-8") {
+		t.Fatalf("Files: %v", err)
 	}
 	if State(ctx, g) != "invalid" || Check(ctx, g) == nil || Require(ctx, g) == nil { // refused up front, before any diff or prompt
 		t.Errorf("state %s", State(ctx, g))
@@ -479,7 +475,7 @@ func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
 	if err := Check(ctx, g); err != nil {
 		t.Fatalf("ASCII name: %v", err)
 	}
-	files, err := snapshot(ctx, g)
+	files, err := Files(g)
 	if err != nil || files[`scripts/ns/caf\udce9.sh`] != sum("echo ascii\n") {
 		t.Fatalf("%q %v", files, err)
 	}
@@ -496,7 +492,7 @@ func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), `"scripts/ns/caf\xe9.sh"`) || !strings.Contains(err.Error(), "not valid UTF-8") {
 		t.Fatalf("Check: %v", err)
 	}
-	if State(ctx, g) != "invalid" || Require(ctx, g) == nil || Save(ctx, g, must(Files(g))) == nil {
+	if State(ctx, g) != "invalid" || Require(ctx, g) == nil {
 		t.Errorf("state %s", State(ctx, g))
 	}
 }
@@ -615,10 +611,8 @@ func TestApproval_ANamespaceFileWithBadBytesInItsPathIsRefusedBeforeAnythingIsSa
 	env := testkit.New(t)
 	ctx := store.NewContext(env.Home, nil)
 	g := store.Group{Kind: store.KindNamespace, Name: "ns", StoreDir: env.Store, File: filepath.Join(env.Store, "imports", "caf\xe9.shortcut")}
-	for name, err := range map[string]error{"Check": Check(ctx, g), "Save": Save(ctx, g, map[string]string{})} {
-		if err == nil || !strings.Contains(err.Error(), `caf\xe9.shortcut"`) || !strings.Contains(err.Error(), "not valid UTF-8") {
-			t.Errorf("%s: %v", name, err)
-		}
+	if err := Check(ctx, g); err == nil || !strings.Contains(err.Error(), `caf\xe9.shortcut"`) || !strings.Contains(err.Error(), "not valid UTF-8") {
+		t.Errorf("Check: %v", err)
 	}
 	if State(ctx, g) != "invalid" {
 		t.Errorf("state %s", State(ctx, g))

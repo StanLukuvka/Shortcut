@@ -103,8 +103,19 @@ func merge(maps ...map[string]string) map[string]string {
 }
 
 // Files is every file the group's approval covers, each as its SHA-256: .shortcuts and .shortcuts.local when they
-// exist, what their entries name, and for a namespace its scripts folder.
+// exist, what their entries name, and for a namespace its scripts folder. It is the one place that refuses a path
+// that is not valid UTF-8: the record is JSON, and JSON cannot hold it without merging two different names into one.
+// That is the group's store folder and, for a namespace, its file (the key), or any covered path, the smallest named.
 func Files(g store.Group) (map[string]string, error) {
+	parts := []string{platform.Realpath(g.StoreDir)} // the key, before anything is read: nothing is shown for a record that cannot be kept
+	if g.Kind == store.KindNamespace {
+		parts = append(parts, platform.Realpath(g.File))
+	}
+	for _, p := range parts {
+		if g.NeedsApproval() && !utf8.ValidString(p) {
+			return nil, notUTF8(p)
+		}
+	}
 	files := merge(folderFiles(g), entryFiles(g, g.Shared, ""), entryFiles(g, g.Local, " in "+store.LocalFile))
 	for _, f := range []struct {
 		path string
@@ -122,52 +133,20 @@ func Files(g store.Group) (map[string]string, error) {
 		}
 		maps.Copy(files, own)
 	}
+	for _, p := range slices.Sorted(maps.Keys(files)) {
+		if !utf8.ValidString(p) {
+			return nil, notUTF8(p)
+		}
+	}
 	return files, nil
 }
 
-// checkPaths refuses a snapshot with a path that is not valid UTF-8: the record is JSON, and JSON cannot hold it
-// without merging two different names into one. The smallest offender is named. Values are hex digests.
-func checkPaths(files map[string]string) error {
-	for _, p := range slices.Sorted(maps.Keys(files)) {
-		if !utf8.ValidString(p) {
-			return fmt.Errorf("cannot approve: %q is not valid UTF-8; rename it", p)
-		}
-	}
-	return nil
-}
-
-// snapshot is Files, or the error for text that cannot be approved. State, Save and Require get the map this way.
-func snapshot(c *store.Context, g store.Group) (map[string]string, error) {
-	if err := CheckKey(c, g); err != nil {
-		return nil, err
-	}
-	files, err := Files(g)
-	if err != nil {
-		return nil, err
-	}
-	return files, checkPaths(files)
-}
-
-// CheckKey refuses a group whose approval key would be built from a path that is not valid UTF-8: the store
-// folder, and for a namespace its file. Before any listing or prompt, so nothing is shown for a record that cannot be kept.
-func CheckKey(c *store.Context, g store.Group) error {
-	if !g.NeedsApproval() {
-		return nil
-	}
-	parts := []string{platform.Realpath(g.StoreDir)}
-	if g.Kind == store.KindNamespace {
-		parts = append(parts, platform.Realpath(g.File))
-	}
-	for _, p := range parts {
-		if !utf8.ValidString(p) {
-			return fmt.Errorf("cannot approve: %q is not valid UTF-8; rename it", p)
-		}
-	}
-	return nil
+func notUTF8(p string) error {
+	return fmt.Errorf("cannot approve: %q is not valid UTF-8; rename it", p)
 }
 
 // Check is nil when the group's files can be approved, else the error that says why not.
 func Check(c *store.Context, g store.Group) error {
-	_, err := snapshot(c, g)
+	_, err := Files(g)
 	return err
 }
