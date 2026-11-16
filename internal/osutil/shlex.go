@@ -2,8 +2,9 @@ package osutil
 
 import "strings"
 
-// ShellQuote is shlex.quote: unchanged when it is only ASCII letters, digits and _@%+=:,./-; two single quotes for empty; else
-// single-quoted with ' written as '"'"'.
+// ShellQuote quotes s for a POSIX shell: unchanged when it holds only ASCII letters, digits and _@%+=:,./-;
+// two single quotes when empty; otherwise single-quoted with ' written as '"'"'. Used to print commands the
+// user can paste.
 func ShellQuote(s string) string {
 	if s == "" {
 		return "''"
@@ -22,7 +23,7 @@ func ShellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }
 
-// ShellJoin quotes each word and joins them with spaces, as shlex.join does.
+// ShellJoin quotes each word and joins them with spaces.
 func ShellJoin(parts []string) string {
 	q := make([]string, len(parts))
 	for i, p := range parts {

@@ -95,8 +95,9 @@ func Realpath(filename string) string {
 	return path
 }
 
-// Getwd is the physical cwd: syscall.Getwd calls getcwd(2) and never reads $PWD, which os.Getwd prefers.
-// Nothing outside _test.go may call os.Getwd.
+// Getwd is the physical cwd from getcwd(2); os.Getwd prefers $PWD, which can name a different folder. Relative
+// paths are resolved against the real folder so store keys and approval hashes do not depend on how the user
+// got there. Nothing outside _test.go may call os.Getwd.
 func Getwd() (string, error) { return syscall.Getwd() }
 
 // Abs joins a relative path to the physical cwd, then cleans it.
@@ -127,9 +128,9 @@ func IsRelativeTo(path, other string) bool {
 	return err == nil && filepath.IsLocal(rel)
 }
 
-// Join: a part starting with / restarts the path; join("", "a") = "a"; join("/", "a") = "/a";
-// join("a", "") = "a/". store.go and store_write.go rely on the restart (an absolute script path stays as it
-// is); filepath.Join would glue it under the folder.
+// Join joins parts with "/". An absolute part restarts the path: a user-written script path or cwd is joined
+// onto a folder, and an absolute one must stay as it is, where filepath.Join would glue it under the folder.
+// Join("", "a") = "a"; Join("/", "a") = "/a"; Join("a", "") = "a/".
 func Join(a string, parts ...string) string {
 	path := a
 	for _, b := range parts {
