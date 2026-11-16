@@ -31,11 +31,21 @@ type Entry struct {
 	Confirm     bool
 }
 
-var knownFields = map[string]bool{
-	"description": true, "inline": true, "script": true, "cwd": true, "confirm": true,
+// Field is one entry field.
+type Field struct {
+	Name string
+	Type string // "string" or "boolean", the words docs/shortcut.schema.json uses
+	Show bool   // `show --field` reads it by its name
 }
 
-var textFields = []string{"inline", "script", "cwd"}
+// Fields are the entry's fields, in the order they are checked and written. Validation, ToObject and
+// `show --field` read them, and a test checks docs/shortcut.schema.json against them.
+func Fields() []Field {
+	return []Field{
+		{"description", "string", true}, {"inline", "string", true}, {"script", "string", true},
+		{"cwd", "string", false}, {"confirm", "boolean", false},
+	}
+}
 
 // EntryFromValue builds an Entry from a decoded value, with fixed messages and check order.
 func EntryFromValue(name string, v ordjson.Value) (*Entry, error) {
@@ -45,62 +55,63 @@ func EntryFromValue(name string, v ordjson.Value) (*Entry, error) {
 		return nil, bad("expected a dictionary")
 	}
 	// An ignored field could be a safety setting from a newer version, so never ignore one
+	fields := Fields()
 	var unknown []string
 	for _, k := range data.Keys {
-		if !knownFields[k] {
+		if !slices.ContainsFunc(fields, func(f Field) bool { return f.Name == k }) {
 			unknown = append(unknown, k)
 		}
 	}
 	if len(unknown) > 0 {
 		return nil, bad("unknown field: " + strings.Join(slices.Sorted(slices.Values(unknown)), ", "))
 	}
-	e := &Entry{Name: name}
-	if d, present := data.Get("description"); present {
-		s, isStr := d.(string)
-		if !isStr {
-			return nil, bad("'description' must be a string")
-		}
-		e.Description = s
-	}
-	texts := map[string]*string{}
-	for _, f := range textFields {
-		val, present := data.Get(f)
+	vals := map[string]any{}
+	for _, f := range fields {
+		val, present := data.Get(f.Name)
 		if !present {
 			continue
 		}
-		s, isStr := val.(string)
-		if !isStr {
-			return nil, bad(fmt.Sprintf("'%s' must be a string", f))
+		var typed bool
+		switch f.Type {
+		case "string":
+			vals[f.Name], typed = val.(string)
+		case "boolean":
+			vals[f.Name], typed = val.(bool)
 		}
-		texts[f] = &s
-	}
-	confirm := false
-	if val, present := data.Get("confirm"); present {
-		b, isBool := val.(bool)
-		if !isBool {
-			return nil, bad("'confirm' must be a boolean")
+		if !typed {
+			return nil, bad("'" + f.Name + "' must be a " + f.Type)
 		}
-		confirm = b
 	}
-	if (texts["inline"] == nil) == (texts["script"] == nil) {
+	if (vals["inline"] == nil) == (vals["script"] == nil) {
 		return nil, bad("it needs exactly one of 'inline' and 'script'")
 	}
-	e.Inline, e.Script, e.Cwd = texts["inline"], texts["script"], texts["cwd"]
-	e.Confirm = confirm
-	return e, nil
+	text := func(k string) *string {
+		if s, ok := vals[k].(string); ok {
+			return &s
+		}
+		return nil
+	}
+	description, _ := vals["description"].(string)
+	confirm, _ := vals["confirm"].(bool)
+	return &Entry{Name: name, Description: description, Inline: text("inline"), Script: text("script"),
+		Cwd: text("cwd"), Confirm: confirm}, nil
 }
 
-// ToObject returns the entry as an object: description, then the text fields that are set, confirm.
+// ToObject returns the entry as an object, its fields in table order: description always, the others when set.
 func (e *Entry) ToObject() *ordjson.Object {
+	text := map[string]*string{"inline": e.Inline, "script": e.Script, "cwd": e.Cwd}
 	o := &ordjson.Object{}
-	o.Set("description", e.Description)
-	for i, p := range []*string{e.Inline, e.Script, e.Cwd} {
-		if p != nil {
-			o.Set(textFields[i], *p)
+	for _, f := range Fields() {
+		switch {
+		case f.Name == "description":
+			o.Set(f.Name, e.Description)
+		case f.Name == "confirm":
+			if e.Confirm {
+				o.Set(f.Name, true)
+			}
+		case text[f.Name] != nil:
+			o.Set(f.Name, *text[f.Name])
 		}
-	}
-	if e.Confirm {
-		o.Set("confirm", true)
 	}
 	return o
 }

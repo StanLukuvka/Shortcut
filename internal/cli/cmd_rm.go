@@ -17,7 +17,7 @@ import (
 
 // cmdRm removes a shortcut or a namespace.
 func cmdRm(c *model.Context, s *textio.Streams, args []string) error {
-	ns, err := parsers["rm"].Parse(args)
+	ns, err := parse("rm", args)
 	if err != nil {
 		return err
 	}

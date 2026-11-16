@@ -16,7 +16,7 @@ func approved(c *model.Context, g model.Group) bool { return approval.State(c, g
 
 // cmdList lists shortcuts.
 func cmdList(c *model.Context, s *textio.Streams, args []string) error {
-	ns, err := parsers["list"].Parse(args)
+	ns, err := parse("list", args)
 	if err != nil {
 		return err
 	}

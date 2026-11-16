@@ -77,8 +77,16 @@ func modelSource(t *testing.T) string {
 
 func TestSchema_FieldsMatchTheCode(t *testing.T) {
 	s := loadSchema(t)
-	if got, want := sortedKeys(s.Defs.Entry.Properties), sortedKeys(knownFields); !slices.Equal(got, want) {
-		t.Errorf("entry: schema %v, code %v", got, want)
+	var names []string
+	for _, f := range Fields() {
+		names = append(names, f.Name)
+		if got := s.Defs.Entry.Properties[f.Name].Type; got != f.Type {
+			t.Errorf("%s: schema type %q, code %q", f.Name, got, f.Type)
+		}
+	}
+	slices.Sort(names)
+	if got := sortedKeys(s.Defs.Entry.Properties); !slices.Equal(got, names) {
+		t.Errorf("entry: schema %v, code %v", got, names)
 	}
 }
 

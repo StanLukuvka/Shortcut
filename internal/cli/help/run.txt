@@ -1,2 +1,0 @@
-usage: shortcut run|r [--global] [-y] <name> [args...]
-       shortcut run|r [--global] [-y] <namespace> <name> [args...]
