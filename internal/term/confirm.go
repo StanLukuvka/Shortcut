@@ -3,6 +3,7 @@ package term
 import (
 	"bufio"
 	"errors"
+	"io"
 	"os"
 	"os/signal"
 	"strings"
@@ -14,9 +15,9 @@ import (
 // Ask asks a question: the prompt goes to stderr through Safe (so it reaches the terminal when stdout is redirected),
 // one line is read, and it counts when its trimmed lower case is y or yes. End of input or Ctrl-C
 // prints a newline to stdout and answers no. SIGINT is caught only while
-// waiting, elsewhere it keeps its default and kills the process.
-// lazy: a read error other than EOF counts as EOF (there is no error to report); the reading goroutine is left behind on Ctrl-C.
-func Ask(s *Streams, prompt string) bool {
+// waiting, elsewhere it keeps its default and kills the process. A read error other than EOF is returned.
+// On Ctrl-C the reading goroutine is left behind.
+func Ask(s *Streams, prompt string) (bool, error) {
 	// Catch SIGINT before the prompt is shown: whoever sees the prompt (a person, a test) may press Ctrl-C at once.
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, syscall.SIGINT)
@@ -36,18 +37,21 @@ func Ask(s *Streams, prompt string) bool {
 	}()
 	select {
 	case r := <-got:
+		if r.err != nil && r.err != io.EOF {
+			return false, r.err
+		}
 		if r.err != nil && r.line == "" {
 			s.Out.WriteString("\n")
-			return false
+			return false, nil
 		}
 		switch strings.ToLower(strings.TrimSpace(r.line)) {
 		case "y", "yes":
-			return true
+			return true, nil
 		}
-		return false
+		return false, nil
 	case <-interrupt:
 		s.Out.WriteString("\n")
-		return false
+		return false, nil
 	}
 }
 
@@ -76,7 +80,11 @@ func (c Confirm) Granted(s *Streams, assumeYes bool) (bool, error) {
 	if c.Message != "" {
 		s.Err.WriteString(c.Message + "\n")
 	}
-	if Ask(s, c.Question+" [y/N] ") {
+	yes, err := Ask(s, c.Question+" [y/N] ")
+	if err != nil {
+		return false, err
+	}
+	if yes {
 		return true, nil
 	}
 	s.Err.WriteString("Aborted.\n")

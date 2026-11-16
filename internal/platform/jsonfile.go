@@ -41,21 +41,21 @@ func WriteJSONAtomic(path string, doc Doc) error {
 	ok := false
 	defer func() {
 		if !ok {
-			os.Remove(tmp.Name())
+			os.Remove(tmp.Name()) // the error that got us here is the one returned
 		}
 	}()
 	if _, err = tmp.Write(text); err != nil {
-		tmp.Close()
+		tmp.Close() // the write error is the one returned
 		return err
 	}
 	if haveMode {
 		if err = tmp.Chmod(mode); err != nil {
-			tmp.Close()
+			tmp.Close() // the chmod error is the one returned
 			return err
 		}
 	}
 	if err = tmp.Sync(); err != nil {
-		tmp.Close()
+		tmp.Close() // the sync error is the one returned
 		return err
 	}
 	if err = tmp.Close(); err != nil {

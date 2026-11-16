@@ -122,7 +122,11 @@ func rmNamespace(c *store.Context, s *term.Streams, name string, assumeYes bool)
 		lines = []string{"Stops importing '" + name + "' in " + st.Main.File, "Keeps its file: " + group.File}
 	} else {
 		lines = []string{"Removes namespace '" + name + "' (" + strconv.Itoa(len(group.Shortcuts())) + " shortcuts): " + group.File}
-		if platform.Lexists(folder) {
+		exists, err := platform.Lexists(folder)
+		if err != nil {
+			return err
+		}
+		if exists {
 			lines = append(lines, "Deletes its scripts folder: "+folder)
 		}
 	}

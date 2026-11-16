@@ -16,12 +16,12 @@ func y(text string) []byte { return []byte(text) }
 func TestRunning_Confirm(t *testing.T) {
 	e := testkit.New(t)
 	work := e.Folder("work")
-	// description as new --confirm -- <cmd> writes it: the command itself, unless --desc gives one
+	// no description, as new writes it without --desc
 	e.WriteStore(e.Store, map[string]any{
-		"danger": map[string]any{"inline": "echo ran; pwd", "description": "echo ran; pwd", "confirm": true},
+		"danger": map[string]any{"inline": "echo ran; pwd", "confirm": true},
 		"wipe":   map[string]any{"inline": "echo ran", "description": "Wipes the cache", "confirm": true},
-		"plain":  map[string]any{"inline": "echo ran", "description": "echo ran", "confirm": true},
-		"noted":  map[string]any{"script": "scripts/none.sh", "description": "(no description)", "confirm": true},
+		"plain":  map[string]any{"inline": "echo ran", "confirm": true},
+		"noted":  map[string]any{"script": "scripts/none.sh", "confirm": true},
 		"drop":   map[string]any{"inline": `echo "dropped $*"`, "description": "x", "confirm": true},
 		"echoes": testkit.Inline(`echo "$@"`),
 	})

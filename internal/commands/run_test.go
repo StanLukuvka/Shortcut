@@ -365,3 +365,20 @@ func TestRunning_TheDotSelectsTheScope(t *testing.T) {
 	e.WriteStore(e.Store, map[string]any{"echoes": testkit.Inline(`echo "$@"`)})
 	testkit.Eq(t, "late dot", e.RunWith(o, "r", "echoes", ".").Stdout, ".\n")
 }
+
+func TestRunning_ShowDirTakesZeroOrOne(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"hi": testkit.Inline("echo hi")})
+	for v, want := range map[string]string{"0": "", "1": "→ "} {
+		res := e.RunWith(testkit.Opts{Env: map[string]string{"SHORTCUT_SHOW_DIR": v}}, "r", "hi")
+		if res.Code != 0 || res.Stdout != "hi\n" || (want == "") != (res.Stderr == "") || !strings.HasPrefix(res.Stderr, want) {
+			t.Errorf("%q: %+v", v, res)
+		}
+	}
+	for _, v := range []string{"", "2", "yes"} {
+		res := e.RunWith(testkit.Opts{Env: map[string]string{"SHORTCUT_SHOW_DIR": v}}, "r", "hi")
+		if res.Code != 1 || res.Stdout != "" || res.Stderr != "error: SHORTCUT_SHOW_DIR must be 0 or 1, not '"+v+"'\n" {
+			t.Errorf("%q: %+v", v, res)
+		}
+	}
+}

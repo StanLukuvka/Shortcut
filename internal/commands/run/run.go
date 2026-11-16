@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"strings"
@@ -49,7 +50,11 @@ func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Loo
 	if err := store.ValidateName(entry.Name); err != nil { // list warns about a hand-written one; run refuses it
 		return err
 	}
-	if !platform.IsDir(resolved.RunCwd) {
+	isDir, err := platform.IsDir(resolved.RunCwd)
+	if err != nil {
+		return err
+	}
+	if !isDir {
 		return errors.New("run directory does not exist: " + resolved.RunCwd)
 	}
 	withArgs := ""
@@ -63,19 +68,19 @@ func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Loo
 	again = append(append(again, strings.Fields(name)...), args...)
 	realCwd := platform.Realpath(resolved.RunCwd)
 	if entry.Confirm {
-		message := oneLine(entry.Description)
-		if entry.Description == "(no description)" || (entry.Inline != nil && entry.Description == *entry.Inline) {
-			message = ""
-		}
 		if err := term.Confirmed(s, term.Confirm{
 			Question:   "run '" + name + "'" + withArgs + " in " + realCwd + "?",
 			NoTerminal: "'" + name + "' asks for confirmation: run it in a terminal, or pass -y (" + oneLine(platform.ShellJoin(again)) + ")",
-			Message:    message,
+			Message:    oneLine(entry.Description),
 		}, assumeYes); err != nil {
 			return err
 		}
 	}
-	if show, ok := os.LookupEnv("SHORTCUT_SHOW_DIR"); !ok || show != "0" {
+	show, err := showDir()
+	if err != nil {
+		return err
+	}
+	if show {
 		line := term.Safe("\u2192 " + realCwd)
 		if s.Err.IsTerminal() {
 			line = "\x1b[2m" + line + "\x1b[0m"
@@ -98,6 +103,18 @@ func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Loo
 	return platform.ExecChild(argv, resolved.RunCwd, env)
 }
 
+// showDir reads SHORTCUT_SHOW_DIR: unset or 1 shows the folder, 0 hides it, anything else is refused.
+func showDir() (bool, error) {
+	v, ok := os.LookupEnv("SHORTCUT_SHOW_DIR")
+	switch {
+	case !ok || v == "1":
+		return true, nil
+	case v == "0":
+		return false, nil
+	}
+	return false, fmt.Errorf("SHORTCUT_SHOW_DIR must be 0 or 1, not '%s'", v)
+}
+
 // childCommand is the argv of the child: bash -c for an inline command, else the script as it is, for the kernel.
 func childCommand(resolved *store.ResolvedShortcut, entry *store.Entry, name string, args []string) ([]string, error) {
 	if entry.Inline != nil {
@@ -113,13 +130,19 @@ func childCommand(resolved *store.ResolvedShortcut, entry *store.Entry, name str
 	if err := platform.CheckExecutable(path); err != nil {
 		return nil, err
 	}
-	if f, err := os.Open(path); err == nil {
-		first, _ := bufio.NewReader(f).ReadSlice('\n') // lazy: a #! line longer than the 4096-byte buffer is cut, and the kernel refuses it anyway
-		f.Close()
-		if bytes.HasPrefix(first, []byte("#!")) && bytes.HasSuffix(first, []byte("\r\n")) {
-			return nil, fmt.Errorf("%s has Windows line endings, so its #! line can't start it. Convert it: sed -i 's/\\r$//' %s",
-				path, platform.ShellQuote(path))
-		}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	first, err := bufio.NewReader(f).ReadSlice('\n')
+	f.Close() // read-only: a failed close loses nothing
+	// bufio.ErrBufferFull is a first line over 4096 bytes: the kernel takes a far shorter #! line, so such a script is not started by a #! line anyway.
+	if err != nil && err != io.EOF && err != bufio.ErrBufferFull {
+		return nil, err
+	}
+	if bytes.HasPrefix(first, []byte("#!")) && bytes.HasSuffix(first, []byte("\r\n")) {
+		return nil, fmt.Errorf("%s has Windows line endings, so its #! line can't start it. Convert it: sed -i 's/\\r$//' %s",
+			path, platform.ShellQuote(path))
 	}
 	return append([]string{path}, args...), nil
 }

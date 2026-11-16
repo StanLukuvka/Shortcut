@@ -50,7 +50,7 @@ func TestEntry_EmptyInlineIsStillSet(t *testing.T) {
 	if err != nil || e.Inline == nil {
 		t.Fatalf("%+v %v", e, err)
 	}
-	if got, _ := e.Raw(); string(got) != `{"description":"","inline":""}` {
+	if got, _ := e.Raw(); string(got) != `{"inline":""}` {
 		t.Error(string(got))
 	}
 }
@@ -199,18 +199,18 @@ func TestStores_StoreDiscoverySkipsGlobalRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Walking up from home or subdirectory must skip ~/.shortcuts
-	if got := NewContext(env.Home, nil).FindProjectRoot(env.Home); got != "" {
+	if got, _ := NewContext(env.Home, nil).FindProjectRoot(env.Home); got != "" {
 		t.Errorf("home: %q", got)
 	}
 	deep := filepath.Join(env.Home, "a", "b", "c")
 	if err := os.MkdirAll(deep, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := NewContext(deep, nil).FindProjectRoot(deep); got != "" {
+	if got, _ := NewContext(deep, nil).FindProjectRoot(deep); got != "" {
 		t.Errorf("deep: %q", got)
 	}
 	// Walking up from inside ~/.shortcuts itself must return none
-	if got := NewContext(env.Store, nil).FindProjectRoot(env.Store); got != "" {
+	if got, _ := NewContext(env.Store, nil).FindProjectRoot(env.Store); got != "" {
 		t.Errorf("store: %q", got)
 	}
 	// A real local store in a project must be found
@@ -220,7 +220,7 @@ func TestStores_StoreDiscoverySkipsGlobalRoot(t *testing.T) {
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := NewContext(sub, nil).FindProjectRoot(sub); got != platform.Realpath(proj) {
+	if got, _ := NewContext(sub, nil).FindProjectRoot(sub); got != platform.Realpath(proj) {
 		t.Errorf("sub: %q", got)
 	}
 }
@@ -231,15 +231,15 @@ func TestStores_ProjectRootViaLocalFileOnlyAndNearest(t *testing.T) {
 	env.WriteFile(filepath.Join(outer, ".shortcuts.local"), `{"version": 1, "shortcuts": {}}`, 0)
 	inner := filepath.Join(outer, "in")
 	env.WriteStore(filepath.Join(inner, ".shortcuts"), map[string]any{})
-	if got := NewContext(filepath.Join(inner, "x"), nil).FindProjectRoot(filepath.Join(inner, "x")); got != inner {
+	if got, _ := NewContext(filepath.Join(inner, "x"), nil).FindProjectRoot(filepath.Join(inner, "x")); got != inner {
 		t.Errorf("nearest: %q", got)
 	}
-	if got := NewContext(outer, nil).FindProjectRoot(outer); got != outer {
+	if got, _ := NewContext(outer, nil).FindProjectRoot(outer); got != outer {
 		t.Errorf("local only: %q", got)
 	}
 	// a .shortcuts that is a folder is no project
 	old := env.Project(nil, testkit.Name("old"), testkit.Dirs(".shortcuts"))
-	if got := NewContext(old, nil).FindProjectRoot(old); got != "" {
+	if got, _ := NewContext(old, nil).FindProjectRoot(old); got != "" {
 		t.Errorf("a .shortcuts folder: %q", got)
 	}
 }
@@ -629,4 +629,22 @@ func compactOf(t *testing.T, d platform.Doc) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+func TestStore_AnUnreadableImportsFolderIsAProblem(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can read any folder")
+	}
+	env := testkit.New(t)
+	imports := filepath.Join(env.Store, "imports")
+	if err := os.MkdirAll(imports, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(imports, 0); err != nil {
+		t.Fatal(err)
+	}
+	problems := NewContext(env.Home, nil).Store(env.Store).Problems
+	if len(problems) != 1 || !strings.Contains(problems[0], imports) {
+		t.Errorf("problems: %q", problems)
+	}
 }

@@ -22,7 +22,7 @@ const (
 // Entry is one shortcut's definition.
 type Entry struct {
 	Name        string
-	Description string  // "" allowed; always written
+	Description string  // "" allowed; left out of the file when empty
 	Inline      *string // exactly one of Inline and Script is non-nil
 	Script      *string
 	Cwd         *string
@@ -102,14 +102,16 @@ func DecodeEntry(name string, raw []byte) (*Entry, error) {
 	return e, nil
 }
 
-// Raw is the entry as an object's text, its fields sorted by name: description always, the others when set.
+// Raw is the entry as an object's text, its fields sorted by name: the fields that are set.
 func (e *Entry) Raw() ([]byte, error) {
 	text := map[string]*string{"inline": e.Inline, "script": e.Script, "cwd": e.Cwd}
 	d := platform.Doc{}
 	for _, f := range Fields() {
 		switch {
 		case f.Name == "description":
-			d.SetString(f.Name, e.Description)
+			if e.Description != "" {
+				d.SetString(f.Name, e.Description)
+			}
 		case f.Name == "confirm":
 			if e.Confirm {
 				d[f.Name] = []byte("true")

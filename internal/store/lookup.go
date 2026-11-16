@@ -146,7 +146,10 @@ func FindEntry(c *Context, words []string, lk Lookup) (Found, error) {
 		notes = append(notes, hint)
 	}
 	if root := c.Project; root != "" && lk.Scope == ScopeProject {
-		if outer := c.FindProjectRoot(filepath.Dir(root)); outer != "" && outer != root && hasName(c.Store(outer), first) {
+		outer, err := c.FindProjectRoot(filepath.Dir(root))
+		if err != nil {
+			notes = append(notes, err.Error())
+		} else if outer != "" && outer != root && hasName(c.Store(outer), first) {
 			notes = append(notes, fmt.Sprintf("The project in %s has a '%s', but only the nearest project, %s, is used here.", outer, first, root))
 		}
 	}

@@ -68,7 +68,11 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 		return err
 	}
 	out("\nScript (" + path + "):")
-	if platform.IsFile(path) {
+	isFile, err := platform.IsFile(path)
+	if err != nil {
+		return err
+	}
+	if isFile {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			return err
