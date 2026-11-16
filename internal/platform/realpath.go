@@ -1,6 +1,5 @@
 // Package platform is the part of the path, process, lock and JSON behaviour that shortcut depends on. Path
 // functions are lexical ones (not filepath.Join); Realpath resolves symlinks without requiring the path to exist.
-// Doc is one JSON object as written.
 package platform
 
 import (

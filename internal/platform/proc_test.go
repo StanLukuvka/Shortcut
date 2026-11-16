@@ -13,8 +13,8 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-// The test binary doubles as the program under test for what only a process can show: OSUTIL_HELPER names the job.
-func TestMain(m *testing.M) { testkit.HelperMain(m, "OSUTIL_HELPER", helper) }
+// The test binary doubles as the program under test for what only a process can show: PLATFORM_HELPER names the job.
+func TestMain(m *testing.M) { testkit.HelperMain(m, "PLATFORM_HELPER", helper) }
 
 func helper(job string) {
 	switch job {
@@ -26,8 +26,8 @@ func helper(job string) {
 		fmt.Println(IsTerminal(0), IsTerminal(1))
 	case "exec":
 		env := append(os.Environ(), "PATH="+os.Getenv("PLATFORM_PATH"))
-		err := ExecChild([]string{os.Getenv("OSUTIL_CMD"), "-c", `pwd; exec grep -E '^Sig(Blk|Ign)' /proc/self/status`},
-			os.Getenv("OSUTIL_CWD"), env)
+		err := ExecChild([]string{os.Getenv("PLATFORM_CMD"), "-c", `pwd; exec grep -E '^Sig(Blk|Ign)' /proc/self/status`},
+			os.Getenv("PLATFORM_CWD"), env)
 		fmt.Println("returned:", err)
 		os.Exit(7)
 	}
@@ -38,7 +38,7 @@ func TestGetwd_IsPhysical(t *testing.T) {
 	e := testkit.New(t)
 	real := e.Folder("real")
 	e.Symlink(real, filepath.Join(e.Tmp, "link"))
-	res := e.RunCmd(testkit.Opts{Cwd: filepath.Join(e.Tmp, "link"), Env: map[string]string{"OSUTIL_HELPER": "cwd", "PWD": filepath.Join(e.Tmp, "link")}}, testkit.SelfArgs()...)
+	res := e.RunCmd(testkit.Opts{Cwd: filepath.Join(e.Tmp, "link"), Env: map[string]string{"PLATFORM_HELPER": "cwd", "PWD": filepath.Join(e.Tmp, "link")}}, testkit.SelfArgs()...)
 	if want := filepath.Join(e.Tmp, "link") + "\n" + real + "\n"; res.Stdout != want {
 		t.Errorf("stdout %q, want %q (os.Getwd then platform.Getwd)", res.Stdout, want)
 	}
@@ -47,7 +47,7 @@ func TestGetwd_IsPhysical(t *testing.T) {
 func TestTTY_StdinAndStdout(t *testing.T) {
 	e := testkit.New(t)
 	opts := func(env map[string]string) testkit.Opts {
-		env["OSUTIL_HELPER"] = "tty"
+		env["PLATFORM_HELPER"] = "tty"
 		return testkit.Opts{Env: env}
 	}
 	if res := e.RunCmd(opts(map[string]string{}), testkit.SelfArgs()...); res.Stdout != "false false\n" { // /dev/null is not a terminal
@@ -159,7 +159,7 @@ func TestExec_TheChildStartsClean(t *testing.T) {
 	}
 	e := testkit.New(t)
 	dir := e.Folder("run")
-	res := e.RunCmd(testkit.Opts{Env: map[string]string{"OSUTIL_HELPER": "exec", "OSUTIL_CMD": "sh", "PLATFORM_PATH": "/bin:/usr/bin", "OSUTIL_CWD": dir}}, testkit.SelfArgs()...)
+	res := e.RunCmd(testkit.Opts{Env: map[string]string{"PLATFORM_HELPER": "exec", "PLATFORM_CMD": "sh", "PLATFORM_PATH": "/bin:/usr/bin", "PLATFORM_CWD": dir}}, testkit.SelfArgs()...)
 	if res.Code != 0 {
 		t.Fatalf("exit %d, stdout %q stderr %q", res.Code, res.Stdout, res.Stderr)
 	}
