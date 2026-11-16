@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -92,23 +91,6 @@ func sameJSON(a, b ordjson.Value) bool {
 	x, err1 := ordjson.Marshal(a)
 	y, err2 := ordjson.Marshal(b)
 	return err1 == nil && err2 == nil && string(x) == string(y)
-}
-
-func TestApproval_GoldenReviewable(t *testing.T) {
-	cases := golden(t, "reviewable_cases")
-	for i, c := range cases {
-		raw, err := hex.DecodeString(str(c, "raw_hex"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got, want := Reviewable(raw), str(c, "expected"); got != want {
-			t.Errorf("case %d (%x): got %q want %q", i, raw, got, want)
-		}
-	}
-	if len(cases) < 40 {
-		t.Errorf("only %d cases", len(cases))
-	}
-	t.Logf("%d reviewable cases", len(cases))
 }
 
 func TestApproval_KeysAndRecordNames(t *testing.T) {
@@ -444,10 +426,10 @@ func TestApproval_EntryFilesEdges(t *testing.T) {
 	}, testkit.Dirs("work"))
 	g := model.LoadStore(proj).Main
 	files := must(SharedFiles(g))
-	if files[elsewhere] != "echo out\n" { // an absolute script is used as given, so its key is the absolute path
+	if files[elsewhere] != sum("echo out\n") { // an absolute script is used as given, so its key is the absolute path
 		t.Errorf("absolute script: %q", files)
 	}
-	if got := files["./cwd of rel"]; got != filepath.Join(proj, "work")+"\n" {
+	if got := files["./cwd of rel"]; got != sum(filepath.Join(proj, "work")+"\n") {
 		t.Errorf("rel cwd: %q", got)
 	}
 	// a NUL in a cwd does not panic and is listed like any relative cwd; the run itself fails (see the cli test)
@@ -482,66 +464,11 @@ func TestApproval_AScriptCannotStandInForACwdRecord(t *testing.T) {
 	env.Symlink(filepath.Join(proj, "safe"), filepath.Join(proj, "work"))
 	store := model.LoadStore(proj)
 	files := must(SharedFiles(store.Main))
-	if files["cwd of go"] != "x" {
+	if files["cwd of go"] != sum("x") {
 		t.Errorf("script: %q", files["cwd of go"])
 	}
-	if want := osutil.Realpath(filepath.Join(proj, "safe")) + "\n"; files["./cwd of go"] != want {
+	if want := sum(osutil.Realpath(filepath.Join(proj, "safe")) + "\n"); files["./cwd of go"] != want {
 		t.Errorf("cwd record %q, want %q", files["./cwd of go"], want)
-	}
-}
-
-func TestApproval_DiffDetails(t *testing.T) {
-	old := map[string]string{"a.txt": "one\ntwo\n", "gone.txt": "bye\n", "same.txt": "x\n", "bin": binaryMark + "aa"}
-	new := map[string]string{"a.txt": "one\nthree\n", "added.txt": "hi\n", "same.txt": "x\n", "bin": binaryMark + "bb"}
-	lines := DiffFiles(old, new)
-	for _, want := range []string{"--- a/a.txt", "+++ b/a.txt", "-two", "+three", "-bye", "+hi", "Binary file bin changed"} {
-		if !slices.Contains(lines, want) {
-			t.Errorf("missing %q in %q", want, lines)
-		}
-	}
-	for _, l := range lines {
-		if strings.Contains(l, "same.txt") {
-			t.Errorf("unchanged file shown: %q", l)
-		}
-	}
-	// A new empty file is still a difference you can see
-	if got := DiffFiles(map[string]string{}, map[string]string{"empty": ""}); len(got) == 0 {
-		t.Error("an empty file added shows nothing")
-	}
-	// "./" is dropped from the shown name; lines lose their line ends
-	got := DiffFiles(map[string]string{}, map[string]string{"./cwd of x": "/tmp/x\r\n"})
-	if strings.Join(got, "|") != "--- a/cwd of x|+++ b/cwd of x|@@ -0,0 +1 @@|+/tmp/x" {
-		t.Errorf("%q", got)
-	}
-}
-
-func TestApproval_ATextFileCannotForgeEitherMark(t *testing.T) {
-	bad := []byte("a \xff\n")
-	shown := Reviewable(bad)
-	if Reviewable([]byte(shown)) == shown {
-		t.Error("the shown text of a bad file hashes as the bad file")
-	}
-	forged := append([]byte(binaryMark), "echo hidden\n"...)
-	if got := Reviewable(forged); !strings.HasPrefix(got, binaryMark) || strings.Contains(got, "echo hidden") {
-		t.Errorf("forged: %q", got)
-	}
-	// a plain NUL in a text file is shown, not hidden (the script bash would run stays visible)
-	if got := Reviewable([]byte("#!/bin/bash\necho PWNED\n\x00")); !strings.Contains(got, "echo PWNED") || strings.HasPrefix(got, binaryMark) {
-		t.Errorf("nul: %q", got)
-	}
-}
-
-func TestApproval_BadBytesInAFileAndTheirEscapedTextAreDifferentContent(t *testing.T) {
-	one := Reviewable([]byte("a \xff\n"))
-	two := Reviewable([]byte("a \\xff\n"))
-	if one == two {
-		t.Error("the same text")
-	}
-	if got := Reviewable([]byte("plain\n")); got != "plain\n" {
-		t.Errorf("%q", got)
-	}
-	if want := "a \\xff\n\n" + invalidMark + "593556958570390666a95c849eaaee0a27455bbe3f9cda2b0a2ea551af93b9e9" + "\n"; one != want {
-		t.Errorf("%q", one)
 	}
 }
 
@@ -568,7 +495,7 @@ func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
 		t.Fatalf("ASCII name: %v", err)
 	}
 	shared, local, err := snapshot(g)
-	if err != nil || shared[`scripts/ns/caf\udce9.sh`] != "echo ascii\n" {
+	if err != nil || shared[`scripts/ns/caf\udce9.sh`] != sum("echo ascii\n") {
 		t.Fatalf("%q %v", shared, err)
 	}
 	if err := Save(g, shared, local); err != nil || State(g) != "ok" {
@@ -593,20 +520,9 @@ func TestApproval_ARecordWithNonUTF8TextIsNoRecord(t *testing.T) {
 	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
 	g := model.LoadStore(proj).Main
 	// a record whose file name is not valid UTF-8 is no record
-	env.WriteFile(model.ApprovalPath(g), "{\"snapshot\": {\"caf\xe9.sh\": \"x\"}, \"local\": {}}", 0)
+	env.WriteFile(model.ApprovalPath(g), "{\"snapshot\": {\"caf\xe9.sh\": \""+sum("x")+"\"}, \"local\": {}}", 0)
 	if Load(g) != nil || State(g) != "new" {
 		t.Errorf("loaded as a record: %+v, state %s", Load(g), State(g))
-	}
-}
-
-func TestApproval_ABinaryReplacingTextSaysSoAndTextReplacingABinaryShows(t *testing.T) {
-	lines := DiffFiles(map[string]string{"t": "echo hi\n"}, map[string]string{"t": binaryMark + "aa"})
-	if !slices.Contains(lines, "Binary file t changed") {
-		t.Errorf("%q", lines)
-	}
-	lines = DiffFiles(map[string]string{"t": binaryMark + "aa"}, map[string]string{"t": "echo hi\n"})
-	if !slices.Contains(lines, "+echo hi") {
-		t.Errorf("%q", lines)
 	}
 }
 
@@ -625,7 +541,7 @@ func TestApproval_FolderFilesNamespace(t *testing.T) {
 	}
 	got := folderFiles(g)
 	want := map[string]string{
-		"scripts/ns/go.sh": "echo go\n", "scripts/ns/sub/deep.sh": "echo deep\n", "scripts/ns/dirlink": "symlink to sub\n",
+		"scripts/ns/go.sh": sum("echo go\n"), "scripts/ns/sub/deep.sh": sum("echo deep\n"), "scripts/ns/dirlink": sum("symlink to sub\n"),
 	}
 	if !equalMaps(got, want) {
 		t.Errorf("got %q\nwant %q", got, want)
@@ -635,33 +551,38 @@ func TestApproval_FolderFilesNamespace(t *testing.T) {
 		t.Error("main group")
 	}
 	// the namespace's script reaches SharedFiles once, under its real path
-	if f := must(SharedFiles(g)); f["scripts/ns/go.sh"] != "echo go\n" || len(f) != 4 {
+	if f := must(SharedFiles(g)); f["scripts/ns/go.sh"] != sum("echo go\n") || len(f) != 4 {
 		t.Errorf("%q", f)
 	}
 }
 
-// An approval record with an unknown field, "extra", which is ignored. Hand-written (ASCII only).
+// An approval record with an unknown field, "extra", which is ignored. Hand-written.
 const recordWithExtraField = `{
   "key": "@ROOT@",
   "extra": 1,
   "snapshot": {
-    ".shortcuts": "{\n  \"shortcuts\": {\n    \"t\": {\n      \"script\": \"bin/t\"\n    }\n  },\n  \"version\": 1\n}\n",
-    "bin/t": "echo one\n"
+    ".shortcuts": "@SHORTCUTS@",
+    "bin/t": "@BINT@"
   },
   "local": {}
 }
 `
+
+func extraFieldRecord(root string) string {
+	r := strings.NewReplacer("@ROOT@", root, "@SHORTCUTS@", sum("{\n  \"shortcuts\": {\n    \"t\": {\n      \"script\": \"bin/t\"\n    }\n  },\n  \"version\": 1\n}\n"), "@BINT@", sum("echo one\n"))
+	return r.Replace(recordWithExtraField)
+}
 
 func TestApproval_RecordWithAnUnknownFieldStillApproves(t *testing.T) {
 	env := testkit.New(t)
 	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
 	g := model.LoadStore(proj).Main
 	rec := model.ApprovalPath(g)
-	env.WriteFile(rec, strings.ReplaceAll(recordWithExtraField, "@ROOT@", proj), 0)
+	env.WriteFile(rec, extraFieldRecord(proj), 0)
 	if got := State(g); got != "ok" {
 		t.Fatalf("unchanged files: %s", got)
 	}
-	env.WriteFile(rec, strings.ReplaceAll(recordWithExtraField, "@ROOT@", proj), 0)
+	env.WriteFile(rec, extraFieldRecord(proj), 0)
 	env.WriteFile(filepath.Join(proj, "bin", "t"), "echo two\n", 0)
 	if got := State(model.LoadStore(proj).Main); got != "changed" {
 		t.Errorf("text changed: %s", got)
@@ -697,6 +618,9 @@ func TestApproval_RecordWithoutSnapshotOrLocal(t *testing.T) {
 	}
 }
 
+// sum is what the record keeps for a file with this content.
+func sum(s string) string { return digest([]byte(s)) }
+
 // must is the value of a call that cannot fail in these tests.
 func must[T any](v T, err error) T {
 	if err != nil {
@@ -718,5 +642,21 @@ func TestApproval_ANamespaceFileWithBadBytesInItsPathIsRefusedBeforeAnythingIsSa
 	}
 	if _, err := os.Stat(model.ApprovalPath(g)); err == nil {
 		t.Error("a record was written")
+	}
+}
+
+func TestApproval_ARecordInTheTextFormatIsNotApprovedYet(t *testing.T) {
+	env := testkit.New(t)
+	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
+	g := model.LoadStore(proj).Main
+	env.WriteFile(model.ApprovalPath(g), `{"key": "x", "snapshot": {"bin/t": "echo one\n"}, "local": {}}`, 0)
+	if Load(g) != nil || State(g) != "new" {
+		t.Errorf("text record: %+v, state %s", Load(g), State(g))
+	}
+	for _, v := range []string{"", sum("a")[1:], strings.ToUpper(sum("a")), sum("a") + "0", strings.Repeat("g", 64)} {
+		env.WriteFile(model.ApprovalPath(g), `{"snapshot": {"bin/t": "`+v+`"}, "local": {}}`, 0)
+		if Load(g) != nil {
+			t.Errorf("%q loaded as a digest", v)
+		}
 	}
 }

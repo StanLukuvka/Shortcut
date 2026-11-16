@@ -34,7 +34,7 @@ type Writer struct {
 // File is the underlying file, for a child that inherits it.
 func (w *Writer) File() *os.File { return w.f }
 
-// IsTerminal is isatty on the stream: the diff colour and pager (stdout), the dim "→ dir" line (stderr).
+// IsTerminal is isatty on the stream: the dim "→ dir" line (stderr).
 func (w *Writer) IsTerminal() bool { return w.tty }
 
 // WriteString writes text to the stream through Safe, then backslashReplace, and returns len(text).

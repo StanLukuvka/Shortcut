@@ -95,7 +95,7 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `<file error>. Nothing runs inside this project until it's fixed; for your own: shortcut r --global <name>` | The project's file is broken, so no name is looked up through it |
 | `<group> isn't approved yet; review it with: <command>` | Run the `shortcut update` command it names |
 | `<group> changed since you approved it; run: <command>` | |
-| `cannot approve: "<path>" is not valid UTF-8; rename it` | A file name in the project or the namespace's scripts folder, a project's own folder name, or the text of a cwd, is not valid UTF-8, so it can't be recorded. `run` and `update` stop there until it's renamed |
+| `cannot approve: "<path>" is not valid UTF-8; rename it` | A file name in the project or the namespace's scripts folder, or a project's own folder name, is not valid UTF-8, so it can't be recorded. `run` and `update` stop there until it's renamed |
 | `run directory does not exist: <dir>` | The entry's `cwd` is gone |
 | `script file not found: <path>` | |
 | `<path> has Windows line endings, so its #! line can't start it. Convert it: sed -i 's/\r$//' <path>` | The script's lines end in `\r\n` |

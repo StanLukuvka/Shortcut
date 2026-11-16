@@ -31,19 +31,8 @@ func helper(job string) {
 	case "confirm":
 		ok, err := Confirm{Question: "run 'go'?", NoTerminal: "no terminal", Message: "will run \x1b[2Kit"}.Granted(s, false)
 		s.Out.WriteString(fmt.Sprintf("granted=%v err=%v\n", ok, err))
-	case "diff":
-		var lines []string
-		for i := 0; i < atoi(os.Getenv("TEXTIO_LINES")); i++ {
-			lines = append(lines, []string{"--- a/f", "+++ b/f", "@@ -1 +1 @@", "+added \x1b[2J", "-removed", " context"}[i%6])
-		}
-		if os.Getenv("TEXTIO_RAW") != "" {
-			lines[0] = "--- a/a\x9bb.sh"
-		}
-		ShowDiff(s, lines)
 	}
 }
-
-func atoi(s string) (n int) { fmt.Sscan(s, &n); return }
 
 // capture is a Streams over files in the test's temp dir, and what each one holds.
 func capture(t *testing.T, e *testkit.Env, input string) (s *Streams, out, errs func() string) {

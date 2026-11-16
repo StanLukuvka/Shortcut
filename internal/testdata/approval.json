@@ -5,172 +5,6 @@
   "notes": [
     "tree_cases: build tree[] under a temp root, load each group, compare shared_files/local_files; replace @ROOT@ with the root in key_template and record_template. Modes are octal strings; symlink targets are relative. content_hex replaces content when the bytes are not UTF-8, path_hex replaces path. A group with error_contains must fail, either to load or when its snapshot is taken, with a message holding that text (@ROOT@ is replaced with the root)."
   ],
-  "reviewable_cases": [
-    {
-      "raw_hex": "",
-      "expected": ""
-    },
-    {
-      "raw_hex": "0a",
-      "expected": "\n"
-    },
-    {
-      "raw_hex": "6563686f2068690a",
-      "expected": "echo hi\n"
-    },
-    {
-      "raw_hex": "6563686f20c3a920f09f98800a",
-      "expected": "echo \u00e9 \ud83d\ude00\n"
-    },
-    {
-      "raw_hex": "6120ff0a",
-      "expected": "a \\xff\n\n\u0000not UTF-8, sha256 593556958570390666a95c849eaaee0a27455bbe3f9cda2b0a2ea551af93b9e9\n"
-    },
-    {
-      "raw_hex": "ff",
-      "expected": "\\xff\n\u0000not UTF-8, sha256 a8100ae6aa1940d0b663bb31cd466142ebbdbd5187131b92d93818987832eb89\n"
-    },
-    {
-      "raw_hex": "8081",
-      "expected": "\\x80\\x81\n\u0000not UTF-8, sha256 5dd1693933cc234394d793f125ab2a0bde44f490c262fe266ad35ee09e2a4016\n"
-    },
-    {
-      "raw_hex": "7f454c46",
-      "expected": "\u0000binary:3bdbb4fe8397cd2b842430b39ccff01a8663c751945ef5e9a09e267fb8b1d359"
-    },
-    {
-      "raw_hex": "7f454c4602010100",
-      "expected": "\u0000binary:e94466faac02d08efbb3109dbe52d0c13c5a53859e328d50dbeb2e6f0ee89871"
-    },
-    {
-      "raw_hex": "207f454c46",
-      "expected": " \u007fELF"
-    },
-    {
-      "raw_hex": "0062696e6172793a616263",
-      "expected": "\u0000binary:c8e36cf1d96ddb4263536f924a0ac802350e56d0137c306103e01af45496415f"
-    },
-    {
-      "raw_hex": "0062696e6172793a",
-      "expected": "\u0000binary:2ff49fee6b500efa335411b5b0c90315f3b099c312b3595725c0bbea34271126"
-    },
-    {
-      "raw_hex": "0062696e617279",
-      "expected": "\u0000binary"
-    },
-    {
-      "raw_hex": "00",
-      "expected": "\u0000"
-    },
-    {
-      "raw_hex": "6100620a",
-      "expected": "a\u0000b\n"
-    },
-    {
-      "raw_hex": "efbbbf6563686f0a",
-      "expected": "\ufeffecho\n"
-    },
-    {
-      "raw_hex": "610d0a620d0a",
-      "expected": "a\r\nb\r\n"
-    },
-    {
-      "raw_hex": "efbfbd",
-      "expected": "\ufffd"
-    },
-    {
-      "raw_hex": "61efbfbd620a",
-      "expected": "a\ufffdb\n"
-    },
-    {
-      "raw_hex": "c080",
-      "expected": "\\xc0\\x80\n\u0000not UTF-8, sha256 4df51a863599ce9b7e9cac29d2144a68d0509897aa26626ded17edb0c761bd52\n"
-    },
-    {
-      "raw_hex": "c1bf",
-      "expected": "\\xc1\\xbf\n\u0000not UTF-8, sha256 898fc3ed9f9433c550e66132b697b96b4cf52cead6d48f48f42d1383471d057f\n"
-    },
-    {
-      "raw_hex": "e08080",
-      "expected": "\\xe0\\x80\\x80\n\u0000not UTF-8, sha256 81cb6f2a8be07e0bc603e036ab7fcda6225b5f50189622832fc1b483eb69e449\n"
-    },
-    {
-      "raw_hex": "eda080",
-      "expected": "\\xed\\xa0\\x80\n\u0000not UTF-8, sha256 91a681b998555fb475479817b126c94e57e52011fa1842c5d188795a4a05226b\n"
-    },
-    {
-      "raw_hex": "edbfbf",
-      "expected": "\\xed\\xbf\\xbf\n\u0000not UTF-8, sha256 8a8821b226fa468b6fadc951dad490315bf41b4761d6f3f56917f1d0e50d4dae\n"
-    },
-    {
-      "raw_hex": "e282",
-      "expected": "\\xe2\\x82\n\u0000not UTF-8, sha256 eed0eb1f664e53388c1f00a4a9ba9b8da60fe792af9eb5f6f4b5ee852a91f03f\n"
-    },
-    {
-      "raw_hex": "e282ac",
-      "expected": "\u20ac"
-    },
-    {
-      "raw_hex": "e282e282ac",
-      "expected": "\\xe2\\x82\u20ac\n\u0000not UTF-8, sha256 62468861a48fdc2a5755f4ea312f2f439d89af794af08fbf88133c5b1a2fdb66\n"
-    },
-    {
-      "raw_hex": "f09f98",
-      "expected": "\\xf0\\x9f\\x98\n\u0000not UTF-8, sha256 b38af6aef10b9620ceb4fe55a4aaf8def5e4d9bd99bd1ebff06a0d44220546a2\n"
-    },
-    {
-      "raw_hex": "f09f9880",
-      "expected": "\ud83d\ude00"
-    },
-    {
-      "raw_hex": "f4908080",
-      "expected": "\\xf4\\x90\\x80\\x80\n\u0000not UTF-8, sha256 fb16995ef3b5d7c2c81b153f945979f1db35ebc62b17616cdc896f8e7836d371\n"
-    },
-    {
-      "raw_hex": "f5808080",
-      "expected": "\\xf5\\x80\\x80\\x80\n\u0000not UTF-8, sha256 902e7d539c596f4dc9459345a8e4cbea6c287e0ae26951e5e72fd33d2290ae65\n"
-    },
-    {
-      "raw_hex": "f888808080",
-      "expected": "\\xf8\\x88\\x80\\x80\\x80\n\u0000not UTF-8, sha256 c0569cef7287222a791fb74755cfbf405ff326d1e46bb79353d501e64135314d\n"
-    },
-    {
-      "raw_hex": "feff",
-      "expected": "\\xfe\\xff\n\u0000not UTF-8, sha256 f197692810d457e297fce9c5653b02581ff99a50852370f29d7e5fe47d9d37e6\n"
-    },
-    {
-      "raw_hex": "6f6b20e9206f6b20e90a",
-      "expected": "ok \\xe9 ok \\xe9\n\n\u0000not UTF-8, sha256 3e9fb4009a0f1c13928c95d2e649a02e57058bd14edf90b0fa854c2bf0833ffa\n"
-    },
-    {
-      "raw_hex": "006e6f74205554462d382c20736861323536206162630a",
-      "expected": "\u0000not UTF-8, sha256 abc\n\n\u0000not UTF-8, sha256 92a0a6da4413c31034a666a685c39c402b9300d5b8f05213cac237338a270bf1\n"
-    },
-    {
-      "raw_hex": "78006e6f74205554462d382c20736861323536200a",
-      "expected": "x\u0000not UTF-8, sha256 \n\n\u0000not UTF-8, sha256 a5abd54a987eb26cd6257c9971cb905fea59b4143422fdc03a2f7fb77f229b40\n"
-    },
-    {
-      "raw_hex": "6120ff0a006e6f74205554462d382c207368613235362064656164626565660a",
-      "expected": "a \\xff\n\u0000not UTF-8, sha256 deadbeef\n\n\u0000not UTF-8, sha256 6fb6850b1a2bb8333a961385511601e6bad340a45818213fedbc1a3ddbeb7bb2\n"
-    },
-    {
-      "raw_hex": "1b5b33316d7265641b5b306d0a",
-      "expected": "\u001b[31mred\u001b[0m\n"
-    },
-    {
-      "raw_hex": "e280a8e280a9c2850a",
-      "expected": "\u2028\u2029\u0085\n"
-    },
-    {
-      "raw_hex": "7f",
-      "expected": "\u007f"
-    },
-    {
-      "raw_hex": "23212f62696e2f73680afffe0a",
-      "expected": "#!/bin/sh\n\\xff\\xfe\n\n\u0000not UTF-8, sha256 75802291baa699097326556152e32b364666b349740b26781f6a4c4b89bee567\n"
-    }
-  ],
   "tree_cases": [
     {
       "name": "project with a script and a local overlay",
@@ -200,14 +34,14 @@
           "name": "",
           "error": null,
           "shared_files": {
-            ".shortcuts": "{\n  \"shortcuts\": {\n    \"hi\": {\n      \"script\": \"scripts/hi.sh\"\n    },\n    \"inline\": {\n      \"inline\": \"echo \u00e9\"\n    }\n  },\n  \"version\": 1\n}\n",
-            "scripts/hi.sh": "#!/usr/bin/env bash\necho hi\n"
+            ".shortcuts": "b8c0a5733fa7e8d02b3b56879c4c28dba6840a102b61dcb0129e0d0eb0433103",
+            "scripts/hi.sh": "ea3bf4b4b4b312e437b5e01a3056d9dcc8d7a4d98669f265f6e73d4548618720"
           },
           "local_files": {
-            ".shortcuts.local": "{\n  \"shortcuts\": {\n    \"hi\": null,\n    \"mine\": {\n      \"inline\": \"echo mine\"\n    }\n  },\n  \"version\": 1\n}\n"
+            ".shortcuts.local": "7e471c946e75ec539ab5c09aaa7d49cd8ca896c9f66b1e6cb308e6c2ebd4479b"
           },
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"hi\\\": {\\n      \\\"script\\\": \\\"scripts/hi.sh\\\"\\n    },\\n    \\\"inline\\\": {\\n      \\\"inline\\\": \\\"echo \u00e9\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"scripts/hi.sh\": \"#!/usr/bin/env bash\\necho hi\\n\"\n  },\n  \"local\": {\n    \".shortcuts.local\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"hi\\\": null,\\n    \\\"mine\\\": {\\n      \\\"inline\\\": \\\"echo mine\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\"\n  }\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"b8c0a5733fa7e8d02b3b56879c4c28dba6840a102b61dcb0129e0d0eb0433103\",\n    \"scripts/hi.sh\": \"ea3bf4b4b4b312e437b5e01a3056d9dcc8d7a4d98669f265f6e73d4548618720\"\n  },\n  \"local\": {\n    \".shortcuts.local\": \"7e471c946e75ec539ab5c09aaa7d49cd8ca896c9f66b1e6cb308e6c2ebd4479b\"\n  }\n}\n"
         }
       ]
     },
@@ -228,10 +62,10 @@
           "error": null,
           "shared_files": {},
           "local_files": {
-            ".shortcuts.local": "{\n  \"shortcuts\": {\n    \"mine\": {\n      \"inline\": \"echo mine\"\n    }\n  },\n  \"version\": 1\n}\n"
+            ".shortcuts.local": "64a22f249f619ce1d74502938783e77b80860d33f69318e7f67849b75afa6da8"
           },
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {},\n  \"local\": {\n    \".shortcuts.local\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"mine\\\": {\\n      \\\"inline\\\": \\\"echo mine\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\"\n  }\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {},\n  \"local\": {\n    \".shortcuts.local\": \"64a22f249f619ce1d74502938783e77b80860d33f69318e7f67849b75afa6da8\"\n  }\n}\n"
         }
       ]
     },
@@ -263,14 +97,14 @@
           "name": "",
           "error": null,
           "shared_files": {
-            ".shortcuts": "{\n  \"shortcuts\": {\n    \"a\": {\n      \"inline\": \"true\"\n    }\n  },\n  \"version\": 1\n}\n"
+            ".shortcuts": "1996268bb55001eb225962df4b80476d8e9e347b7f480431fc1f0aa5b82bef9a"
           },
           "local_files": {
-            ".shortcuts.local": "{\n  \"shortcuts\": {\n    \"b\": {\n      \"script\": \"tools/b.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
-            "tools/b.sh": "echo b\n"
+            ".shortcuts.local": "322fa8df77aeeec33134a6660cd0fb5f1ba3fc4ae67cddbee5c934f4cfa5172a",
+            "tools/b.sh": "256931e5627bfa46347df35ae1c25649073ce5630975d0cdf9d301d32836a118"
           },
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"a\\\": {\\n      \\\"inline\\\": \\\"true\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\"\n  },\n  \"local\": {\n    \".shortcuts.local\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"b\\\": {\\n      \\\"script\\\": \\\"tools/b.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"tools/b.sh\": \"echo b\\n\"\n  }\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"1996268bb55001eb225962df4b80476d8e9e347b7f480431fc1f0aa5b82bef9a\"\n  },\n  \"local\": {\n    \".shortcuts.local\": \"322fa8df77aeeec33134a6660cd0fb5f1ba3fc4ae67cddbee5c934f4cfa5172a\",\n    \"tools/b.sh\": \"256931e5627bfa46347df35ae1c25649073ce5630975d0cdf9d301d32836a118\"\n  }\n}\n"
         }
       ]
     },
@@ -326,17 +160,17 @@
           "name": "",
           "error": null,
           "shared_files": {
-            ".shortcuts": "{\n  \"shortcuts\": {\n    \"bad\": {\n      \"script\": \"bad.sh\"\n    },\n    \"crlf\": {\n      \"script\": \"crlf.sh\"\n    },\n    \"elf\": {\n      \"script\": \"bin/prog\"\n    },\n    \"empty\": {\n      \"script\": \"empty.sh\"\n    },\n    \"marked\": {\n      \"script\": \"marked.sh\"\n    },\n    \"uni\": {\n      \"script\": \"caf\u00e9.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
-            "bad.sh": "echo \\xff\\xfe\n\n\u0000not UTF-8, sha256 dd1284d090313958484127c39a687db402f3a7a8017f2616d9048ece12b6d516\n",
-            "crlf.sh": "echo a\r\necho b\r\n",
-            "bin/prog": "\u0000binary:2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d",
-            "empty.sh": "",
-            "marked.sh": "\u0000binary:c8e36cf1d96ddb4263536f924a0ac802350e56d0137c306103e01af45496415f",
-            "caf\u00e9.sh": "echo \u00e9\n"
+            ".shortcuts": "cdad4c440b23a56dbdfeb5eb05b6fd58edf158e65aa096a88db3dfa57f302c82",
+            "bad.sh": "dd1284d090313958484127c39a687db402f3a7a8017f2616d9048ece12b6d516",
+            "crlf.sh": "e1c9dfdebf943ec05e4e4e7d16b14840806c84890478b5f173da0999224384b3",
+            "bin/prog": "2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d",
+            "empty.sh": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "marked.sh": "c8e36cf1d96ddb4263536f924a0ac802350e56d0137c306103e01af45496415f",
+            "caf\u00e9.sh": "0b6eb29672b53f43e87dc11fe2324de21680b606170eceff5136f880cd4892de"
           },
           "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"bad\\\": {\\n      \\\"script\\\": \\\"bad.sh\\\"\\n    },\\n    \\\"crlf\\\": {\\n      \\\"script\\\": \\\"crlf.sh\\\"\\n    },\\n    \\\"elf\\\": {\\n      \\\"script\\\": \\\"bin/prog\\\"\\n    },\\n    \\\"empty\\\": {\\n      \\\"script\\\": \\\"empty.sh\\\"\\n    },\\n    \\\"marked\\\": {\\n      \\\"script\\\": \\\"marked.sh\\\"\\n    },\\n    \\\"uni\\\": {\\n      \\\"script\\\": \\\"caf\u00e9.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"bad.sh\": \"echo \\\\xff\\\\xfe\\n\\n\\u0000not UTF-8, sha256 dd1284d090313958484127c39a687db402f3a7a8017f2616d9048ece12b6d516\\n\",\n    \"crlf.sh\": \"echo a\\r\\necho b\\r\\n\",\n    \"bin/prog\": \"\\u0000binary:2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\",\n    \"empty.sh\": \"\",\n    \"marked.sh\": \"\\u0000binary:c8e36cf1d96ddb4263536f924a0ac802350e56d0137c306103e01af45496415f\",\n    \"caf\u00e9.sh\": \"echo \u00e9\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"cdad4c440b23a56dbdfeb5eb05b6fd58edf158e65aa096a88db3dfa57f302c82\",\n    \"bad.sh\": \"dd1284d090313958484127c39a687db402f3a7a8017f2616d9048ece12b6d516\",\n    \"crlf.sh\": \"e1c9dfdebf943ec05e4e4e7d16b14840806c84890478b5f173da0999224384b3\",\n    \"bin/prog\": \"2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\",\n    \"empty.sh\": \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\n    \"marked.sh\": \"c8e36cf1d96ddb4263536f924a0ac802350e56d0137c306103e01af45496415f\",\n    \"caf\u00e9.sh\": \"0b6eb29672b53f43e87dc11fe2324de21680b606170eceff5136f880cd4892de\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     },
@@ -356,11 +190,11 @@
           "name": "",
           "error": "/tmp/golden/trees/t04/.shortcuts has an unknown field: extra",
           "shared_files": {
-            ".shortcuts": "{\n  \"extra\": {\n    \"big\": 1e30,\n    \"e\": 1E2,\n    \"huge\": 1e400,\n    \"int\": 12345678901234567890123,\n    \"n\": 1.0,\n    \"z\": -0,\n    \"zf\": -0.0\n  },\n  \"shortcuts\": {\n    \"x\": {\n      \"inline\": \"echo dup\"\n    },\n    \"y\": {\n      \"inline\": \"x\"\n    }\n  },\n  \"version\": 1\n}\n"
+            ".shortcuts": "39c59986fa97de1609b19aa8b24c895660041d5c29eb60a8dd6e96a8f5d63506"
           },
           "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"extra\\\": {\\n    \\\"big\\\": 1e30,\\n    \\\"e\\\": 1E2,\\n    \\\"huge\\\": 1e400,\\n    \\\"int\\\": 12345678901234567890123,\\n    \\\"n\\\": 1.0,\\n    \\\"z\\\": -0,\\n    \\\"zf\\\": -0.0\\n  },\\n  \\\"shortcuts\\\": {\\n    \\\"x\\\": {\\n      \\\"inline\\\": \\\"echo dup\\\"\\n    },\\n    \\\"y\\\": {\\n      \\\"inline\\\": \\\"x\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"39c59986fa97de1609b19aa8b24c895660041d5c29eb60a8dd6e96a8f5d63506\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     },
@@ -445,12 +279,12 @@
           "name": "",
           "error": null,
           "shared_files": {
-            ".shortcuts": "{\n  \"shortcuts\": {\n    \"l\": {\n      \"script\": \"scripts/link.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
-            "scripts/real.sh": "echo real\n"
+            ".shortcuts": "e62b457e877afbfa2f6d1f52f45c199d84e107c8beb568fe25711f3cd32daf3d",
+            "scripts/real.sh": "42b68f8617f6999408e52df5720a76cee00ae1a9dbad39ff657930b6a9d5c485"
           },
           "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"l\\\": {\\n      \\\"script\\\": \\\"scripts/link.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"scripts/real.sh\": \"echo real\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"e62b457e877afbfa2f6d1f52f45c199d84e107c8beb568fe25711f3cd32daf3d\",\n    \"scripts/real.sh\": \"42b68f8617f6999408e52df5720a76cee00ae1a9dbad39ff657930b6a9d5c485\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     },
@@ -476,12 +310,12 @@
           "name": "",
           "error": null,
           "shared_files": {
-            ".shortcuts": "{\n  \"shortcuts\": {\n    \"dir\": {\n      \"script\": \"scripts\"\n    },\n    \"gone\": {\n      \"script\": \"scripts/gone.sh\"\n    },\n    \"ok\": {\n      \"script\": \"scripts/ok.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
-            "scripts/ok.sh": "echo ok\n"
+            ".shortcuts": "a85065102455cb35995f24c43a6373270cc31ddb43e5c05ff33ba2420af24e94",
+            "scripts/ok.sh": "4726de74e6ad02ddb5decee701960c06c6fd91a871f95238350941eed7dbb22a"
           },
           "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"dir\\\": {\\n      \\\"script\\\": \\\"scripts\\\"\\n    },\\n    \\\"gone\\\": {\\n      \\\"script\\\": \\\"scripts/gone.sh\\\"\\n    },\\n    \\\"ok\\\": {\\n      \\\"script\\\": \\\"scripts/ok.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"scripts/ok.sh\": \"echo ok\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"a85065102455cb35995f24c43a6373270cc31ddb43e5c05ff33ba2420af24e94\",\n    \"scripts/ok.sh\": \"4726de74e6ad02ddb5decee701960c06c6fd91a871f95238350941eed7dbb22a\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     },
@@ -553,28 +387,28 @@
           "name": "",
           "error": null,
           "shared_files": {
-            ".shortcuts": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {\n    \"p\": {\n      \"inline\": \"echo p\"\n    }\n  },\n  \"version\": 1\n}\n"
+            ".shortcuts": "5ee0062a34265c2a986309d0dc69296e283ed28eeaf037eaf8c3d1da0555ebd1"
           },
           "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {\\n    \\\"p\\\": {\\n      \\\"inline\\\": \\\"echo p\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"5ee0062a34265c2a986309d0dc69296e283ed28eeaf037eaf8c3d1da0555ebd1\"\n  },\n  \"local\": {}\n}\n"
         },
         {
           "name": "ns",
           "error": null,
           "shared_files": {
-            "ns.shortcut": "{\n  \"description\": \"ns\",\n  \"shortcuts\": {\n    \"go\": {\n      \"script\": \"scripts/ns/go.sh\"\n    },\n    \"viaLink\": {\n      \"script\": \"scripts/ns/link.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
-            "scripts/ns/dirlink": "symlink to sub\n",
-            "scripts/ns/bad.txt": "x \\xe9\n\n\u0000not UTF-8, sha256 7a4367375c389643ada40c26163239533285bf24eebc59e1db48d412ac663cfd\n",
-            "scripts/ns/blob": "\u0000binary:2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d",
-            "scripts/ns/link.sh": "echo lib\n",
-            "scripts/ns/lib.sh": "echo lib\n",
-            "scripts/ns/go.sh": "#!/bin/sh\n. ./lib.sh\n",
-            "scripts/ns/sub/deep.sh": "echo deep \u00e9\n"
+            "ns.shortcut": "231a2efe344d9f72137675243590d2dc9a66e337d22f4635831891048be4022e",
+            "scripts/ns/dirlink": "8ab1b99276f5e7ff97ab3aeef534fde4a02bd1738894ecb849b975c4b796e952",
+            "scripts/ns/bad.txt": "7a4367375c389643ada40c26163239533285bf24eebc59e1db48d412ac663cfd",
+            "scripts/ns/blob": "2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d",
+            "scripts/ns/link.sh": "c0c44fc4d0864a3fcfd8a9faca69df1b306898f8bfa18f33c51eaffe66d11c17",
+            "scripts/ns/lib.sh": "c0c44fc4d0864a3fcfd8a9faca69df1b306898f8bfa18f33c51eaffe66d11c17",
+            "scripts/ns/go.sh": "92d165ab3235e426a077581c4243649a386addfe660bfd17bc8bbd2054f1338b",
+            "scripts/ns/sub/deep.sh": "84cb9a84c12ebc5057b42c63d51716c0a526ba60c6a53d794f91429e85924975"
           },
           "local_files": {},
           "key_template": "[\"@ROOT@\", \"ns\", \"@ROOT@/ns.shortcut\"]",
-          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"{\\n  \\\"description\\\": \\\"ns\\\",\\n  \\\"shortcuts\\\": {\\n    \\\"go\\\": {\\n      \\\"script\\\": \\\"scripts/ns/go.sh\\\"\\n    },\\n    \\\"viaLink\\\": {\\n      \\\"script\\\": \\\"scripts/ns/link.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"scripts/ns/dirlink\": \"symlink to sub\\n\",\n    \"scripts/ns/bad.txt\": \"x \\\\xe9\\n\\n\\u0000not UTF-8, sha256 7a4367375c389643ada40c26163239533285bf24eebc59e1db48d412ac663cfd\\n\",\n    \"scripts/ns/blob\": \"\\u0000binary:2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\",\n    \"scripts/ns/link.sh\": \"echo lib\\n\",\n    \"scripts/ns/lib.sh\": \"echo lib\\n\",\n    \"scripts/ns/go.sh\": \"#!/bin/sh\\n. ./lib.sh\\n\",\n    \"scripts/ns/sub/deep.sh\": \"echo deep \u00e9\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"231a2efe344d9f72137675243590d2dc9a66e337d22f4635831891048be4022e\",\n    \"scripts/ns/dirlink\": \"8ab1b99276f5e7ff97ab3aeef534fde4a02bd1738894ecb849b975c4b796e952\",\n    \"scripts/ns/bad.txt\": \"7a4367375c389643ada40c26163239533285bf24eebc59e1db48d412ac663cfd\",\n    \"scripts/ns/blob\": \"2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\",\n    \"scripts/ns/link.sh\": \"c0c44fc4d0864a3fcfd8a9faca69df1b306898f8bfa18f33c51eaffe66d11c17\",\n    \"scripts/ns/lib.sh\": \"c0c44fc4d0864a3fcfd8a9faca69df1b306898f8bfa18f33c51eaffe66d11c17\",\n    \"scripts/ns/go.sh\": \"92d165ab3235e426a077581c4243649a386addfe660bfd17bc8bbd2054f1338b\",\n    \"scripts/ns/sub/deep.sh\": \"84cb9a84c12ebc5057b42c63d51716c0a526ba60c6a53d794f91429e85924975\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     },
@@ -612,11 +446,11 @@
           "name": "",
           "error": null,
           "shared_files": {
-            ".shortcuts": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {},\n  \"version\": 1\n}\n"
+            ".shortcuts": "ab8d671ddbec393a1f235e3ebc4cccc92f24e6b96301aee672b5d0d6e1ec1ecb"
           },
           "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {},\\n  \\\"version\\\": 1\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"ab8d671ddbec393a1f235e3ebc4cccc92f24e6b96301aee672b5d0d6e1ec1ecb\"\n  },\n  \"local\": {}\n}\n"
         },
         {
           "name": "ns",
@@ -661,22 +495,22 @@
           "name": "",
           "error": null,
           "shared_files": {
-            ".shortcuts": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {},\n  \"version\": 1\n}\n"
+            ".shortcuts": "ab8d671ddbec393a1f235e3ebc4cccc92f24e6b96301aee672b5d0d6e1ec1ecb"
           },
           "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {},\\n  \\\"version\\\": 1\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"ab8d671ddbec393a1f235e3ebc4cccc92f24e6b96301aee672b5d0d6e1ec1ecb\"\n  },\n  \"local\": {}\n}\n"
         },
         {
           "name": "ns",
           "error": null,
           "shared_files": {
-            "ns.shortcut": "{\n  \"shortcuts\": {\n    \"a\": {\n      \"inline\": \"true\"\n    }\n  },\n  \"version\": 1\n}\n",
-            "scripts/ns/ok.sh": "echo ok\n"
+            "ns.shortcut": "1996268bb55001eb225962df4b80476d8e9e347b7f480431fc1f0aa5b82bef9a",
+            "scripts/ns/ok.sh": "4726de74e6ad02ddb5decee701960c06c6fd91a871f95238350941eed7dbb22a"
           },
           "local_files": {},
           "key_template": "[\"@ROOT@\", \"ns\", \"@ROOT@/ns.shortcut\"]",
-          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"a\\\": {\\n      \\\"inline\\\": \\\"true\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"scripts/ns/ok.sh\": \"echo ok\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"1996268bb55001eb225962df4b80476d8e9e347b7f480431fc1f0aa5b82bef9a\",\n    \"scripts/ns/ok.sh\": \"4726de74e6ad02ddb5decee701960c06c6fd91a871f95238350941eed7dbb22a\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     },
@@ -714,23 +548,23 @@
           "name": "",
           "error": null,
           "shared_files": {
-            ".shortcuts": "{\n  \"imports\": {\n    \"ns\": \"ns.shortcut\"\n  },\n  \"shortcuts\": {},\n  \"version\": 1\n}\n"
+            ".shortcuts": "ab8d671ddbec393a1f235e3ebc4cccc92f24e6b96301aee672b5d0d6e1ec1ecb"
           },
           "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"{\\n  \\\"imports\\\": {\\n    \\\"ns\\\": \\\"ns.shortcut\\\"\\n  },\\n  \\\"shortcuts\\\": {},\\n  \\\"version\\\": 1\\n}\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"ab8d671ddbec393a1f235e3ebc4cccc92f24e6b96301aee672b5d0d6e1ec1ecb\"\n  },\n  \"local\": {}\n}\n"
         },
         {
           "name": "ns",
           "error": null,
           "shared_files": {
-            "ns.shortcut": "{\n  \"shortcuts\": {\n    \"go\": {\n      \"script\": \"scripts/ns/a.sh\"\n    }\n  },\n  \"version\": 1\n}\n",
-            "scripts/ns/a.sh": "echo a\n",
-            "scripts/ns/\ud800\udc00.sh": "echo astral\n"
+            "ns.shortcut": "c2b33504c41ae4ce85ff3a31616429e5b5f5324ac8caa7daec31e94c85d0ebe2",
+            "scripts/ns/a.sh": "914cefaded94d45f313fa21b0af05991c33df3566f4ca6814c3652f4b92b7c8c",
+            "scripts/ns/\ud800\udc00.sh": "4e0ad7233a9240b6fe44950587ab40241ed65b3bb305567d04b31415e3c0d7c3"
           },
           "local_files": {},
           "key_template": "[\"@ROOT@\", \"ns\", \"@ROOT@/ns.shortcut\"]",
-          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"{\\n  \\\"shortcuts\\\": {\\n    \\\"go\\\": {\\n      \\\"script\\\": \\\"scripts/ns/a.sh\\\"\\n    }\\n  },\\n  \\\"version\\\": 1\\n}\\n\",\n    \"scripts/ns/a.sh\": \"echo a\\n\",\n    \"scripts/ns/\ud800\udc00.sh\": \"echo astral\\n\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"c2b33504c41ae4ce85ff3a31616429e5b5f5324ac8caa7daec31e94c85d0ebe2\",\n    \"scripts/ns/a.sh\": \"914cefaded94d45f313fa21b0af05991c33df3566f4ca6814c3652f4b92b7c8c\",\n    \"scripts/ns/\ud800\udc00.sh\": \"4e0ad7233a9240b6fe44950587ab40241ed65b3bb305567d04b31415e3c0d7c3\"\n  },\n  \"local\": {}\n}\n"
         }
       ]
     }
