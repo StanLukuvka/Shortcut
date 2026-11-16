@@ -1,4 +1,4 @@
-// Package testkit is the hub of the Go tests (port of tests/fixtures.py): one sandbox per test, one set of
+// Package testkit is the hub of the Go tests: one sandbox per test, one set of
 // fixtures, one way to start a process. Only this package may call t.TempDir, t.Setenv, os.Setenv or
 // os.MkdirTemp, or import os/exec (rules_test.go enforces it); every launch is refused unless it stays inside
 // the test's temp dir.
@@ -212,8 +212,8 @@ var (
 	binDir  string
 	binPath string
 	binErr  error
-	// testBinary stands in for the built binary while testkit tests itself: cmd/shortcut is an empty main
-	// until the port lands, so sandbox_test.go and testkit_test.go use `sh` scripts.
+	// testBinary stands in for the built binary while testkit tests itself, so sandbox_test.go and
+	// testkit_test.go use `sh` scripts.
 	testBinary string
 )
 

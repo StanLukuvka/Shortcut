@@ -116,7 +116,7 @@ func (e *Env) RunCmd(o Opts, argv ...string) Result {
 	if cmd.ProcessState == nil {
 		e.dief("%q: %v", argv, err)
 	}
-	// lazy: no universal-newline translation (text mode would turn \r\n and \r into \n); tests see raw bytes.
+	// lazy: no newline translation: tests see raw bytes.
 	return Result{codeOf(cmd.ProcessState), out.String(), errb.String()}
 }
 
@@ -246,7 +246,7 @@ func (e *Env) BashComplete(words ...string) []string {
 	return offered
 }
 
-// shquote joins words into one shell-quoted string, as shlex.join does.
+// shquote joins words into one shell-quoted string, so a POSIX shell reads it back as the same words.
 func shquote(words []string) string {
 	q := make([]string, len(words))
 	for i, w := range words {

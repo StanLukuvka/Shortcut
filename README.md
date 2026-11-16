@@ -180,7 +180,7 @@ SHORTCUT_SHOW_DIR=0   hide the "→ dir" line
 - [CHANGELOG.md](CHANGELOG.md): what changed in each version.
 - [docs/](docs/): diagrams, the JSON Schema for shortcut files, and every error message.
 - [examples/podman](examples/podman/): a namespace for podman containers.
-- Code, in Go: [cmd/shortcut](cmd/shortcut/) is the entry point. `internal/cli` has the commands, one `cmd_*.go` file each, with the command table in `commands.go`, from which dispatch, parsing and help are read, and the completion scripts in `completion/`. `internal/model` has the store files, entries and lookup, and ordered JSON that refuses text that is not valid UTF-8; `internal/approval` the approval records; `internal/textio` terminal output and prompts. `internal/osutil` reproduces the file behaviour that shortcut's output depends on; `internal/testkit` is the test sandbox. [installer/](installer/) is the install script.
+- Code, in Go: [cmd/shortcut](cmd/shortcut/) is the entry point. `internal/commands` has the command table, dispatch and the usage text, with one folder per command (`run`, `new`, `list`, `show`, `rm`, `update`, and `completion`, which holds the completion scripts). `internal/store` has the store files, entries, groups and lookup, `store/approval` the approval records and `store/write` everything that changes a store. `internal/term` has terminal output, prompts and the argument parser; `internal/platform` the file, process, lock and JSON behaviour that shortcut's output depends on, including JSON that refuses text that is not valid UTF-8. `internal/testkit` is the test sandbox. [installer/](installer/) is the install script.
 
 ## License
 

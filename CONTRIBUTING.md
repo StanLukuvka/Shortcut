@@ -27,7 +27,7 @@ go test ./...
 One package, or the tests whose names match:
 
 ```bash
-go test ./internal/cli -run TestName
+go test ./internal/commands -run TestName
 ```
 
 CI also checks `gofmt` and runs `go vet ./...`.
@@ -36,9 +36,9 @@ CI also checks `gofmt` and runs `go vet ./...`.
 
 ## What a change updates
 
-- A new error or warning: a row in [docs/errors.md](docs/errors.md). `internal/cli/errors_doc_test.go` fails without one.
-- A new entry field: a row in `Fields()` in `internal/model/entry.go`, and [docs/shortcut.schema.json](docs/shortcut.schema.json) (a test fails if they differ).
-- A new command or flag: its row in `commands()` in `internal/cli/commands.go` (dispatch, parsing, usage and help follow from it), the three completion scripts in `internal/cli/completion/` (a test fails if they disagree with `commands()`), the README command list, and AGENT.md if agents use it.
+- A new error or warning: a row in [docs/errors.md](docs/errors.md). `internal/commands/errors_doc_test.go` fails without one.
+- A new entry field: a row in `Fields()` in `internal/store/entry.go`, and [docs/shortcut.schema.json](docs/shortcut.schema.json) (a test fails if they differ).
+- A new command or flag: its row in `commands()` in `internal/commands/commands.go` (dispatch, parsing, usage and help follow from it), the three completion scripts in `internal/commands/completion/` (a test fails if they disagree with `commands()`), the README command list, and AGENT.md if agents use it.
 - Anything a user would notice: a line under Unreleased in [CHANGELOG.md](CHANGELOG.md).
 
 ## What doesn't change
@@ -47,26 +47,24 @@ CI also checks `gofmt` and runs `go vet ./...`.
 - The README's Security model, statements 1–5, word for word.
 - Entries are immutable: no edit command. To change one, `rm` it and make it again.
 - shortcut never writes a project's `.shortcuts`.
-- Text from a file is printed through `textio.Safe`.
-- Every question goes through `textio.Confirm`.
+- Text from a file is printed through `term.Safe`.
+- Every question goes through `term.Confirm`.
 
 ## Layout
 
 - `cmd/shortcut/`: the main package.
-- `internal/cli/`: dispatch and the commands. `commands.go` is the command table, from which `dispatch.go`, each command's parser and `help.go` (the usage and help text) are read; `cmd_*.go` is one file per command, `store_write.go` what changes the stores, and `completion/` the bash, zsh and fish scripts.
-- `internal/cli/argparse/`: the argument parser. It imports nothing of the CLI.
-- `internal/model/`: store files, entries, groups and lookup, and ordered JSON that refuses text that is not valid UTF-8. It never prints.
-- `internal/approval/`: what a project or namespace is approved for, and the approval records, which hold one SHA-256 per file.
-- `internal/textio/`: printed text and questions.
-- `internal/osutil/`: the parts of the standard library's file behaviour that shortcut's output depends on.
-- `internal/testkit/`: the test sandbox and helpers. `internal/testdata/`: frozen golden data that the tests compare against.
+- `internal/commands/`: `commands.go` is the command table, from which `dispatch.go`, each command's parser and the usage and help text (`help.go`, `term`) are read. Each command is a package below it: `run/`, `new/`, `list/`, `show/`, `rm/`, `update/` and `completion/` (which holds the bash, zsh and fish scripts). No command imports another command.
+- `internal/store/`: store files, entries, groups, lookup and the run's context. It never prints. `approval/` is what a project or namespace is approved for, and the approval records, which hold one SHA-256 per file. `write/` is everything that changes a store: adding an entry, the registry lock, and the approval that follows a write.
+- `internal/term/`: printed text and questions, the exit error and `Die` that commands share, and the description of a command that its parser, usage line and help are read from. `argparse/` is the argument parser; it imports nothing of this repository.
+- `internal/platform/`: the parts of the standard library's file, process, lock and JSON behaviour that shortcut's output depends on, including ordered JSON that refuses text that is not valid UTF-8. It imports nothing of this repository.
+- `internal/testkit/`: the test sandbox and helpers. A package's frozen golden data is in its own `testdata/` folder.
 - `installer/`: `install.sh` and its tests.
 - `examples/`: namespaces to copy from.
 - `docs/`: the diagrams, the schema and the error table.
 
 ## Imports
 
-Which package may import which is the table in [internal/testkit/layers_test.go](internal/testkit/layers_test.go). The test fails on an import the table doesn't list and on a package that isn't in it, so a new package or import is a row there.
+Imports point down this tree and never up: `cmd/shortcut`, `internal/commands`, one command, `internal/store/write`, `internal/store/approval`, `internal/store`, `internal/term`, `internal/platform`. A command may import the store, term and platform packages and nothing beside it, so one command cannot import another and none imports `internal/commands`. `internal/store` imports only `internal/platform`; `internal/store/write` also imports `internal/term`. `internal/platform` imports nothing of this repository. The table is in [internal/testkit/layers_test.go](internal/testkit/layers_test.go). The test fails on an import the table doesn't list and on a package that isn't in it, so a new package or import is a row there.
 
 ## Docs and commits
 
@@ -80,6 +78,6 @@ Which package may import which is the table in [internal/testkit/layers_test.go]
 
 ## Releasing
 
-1. Set `const Version` in [internal/cli/version.go](internal/cli/version.go) to the version without the `v`, such as `0.1.0`. The release workflow fails if `shortcut --version` doesn't match the tag.
+1. Set `const Version` in [internal/commands/version.go](internal/commands/version.go) to the version without the `v`, such as `0.1.0`. The release workflow fails if `shortcut --version` doesn't match the tag.
 2. Move Unreleased in CHANGELOG.md under the new version and date.
 3. Commit, then tag `v<version>` on main and push the tag. The release workflow runs `go vet` and `go test ./...`, builds the archives for linux and darwin on amd64 and arm64, and publishes the GitHub release with `checksums.txt`, `install.sh` and `VERSION`. A tag with a hyphen, such as `v0.1.0-rc.1`, is published as a prerelease.

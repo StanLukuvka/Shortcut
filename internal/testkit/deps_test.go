@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// The port is stdlib only: go.mod has no require line or block.
+// shortcut is stdlib only: go.mod has no require line or block.
 func TestGoModHasNoRequire(t *testing.T) {
 	raw, err := os.ReadFile("../../go.mod")
 	if err != nil {

@@ -3,9 +3,9 @@ package main
 import (
 	"os"
 
-	"github.com/StanLukuvka/Shortcut/internal/cli"
+	"github.com/StanLukuvka/Shortcut/internal/commands"
 )
 
 func main() {
-	os.Exit(cli.Main(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	os.Exit(commands.Main(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
