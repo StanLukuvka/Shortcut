@@ -12,11 +12,10 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/store"
 )
 
-// Record is approvals/<sha256(key)>.json: the snapshot last approved, and Local for .shortcuts.local on its own
-// (a change the CLI makes there updates that half alone). Records live in the global store, never next to what they approve.
+// Record is approvals/<sha256(key)>.json: the files last approved, path -> SHA-256 (hex). Records live in the global
+// store, never next to what they approve.
 type Record struct {
-	Snapshot map[string]string // shared files: path -> SHA-256 (hex)
-	Local    map[string]string // .shortcuts.local half
+	Files map[string]string
 }
 
 func isDigest(s string) bool {
@@ -49,7 +48,7 @@ func digests(d *platform.Doc, key string) (map[string]string, bool) {
 }
 
 // Load returns the record, or nil when there is none, it can't be read, or it isn't shaped as one (a
-// JSON object with a "snapshot" and a "local" object, each holding only 64-character lowercase hex strings).
+// JSON object with a "files" object holding only 64-character lowercase hex strings).
 // Keys are matched exactly, not case-insensitively.
 func Load(c *store.Context, g store.Group) *Record {
 	text, err := platform.ReadJSONFile(c.ApprovalPath(g))
@@ -60,15 +59,11 @@ func Load(c *store.Context, g store.Group) *Record {
 	if err != nil {
 		return nil
 	}
-	snap, ok := digests(d, "snapshot")
+	files, ok := digests(d, "files")
 	if !ok {
 		return nil
 	}
-	local, ok := digests(d, "local")
-	if !ok {
-		return nil
-	}
-	return &Record{Snapshot: snap, Local: local}
+	return &Record{Files: files}
 }
 
 // mapDoc is m as an object's text, its keys sorted: readers sort, so the order is free, and sorted is stable.
@@ -83,11 +78,8 @@ func mapDoc(m map[string]string) ([]byte, error) {
 }
 
 // Save records what was shown and approved, under the global store's lock.
-func Save(c *store.Context, g store.Group, shared, local map[string]string) error {
-	if err := checkPaths(shared); err != nil {
-		return err
-	}
-	if err := checkPaths(local); err != nil {
+func Save(c *store.Context, g store.Group, files map[string]string) error {
+	if err := checkPaths(files); err != nil {
 		return err
 	}
 	if err := CheckKey(c, g); err != nil {
@@ -105,32 +97,17 @@ func Save(c *store.Context, g store.Group, shared, local map[string]string) erro
 		if err := rec.SetString("key", g.Key()); err != nil {
 			return err
 		}
-		snap, err := mapDoc(shared)
+		doc, err := mapDoc(files)
 		if err != nil {
 			return err
 		}
-		loc, err := mapDoc(local)
-		if err != nil {
-			return err
-		}
-		rec.Set("snapshot", snap)
-		rec.Set("local", loc)
+		rec.Set("files", doc)
 		if err := platform.WriteJSONAtomic(path, rec); err != nil {
 			return err
 		}
 		c.Forget(g.Key())
 		return nil
 	})
-}
-
-// LocalIsApproved: whether .shortcuts.local matches what the record holds for it.
-func LocalIsApproved(c *store.Context, g store.Group, r *Record) bool {
-	var held map[string]string
-	if r != nil {
-		held = r.Local
-	}
-	local, err := LocalFiles(g)
-	return err == nil && maps.Equal(held, local)
 }
 
 // State is the group's approval state, computed once per run (Context.State) from the files on disk: StateOK,
@@ -140,17 +117,11 @@ func State(c *store.Context, g store.Group) store.ApprovalState {
 	return c.State(g.Key(), func() store.ApprovalState { return computeState(c, g) })
 }
 
-// Refresh drops the cached state of g and reads it from disk again.
-func Refresh(c *store.Context, g store.Group) store.ApprovalState {
-	c.Forget(g.Key())
-	return State(c, g)
-}
-
 func computeState(c *store.Context, g store.Group) store.ApprovalState {
 	if !g.NeedsApproval() {
 		return store.StateOK
 	}
-	shared, local, err := snapshot(c, g)
+	files, err := snapshot(c, g)
 	if err != nil {
 		return store.StateInvalid
 	}
@@ -158,13 +129,10 @@ func computeState(c *store.Context, g store.Group) store.ApprovalState {
 	if r == nil {
 		return store.StateNew
 	}
-	if maps.Equal(r.Snapshot, shared) && maps.Equal(r.Local, local) { // both halves exactly as recorded
+	if maps.Equal(r.Files, files) {
 		return store.StateOK
 	}
-	if len(r.Snapshot) > 0 {
-		return store.StateChanged
-	}
-	return store.StateNew // with no snapshot, only CLI writes to .local were recorded
+	return store.StateChanged
 }
 
 // Require returns an error unless the group is approved.

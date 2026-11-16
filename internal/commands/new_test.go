@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/store"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
@@ -79,11 +78,11 @@ func TestStores_CreationScopeRules(t *testing.T) {
 	}
 	testkit.NotExist(t, filepath.Join(proj, ".shortcuts"))
 
-	// 2. --local creates .shortcuts.local on demand, and what it adds runs straight away
+	// 2. --local creates .shortcuts.local on demand, and what it adds runs once `update` has approved it
 	res := runOK(t, e, in(proj), "new", "local_cmd", "--local", "--", "echo local")
-	if strings.Contains(res.Stderr, "needs approving") {
-		t.Errorf("stderr: %q", res.Stderr)
-	}
+	testkit.Contains(t, "stderr", res.Stderr, "needs approving before it runs: shortcut update")
+	testkit.Contains(t, "run before update", e.RunWith(in(proj), "run", "local_cmd").Stderr, "isn't approved yet")
+	runOK(t, e, in(proj), "update", ".", "-y")
 	if _, err := os.Stat(filepath.Join(proj, ".shortcuts.local")); err != nil {
 		t.Errorf("no .shortcuts.local: %v", err)
 	}
@@ -414,25 +413,6 @@ func TestNew_EmptyFlagsAreErrors(t *testing.T) {
 	testkit.NotExist(t, filepath.Join(e.Store, "shortcuts.json"))
 	runOK(t, e, testkit.Opts{}, "new", "dflt", "--script", script)
 	testkit.Eq(t, "no desc", e.LoadGlobal()["dflt"].(map[string]any)["description"], "(no description)")
-}
-
-func TestNew_LocalInAFolderThatCannotBeApprovedWritesNothing(t *testing.T) {
-	e := testkit.New(t)
-	proj := filepath.Join(e.Tmp, "pr\xffoj")
-	if err := os.Mkdir(proj, 0o755); err != nil {
-		t.Skipf("this filesystem refuses non-UTF-8 names: %v", err)
-	}
-	res := e.RunWith(in(proj), "new", "t", "--local", "--", "echo hi")
-	res.WantCode(t, 1)
-	testkit.Contains(t, "stderr", res.Stderr, "not valid UTF-8")
-	for _, out := range []string{res.Stdout, res.Stderr} {
-		if strings.ContainsRune(out, '\xff') || !utf8.ValidString(out) {
-			t.Errorf("raw bytes in the output: %q", out)
-		}
-	}
-	if _, err := os.Stat(filepath.Join(proj, ".shortcuts.local")); err == nil {
-		t.Error(".shortcuts.local was written")
-	}
 }
 
 func TestList_NamesComeOutInByteOrder(t *testing.T) {

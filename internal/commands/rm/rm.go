@@ -71,7 +71,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 		return err
 	}
 
-	err = write.LockedGroupWrite(c, group, func() error {
+	err = c.WithRegistryLock(group.StoreDir, func() error {
 		reg, shortcuts, err := write.LoadForEdit(group.File, false)
 		if err != nil {
 			return err
@@ -88,7 +88,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 		return err
 	}
 	s.Out.WriteString("Removed shortcut '" + display + "'.\n")
-	write.NoteIfUnapproved(c, s, group)
+	write.NoteNeedsApproval(s, group)
 	return nil
 }
 
@@ -117,14 +117,14 @@ func rmLocal(c *store.Context, s *term.Streams, ns term.Namespace) error {
 		Message: rmLocalMessage(group, name), TellOnYes: true}, ns.Bool("yes")); err != nil {
 		return err
 	}
-	after, err := write.WriteLocal(c, group.StoreDir, func(shortcuts *platform.Doc) error {
+	err = write.WriteLocal(c, group.StoreDir, func(shortcuts *platform.Doc) error {
 		shortcuts.Delete(name)
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	write.NoteIfUnapproved(c, s, after)
+	write.NoteNeedsApproval(s, group)
 	s.Out.WriteString("Removed '" + name + "' from " + store.LocalFile + ".\n")
 	return nil
 }

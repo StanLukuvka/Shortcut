@@ -3,7 +3,7 @@
     "note": "table of cases for internal/store/approval tests"
   },
   "notes": [
-    "tree_cases: build tree[] under a temp root, load each group, compare shared_files/local_files; replace @ROOT@ with the root in key_template and record_template. Modes are octal strings; symlink targets are relative. content_hex replaces content when the bytes are not UTF-8, path_hex replaces path. A group with error_contains must fail, either to load or when its snapshot is taken, with a message holding that text (@ROOT@ is replaced with the root)."
+    "tree_cases: build tree[] under a temp root, load each group, compare files; replace @ROOT@ with the root in key_template and record_template. Modes are octal strings; symlink targets are relative. content_hex replaces content when the bytes are not UTF-8, path_hex replaces path. A group with error_contains must fail, either to load or when its snapshot is taken, with a message holding that text (@ROOT@ is replaced with the root)."
   ],
   "tree_cases": [
     {
@@ -33,15 +33,13 @@
         {
           "name": "",
           "error": null,
-          "shared_files": {
-            ".shortcuts": "b8c0a5733fa7e8d02b3b56879c4c28dba6840a102b61dcb0129e0d0eb0433103",
-            "scripts/hi.sh": "ea3bf4b4b4b312e437b5e01a3056d9dcc8d7a4d98669f265f6e73d4548618720"
-          },
-          "local_files": {
-            ".shortcuts.local": "7e471c946e75ec539ab5c09aaa7d49cd8ca896c9f66b1e6cb308e6c2ebd4479b"
-          },
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"b8c0a5733fa7e8d02b3b56879c4c28dba6840a102b61dcb0129e0d0eb0433103\",\n    \"scripts/hi.sh\": \"ea3bf4b4b4b312e437b5e01a3056d9dcc8d7a4d98669f265f6e73d4548618720\"\n  },\n  \"local\": {\n    \".shortcuts.local\": \"7e471c946e75ec539ab5c09aaa7d49cd8ca896c9f66b1e6cb308e6c2ebd4479b\"\n  }\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"files\": {\n    \".shortcuts\": \"b8c0a5733fa7e8d02b3b56879c4c28dba6840a102b61dcb0129e0d0eb0433103\",\n    \"scripts/hi.sh\": \"ea3bf4b4b4b312e437b5e01a3056d9dcc8d7a4d98669f265f6e73d4548618720\",\n    \".shortcuts.local\": \"7e471c946e75ec539ab5c09aaa7d49cd8ca896c9f66b1e6cb308e6c2ebd4479b\"\n  }\n}\n",
+          "files": {
+            ".shortcuts": "b8c0a5733fa7e8d02b3b56879c4c28dba6840a102b61dcb0129e0d0eb0433103",
+            "scripts/hi.sh": "ea3bf4b4b4b312e437b5e01a3056d9dcc8d7a4d98669f265f6e73d4548618720",
+            ".shortcuts.local": "7e471c946e75ec539ab5c09aaa7d49cd8ca896c9f66b1e6cb308e6c2ebd4479b"
+          }
         }
       ]
     },
@@ -60,12 +58,11 @@
         {
           "name": "",
           "error": null,
-          "shared_files": {},
-          "local_files": {
-            ".shortcuts.local": "64a22f249f619ce1d74502938783e77b80860d33f69318e7f67849b75afa6da8"
-          },
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {},\n  \"local\": {\n    \".shortcuts.local\": \"64a22f249f619ce1d74502938783e77b80860d33f69318e7f67849b75afa6da8\"\n  }\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"files\": {\n    \".shortcuts.local\": \"64a22f249f619ce1d74502938783e77b80860d33f69318e7f67849b75afa6da8\"\n  }\n}\n",
+          "files": {
+            ".shortcuts.local": "64a22f249f619ce1d74502938783e77b80860d33f69318e7f67849b75afa6da8"
+          }
         }
       ]
     },
@@ -96,15 +93,13 @@
         {
           "name": "",
           "error": null,
-          "shared_files": {
-            ".shortcuts": "1996268bb55001eb225962df4b80476d8e9e347b7f480431fc1f0aa5b82bef9a"
-          },
-          "local_files": {
+          "key_template": "@ROOT@",
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"files\": {\n    \".shortcuts\": \"1996268bb55001eb225962df4b80476d8e9e347b7f480431fc1f0aa5b82bef9a\",\n    \".shortcuts.local\": \"322fa8df77aeeec33134a6660cd0fb5f1ba3fc4ae67cddbee5c934f4cfa5172a\",\n    \"tools/b.sh\": \"256931e5627bfa46347df35ae1c25649073ce5630975d0cdf9d301d32836a118\"\n  }\n}\n",
+          "files": {
+            ".shortcuts": "1996268bb55001eb225962df4b80476d8e9e347b7f480431fc1f0aa5b82bef9a",
             ".shortcuts.local": "322fa8df77aeeec33134a6660cd0fb5f1ba3fc4ae67cddbee5c934f4cfa5172a",
             "tools/b.sh": "256931e5627bfa46347df35ae1c25649073ce5630975d0cdf9d301d32836a118"
-          },
-          "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"1996268bb55001eb225962df4b80476d8e9e347b7f480431fc1f0aa5b82bef9a\"\n  },\n  \"local\": {\n    \".shortcuts.local\": \"322fa8df77aeeec33134a6660cd0fb5f1ba3fc4ae67cddbee5c934f4cfa5172a\",\n    \"tools/b.sh\": \"256931e5627bfa46347df35ae1c25649073ce5630975d0cdf9d301d32836a118\"\n  }\n}\n"
+          }
         }
       ]
     },
@@ -159,7 +154,9 @@
         {
           "name": "",
           "error": null,
-          "shared_files": {
+          "key_template": "@ROOT@",
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"files\": {\n    \".shortcuts\": \"cdad4c440b23a56dbdfeb5eb05b6fd58edf158e65aa096a88db3dfa57f302c82\",\n    \"bad.sh\": \"dd1284d090313958484127c39a687db402f3a7a8017f2616d9048ece12b6d516\",\n    \"crlf.sh\": \"e1c9dfdebf943ec05e4e4e7d16b14840806c84890478b5f173da0999224384b3\",\n    \"bin/prog\": \"2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\",\n    \"empty.sh\": \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\n    \"marked.sh\": \"c8e36cf1d96ddb4263536f924a0ac802350e56d0137c306103e01af45496415f\",\n    \"caf\u00e9.sh\": \"0b6eb29672b53f43e87dc11fe2324de21680b606170eceff5136f880cd4892de\"\n  }\n}\n",
+          "files": {
             ".shortcuts": "cdad4c440b23a56dbdfeb5eb05b6fd58edf158e65aa096a88db3dfa57f302c82",
             "bad.sh": "dd1284d090313958484127c39a687db402f3a7a8017f2616d9048ece12b6d516",
             "crlf.sh": "e1c9dfdebf943ec05e4e4e7d16b14840806c84890478b5f173da0999224384b3",
@@ -167,10 +164,7 @@
             "empty.sh": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
             "marked.sh": "c8e36cf1d96ddb4263536f924a0ac802350e56d0137c306103e01af45496415f",
             "caf\u00e9.sh": "0b6eb29672b53f43e87dc11fe2324de21680b606170eceff5136f880cd4892de"
-          },
-          "local_files": {},
-          "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"cdad4c440b23a56dbdfeb5eb05b6fd58edf158e65aa096a88db3dfa57f302c82\",\n    \"bad.sh\": \"dd1284d090313958484127c39a687db402f3a7a8017f2616d9048ece12b6d516\",\n    \"crlf.sh\": \"e1c9dfdebf943ec05e4e4e7d16b14840806c84890478b5f173da0999224384b3\",\n    \"bin/prog\": \"2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\",\n    \"empty.sh\": \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\n    \"marked.sh\": \"c8e36cf1d96ddb4263536f924a0ac802350e56d0137c306103e01af45496415f\",\n    \"caf\u00e9.sh\": \"0b6eb29672b53f43e87dc11fe2324de21680b606170eceff5136f880cd4892de\"\n  },\n  \"local\": {}\n}\n"
+          }
         }
       ]
     },
@@ -189,12 +183,11 @@
         {
           "name": "",
           "error": "/tmp/golden/trees/t04/.shortcuts has an unknown field: extra",
-          "shared_files": {
-            ".shortcuts": "39c59986fa97de1609b19aa8b24c895660041d5c29eb60a8dd6e96a8f5d63506"
-          },
-          "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"39c59986fa97de1609b19aa8b24c895660041d5c29eb60a8dd6e96a8f5d63506\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"files\": {\n    \".shortcuts\": \"39c59986fa97de1609b19aa8b24c895660041d5c29eb60a8dd6e96a8f5d63506\"\n  }\n}\n",
+          "files": {
+            ".shortcuts": "39c59986fa97de1609b19aa8b24c895660041d5c29eb60a8dd6e96a8f5d63506"
+          }
         }
       ]
     },
@@ -278,13 +271,12 @@
         {
           "name": "",
           "error": null,
-          "shared_files": {
+          "key_template": "@ROOT@",
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"files\": {\n    \".shortcuts\": \"e62b457e877afbfa2f6d1f52f45c199d84e107c8beb568fe25711f3cd32daf3d\",\n    \"scripts/real.sh\": \"42b68f8617f6999408e52df5720a76cee00ae1a9dbad39ff657930b6a9d5c485\"\n  }\n}\n",
+          "files": {
             ".shortcuts": "e62b457e877afbfa2f6d1f52f45c199d84e107c8beb568fe25711f3cd32daf3d",
             "scripts/real.sh": "42b68f8617f6999408e52df5720a76cee00ae1a9dbad39ff657930b6a9d5c485"
-          },
-          "local_files": {},
-          "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"e62b457e877afbfa2f6d1f52f45c199d84e107c8beb568fe25711f3cd32daf3d\",\n    \"scripts/real.sh\": \"42b68f8617f6999408e52df5720a76cee00ae1a9dbad39ff657930b6a9d5c485\"\n  },\n  \"local\": {}\n}\n"
+          }
         }
       ]
     },
@@ -309,13 +301,12 @@
         {
           "name": "",
           "error": null,
-          "shared_files": {
+          "key_template": "@ROOT@",
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"files\": {\n    \".shortcuts\": \"a85065102455cb35995f24c43a6373270cc31ddb43e5c05ff33ba2420af24e94\",\n    \"scripts/ok.sh\": \"4726de74e6ad02ddb5decee701960c06c6fd91a871f95238350941eed7dbb22a\"\n  }\n}\n",
+          "files": {
             ".shortcuts": "a85065102455cb35995f24c43a6373270cc31ddb43e5c05ff33ba2420af24e94",
             "scripts/ok.sh": "4726de74e6ad02ddb5decee701960c06c6fd91a871f95238350941eed7dbb22a"
-          },
-          "local_files": {},
-          "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"a85065102455cb35995f24c43a6373270cc31ddb43e5c05ff33ba2420af24e94\",\n    \"scripts/ok.sh\": \"4726de74e6ad02ddb5decee701960c06c6fd91a871f95238350941eed7dbb22a\"\n  },\n  \"local\": {}\n}\n"
+          }
         }
       ]
     },
@@ -386,17 +377,18 @@
         {
           "name": "",
           "error": null,
-          "shared_files": {
-            ".shortcuts": "5ee0062a34265c2a986309d0dc69296e283ed28eeaf037eaf8c3d1da0555ebd1"
-          },
-          "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"5ee0062a34265c2a986309d0dc69296e283ed28eeaf037eaf8c3d1da0555ebd1\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"files\": {\n    \".shortcuts\": \"5ee0062a34265c2a986309d0dc69296e283ed28eeaf037eaf8c3d1da0555ebd1\"\n  }\n}\n",
+          "files": {
+            ".shortcuts": "5ee0062a34265c2a986309d0dc69296e283ed28eeaf037eaf8c3d1da0555ebd1"
+          }
         },
         {
           "name": "ns",
           "error": null,
-          "shared_files": {
+          "key_template": "[\"@ROOT@\", \"ns\", \"@ROOT@/ns.shortcut\"]",
+          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"files\": {\n    \"ns.shortcut\": \"231a2efe344d9f72137675243590d2dc9a66e337d22f4635831891048be4022e\",\n    \"scripts/ns/dirlink\": \"8ab1b99276f5e7ff97ab3aeef534fde4a02bd1738894ecb849b975c4b796e952\",\n    \"scripts/ns/bad.txt\": \"7a4367375c389643ada40c26163239533285bf24eebc59e1db48d412ac663cfd\",\n    \"scripts/ns/blob\": \"2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\",\n    \"scripts/ns/link.sh\": \"c0c44fc4d0864a3fcfd8a9faca69df1b306898f8bfa18f33c51eaffe66d11c17\",\n    \"scripts/ns/lib.sh\": \"c0c44fc4d0864a3fcfd8a9faca69df1b306898f8bfa18f33c51eaffe66d11c17\",\n    \"scripts/ns/go.sh\": \"92d165ab3235e426a077581c4243649a386addfe660bfd17bc8bbd2054f1338b\",\n    \"scripts/ns/sub/deep.sh\": \"84cb9a84c12ebc5057b42c63d51716c0a526ba60c6a53d794f91429e85924975\"\n  }\n}\n",
+          "files": {
             "ns.shortcut": "231a2efe344d9f72137675243590d2dc9a66e337d22f4635831891048be4022e",
             "scripts/ns/dirlink": "8ab1b99276f5e7ff97ab3aeef534fde4a02bd1738894ecb849b975c4b796e952",
             "scripts/ns/bad.txt": "7a4367375c389643ada40c26163239533285bf24eebc59e1db48d412ac663cfd",
@@ -405,10 +397,7 @@
             "scripts/ns/lib.sh": "c0c44fc4d0864a3fcfd8a9faca69df1b306898f8bfa18f33c51eaffe66d11c17",
             "scripts/ns/go.sh": "92d165ab3235e426a077581c4243649a386addfe660bfd17bc8bbd2054f1338b",
             "scripts/ns/sub/deep.sh": "84cb9a84c12ebc5057b42c63d51716c0a526ba60c6a53d794f91429e85924975"
-          },
-          "local_files": {},
-          "key_template": "[\"@ROOT@\", \"ns\", \"@ROOT@/ns.shortcut\"]",
-          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"231a2efe344d9f72137675243590d2dc9a66e337d22f4635831891048be4022e\",\n    \"scripts/ns/dirlink\": \"8ab1b99276f5e7ff97ab3aeef534fde4a02bd1738894ecb849b975c4b796e952\",\n    \"scripts/ns/bad.txt\": \"7a4367375c389643ada40c26163239533285bf24eebc59e1db48d412ac663cfd\",\n    \"scripts/ns/blob\": \"2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\",\n    \"scripts/ns/link.sh\": \"c0c44fc4d0864a3fcfd8a9faca69df1b306898f8bfa18f33c51eaffe66d11c17\",\n    \"scripts/ns/lib.sh\": \"c0c44fc4d0864a3fcfd8a9faca69df1b306898f8bfa18f33c51eaffe66d11c17\",\n    \"scripts/ns/go.sh\": \"92d165ab3235e426a077581c4243649a386addfe660bfd17bc8bbd2054f1338b\",\n    \"scripts/ns/sub/deep.sh\": \"84cb9a84c12ebc5057b42c63d51716c0a526ba60c6a53d794f91429e85924975\"\n  },\n  \"local\": {}\n}\n"
+          }
         }
       ]
     },
@@ -445,12 +434,11 @@
         {
           "name": "",
           "error": null,
-          "shared_files": {
-            ".shortcuts": "ab8d671ddbec393a1f235e3ebc4cccc92f24e6b96301aee672b5d0d6e1ec1ecb"
-          },
-          "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"ab8d671ddbec393a1f235e3ebc4cccc92f24e6b96301aee672b5d0d6e1ec1ecb\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"files\": {\n    \".shortcuts\": \"ab8d671ddbec393a1f235e3ebc4cccc92f24e6b96301aee672b5d0d6e1ec1ecb\"\n  }\n}\n",
+          "files": {
+            ".shortcuts": "ab8d671ddbec393a1f235e3ebc4cccc92f24e6b96301aee672b5d0d6e1ec1ecb"
+          }
         },
         {
           "name": "ns",
@@ -494,23 +482,21 @@
         {
           "name": "",
           "error": null,
-          "shared_files": {
-            ".shortcuts": "ab8d671ddbec393a1f235e3ebc4cccc92f24e6b96301aee672b5d0d6e1ec1ecb"
-          },
-          "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"ab8d671ddbec393a1f235e3ebc4cccc92f24e6b96301aee672b5d0d6e1ec1ecb\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"files\": {\n    \".shortcuts\": \"ab8d671ddbec393a1f235e3ebc4cccc92f24e6b96301aee672b5d0d6e1ec1ecb\"\n  }\n}\n",
+          "files": {
+            ".shortcuts": "ab8d671ddbec393a1f235e3ebc4cccc92f24e6b96301aee672b5d0d6e1ec1ecb"
+          }
         },
         {
           "name": "ns",
           "error": null,
-          "shared_files": {
+          "key_template": "[\"@ROOT@\", \"ns\", \"@ROOT@/ns.shortcut\"]",
+          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"files\": {\n    \"ns.shortcut\": \"1996268bb55001eb225962df4b80476d8e9e347b7f480431fc1f0aa5b82bef9a\",\n    \"scripts/ns/ok.sh\": \"4726de74e6ad02ddb5decee701960c06c6fd91a871f95238350941eed7dbb22a\"\n  }\n}\n",
+          "files": {
             "ns.shortcut": "1996268bb55001eb225962df4b80476d8e9e347b7f480431fc1f0aa5b82bef9a",
             "scripts/ns/ok.sh": "4726de74e6ad02ddb5decee701960c06c6fd91a871f95238350941eed7dbb22a"
-          },
-          "local_files": {},
-          "key_template": "[\"@ROOT@\", \"ns\", \"@ROOT@/ns.shortcut\"]",
-          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"1996268bb55001eb225962df4b80476d8e9e347b7f480431fc1f0aa5b82bef9a\",\n    \"scripts/ns/ok.sh\": \"4726de74e6ad02ddb5decee701960c06c6fd91a871f95238350941eed7dbb22a\"\n  },\n  \"local\": {}\n}\n"
+          }
         }
       ]
     },
@@ -547,24 +533,22 @@
         {
           "name": "",
           "error": null,
-          "shared_files": {
-            ".shortcuts": "ab8d671ddbec393a1f235e3ebc4cccc92f24e6b96301aee672b5d0d6e1ec1ecb"
-          },
-          "local_files": {},
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"snapshot\": {\n    \".shortcuts\": \"ab8d671ddbec393a1f235e3ebc4cccc92f24e6b96301aee672b5d0d6e1ec1ecb\"\n  },\n  \"local\": {}\n}\n"
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"files\": {\n    \".shortcuts\": \"ab8d671ddbec393a1f235e3ebc4cccc92f24e6b96301aee672b5d0d6e1ec1ecb\"\n  }\n}\n",
+          "files": {
+            ".shortcuts": "ab8d671ddbec393a1f235e3ebc4cccc92f24e6b96301aee672b5d0d6e1ec1ecb"
+          }
         },
         {
           "name": "ns",
           "error": null,
-          "shared_files": {
+          "key_template": "[\"@ROOT@\", \"ns\", \"@ROOT@/ns.shortcut\"]",
+          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"files\": {\n    \"ns.shortcut\": \"c2b33504c41ae4ce85ff3a31616429e5b5f5324ac8caa7daec31e94c85d0ebe2\",\n    \"scripts/ns/a.sh\": \"914cefaded94d45f313fa21b0af05991c33df3566f4ca6814c3652f4b92b7c8c\",\n    \"scripts/ns/\ud800\udc00.sh\": \"4e0ad7233a9240b6fe44950587ab40241ed65b3bb305567d04b31415e3c0d7c3\"\n  }\n}\n",
+          "files": {
             "ns.shortcut": "c2b33504c41ae4ce85ff3a31616429e5b5f5324ac8caa7daec31e94c85d0ebe2",
             "scripts/ns/a.sh": "914cefaded94d45f313fa21b0af05991c33df3566f4ca6814c3652f4b92b7c8c",
             "scripts/ns/\ud800\udc00.sh": "4e0ad7233a9240b6fe44950587ab40241ed65b3bb305567d04b31415e3c0d7c3"
-          },
-          "local_files": {},
-          "key_template": "[\"@ROOT@\", \"ns\", \"@ROOT@/ns.shortcut\"]",
-          "record_template": "{\n  \"key\": \"[\\\"@ROOT@\\\", \\\"ns\\\", \\\"@ROOT@/ns.shortcut\\\"]\",\n  \"snapshot\": {\n    \"ns.shortcut\": \"c2b33504c41ae4ce85ff3a31616429e5b5f5324ac8caa7daec31e94c85d0ebe2\",\n    \"scripts/ns/a.sh\": \"914cefaded94d45f313fa21b0af05991c33df3566f4ca6814c3652f4b92b7c8c\",\n    \"scripts/ns/\ud800\udc00.sh\": \"4e0ad7233a9240b6fe44950587ab40241ed65b3bb305567d04b31415e3c0d7c3\"\n  },\n  \"local\": {}\n}\n"
+          }
         }
       ]
     }

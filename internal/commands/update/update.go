@@ -98,26 +98,18 @@ func approveGroup(c *store.Context, s *term.Streams, g store.Group, globalNames 
 		}
 		return rc, nil
 	}
-	shared, err := approval.SharedFiles(g)
+	files, err := approval.Files(g)
 	if err != nil {
 		s.Err.WriteString("error: " + err.Error() + "\n")
 		return 1, nil
 	}
-	local, err := approval.LocalFiles(g)
-	if err != nil {
-		s.Err.WriteString("error: " + err.Error() + "\n")
-		return 1, nil
-	}
-	files := maps.Clone(shared)
-	maps.Copy(files, local)
 	if approval.State(c, g) == store.StateOK {
 		s.Out.WriteString(g.Label() + ": already approved, nothing has changed.\n")
 		return 0, nil
 	}
 	old := map[string]string{}
 	if record := approval.Load(c, g); record != nil {
-		maps.Copy(old, record.Snapshot)
-		maps.Copy(old, record.Local)
+		old = record.Files
 	}
 	where := ""
 	if g.Kind == store.KindNamespace {
@@ -167,7 +159,7 @@ func approveGroup(c *store.Context, s *term.Streams, g store.Group, globalNames 
 	if !granted {
 		return 1, nil
 	}
-	if err := approval.Save(c, g, shared, local); err != nil {
+	if err := approval.Save(c, g, files); err != nil {
 		return 0, err
 	}
 	covers := "its definitions"

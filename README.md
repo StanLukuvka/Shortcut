@@ -127,7 +127,7 @@ Flags for `new`:
 - Relative `script` and `cwd` paths resolve from the folder holding the file.
 - A namespace file is `<name>.shortcut`, such as `docker.shortcut`. A bare `.shortcut` is an error.
 - Projects and namespaces run only after `shortcut update`. A namespace name pointed at another file needs approving again. Global shortcuts need no approval.
-- What the CLI writes keeps an approval that held before. So `new --local` in a folder with no `.shortcuts`, or with an approved one, runs at once. A namespace made with `new --namespace` needs `shortcut update <ns>` once, and after that `new` and `rm` keep it approved. A change made by hand needs `shortcut update`.
+- Any change to a project's or namespace's files, by `new`, `rm` or by hand, needs `shortcut update` before the group runs again. `new` and `rm` print the command.
 - If a project's file can't be read, nothing runs inside the project until it's fixed, and `rm` there only takes `--local`. `--global` reaches your own shortcuts.
 
 ## What a shortcut runs with
@@ -151,7 +151,7 @@ A namespace is a file named `<ns>.shortcut`: `{"version": 1, "shortcuts": {...}}
 - To install one, copy its `<ns>.shortcut` and its `scripts/<ns>/` folder into `~/.shortcuts/imports/`, then run `shortcut update <ns>`. Every script an entry names has to be in that folder.
 - A file anywhere else is listed in `shortcuts.json`, or in a project's `.shortcuts`: `"imports": {"<ns>": "path/to/<ns>.shortcut"}`. The path is relative to the file that lists it, and can start with `~`.
 - It runs only after `shortcut update <ns>`, and again after each change to its file, a script it names, or anything in its `scripts/<ns>/` folder.
-- `shortcut new --namespace <ns> <name> ...` adds an entry, and keeps an approved namespace approved.
+- `shortcut new --namespace <ns> <name> ...` adds an entry. The namespace needs `shortcut update <ns>` again.
 - `scripts/<ns>/`, next to the file, is the namespace's own folder: scripts and helpers belong there. `rm <name>` removes only the entry, never a script file; `rm --namespace` deletes the folder.
 - A script runs a sibling with `shortcut r "$SHORTCUT_NAMESPACE" <name>`. `SHORTCUT_SHOW_DIR=0` keeps the `→ dir` line out when capturing it.
 

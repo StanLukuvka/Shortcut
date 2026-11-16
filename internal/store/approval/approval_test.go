@@ -211,18 +211,15 @@ func TestApproval_GoldenTrees(t *testing.T) {
 					(g.Error != nil && afterShortcut(*g.Error) != afterShortcut(wantErr.(string))) {
 					t.Errorf("error %v, want %v", g.Error, wantErr)
 				}
-				shared, local := must(SharedFiles(g)), must(LocalFiles(g))
-				if wantShared := strMap(t, w["shared_files"]); !equalMaps(shared, wantShared) {
-					t.Errorf("shared files\n got %q\nwant %q", shared, wantShared)
-				}
-				if wantLocal := strMap(t, w["local_files"]); !equalMaps(local, wantLocal) {
-					t.Errorf("local files\n got %q\nwant %q", local, wantLocal)
+				files := must(Files(g))
+				if want := strMap(t, w["files"]); !equalMaps(files, want) {
+					t.Errorf("files\n got %q\nwant %q", files, want)
 				}
 				if got, want := g.Key(), strings.ReplaceAll(str(w, "key_template"), "@ROOT@", root); got != want {
 					t.Errorf("key %q, want %q", got, want)
 				}
 				records++
-				checkRecord(t, env, g, root, str(w, "record_template"), shared, local)
+				checkRecord(t, env, g, root, str(w, "record_template"), files)
 			}
 		})
 	}
@@ -242,7 +239,7 @@ func equalMaps(a, b map[string]string) bool {
 }
 
 // checkRecord: a record in the stored form reads as ok; one written now parses to the same object.
-func checkRecord(t *testing.T, env *testkit.Env, g store.Group, root, template string, shared, local map[string]string) {
+func checkRecord(t *testing.T, env *testkit.Env, g store.Group, root, template string, files map[string]string) {
 	t.Helper()
 	ctx := store.NewContext(env.Home, nil)
 	text := strings.ReplaceAll(template, "@ROOT@", root)
@@ -258,13 +255,13 @@ func checkRecord(t *testing.T, env *testkit.Env, g store.Group, root, template s
 	if got := State(store.NewContext(env.Home, nil), g); got != "ok" {
 		t.Errorf("a stored record: state %s, want ok", got)
 	}
-	if r := Load(ctx, g); r == nil || !equalMaps(r.Snapshot, shared) || !equalMaps(r.Local, local) {
+	if r := Load(ctx, g); r == nil || !equalMaps(r.Files, files) {
 		t.Errorf("Load: %+v", r)
 	}
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	if err := Save(ctx, g, shared, local); err != nil {
+	if err := Save(ctx, g, files); err != nil {
 		t.Fatal(err)
 	}
 	raw, err := os.ReadFile(path)
@@ -307,7 +304,7 @@ func TestApproval_ProjectInANonUTF8FolderCannotBeApproved(t *testing.T) {
 		t.Errorf("record %s", got)
 	}
 	// but the record would have to hold the key as JSON text, which cannot hold it: refused, nothing written
-	err := Save(ctx, g, must(SharedFiles(g)), must(LocalFiles(g)))
+	err := Save(ctx, g, must(Files(g)))
 	if err == nil || !strings.Contains(err.Error(), "not valid UTF-8") {
 		t.Fatalf("Save: %v", err)
 	}
@@ -331,7 +328,7 @@ func TestApproval_StateAndRequire(t *testing.T) {
 	if err := Require(ctx, g); err == nil || err.Error() != g.Key()+" isn't approved yet; review it with: shortcut update" {
 		t.Error(err)
 	}
-	if err := Save(ctx, g, must(SharedFiles(g)), must(LocalFiles(g))); err != nil {
+	if err := Save(ctx, g, must(Files(g))); err != nil {
 		t.Fatal(err)
 	}
 	if State(ctx, g) != "ok" || Require(ctx, g) != nil {
@@ -345,21 +342,14 @@ func TestApproval_StateAndRequire(t *testing.T) {
 	if err := Require(ctx, g); err == nil || err.Error() != g.Key()+" changed since you approved it; run: shortcut update" {
 		t.Error(err)
 	}
-	// a .shortcuts.local appearing changes the local half
-	if err := Save(ctx, g, must(SharedFiles(g)), must(LocalFiles(g))); err != nil {
+	// a .shortcuts.local appearing is a change
+	if err := Save(ctx, g, must(Files(g))); err != nil {
 		t.Fatal(err)
 	}
 	env.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"m": {"inline": "x"}}}`, 0)
 	ctx, g = store.NewContext(env.Home, nil), load()
-	if State(ctx, g) != "changed" || LocalIsApproved(ctx, g, Load(ctx, g)) {
+	if State(ctx, g) != "changed" {
 		t.Errorf("after adding .shortcuts.local: %s", State(ctx, g))
-	}
-	// a record with no snapshot (only CLI writes to .local were recorded) reads as new, not changed
-	if err := Save(ctx, g, map[string]string{}, must(LocalFiles(g))); err != nil {
-		t.Fatal(err)
-	}
-	if State(ctx, g) != "new" {
-		t.Errorf("empty snapshot: %s", State(ctx, g))
 	}
 	// the global store never needs approval
 	if gl := store.NewContext(env.Home, nil).Store(env.Store).Main; State(ctx, gl) != "ok" || Require(ctx, gl) != nil {
@@ -373,8 +363,8 @@ func TestApproval_LoadRefusesWhatIsNotARecord(t *testing.T) {
 	proj := env.Project(map[string]any{})
 	g := store.NewContext(env.Home, nil).Store(proj).Main
 	path := ctx.ApprovalPath(g)
-	for _, bad := range []string{`{not json`, `[]`, `{"hash": "x"}`, `{"snapshot": []}`, `{"snapshot": {"a": 1}}`, `{"snapshot": {}, "local": []}`, `{"snapshot": {}}`,
-		`{"Snapshot": {}, "local": {}}`, `{"snapshot": {}, "Local": {}}`, `{"SNAPSHOT": {}, "LOCAL": {}}`} { // keys match exactly
+	for _, bad := range []string{`{not json`, `[]`, `{"hash": "x"}`, `{"files": []}`, `{"files": {"a": 1}}`, `{"Files": {}}`, `{"FILES": {}}`,
+		`{"snapshot": {}, "local": {}}`} { // keys match exactly; the old shape is no record
 		env.WriteFile(path, bad, 0)
 		if r := Load(ctx, g); r != nil {
 			t.Errorf("%s loaded as %+v", bad, r)
@@ -383,11 +373,11 @@ func TestApproval_LoadRefusesWhatIsNotARecord(t *testing.T) {
 			t.Errorf("%s: state %s", bad, got)
 		}
 	}
-	env.WriteFile(path, `{"snapshot": {}, "local": {}}`, 0)
-	if r := Load(ctx, g); r == nil || len(r.Local) != 0 {
+	env.WriteFile(path, `{"files": {}}`, 0)
+	if r := Load(ctx, g); r == nil || len(r.Files) != 0 {
 		t.Errorf("%+v", r)
 	}
-	env.WriteFile(path, "{\r\n\"snapshot\": {},\r\n\"local\": {}\r\n}", 0)
+	env.WriteFile(path, "{\r\n\"files\": {}\r\n}", 0)
 	if Load(ctx, g) == nil {
 		t.Error("CRLF record")
 	}
@@ -405,7 +395,7 @@ func TestApproval_EntryFilesEdges(t *testing.T) {
 		"fifo":   map[string]any{"script": "pipe"},
 	}, testkit.Dirs("work"))
 	g := store.NewContext(env.Home, nil).Store(proj).Main
-	files := must(SharedFiles(g))
+	files := must(Files(g))
 	if files[elsewhere] != sum("echo out\n") { // an absolute script is used as given, so its key is the absolute path
 		t.Errorf("absolute script: %q", files)
 	}
@@ -434,7 +424,7 @@ func TestEntryFiles_BrokenEntryStillCountsItsScriptAndCwd(t *testing.T) {
 	if len(store.EntryErrors(g)) != 1 {
 		t.Fatalf("the entry should be broken: %q", store.EntryErrors(g))
 	}
-	files := must(SharedFiles(g))
+	files := must(Files(g))
 	if files["bin/b"] != sum("echo b\n") || files["./cwd of b"] != sum(filepath.Join(proj, "work")+"\n") {
 		t.Errorf("files %q", files)
 	}
@@ -457,7 +447,7 @@ func TestApproval_AScriptCannotStandInForACwdRecord(t *testing.T) {
 	}, testkit.Dirs("safe"), testkit.Files(map[string]any{"cwd of go": "x"}))
 	env.Symlink(filepath.Join(proj, "safe"), filepath.Join(proj, "work"))
 	st := store.NewContext(env.Home, nil).Store(proj)
-	files := must(SharedFiles(st.Main))
+	files := must(Files(st.Main))
 	if files["cwd of go"] != sum("x") {
 		t.Errorf("script: %q", files["cwd of go"])
 	}
@@ -489,11 +479,11 @@ func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
 	if err := Check(ctx, g); err != nil {
 		t.Fatalf("ASCII name: %v", err)
 	}
-	shared, local, err := snapshot(ctx, g)
-	if err != nil || shared[`scripts/ns/caf\udce9.sh`] != sum("echo ascii\n") {
-		t.Fatalf("%q %v", shared, err)
+	files, err := snapshot(ctx, g)
+	if err != nil || files[`scripts/ns/caf\udce9.sh`] != sum("echo ascii\n") {
+		t.Fatalf("%q %v", files, err)
 	}
-	if err := Save(ctx, g, shared, local); err != nil || State(ctx, g) != "ok" {
+	if err := Save(ctx, g, files); err != nil || State(ctx, g) != "ok" {
 		t.Fatalf("Save %v, state %s", err, State(ctx, g))
 	}
 	// a file named caf<0xe9>.sh is refused, and the message names it; the approval no longer holds
@@ -506,7 +496,7 @@ func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), `"scripts/ns/caf\xe9.sh"`) || !strings.Contains(err.Error(), "not valid UTF-8") {
 		t.Fatalf("Check: %v", err)
 	}
-	if State(ctx, g) != "invalid" || Require(ctx, g) == nil || Save(ctx, g, must(SharedFiles(g)), must(LocalFiles(g))) == nil {
+	if State(ctx, g) != "invalid" || Require(ctx, g) == nil || Save(ctx, g, must(Files(g))) == nil {
 		t.Errorf("state %s", State(ctx, g))
 	}
 }
@@ -517,7 +507,7 @@ func TestApproval_ARecordWithNonUTF8TextIsNoRecord(t *testing.T) {
 	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
 	g := store.NewContext(env.Home, nil).Store(proj).Main
 	// a record whose file name is not valid UTF-8 is no record
-	env.WriteFile(ctx.ApprovalPath(g), "{\"snapshot\": {\"caf\xe9.sh\": \""+sum("x")+"\"}, \"local\": {}}", 0)
+	env.WriteFile(ctx.ApprovalPath(g), "{\"files\": {\"caf\xe9.sh\": \""+sum("x")+"\"}}", 0)
 	if Load(ctx, g) != nil || State(ctx, g) != "new" {
 		t.Errorf("loaded as a record: %+v, state %s", Load(ctx, g), State(ctx, g))
 	}
@@ -547,8 +537,8 @@ func TestApproval_FolderFilesNamespace(t *testing.T) {
 	if len(folderFiles(store.NewContext(env.Home, nil).Store(proj).Main)) != 0 {
 		t.Error("main group")
 	}
-	// the namespace's script reaches SharedFiles once, under its real path
-	if f := must(SharedFiles(g)); f["scripts/ns/go.sh"] != sum("echo go\n") || len(f) != 4 {
+	// the namespace's script reaches Files once, under its real path
+	if f := must(Files(g)); f["scripts/ns/go.sh"] != sum("echo go\n") || len(f) != 4 {
 		t.Errorf("%q", f)
 	}
 }
@@ -557,11 +547,10 @@ func TestApproval_FolderFilesNamespace(t *testing.T) {
 const recordWithExtraField = `{
   "key": "@ROOT@",
   "extra": 1,
-  "snapshot": {
+  "files": {
     ".shortcuts": "@SHORTCUTS@",
     "bin/t": "@BINT@"
-  },
-  "local": {}
+  }
 }
 `
 
@@ -600,20 +589,14 @@ func TestApproval_RecordWithAnUnknownFieldStillApproves(t *testing.T) {
 	}
 }
 
-func TestApproval_RecordWithoutSnapshotOrLocal(t *testing.T) {
+func TestApproval_RecordWithoutFiles(t *testing.T) {
 	env := testkit.New(t)
 	ctx := store.NewContext(env.Home, nil)
 	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
 	g := store.NewContext(env.Home, nil).Store(proj).Main
-	rec := ctx.ApprovalPath(g)
-	env.WriteFile(rec, `{"key": "x", "hash": "abc", "local": {}}`, 0) // no snapshot: not a record, never approved
+	env.WriteFile(ctx.ApprovalPath(g), `{"key": "x", "hash": "abc"}`, 0) // no files: not a record, never approved
 	if got := State(ctx, g); got != "new" {
-		t.Errorf("no snapshot: %s", got)
-	}
-	// no "local": not a record either (fail closed)
-	env.WriteFile(rec, `{"snapshot": {".shortcuts": "{\n  \"shortcuts\": {\n    \"t\": {\n      \"script\": \"bin/t\"\n    }\n  },\n  \"version\": 1\n}\n", "bin/t": "echo one\n"}}`, 0)
-	if got := State(store.NewContext(env.Home, nil), g); got != "new" {
-		t.Errorf("no local: %s", got)
+		t.Errorf("no files: %s", got)
 	}
 }
 
@@ -632,7 +615,7 @@ func TestApproval_ANamespaceFileWithBadBytesInItsPathIsRefusedBeforeAnythingIsSa
 	env := testkit.New(t)
 	ctx := store.NewContext(env.Home, nil)
 	g := store.Group{Kind: store.KindNamespace, Name: "ns", StoreDir: env.Store, File: filepath.Join(env.Store, "imports", "caf\xe9.shortcut")}
-	for name, err := range map[string]error{"Check": Check(ctx, g), "Save": Save(ctx, g, map[string]string{}, map[string]string{})} {
+	for name, err := range map[string]error{"Check": Check(ctx, g), "Save": Save(ctx, g, map[string]string{})} {
 		if err == nil || !strings.Contains(err.Error(), `caf\xe9.shortcut"`) || !strings.Contains(err.Error(), "not valid UTF-8") {
 			t.Errorf("%s: %v", name, err)
 		}
@@ -650,12 +633,12 @@ func TestApproval_ARecordInTheTextFormatIsNotApprovedYet(t *testing.T) {
 	ctx := store.NewContext(env.Home, nil)
 	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
 	g := store.NewContext(env.Home, nil).Store(proj).Main
-	env.WriteFile(ctx.ApprovalPath(g), `{"key": "x", "snapshot": {"bin/t": "echo one\n"}, "local": {}}`, 0)
+	env.WriteFile(ctx.ApprovalPath(g), `{"key": "x", "files": {"bin/t": "echo one\n"}}`, 0)
 	if Load(ctx, g) != nil || State(ctx, g) != "new" {
 		t.Errorf("text record: %+v, state %s", Load(ctx, g), State(ctx, g))
 	}
 	for _, v := range []string{"", sum("a")[1:], strings.ToUpper(sum("a")), sum("a") + "0", strings.Repeat("g", 64)} {
-		env.WriteFile(ctx.ApprovalPath(g), `{"snapshot": {"bin/t": "`+v+`"}, "local": {}}`, 0)
+		env.WriteFile(ctx.ApprovalPath(g), `{"files": {"bin/t": "`+v+`"}}`, 0)
 		if Load(ctx, g) != nil {
 			t.Errorf("%q loaded as a digest", v)
 		}
@@ -673,7 +656,7 @@ func TestApproval_StateIsComputedOncePerRun(t *testing.T) {
 	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
 	ctx := store.NewContext(env.Home, nil)
 	g := ctx.Store(proj).Main
-	if err := Save(ctx, g, must(SharedFiles(g)), must(LocalFiles(g))); err != nil {
+	if err := Save(ctx, g, must(Files(g))); err != nil {
 		t.Fatal(err)
 	}
 	if got := State(ctx, g); got != store.StateOK {
@@ -683,8 +666,9 @@ func TestApproval_StateIsComputedOncePerRun(t *testing.T) {
 	if got := State(ctx, g); got != store.StateOK {
 		t.Errorf("the state was computed again: %s", got)
 	}
-	if got := Refresh(ctx, g); got != store.StateChanged {
-		t.Errorf("Refresh: %s", got)
+	ctx.Forget(g.Key())
+	if got := State(ctx, g); got != store.StateChanged {
+		t.Errorf("after Forget: %s", got)
 	}
 	if got := stateOnDisk(env, proj); got != store.StateChanged {
 		t.Errorf("a new run: %s", got)
@@ -699,7 +683,7 @@ func TestApproval_SaveForgetsTheCachedState(t *testing.T) {
 	if got := State(ctx, g); got != store.StateNew {
 		t.Fatal(got)
 	}
-	if err := Save(ctx, g, must(SharedFiles(g)), must(LocalFiles(g))); err != nil {
+	if err := Save(ctx, g, must(Files(g))); err != nil {
 		t.Fatal(err)
 	}
 	if got := State(ctx, g); got != store.StateOK {
