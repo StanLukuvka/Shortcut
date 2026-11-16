@@ -112,7 +112,7 @@ func Save(c *store.Context, g store.Group, files map[string]string) error {
 
 // State is the group's approval state, computed once per run (Context.State) from the files on disk: StateOK,
 // StateNew (never approved), StateChanged, or StateInvalid (a path or registry text that is not valid UTF-8 can't be
-// recorded; Require says which). Anything but StateOK means not approved. Save, and a check under a lock or after a prompt, Forget it first.
+// recorded; Require says which). Anything but StateOK means not approved. After a prompt, Forget it first; Save forgets it itself.
 func State(c *store.Context, g store.Group) store.ApprovalState {
 	return c.State(g.Key(), func() store.ApprovalState { return computeState(c, g) })
 }
