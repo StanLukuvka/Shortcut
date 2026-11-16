@@ -59,7 +59,7 @@ func TestStores_NamespaceDispatch(t *testing.T) {
 	res := e.Run("r", "docker", "delete", "XYZ")
 	testkit.Eq(t, "delete", res.Stdout, "deleting XYZ\n")
 	testkit.Eq(t, "where", e.Run("r", "docker", "where").Stdout, imports+"\n")
-	testkit.Eq(t, "location", e.Run("location", "docker", "delete").Stdout, imports+"/scripts/del.sh\n")
+	testkit.Eq(t, "script_path", e.Run("show", "--field", "script_path", "docker", "delete").Stdout, imports+"/scripts/del.sh\n")
 	testkit.Contains(t, "show", e.Run("show", "docker", "delete").Stdout, "Name:        docker delete")
 	if !slices.Contains(strings.Fields(e.Run("list", "--names").Stdout), "docker") {
 		t.Errorf("list --names has no docker")
@@ -193,8 +193,8 @@ func TestStores_BrokenProjectStopsEveryRunInsideIt(t *testing.T) {
 	}
 	testkit.Eq(t, "--global", e.RunWith(in(proj), "r", "--global", "outside").Stdout, "outside\n")
 
-	// Looking is not running: show and location read past the file, quietly
-	for _, cmd := range [][]string{{"show", "outside"}, {"show", "--json", "outside"}, {"location", "outside"}} {
+	// Looking is not running: show reads past the file, quietly
+	for _, cmd := range [][]string{{"show", "outside"}, {"show", "--json", "outside"}} {
 		res := e.RunWith(in(proj), cmd...)
 		if strings.Contains(res.Stderr, "corrupt registry") || strings.Contains(res.Stderr, "warning") {
 			t.Errorf("%v: stderr %q", cmd, res.Stderr)

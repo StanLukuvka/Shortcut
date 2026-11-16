@@ -99,7 +99,6 @@ shortcut list --names [ns]            bare names
 shortcut show <name>                  details and script
 shortcut show --json <name>           entry and where it resolves, as JSON
 shortcut show --field KEY <name>      one field, bare, for scripts
-shortcut location <name>              script path
 
 shortcut rm <name> [-y]               remove a global or namespace shortcut; says what goes, with -y too
 shortcut rm --local <name>            undo your override, or hide a shared entry. Never changes .shortcuts
@@ -137,7 +136,7 @@ Flags for `new`:
 
 `new <name> -- CMD` stores the command as text and runs it with `bash -c`. One quoted word is kept as written: `-- 'ls "$1" | wc -l'` keeps its pipe. Several words are each quoted, so each stays one word: `-- echo '$HOME'` prints `$HOME`. In both, `$1`, `$@` and the other arguments stay live.
 
-`show`, `location` and `rm` take `--global` too. In a project, `--local` works only from the project root.
+`show` and `rm` take `--global` too. In a project, `--local` works only from the project root.
 
 `show --field KEY` prints one field of that object bare, or of the entry (`description`, `icon`, `created_by`, `created`, `inline`, `script`); `true` and `false` print as words, and a null or absent field prints nothing. It only reads: it never approves. `show --json` prints one object: `name`, `namespace`, `scope`, `defined_in`, `source`, `hides_global`, `approval`, `cwd`, `run_cwd`, `script_path`, `error`, and `entry` as written. A field that can't be worked out is null.
 

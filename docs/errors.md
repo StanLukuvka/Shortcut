@@ -103,7 +103,7 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `... The project in <outer> has a '<name>', but only the nearest project, <dir>, is used here.` | Added when a project holds another, and only the outer one has the name |
 | `'<name>' not found in namespace '<ns>'. It has: <names>` | When the project's namespace hides a global one that has the name, `. Your global '<ns>' has it: shortcut r --global <ns> <name>` follows |
 | `'<ns>' is a namespace; run one of its shortcuts: <names>` | |
-| `too many names: <words>` | `show`, `location` and `rm` take a name, or a namespace and a name |
+| `too many names: <words>` | `show` and `rm` take a name, or a namespace and a name |
 | `<file error>. Nothing runs inside this project until it's fixed; for your own: shortcut r --global <name>` | The project's file is broken, so no name is looked up through it |
 | `<group> isn't approved yet; review it with: <command>` | Run the `shortcut update` command it names |
 | `<group> changed since you approved it; run: <command>` | |
@@ -154,11 +154,10 @@ A new local shortcut needs a project folder:
 | `<dir> is inside the global store, so it can't hold local shortcuts. Run this inside a project folder.` | |
 | `<dir>/.shortcuts.local is a symlink, so writing it would go somewhere else.` | |
 
-## show and location
+## show
 
 | Message | Meaning |
 |---|---|
-| ``'<name>' is an inline shortcut, so it has no file. Change it in the file `shortcut show` names.`` | `location` |
 | `unknown field '<key>' (one of: <list>)` | `show --field` takes a top-level key of `show --json`, or `description`, `icon`, `created_by`, `created`, `inline`, `script` |
 | `--field and --json can't be used together` | |
 

@@ -12,7 +12,6 @@ Usage:
                                             file with --script or --copy
   shortcut list [--names [NAMESPACE]]       List visible shortcuts, with where each runs
   shortcut show [--global] [--json] <name>  Show shortcut metadata and script contents, or the entry as JSON
-  shortcut location [--global] <name>       Print the path of its script (fails for inline)
   shortcut rm [--global|--local] <name> [-y]
                                             Remove a shortcut. With --local, take it out of .shortcuts.local,
                                             or hide a shared one from you
