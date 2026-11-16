@@ -155,7 +155,7 @@ func register(c *model.Context, s *textio.Streams, group model.Group, entry *mod
 			return err
 		}
 		noteIfUnapproved(c, s, after)
-		if _, shared := group.SharedShortcuts().Get(entry.Name); shared {
+		if _, shared := group.Shared.Get(entry.Name); shared {
 			s.Err.WriteString("note: this overrides '" + entry.Name + "' from " + model.ProjectFile + " for you\n")
 		}
 		return nil

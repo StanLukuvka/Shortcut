@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"unicode/utf8"
 )
 
@@ -103,9 +104,6 @@ func readValue(dec *json.Decoder) ([]byte, error) {
 }
 
 func (d *Doc) Has(k string) bool {
-	if d == nil {
-		return false
-	}
 	_, ok := d.Raw[k]
 	return ok
 }
@@ -131,23 +129,23 @@ func (d *Doc) SetString(k, s string) error {
 }
 
 func (d *Doc) Delete(k string) {
-	if d.Has(k) {
+	if i := slices.Index(d.Keys, k); i >= 0 {
 		delete(d.Raw, k)
-		d.Keys = slices.DeleteFunc(d.Keys, func(key string) bool { return key == k })
+		d.Keys = slices.Delete(d.Keys, i, i+1)
 	}
 }
 
-// Object is the value of k when it is an object.
+// Object is the value of k when it is an object; otherwise an empty Doc and false.
 func (d *Doc) Object(k string) (*Doc, bool) {
-	if !d.Has(k) {
-		return nil, false
+	if o, ok := objectOf(d.Raw[k]); ok {
+		return o, true
 	}
-	return objectOf(d.Raw[k])
+	return &Doc{}, false
 }
 
 // String is the value of k when it is a string.
 func (d *Doc) String(k string) (string, bool) {
-	raw := d.rawOf(k)
+	raw := d.Raw[k]
 	var s string
 	if len(raw) == 0 || raw[0] != '"' || json.Unmarshal(raw, &s) != nil {
 		return "", false
@@ -155,30 +153,21 @@ func (d *Doc) String(k string) (string, bool) {
 	return s, true
 }
 
-func (d *Doc) rawOf(k string) []byte {
-	if d == nil {
-		return nil
-	}
-	return d.Raw[k]
-}
-
 // Bytes is the object on one line. A key or value that is not valid UTF-8 is an error (ErrNotUTF8).
 func (d *Doc) Bytes() ([]byte, error) {
 	out := []byte{'{'}
-	if d != nil {
-		for i, k := range d.Keys {
-			if !utf8.ValidString(k) {
-				return nil, fmt.Errorf("%w: key %q", ErrNotUTF8, k)
-			}
-			if !utf8.Valid(d.Raw[k]) {
-				return nil, fmt.Errorf("%w: %q", ErrNotUTF8, d.Raw[k])
-			}
-			if i > 0 {
-				out = append(out, ',')
-			}
-			kb, _ := quote(k)
-			out = append(append(append(out, kb...), ':'), d.Raw[k]...)
+	for i, k := range d.Keys {
+		if !utf8.ValidString(k) {
+			return nil, fmt.Errorf("%w: key %q", ErrNotUTF8, k)
 		}
+		if !utf8.Valid(d.Raw[k]) {
+			return nil, fmt.Errorf("%w: %q", ErrNotUTF8, d.Raw[k])
+		}
+		if i > 0 {
+			out = append(out, ',')
+		}
+		kb, _ := quote(k)
+		out = append(append(append(out, kb...), ':'), d.Raw[k]...)
 	}
 	return append(out, '}'), nil
 }
@@ -261,21 +250,8 @@ func hex4At(raw []byte, i int) (rune, bool) {
 	if i+4 > len(raw) {
 		return 0, false
 	}
-	var r rune
-	for _, c := range raw[i : i+4] {
-		switch {
-		case c >= '0' && c <= '9':
-			c -= '0'
-		case c >= 'a' && c <= 'f':
-			c = c - 'a' + 10
-		case c >= 'A' && c <= 'F':
-			c = c - 'A' + 10
-		default:
-			return 0, false
-		}
-		r = r<<4 | rune(c)
-	}
-	return r, true
+	r, err := strconv.ParseUint(string(raw[i:i+4]), 16, 16)
+	return rune(r), err == nil
 }
 
 // checkText refuses invalid UTF-8 and every surrogate escape that is not a proper high+low pair. A proper pair

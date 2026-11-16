@@ -217,10 +217,11 @@ func TestDecodeEntry_KeepsWellTypedFieldsOfABrokenEntry(t *testing.T) {
 }
 
 func TestItem_TextShowsAWrongTypeAsWritten(t *testing.T) {
-	items := ItemsOf(doc(t, `{"shortcuts": {"a": {"inline": "x", "description": 5, "cwd": null}, "b": {"inline": "x", "description": "d"}, "c": 7}}`))
+	items := ItemsOf(doc(t, `{"shortcuts": {"a": {"inline": "x", "description": 5, "cwd": null}, "b": {"inline": "x", "description": "d"}, "c": 7, "d": {"inline": "x", "description": ["a", "b"]}}}`))
 	for _, c := range []struct{ name, field, want string }{
 		{"a", "description", "5"}, {"a", "cwd", ""}, {"a", "inline", "x"}, {"a", "script", ""},
 		{"b", "description", "d"}, {"c", "description", ""},
+		{"d", "description", `["a","b"]`},
 	} {
 		item, _ := items.Get(c.name)
 		if got := item.Text(c.field); got != c.want {

@@ -90,81 +90,33 @@ func cmdShow(c *model.Context, s *textio.Streams, args []string) error {
 	return nil
 }
 
-// showView is what `show` describes: the entry as written and where it resolves. A broken entry still has one,
-// with its error and nil for what can't be worked out.
-type showView struct {
-	name, scope, definedIn, approval string
-	namespace, source                *string
-	hidesGlobal                      bool
-	cwd, runCwd, scriptPath, errText *string
-	entry                            []byte // the entry as written
-}
+// showTop are the top-level keys of `show --json`, in order.
+var showTop = []string{"name", "namespace", "scope", "defined_in", "source", "hides_global", "approval", "cwd", "run_cwd", "script_path", "error"}
 
-// viewField is one top-level key of `show --json`, in order. val is nil for null; isBool says val is true or false.
-type viewField struct {
-	key    string
-	val    *string
-	isBool bool
-}
-
-func (v showView) fields() []viewField {
-	return []viewField{{"name", &v.name, false}, {"namespace", v.namespace, false}, {"scope", &v.scope, false},
-		{"defined_in", &v.definedIn, false}, {"source", v.source, false},
-		{"hides_global", ptr(strconv.FormatBool(v.hidesGlobal)), true}, {"approval", &v.approval, false},
-		{"cwd", v.cwd, false}, {"run_cwd", v.runCwd, false}, {"script_path", v.scriptPath, false}, {"error", v.errText, false}}
-}
-
-func ptr(s string) *string { return &s }
-
-// doc is the view as one object. A string that is not valid UTF-8 is refused (model.ErrNotUTF8).
-func (v showView) doc() (*model.Doc, error) {
-	d := &model.Doc{}
-	for _, f := range v.fields() {
-		switch {
-		case f.val == nil:
-			d.Set(f.key, []byte("null"))
-		case f.isBool:
-			d.Set(f.key, []byte(*f.val))
-		default:
-			if err := d.SetString(f.key, *f.val); err != nil {
-				return nil, err
-			}
-		}
-	}
-	d.Set("entry", v.entry)
-	return d, nil
-}
-
-// field is the text `--field key` prints, nil for nothing: a top-level key, else a field of the entry as written.
-func (v showView) field(key string) *string {
-	for _, f := range v.fields() {
-		if f.key == key {
-			return f.val
-		}
-	}
-	entry, err := model.ParseDoc(v.entry)
-	if err != nil { // a broken entry that isn't an object
+// setOpt writes null for nil, else the string. A string that is not valid UTF-8 is refused (model.ErrNotUTF8).
+func setOpt(d *model.Doc, key string, val *string) error {
+	if val == nil {
+		d.Set(key, []byte("null"))
 		return nil
 	}
-	if s, ok := entry.String(key); ok {
-		return &s
-	}
-	if raw := string(entry.Raw[key]); raw != "" && raw != "null" {
-		return &raw
-	}
-	return nil
+	return d.SetString(key, *val)
 }
 
 // showJSON prints one JSON object, the entry as written plus where it resolves.
 func showJSON(c *model.Context, s *textio.Streams, words []string, lk model.Lookup) error {
-	v, err := showObject(c, words, lk)
+	vals, entry, err := showObject(c, words, lk)
 	if err != nil {
 		return err
 	}
-	d, err := v.doc()
-	if err != nil {
-		return err
+	d := &model.Doc{}
+	for _, k := range showTop {
+		if k == "hides_global" {
+			d.Set(k, []byte(*vals[k])) // true or false
+		} else if err := setOpt(d, k, vals[k]); err != nil {
+			return err
+		}
 	}
+	d.Set("entry", entry)
 	text, err := d.Pretty()
 	if err != nil {
 		return err
@@ -175,7 +127,7 @@ func showJSON(c *model.Context, s *textio.Streams, words []string, lk model.Look
 
 // showFields are the keys `--field` reads: the top-level keys of `show --json`, then the entry's fields marked Show.
 func showFields() []string {
-	keys := []string{"name", "namespace", "scope", "defined_in", "source", "hides_global", "approval", "cwd", "run_cwd", "script_path", "error"}
+	keys := slices.Clone(showTop)
 	for _, f := range model.Fields() {
 		if f.Show {
 			keys = append(keys, f.Name)
@@ -190,50 +142,63 @@ func showField(c *model.Context, s *textio.Streams, words []string, lk model.Loo
 	if keys := showFields(); !slices.Contains(keys, key) {
 		return Die("unknown field '" + key + "' (one of: " + strings.Join(keys, ", ") + ")")
 	}
-	v, err := showObject(c, words, lk)
+	vals, entry, err := showObject(c, words, lk)
 	if err != nil {
 		return err
 	}
-	if text := v.field(key); text != nil {
+	text, top := vals[key]
+	if !top { // a field of the entry as written; a broken entry that isn't an object has none
+		if d, err := model.ParseDoc(entry); err == nil {
+			if str, ok := d.String(key); ok {
+				text = &str
+			} else if raw := string(d.Raw[key]); raw != "" && raw != "null" {
+				text = &raw
+			}
+		}
+	}
+	if text != nil {
 		_, err = s.Out.WriteString(*text + "\n")
 	}
 	return err
 }
 
-func showObject(c *model.Context, words []string, lk model.Lookup) (showView, error) {
+// showObject is the values of showTop (nil for null) and the entry as written. A broken entry still gives them,
+// with its error and nil for what can't be worked out.
+func showObject(c *model.Context, words []string, lk model.Lookup) (vals map[string]*string, entry []byte, err error) {
 	f, err := model.FindEntry(c, words, lk)
 	if err != nil {
-		return showView{}, err
+		return nil, nil, err
 	}
 	if len(f.Rest) > 0 {
-		return showView{}, model.TooManyNames(words)
+		return nil, nil, model.TooManyNames(words)
 	}
 	g, name := f.Group, f.Name
-	nullable := func(s string) *string {
-		if s == "" {
-			return nil
-		}
-		return &s
+	str := func(s string) *string { return &s }
+	vals = map[string]*string{"name": &name, "scope": str(string(g.Kind)), "defined_in": str(g.DefiningFile(name)),
+		"hides_global": str(strconv.FormatBool(f.Hides)), "approval": str(string(approval.State(c, g)))}
+	for _, k := range []string{"namespace", "source", "cwd", "run_cwd", "script_path", "error"} {
+		vals[k] = nil
 	}
-	v := showView{name: name, namespace: nullable(g.Name), scope: string(g.Kind), definedIn: g.DefiningFile(name),
-		hidesGlobal: f.Hides, approval: string(approval.State(c, g)), entry: f.Item.Raw}
+	if g.Name != "" {
+		vals["namespace"] = &g.Name
+	}
 	if g.Kind == model.KindProject {
-		v.source = ptr(string(g.Source(name)))
+		vals["source"] = str(string(g.Source(name)))
 	}
 	err = f.Item.Err
 	if err == nil {
-		entry := f.Item.Entry
-		v.cwd = entry.Cwd
-		v.runCwd = ptr(model.ResolveRunDir(entry.Cwd, g, c.Cwd))
-		if entry.Script != nil {
+		e := f.Item.Entry
+		vals["cwd"] = e.Cwd
+		vals["run_cwd"] = str(model.ResolveRunDir(e.Cwd, g, c.Cwd))
+		if e.Script != nil {
 			var path string
-			if path, err = model.ResolveScriptPath(g.ScriptBase(), *entry.Script); err == nil {
-				v.scriptPath = &path
+			if path, err = model.ResolveScriptPath(g.ScriptBase(), *e.Script); err == nil {
+				vals["script_path"] = &path
 			}
 		}
 	}
 	if err != nil {
-		v.errText = ptr(err.Error())
+		vals["error"] = str(err.Error())
 	}
-	return v, nil
+	return vals, f.Item.Raw, nil
 }

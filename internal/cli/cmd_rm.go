@@ -106,8 +106,8 @@ func rmLocal(c *model.Context, s *textio.Streams, ns Namespace) error {
 		return err
 	}
 	group := c.Store(root).Main
-	if _, inLocal := group.LocalShortcuts().Get(name); !inLocal {
-		if _, inShared := group.SharedShortcuts().Get(name); inShared {
+	if _, inLocal := group.Local.Get(name); !inLocal {
+		if _, inShared := group.Shared.Get(name); inShared {
 			return Die("'" + name + "' isn't in " + model.LocalFile + ", and shortcut doesn't change " + model.ProjectFile)
 		}
 		return Die("'" + name + "' isn't in " + model.ProjectFile + " or " + model.LocalFile + " here")
@@ -213,9 +213,9 @@ func rmMessage(group model.Group, display string, it model.Item) string {
 
 // rmLocalMessage returns what rm --local is about to change in .shortcuts.local, shown above its question.
 func rmLocalMessage(group model.Group, name string) string {
-	mine, _ := group.LocalShortcuts().Get(name)
+	mine, _ := group.Local.Get(name)
 	lines := []string{"Removes your '" + name + "' from " + group.LocalFile + "."}
-	if _, shared := group.SharedShortcuts().Get(name); shared {
+	if _, shared := group.Shared.Get(name); shared {
 		lines = append(lines, "The '"+name+"' in "+model.ProjectFile+" applies again.")
 	}
 	if kept := keptScript(group, mine); kept != "" {

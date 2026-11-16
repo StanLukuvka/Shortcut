@@ -142,8 +142,8 @@ func approveGroup(c *model.Context, s *textio.Streams, g model.Group, globalName
 			s.Out.WriteString("  changed  " + path + "\n")
 		}
 	}
-	local2 := g.LocalShortcuts()
-	for _, name := range slices.Sorted(slices.Values(g.SharedShortcuts().Names())) {
+	local2 := g.Local
+	for _, name := range slices.Sorted(slices.Values(g.Shared.Names())) {
 		if _, both := local2.Get(name); both {
 			s.Out.WriteString("'" + name + "' in " + model.ProjectFile + " is " + string(g.Source(name)) + " by " + model.LocalFile + " for you.\n")
 		}

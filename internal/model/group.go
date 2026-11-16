@@ -71,18 +71,11 @@ func (is Items) Names() []string {
 func ItemsOf(d *Doc) Items {
 	shortcuts, _ := d.Object("shortcuts")
 	var items Items
-	for _, k := range shortcuts.keys() {
+	for _, k := range shortcuts.Keys {
 		e, err := DecodeEntry(k, shortcuts.Raw[k])
 		items = append(items, Item{Name: k, Entry: e, Err: err, Raw: shortcuts.Raw[k]})
 	}
 	return items
-}
-
-func (d *Doc) keys() []string {
-	if d == nil {
-		return nil
-	}
-	return d.Keys
 }
 
 // Text is a field of the entry for display: a string as itself, an absent or null field as "", anything else as
@@ -116,11 +109,6 @@ type Group struct {
 	LocalDoc  *Doc
 	Local     Items
 }
-
-func (g Group) SharedShortcuts() Items { return g.Shared }
-
-// A namespace or the global store has no .shortcuts.local, so it has no local entries.
-func (g Group) LocalShortcuts() Items { return g.Local }
 
 // Shortcuts is what can run: the shared entries, each replaced by the same name in .shortcuts.local, and the local-only ones.
 func (g Group) Shortcuts() Items {
