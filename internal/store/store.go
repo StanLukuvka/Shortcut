@@ -100,7 +100,7 @@ func entryError(g Group, it Item) error {
 			return fmt.Errorf("'%s' is not a valid entry: script not found: %s", it.Name, *e.Script)
 		}
 		if err := platform.CheckExecutable(path); err != nil {
-			return fmt.Errorf("'%s' is not a valid entry: %w", it.Name, err)
+			return fmt.Errorf("'%s': %w", it.Name, err)
 		}
 	}
 	return nil
