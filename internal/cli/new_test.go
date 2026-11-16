@@ -237,20 +237,20 @@ func TestStores_NewScriptInsideTheStoreIsKeptRelative(t *testing.T) {
 	e := testkit.New(t)
 	imports := filepath.Join(e.Store, "imports")
 	inside := e.WriteFile(filepath.Join(imports, "dk", "ps.sh"), "#!/usr/bin/env bash\necho ps\n", 0o755)
-	copies := e.WriteFile(filepath.Join(imports, "scripts", "dk", "kept.sh"), "#!/usr/bin/env bash\n", 0o755)
+	kept := e.WriteFile(filepath.Join(imports, "scripts", "dk", "kept.sh"), "#!/usr/bin/env bash\n", 0o755)
 	outside := e.Script("out.sh", "#!/usr/bin/env bash\necho out\n")
 	mine := e.WriteFile(filepath.Join(e.Store, "tools", "mine.sh"), "#!/usr/bin/env bash\necho mine\n", 0o755)
 	for _, argv := range [][]string{
 		{"--namespace", "dk", "ps", "--script", inside},
 		{"--namespace", "dk", "out", "--script", outside},
-		{"--namespace", "dk", "kept", "--script", copies},
+		{"--namespace", "dk", "kept", "--script", kept},
 		{"mine", "--script", mine},
 	} {
 		runOK(t, e, testkit.Opts{}, append([]string{"new"}, argv...)...)
 	}
 	dk := fileShortcuts(t, filepath.Join(imports, "dk.shortcut"))
 	testkit.Eq(t, "ps", dk["ps"].(map[string]any)["script"], "dk/ps.sh")
-	testkit.Eq(t, "kept", dk["kept"].(map[string]any)["script"], realpath(t, copies))
+	testkit.Eq(t, "kept", dk["kept"].(map[string]any)["script"], "scripts/dk/kept.sh")
 	testkit.Eq(t, "out", dk["out"].(map[string]any)["script"], realpath(t, outside))
 	testkit.Eq(t, "mine", e.LoadGlobal()["mine"].(map[string]any)["script"], "tools/mine.sh")
 	testkit.Eq(t, "run mine", e.Run("r", "mine").Stdout, "mine\n")

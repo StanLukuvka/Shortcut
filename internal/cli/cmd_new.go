@@ -137,7 +137,7 @@ func entryFields(name string, ns Namespace, g model.Group) (*model.Entry, error)
 
 // newFromScript makes an entry that names the file where it is. A file inside the folder its paths
 // resolve from (the project, the namespace file's folder, the global store) is kept relative, so the folder can
-// move. One in the scripts folder stays absolute.
+// move.
 func newFromScript(s *textio.Streams, ns Namespace, group model.Group, fields *model.Entry) error {
 	path := ns.Str("script")
 	abs := osutil.Abs(osutil.ExpandUser(path))
@@ -146,9 +146,8 @@ func newFromScript(s *textio.Streams, ns Namespace, group model.Group, fields *m
 	}
 	base := osutil.Realpath(group.ScriptBase())
 	real := osutil.Realpath(abs)
-	scripts := osutil.Realpath(group.ScriptsDir())
 	field := abs
-	if osutil.IsRelativeTo(real, base) && !osutil.IsRelativeTo(real, scripts) {
+	if osutil.IsRelativeTo(real, base) {
 		field = osutil.Relpath(real, base)
 	}
 	entry := *fields
