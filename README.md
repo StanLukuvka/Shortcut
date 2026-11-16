@@ -94,7 +94,7 @@ shortcut show --json <name>           entry and where it resolves, as JSON
 shortcut show --field KEY <name>      one field, bare, for scripts
 
 shortcut rm <name> [-y]               remove a global or namespace shortcut; says what goes, with -y too
-shortcut rm --local <name>            undo your override, or hide a shared entry. Never changes .shortcuts
+shortcut rm --local <name>            undo your override, or remove a local entry. Never changes .shortcuts
 shortcut rm --namespace <ns> [-y]     remove a global namespace and its scripts/<ns>/ folder; one imported
                                       from elsewhere is only no longer imported
 
@@ -126,7 +126,7 @@ Flags for `new`:
 ## Projects and approval
 
 - The project is the nearest folder, walking up, with `.shortcuts` or `.shortcuts.local`. Only that one is read, also inside another project.
-- `.shortcuts.local` overrides `.shortcuts` per entry. `"name": null` hides a shared one.
+- `.shortcuts.local` overrides `.shortcuts` per entry.
 - Inside a project, its shortcuts and namespaces hide your global ones of the same name. `update`, `list`, `show` and `run` say so, and `shortcut r --global <name>` runs yours.
 - Relative `script` and `cwd` paths resolve from the folder holding the file.
 - A namespace file is `<name>.shortcut`, such as `docker.shortcut`. A bare `.shortcut` is an error.

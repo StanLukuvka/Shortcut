@@ -134,19 +134,19 @@ func TestList_FullListing(t *testing.T) {
 	runOK(t, e, testkit.Opts{}, "update", "docker", "-y")
 	proj := e.Project(map[string]any{"build": map[string]any{"description": "Proj build", "inline": "echo pb", "cwd": "."},
 		"shared": map[string]any{"inline": "echo s", "description": "sh"}}, testkit.Extra(map[string]any{"description": "p"}))
-	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"shared": {"inline": "echo local"}, "loc": {"inline": "l", "description": "mine"}, "build": null}}`, 0)
+	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"shared": {"inline": "echo local"}, "loc": {"inline": "l", "description": "mine"}}}`, 0)
 	e.Approve(filepath.Join(proj, ".shortcuts"))
 	res := e.RunWith(testkit.Opts{Cwd: proj}, "list")
 	want := "Project shortcuts (" + proj + "):\n" +
 		"  p\n" +
-		"  build                .       hidden      Proj build  [hides global]\n" +
+		"  build                .       shared      Proj build  [hides global]\n" +
 		"  loc                  caller  local       mine\n" +
 		"  shared               caller  overridden  \n" +
 		"\n" +
 		"Global shortcuts:\n" +
 		"  mine\n" +
 		"  bad                  5       bd\n" +
-		"  build                /tmp    Global build\n" +
+		"  build                /tmp    Global build  [hidden here by project]\n" +
 		"  é                    caller  d\n" +
 		"\n" +
 		"Namespace docker (" + filepath.Join(e.Store, "imports", "docker.shortcut") + "):\n" +

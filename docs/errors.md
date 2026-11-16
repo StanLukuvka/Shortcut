@@ -68,7 +68,7 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 
 | Message | Meaning |
 |---|---|
-| `expected a dictionary` | The entry is a string or list, not `{...}` |
+| `expected a dictionary` | The entry is a string, list or `null`, not `{...}` |
 | `unknown field: <fields>` | |
 | `'description' must be a string` | |
 | `'<field>' must be a string` | `inline`, `script` or `cwd`. A `null` counts as the wrong type |
@@ -160,6 +160,7 @@ A new local shortcut needs a project folder:
 | `--local and --global can't be used together` | |
 | `--local takes one name: namespaces aren't in .shortcuts.local` | |
 | `'<name>' isn't in .shortcuts or .shortcuts.local here` | |
+| `'<name>' isn't in .shortcuts.local, and shortcut doesn't change .shortcuts` | `rm --local` of a name only in `.shortcuts` |
 | `'<name>' is a project shortcut, and shortcut doesn't change .shortcuts. Edit it by hand, or use: shortcut rm --local <name>` | |
 | `<file error>. Inside this project rm only takes --local until it's fixed; for your own: shortcut rm --global <name>` | |
 | `--namespace takes the namespace alone: shortcut rm --namespace <ns>` | |

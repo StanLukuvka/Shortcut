@@ -93,8 +93,7 @@ func cmdRm(s *textio.Streams, args []string) error {
 	return nil
 }
 
-// rmLocal takes a name out of .shortcuts.local, which also undoes an override or a hide. A name only in
-// .shortcuts is hidden instead.
+// rmLocal takes a name out of .shortcuts.local, which also undoes an override.
 func rmLocal(s *textio.Streams, ns Namespace) error {
 	if ns.Bool("skipLocal") {
 		return Die("--local and --global can't be used together")
@@ -110,37 +109,25 @@ func rmLocal(s *textio.Streams, ns Namespace) error {
 		return err
 	}
 	group := model.LoadStore(root).Main
-	unreadable := model.LoadGroup(group.File, group.StoreDir, "").Error // .shortcuts can't be read: hide the name anyway
-	_, inLocal := group.LocalShortcuts().Get(name)
-	_, inShared := group.SharedShortcuts().Get(name)
-	if !inLocal && !inShared && unreadable == nil {
+	if _, inLocal := group.LocalShortcuts().Get(name); !inLocal {
+		if _, inShared := group.SharedShortcuts().Get(name); inShared {
+			return Die("'" + name + "' isn't in " + model.LocalFile + ", and shortcut doesn't change " + model.ProjectFile)
+		}
 		return Die("'" + name + "' isn't in " + model.ProjectFile + " or " + model.LocalFile + " here")
 	}
-	verb := "hide"
-	if inLocal {
-		verb = "remove"
-	}
-	if err := confirmed(s, textio.Confirm{Question: verb + " '" + name + "'?", NoTerminal: verb + " '" + name + "' in a terminal, or pass -y",
-		Message: rmLocalMessage(group, name, unreadable), TellOnYes: true}, ns.Bool("yes")); err != nil {
+	if err := confirmed(s, textio.Confirm{Question: "remove '" + name + "'?", NoTerminal: "remove '" + name + "' in a terminal, or pass -y",
+		Message: rmLocalMessage(group, name), TellOnYes: true}, ns.Bool("yes")); err != nil {
 		return err
 	}
 	after, err := writeLocal(group.StoreDir, func(shortcuts *ordjson.Object) error {
-		if _, has := shortcuts.Get(name); has {
-			shortcuts.Delete(name)
-		} else {
-			shortcuts.Set(name, nil)
-		}
+		shortcuts.Delete(name)
 		return nil
 	})
 	if err != nil {
 		return err
 	}
 	noteIfUnapproved(s, after)
-	if verb == "hide" {
-		s.Out.WriteString("Hid shortcut '" + name + "' from you.\n")
-	} else {
-		s.Out.WriteString("Removed '" + name + "' from " + model.LocalFile + ".\n")
-	}
+	s.Out.WriteString("Removed '" + name + "' from " + model.LocalFile + ".\n")
 	return nil
 }
 
@@ -233,26 +220,14 @@ func rmMessage(group model.Group, display string, raw ordjson.Value) string {
 }
 
 // rmLocalMessage returns what rm --local is about to change in .shortcuts.local, shown above its question.
-func rmLocalMessage(group model.Group, name string, unreadable *string) string {
-	local := group.LocalFile
-	var lines []string
-	if unreadable != nil {
-		lines = append(lines, *unreadable+". "+model.ProjectFile+" stays as it is.")
+func rmLocalMessage(group model.Group, name string) string {
+	mine, _ := group.LocalShortcuts().Get(name)
+	lines := []string{"Removes your '" + name + "' from " + group.LocalFile + "."}
+	if _, shared := group.SharedShortcuts().Get(name); shared {
+		lines = append(lines, "The '"+name+"' in "+model.ProjectFile+" applies again.")
 	}
-	mine, inLocal := group.LocalShortcuts().Get(name)
-	switch {
-	case !inLocal:
-		lines = append(lines, "Hides '"+name+"' from you: writes \""+name+"\": null to "+local+".")
-	case mine == nil:
-		lines = append(lines, "Stops hiding '"+name+"': takes its null out of "+local+". The one in "+model.ProjectFile+" applies again.")
-	default:
-		lines = append(lines, "Removes your '"+name+"' from "+local+".")
-		if _, shared := group.SharedShortcuts().Get(name); shared {
-			lines = append(lines, "The '"+name+"' in "+model.ProjectFile+" applies again.")
-		}
-		if kept := keptScript(group, mine); kept != "" {
-			lines = append(lines, "Keeps its script: "+kept)
-		}
+	if kept := keptScript(group, mine); kept != "" {
+		lines = append(lines, "Keeps its script: "+kept)
 	}
 	return strings.Join(lines, "\n")
 }
