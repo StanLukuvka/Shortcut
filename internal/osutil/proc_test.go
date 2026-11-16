@@ -26,7 +26,7 @@ func helper(job string) {
 		fmt.Println(IsTerminal(0), IsTerminal(1), TerminalRows())
 	case "exec":
 		env := append(os.Environ(), "PATH="+os.Getenv("PYOS_PATH"))
-		err := ExecChild([]string{os.Getenv("PYOS_CMD"), "-c", `pwd; grep -E '^Sig(Blk|Ign)' /proc/$$/status`},
+		err := ExecChild([]string{os.Getenv("PYOS_CMD"), "-c", `pwd; exec grep -E '^Sig(Blk|Ign)' /proc/self/status`},
 			os.Getenv("PYOS_CWD"), env)
 		fmt.Println("returned:", err)
 		os.Exit(7)
@@ -167,7 +167,7 @@ func TestExec_TheChildStartsClean(t *testing.T) {
 	if len(lines) != 3 || lines[0] != dir {
 		t.Fatalf("stdout %q", res.Stdout)
 	}
-	ign, blk := hexOf(t, lines[1]), hexOf(t, lines[2])
+	blk, ign := hexOf(t, lines[1]), hexOf(t, lines[2])
 	if ign&(1<<(syscall.SIGPIPE-1)) != 0 || ign&(1<<(syscall.SIGXFSZ-1)) != 0 || blk != 0 {
 		t.Errorf("%s / %s", lines[1], lines[2])
 	}
