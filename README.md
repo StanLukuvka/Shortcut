@@ -63,7 +63,7 @@ A project shares its shortcuts in a `.shortcuts` file at its root, committed wit
 |---|---|---|
 | `~/.shortcuts/` (or `$SHORTCUTS_HOME`) | Global store, visible everywhere | the CLI |
 | `<project>/.shortcuts` | Shared project file, committed | you, by hand |
-| `<project>/.shortcuts.local` | Your own entries, kept out of git | the CLI, with `--local` |
+| `<project>/.shortcuts.local` | Your own entries; shortcut does not change git files | the CLI, with `--local` |
 
 ```
 ~/.shortcuts/

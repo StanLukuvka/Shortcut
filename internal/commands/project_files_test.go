@@ -109,30 +109,6 @@ func TestProjectFiles_LocalOnlyWorksAtTheProjectRoot(t *testing.T) {
 	testkit.Eq(t, "keep", e.RunWith(in(src), "r", ".", "keep").Stdout, "shared keep\n")
 }
 
-func TestProjectFiles_ANewLocalFileIsExcludedFromGitOnce(t *testing.T) {
-	e := testkit.New(t)
-	proj := e.Project(map[string]any{})
-	e.RunCmd(testkit.Opts{}, "git", "init", "-q", proj)
-	e.RunWith(in(proj), "new", "a", "--local", "--", "true")
-	e.RunWith(in(proj), "new", "b", "--local", "--", "true")
-	exclude := testkit.ReadFile(t, filepath.Join(proj, ".git", "info", "exclude"))
-	n := 0
-	for _, line := range strings.Split(exclude, "\n") {
-		if line == ".shortcuts.local" {
-			n++
-		}
-	}
-	testkit.Eq(t, "exclude lines", n, 1)
-	testkit.Eq(t, "status", e.RunCmd(testkit.Opts{Cwd: proj}, "git", "status", "--porcelain").Stdout, "?? .shortcuts\n")
-}
-
-func TestProjectFiles_OutsideGitNothingIsExcluded(t *testing.T) {
-	e := testkit.New(t)
-	proj := e.Project(map[string]any{})
-	testkit.Eq(t, "new", e.RunWith(in(proj), "new", "a", "--local", "--", "true").Code, 0)
-	testkit.NotExist(t, filepath.Join(proj, ".git"))
-}
-
 func TestProjectFiles_ShowJSONSaysWhichFileAnEntryComesFrom(t *testing.T) {
 	e := testkit.New(t)
 	proj := overlaid(t, e)
@@ -203,19 +179,6 @@ func TestProjectFiles_RmLocalSaysTheSharedEntryAppliesAgain(t *testing.T) {
 	testkit.Eq(t, "exit", rc, 1)
 	testkit.Contains(t, "removes", out, "Removes your 'swap' from "+filepath.Join(proj, ".shortcuts.local")+".")
 	testkit.Contains(t, "again", out, "The 'swap' in .shortcuts applies again.")
-}
-
-// An exclude file whose last line has no newline keeps that line intact.
-func TestProjectFiles_ExcludeWithoutTrailingNewline(t *testing.T) {
-	e := testkit.New(t)
-	proj := e.Project(map[string]any{})
-	e.RunCmd(testkit.Opts{}, "git", "init", "-q", proj)
-	path := filepath.Join(proj, ".git", "info", "exclude")
-	if err := os.WriteFile(path, []byte("build/"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	e.RunWith(in(proj), "new", "a", "--local", "--", "true")
-	testkit.Eq(t, "exclude", testkit.ReadFile(t, path), "build/\n.shortcuts.local\n")
 }
 
 func TestProjectFiles_RmLocalOfANameOnlyInTheSharedFileFails(t *testing.T) {
