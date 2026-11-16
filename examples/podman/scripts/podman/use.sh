@@ -6,7 +6,7 @@ state=${XDG_STATE_HOME:-$HOME/.local/state}/shortcut-podman
 if t=$(tty 2>/dev/null); then key=${t#/dev/}; key=${key//\//-}.$(ps -o sid= -p $$ | tr -d ' '); else key=shared; fi
 pick_file=$state/pick.$key
 
-case ${SC_ARG_TARGET:-} in
+case ${1:-} in
     "")
         [ -f "$pick_file" ] || { echo "Nothing picked in this terminal. Pick one with: shortcut r podman use N"; exit 0; }
         SHORTCUT_SHOW_DIR=0 exec shortcut r "$SHORTCUT_NAMESPACE" current ;;
@@ -16,7 +16,7 @@ case ${SC_ARG_TARGET:-} in
         exit 0 ;;
 esac
 
-name=$(SHORTCUT_SHOW_DIR=0 shortcut r "$SHORTCUT_NAMESPACE" current "$SC_ARG_TARGET")
+name=$(SHORTCUT_SHOW_DIR=0 shortcut r "$SHORTCUT_NAMESPACE" current "$1")
 mkdir -p "$state"
 # Drop picks and lists of terminal sessions that have closed
 for f in "$state"/pick.* "$state"/list.*; do

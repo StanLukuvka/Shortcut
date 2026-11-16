@@ -7,7 +7,6 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
@@ -65,7 +64,7 @@ func cmdNew(s *textio.Streams, args []string) error {
 	if err := register(s, group, &entry); err != nil {
 		return err
 	}
-	if !positionalAnywhere.MatchString(text) && !strings.Contains(text, "SC_ARG_") {
+	if !positionalAnywhere.MatchString(text) {
 		s.Err.WriteString("note: '" + name + "' won't see any arguments you give it; add \"$@\" to pass them on\n")
 	}
 	_, err = s.Out.WriteString("Created inline shortcut '" + group.Display(name) + "'.\n")
@@ -80,49 +79,8 @@ func descOr(ns Namespace, def string) string {
 	return def
 }
 
-// entryFields returns the parts of an entry the flags of new set, and the --arg/--arg-desc rules.
+// entryFields returns the parts of an entry the flags of new set.
 func entryFields(name string, ns Namespace, g model.Group) (*model.Entry, error) {
-	var args []*ordjson.Object
-	if flags := ns.List("arg"); len(flags) > 0 {
-		args = []*ordjson.Object{}
-		list := make([]ordjson.Value, 0, len(flags))
-		for _, flag := range flags {
-			argName, def, hasDef := strings.Cut(flag, "=")
-			a := &ordjson.Object{}
-			a.Set("name", strings.TrimSuffix(argName, "..."))
-			rest := strings.HasSuffix(argName, "...")
-			if rest {
-				a.Set("rest", true)
-			}
-			if !hasDef {
-				a.Set("required", true)
-			} else if def != "" || !rest { // NAME...= is optional with nothing in its place
-				a.Set("default", def)
-			}
-			args = append(args, a)
-			list = append(list, a)
-		}
-		if err := model.ValidateArgs(name, list); err != nil {
-			return nil, err
-		}
-	}
-	for _, flag := range ns.List("argDesc") {
-		argName, text, hasText := strings.Cut(flag, "=")
-		var match *ordjson.Object
-		for _, a := range args {
-			if a.Vals["name"] == strings.TrimSuffix(argName, "...") {
-				match = a
-				break
-			}
-		}
-		if !hasText || match == nil {
-			return nil, Die("--arg-desc " + flag + ": needs NAME=TEXT, with NAME declared by --arg")
-		}
-		if _, has := match.Get("desc"); has {
-			return nil, Die("--arg-desc " + flag + ": '" + match.Vals["name"].(string) + "' already has a desc")
-		}
-		match.Set("desc", text)
-	}
 	var cwd *string
 	if ns.Set("cwd") {
 		v := ns.Str("cwd")
@@ -131,7 +89,7 @@ func entryFields(name string, ns Namespace, g model.Group) (*model.Entry, error)
 			return nil, err
 		}
 	}
-	e := &model.Entry{Name: name, Cwd: cwd, Confirm: ns.Bool("confirm"), Args: args}
+	e := &model.Entry{Name: name, Cwd: cwd, Confirm: ns.Bool("confirm")}
 	return e, nil
 }
 
@@ -158,4 +116,41 @@ func newFromScript(s *textio.Streams, ns Namespace, group model.Group, fields *m
 	}
 	_, err := s.Out.WriteString("Created shortcut '" + group.Display(entry.Name) + "' using " + abs + ".\n")
 	return err
+}
+
+var positionalAt = regexp.MustCompile(`^\$(?:[1-9@*]|\{[1-9@*])`) // $1, $@, $*, ${1}: how a shell command reads its arguments
+
+// joinCommand turns `-- cmd word word` into one inline command. Each word stays one word, as typed, and
+// only the shortcut's own arguments stay live, because $1 is why someone quoted it past their shell. A lookahead
+// for POSITIONAL at each $ is a check in code, since Go's regexp has none.
+func joinCommand(words []string) string {
+	if len(words) == 1 {
+		return words[0]
+	}
+	quoted := make([]string, len(words))
+	for i, word := range words {
+		live := false
+		for j := 0; j < len(word); j++ {
+			if positionalAt.MatchString(word[j:]) {
+				live = true
+				break
+			}
+		}
+		if !live {
+			quoted[i] = osutil.ShellQuote(word)
+			continue
+		}
+		var b strings.Builder
+		b.WriteByte('"')
+		for j := 0; j < len(word); j++ {
+			c := word[j]
+			if c == '"' || c == '\\' || c == '`' || (c == '$' && !positionalAt.MatchString(word[j:])) {
+				b.WriteByte('\\')
+			}
+			b.WriteByte(c)
+		}
+		b.WriteByte('"')
+		quoted[i] = b.String()
+	}
+	return strings.Join(quoted, " ")
 }

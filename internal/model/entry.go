@@ -4,7 +4,6 @@ package model
 
 import (
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -30,11 +29,10 @@ type Entry struct {
 	Script      *string
 	Cwd         *string
 	Confirm     bool
-	Args        []*ordjson.Object // nil = field absent; kept raw so key order round-trips
 }
 
 var knownFields = map[string]bool{
-	"description": true, "inline": true, "script": true, "cwd": true, "confirm": true, "args": true,
+	"description": true, "inline": true, "script": true, "cwd": true, "confirm": true,
 }
 
 var textFields = []string{"inline", "script", "cwd"}
@@ -87,22 +85,12 @@ func EntryFromValue(name string, v ordjson.Value) (*Entry, error) {
 	if (texts["inline"] == nil) == (texts["script"] == nil) {
 		return nil, bad("it needs exactly one of 'inline' and 'script'")
 	}
-	if args, present := data.Get("args"); present {
-		if err := ValidateArgs(name, args); err != nil {
-			return nil, err
-		}
-		list := args.([]ordjson.Value)
-		e.Args = make([]*ordjson.Object, len(list))
-		for i, a := range list {
-			e.Args[i] = a.(*ordjson.Object)
-		}
-	}
 	e.Inline, e.Script, e.Cwd = texts["inline"], texts["script"], texts["cwd"]
 	e.Confirm = confirm
 	return e, nil
 }
 
-// ToObject returns the entry as an object: description, then the text fields that are set, confirm, args.
+// ToObject returns the entry as an object: description, then the text fields that are set, confirm.
 func (e *Entry) ToObject() *ordjson.Object {
 	o := &ordjson.Object{}
 	o.Set("description", e.Description)
@@ -114,88 +102,7 @@ func (e *Entry) ToObject() *ordjson.Object {
 	if e.Confirm {
 		o.Set("confirm", true)
 	}
-	if e.Args != nil {
-		list := make([]ordjson.Value, len(e.Args))
-		for i, a := range e.Args {
-			list[i] = a
-		}
-		o.Set("args", list)
-	}
 	return o
-}
-
-var argName = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
-
-// ArgVar is the environment variable a declared argument is in.
-func ArgVar(name string) string {
-	return "SC_ARG_" + strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
-}
-
-// ValidateArgs checks a declared args list, with fixed messages and check order.
-func ValidateArgs(name string, args ordjson.Value) error {
-	bad := func(msg string) error { return fmt.Errorf("'%s' is not a valid entry: %s", name, msg) }
-	list, ok := args.([]ordjson.Value)
-	if !ok {
-		return bad("'args' must be a list")
-	}
-	for i, item := range list {
-		arg, isObj := item.(*ordjson.Object)
-		var argN string
-		if isObj {
-			n, _ := arg.Get("name")
-			argN, ok = n.(string)
-			ok = ok && argName.MatchString(argN)
-		}
-		if !isObj || !ok {
-			return bad("every entry in 'args' needs a 'name' (letters, digits, _ and -)")
-		}
-		var unknown []string
-		for _, k := range arg.Keys {
-			switch k {
-			case "name", "required", "default", "desc", "rest":
-			default:
-				unknown = append(unknown, k)
-			}
-		}
-		if len(unknown) > 0 {
-			return bad("unknown args field: " + strings.Join(slices.Sorted(slices.Values(unknown)), ", "))
-		}
-		for _, f := range []string{"default", "desc"} {
-			if v, present := arg.Get(f); present {
-				if _, isStr := v.(string); !isStr {
-					return bad(fmt.Sprintf("args '%s' must be a string", f))
-				}
-			}
-		}
-		flag := map[string]bool{}
-		for _, f := range []string{"required", "rest"} {
-			if v, present := arg.Get(f); present {
-				b, isBool := v.(bool)
-				if !isBool {
-					return bad(fmt.Sprintf("args '%s' must be a boolean", f))
-				}
-				flag[f] = b
-			}
-		}
-		if flag["rest"] && i != len(list)-1 {
-			return bad("only the last entry in 'args' can be 'rest'")
-		}
-		if _, hasDefault := arg.Get("default"); flag["required"] && hasDefault {
-			return bad(fmt.Sprintf("arg '%s' can't be both 'required' and have a 'default'", argN))
-		}
-		for _, other := range list[:i] {
-			if n, _ := other.(*ordjson.Object).Get("name"); n == argN {
-				return bad(fmt.Sprintf("arg '%s' is declared twice", argN))
-			}
-		}
-		for _, other := range list[:i] {
-			on, _ := other.(*ordjson.Object).Get("name")
-			if ArgVar(on.(string)) == ArgVar(argN) {
-				return bad(fmt.Sprintf("args '%s' and '%s' would both be %s", on, argN, ArgVar(argN)))
-			}
-		}
-	}
-	return nil
 }
 
 // IsRelativeCwd: a cwd that means a folder next to the file defining it, so it's only right in that checkout.

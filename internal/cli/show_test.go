@@ -35,7 +35,7 @@ func TestEntries_CommandsThatTakeANameShowHowMany(t *testing.T) {
 }
 
 const toolRegistry = `{"version": 1, "shortcuts": {
- "tool": {"description": "A tool: é", "script": "scripts/tool.sh", "args": [{"name":"a","required":true,"desc":"first\nline"},{"name":"b","default":"x y"},{"name":"r","rest":true}], "confirm": true },
+ "tool": {"description": "A tool: é", "script": "scripts/tool.sh", "confirm": true },
  "bad": {"inline": "x", "cwd": 5, "description": "bd"},
  "gone": {"script": "scripts/none.sh"},
  "trav": {"script": "../../etc/passwd"},
@@ -59,11 +59,6 @@ Defined in:  TMP/home/.shortcuts/shortcuts.json
 CWD:         caller
 Run CWD:     TMP/home
 Description: A tool: é
-Usage:       shortcut r tool <a> [b] [r...]
-Arguments:
-  a     required        first\nline
-  b     default: 'x y'
-  r...  optional
 Confirm:     yes
 
 Script (TMP/home/.shortcuts/scripts/tool.sh):
@@ -85,21 +80,6 @@ echo hi
   "entry": {
     "description": "A tool: é",
     "script": "scripts/tool.sh",
-    "args": [
-      {
-        "name": "a",
-        "required": true,
-        "desc": "first\nline"
-      },
-      {
-        "name": "b",
-        "default": "x y"
-      },
-      {
-        "name": "r",
-        "rest": true
-      }
-    ],
     "confirm": true
   }
 }

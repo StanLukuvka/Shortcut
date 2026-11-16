@@ -24,9 +24,6 @@ FLAGS for new:
   --script PATH             Run this file where it is
   --desc D                  Description
   --cwd caller|DIR          Where it runs (default: caller, your current directory)
-  --arg NAME[=DEFAULT]      Declare a required argument, or an optional one with a default.
-                            NAME... takes the rest of the arguments; NAME...= makes it optional
-  --arg-desc NAME=TEXT      Describe a declared argument, for show and usage errors
   --confirm                 Ask before running it
   --local                   Store it in .shortcuts.local in this directory (default: the global store)
   --namespace NAME          Put it in namespace NAME in the global store, creating it if needed

@@ -36,19 +36,19 @@ func TestRunning_RunInlineWithPassthroughArgs(t *testing.T) {
 
 func TestRunning_TheEnvironmentSaysWhatRunsAndFromWhere(t *testing.T) {
 	e := testkit.New(t)
-	show := `echo "$SHORTCUT_NAME|$SHORTCUT_NAMESPACE|$SHORTCUT_CALLER_CWD|${SC_ARG_OLD-unset}|${SC_ARG_X-unset}"`
+	show := `echo "$SHORTCUT_NAME|$SHORTCUT_NAMESPACE|$SHORTCUT_CALLER_CWD"`
 	e.WriteImport(e.Store, "dk", testkit.NS(map[string]any{
-		"env": map[string]any{"inline": show, "args": []any{map[string]any{"name": "x", "default": "d"}}}}))
+		"env": testkit.Inline(show)}))
 	e.WriteStore(e.Store, map[string]any{"env": testkit.Inline(show)})
 	runOK(t, e, testkit.Opts{}, "update", "-y", "dk")
 	caller := e.Folder("caller")
-	outer := map[string]string{"SC_ARG_OLD": "outer", "SC_ARG_X": "outer", "SHORTCUT_NAMESPACE": "outer"}
+	outer := map[string]string{"SHORTCUT_NAMESPACE": "outer"}
 	res := e.RunWith(testkit.Opts{Cwd: caller, Env: outer}, "r", "dk", "env")
-	if want := "dk env|dk|" + caller + "|unset|d\n"; res.Stdout != want {
+	if want := "dk env|dk|" + caller + "\n"; res.Stdout != want {
 		t.Errorf("stdout %q, want %q (%s)", res.Stdout, want, res.Stderr)
 	}
 	res = e.RunWith(testkit.Opts{Cwd: caller, Env: outer}, "r", "env")
-	if want := "env||" + caller + "|unset|unset\n"; res.Stdout != want {
+	if want := "env||" + caller + "\n"; res.Stdout != want {
 		t.Errorf("stdout %q, want %q (%s)", res.Stdout, want, res.Stderr)
 	}
 }
@@ -196,17 +196,15 @@ func TestRunning_RunDirectoryLine(t *testing.T) {
 	testkit.Contains(t, "on a terminal", out, "\x1b[2m→ "+work+"\x1b[0m")
 }
 
-func TestRunning_ShowPrintsTheEntryScriptCwdAndArgs(t *testing.T) {
+func TestRunning_ShowPrintsTheEntryScriptAndCwd(t *testing.T) {
 	e := testkit.New(t)
 	script := e.Script("shown.sh", "#!/usr/bin/env bash\necho show output running\n")
-	e.WriteStore(e.Store, map[string]any{"shown": map[string]any{"script": script, "description": "Show sample", "cwd": e.Tmp,
-		"args": []any{map[string]any{"name": "target", "required": true}, map[string]any{"name": "mode", "default": "fast"}}}})
+	e.WriteStore(e.Store, map[string]any{"shown": map[string]any{"script": script, "description": "Show sample", "cwd": e.Tmp}})
 	res := e.Run("show", "shown")
 	res.WantCode(t, 0)
 	testkit.Contains(t, "show", res.Stdout, "Description: Show sample\n")
 	testkit.Contains(t, "show", res.Stdout, "echo show output running")
 	testkit.Contains(t, "show", res.Stdout, "Run CWD:     "+e.Tmp+"\n")
-	testkit.Contains(t, "show", res.Stdout, "Usage:       shortcut r shown <target> [mode]\n")
 }
 
 func TestRunning_ShowSaysWhenTheRunDirectoryOrScriptIsGone(t *testing.T) {
@@ -275,36 +273,6 @@ func TestRunning_ARunThatCantStartIsAnError(t *testing.T) {
 	testkit.Contains(t, "stderr", res.Stderr, "error:")
 }
 
-func TestRunning_InvalidArgsDeclarationIsAnError(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"bad": map[string]any{"inline": "true", "args": []any{
-		map[string]any{"name": "a", "rest": true}, map[string]any{"name": "b"}}}})
-	res := e.Run("r", "bad")
-	res.WantCode(t, 1)
-	testkit.Contains(t, "stderr", res.Stderr, "only the last entry in 'args' can be 'rest'")
-	e.WriteStore(e.Store, map[string]any{"both": map[string]any{"inline": "true", "args": []any{
-		map[string]any{"name": "a", "required": true, "default": "x"}}}})
-	res = e.Run("r", "both")
-	res.WantCode(t, 1)
-	testkit.Contains(t, "stderr", res.Stderr, "arg 'a' can't be both 'required' and have a 'default'")
-}
-
-func TestRunning_AnEmptyWordDoesntFillARequiredArgument(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{
-		"wipe": map[string]any{"inline": `echo "gone: /$1"`, "args": []any{map[string]any{"name": "target", "required": true}}},
-		"opt":  map[string]any{"inline": `echo "[$1]"`, "args": []any{map[string]any{"name": "x", "default": ""}}},
-	})
-	res := e.Run("r", "wipe", "")
-	if res.Code != 2 || res.Stdout != "" {
-		t.Errorf("exit %d stdout %q", res.Code, res.Stdout)
-	}
-	testkit.Contains(t, "stderr", res.Stderr, "error: <target> can't be empty\n")
-	if out := e.Run("r", "opt", "").Stdout; out != "[]\n" {
-		t.Errorf("opt: %q", out)
-	}
-}
-
 func TestRunning_AScriptWithWindowsLineEndingsSaysSo(t *testing.T) {
 	e := testkit.New(t)
 	script := e.Script("crlf.sh", "#!/usr/bin/env bash\r\necho hi\r\n")
@@ -325,61 +293,11 @@ func TestRunning_AHandWrittenInvalidNameDoesntRun(t *testing.T) {
 	testkit.Contains(t, "stderr", res.Stderr, "invalid shortcut name 'a b'")
 }
 
-func TestRunning_DeclaredArgs(t *testing.T) {
+func TestRunning_EveryWordReachesTheShortcutAFirstDoubleDashIncluded(t *testing.T) {
 	e := testkit.New(t)
-	script := `printf "[%s]" "$@"; echo; echo "c=$SC_ARG_CONTAINER s=$SC_ARG_SIGNAL e=$SC_ARG_EXTRA"`
-	e.WriteStore(e.Store, map[string]any{
-		"kill": map[string]any{"inline": script, "args": []any{
-			map[string]any{"name": "container", "required": true, "desc": "Which one"},
-			map[string]any{"name": "signal", "default": "TERM"},
-			map[string]any{"name": "extra", "rest": true},
-		}},
-		"two":  map[string]any{"inline": `echo "$#:$*"`, "args": []any{map[string]any{"name": "a"}, map[string]any{"name": "b", "default": "B"}}},
-		"free": testkit.Inline(`echo "$#"`),
-		"one":  map[string]any{"inline": "true", "args": []any{map[string]any{"name": "only"}}},
-	})
-	lines := func(args ...string) []string {
-		return strings.Split(strings.TrimSuffix(e.Run(args...).Stdout, "\n"), "\n")
-	}
-
-	res := e.Run("r", "kill")
-	res.WantCode(t, 2)
-	testkit.Contains(t, "missing", res.Stderr, "missing <container>")
-	testkit.Contains(t, "missing", res.Stderr, "usage: shortcut r kill <container> [signal] [extra...]")
-	// With a desc on any argument, the error lists them all
-	testkit.Contains(t, "list", res.Stderr, "  container  required       Which one\n")
-	testkit.Contains(t, "list", res.Stderr, "  signal     default: TERM\n")
-	testkit.Contains(t, "list", res.Stderr, "  extra...   optional\n")
-
-	testkit.Eq(t, "web", lines("r", "kill", "web"), []string{"[web][TERM]", "c=web s=TERM e="})
-	testkit.Eq(t, "all", lines("r", "kill", "web", "KILL", "a b", "c"), []string{"[web][KILL][a b][c]", "c=web s=KILL e='a b' c"})
-	// Flags are neither counted nor moved, and a default keeps its position before them
-	testkit.Eq(t, "flag", lines("r", "kill", "web", "--force")[0], "[web][TERM][--force]")
-	// A skipped optional keeps later defaults in their own position
-	testkit.Eq(t, "two", e.Run("r", "two").Stdout, "2: B\n")
-
-	res = e.Run("r", "one", "a", "b")
-	res.WantCode(t, 2)
-	testkit.Contains(t, "too many", res.Stderr, "too many arguments")
-	testkit.Contains(t, "too many", res.Stderr, "usage: shortcut r one [only]")
-	if strings.Contains(res.Stderr, "  only") {
-		t.Errorf("a list with no desc anywhere: %q", res.Stderr)
-	}
-
-	// After --, every word is a value, even one starting with a dash; the -- itself is dropped
-	testkit.Contains(t, "-5", e.Run("r", "kill", "-5").Stderr, "missing <container>")
-	testkit.Eq(t, "--", lines("r", "kill", "--force", "--", "-5", "-x"), []string{"[--force][-5][-x]", "c=-5 s=-x e="})
-	testkit.Eq(t, "two --", e.Run("r", "two", "--", "-a").Stdout, "2:-a B\n")
-
-	// No `args` key: no checking, and -- passes through
-	testkit.Eq(t, "free", e.Run("r", "free", "1", "2", "3").Stdout, "3\n")
-	testkit.Eq(t, "free --", e.Run("r", "free", "--", "x").Stdout, "2\n")
-	shown := e.Run("show", "kill").Stdout
-	testkit.Contains(t, "show", shown, "Usage:       shortcut r kill <container> [signal] [extra...]\n")
-	testkit.Contains(t, "show", shown, "Arguments:\n  container  required       Which one\n  signal     default: TERM\n  extra...   optional\n")
-	if strings.Contains(e.Run("show", "free").Stdout, "Arguments:") {
-		t.Errorf("show free lists arguments")
-	}
+	e.WriteStore(e.Store, map[string]any{"words": testkit.Inline(`printf "[%s]" "$@"; echo`)})
+	testkit.Eq(t, "--", e.Run("r", "words", "--", "-5", "x").Stdout, "[--][-5][x]\n")
+	testkit.Eq(t, "flags", e.Run("r", "words", "--force", "", "a b").Stdout, "[--force][][a b]\n")
 }
 
 func TestRunning_AClosedPipeStopsQuietly(t *testing.T) {

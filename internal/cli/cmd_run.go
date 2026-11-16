@@ -34,7 +34,9 @@ func cmdRun(s *textio.Streams, args []string) error {
 	return runShortcut(s, args, skipLocal, assumeYes)
 }
 
-// runShortcut handles approval, the confirmation, arguments and the child process, which replaces this one.
+func oneLine(text string) string { return strings.ReplaceAll(text, "\n", "\\n") }
+
+// runShortcut handles approval, the confirmation and the child process, which replaces this one.
 // It returns only when something stops the run.
 func runShortcut(s *textio.Streams, words []string, skipLocal, assumeYes bool) error {
 	callerCwd, err := osutil.Getwd()
@@ -52,25 +54,18 @@ func runShortcut(s *textio.Streams, words []string, skipLocal, assumeYes bool) e
 	if err := model.ValidateName(entry.Name); err != nil { // list warns about a hand-written one; run refuses it
 		return err
 	}
-	typed := args // as given, for the question and the command that answers it
-	var argEnv []string
-	if entry.Args != nil {
-		if args, argEnv, err = bindArgs(name, entry.Args, args); err != nil {
-			return err
-		}
-	}
 	if !osutil.IsDir(resolved.RunCwd) {
 		return errors.New("run directory does not exist: " + resolved.RunCwd)
 	}
 	withArgs := ""
-	if len(typed) > 0 {
-		withArgs = " with " + oneLine(osutil.ShellJoin(typed))
+	if len(args) > 0 {
+		withArgs = " with " + oneLine(osutil.ShellJoin(args))
 	}
 	again := []string{"shortcut", "r", "-y"}
 	if skipLocal {
 		again = append(again, "--global")
 	}
-	again = append(append(again, strings.Fields(name)...), typed...)
+	again = append(append(again, strings.Fields(name)...), args...)
 	if resolved.HidesGlobal { // before any question, and also with SHORTCUT_SHOW_DIR=0
 		first := strings.Fields(name)[0]
 		s.Err.WriteString("note: '" + first + "' here is this project's; your global '" + first + "' runs with: " +
@@ -108,13 +103,12 @@ func runShortcut(s *textio.Streams, words []string, skipLocal, assumeYes bool) e
 	if err != nil {
 		return err
 	}
-	// A shortcut run from another one gets its own SC_ARG_ variables, not the caller's
+	// A shortcut run from another one gets its own SHORTCUT_ variables, not the caller's
 	env := slices.DeleteFunc(os.Environ(), func(kv string) bool {
 		k, _, hasEq := strings.Cut(kv, "=")
-		return !hasEq || strings.HasPrefix(k, "SC_ARG_") || k == "SHORTCUT_NAME" || k == "SHORTCUT_NAMESPACE" || k == "SHORTCUT_CALLER_CWD"
+		return !hasEq || k == "SHORTCUT_NAME" || k == "SHORTCUT_NAMESPACE" || k == "SHORTCUT_CALLER_CWD"
 	})
 	env = append(env, "SHORTCUT_NAME="+name, "SHORTCUT_NAMESPACE="+resolved.Group.Name, "SHORTCUT_CALLER_CWD="+callerCwd)
-	env = append(env, argEnv...)
 	err = osutil.ExecChild(plan.argv, resolved.RunCwd, env)
 	if plan.direct && errors.Is(err, syscall.ENOEXEC) && !bytes.Contains(plan.header, []byte{0}) {
 		// An executable text file with no #!: exec says "exec format error", a shell would run it with itself.

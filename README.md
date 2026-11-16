@@ -4,7 +4,7 @@
 
 Names shell commands and scripts, and runs them from any directory. One binary, no dependencies.
 
-Unlike an alias or a file in `~/bin`, a shortcut can belong to a project and be committed with it, runs only after you've reviewed it, and can declare its arguments, the folder it runs in and a confirm prompt.
+Unlike an alias or a file in `~/bin`, a shortcut can belong to a project and be committed with it, runs only after you've reviewed it, and can set the folder it runs in and a confirm prompt.
 
 ## Install
 
@@ -82,7 +82,6 @@ Each person reviews it once with `shortcut update`, and again after it changes. 
 shortcut r <name> [args]              run (also: run, r <ns> <name>)
 shortcut r --global <name>            skip the project, run the global one
 shortcut r -y <name>                  answer a confirm prompt
-shortcut r <name> -- -5               after --, a declared argument can start with -
 
 shortcut new <name> -- CMD            inline shortcut
 shortcut new <name> --script PATH     use a script where it is; a path inside the store (or a project or namespace folder) is kept relative
@@ -109,10 +108,7 @@ Flags for `new`:
 ```
 --desc D              description
 --cwd caller|DIR      where it runs (default: caller)
---arg NAME            required argument; NAME=DEFAULT for optional
---arg NAME...         the rest of the arguments; NAME...= for optional, NAME...=W for a one-word default
---arg-desc NAME=T     describe an argument, shown by show and usage errors
---confirm             ask before running, showing the description and the arguments given
+--confirm             ask before running, showing the description and the words given
 --local               write to .shortcuts.local here
 --namespace NS        write to a global namespace
 ```
@@ -138,18 +134,13 @@ Flags for `new`:
 
 - An inline shortcut runs as `bash -c CMD <name> ARGS...`, so `$0` is its name. A script runs by its shebang. An executable file with no shebang runs as it is (a binary, or a text file the kernel refuses, which bash then runs); a file that is not executable runs with bash.
 - It runs in its `cwd`, the caller's directory by default.
-- Every word after the name reaches it as `$1`, `$2`..., flags included. A first `--` is dropped only when the shortcut declares `args`.
-- With `args` declared, a missing optional argument is filled with its default, or with an empty word if a later one has a default. A required one can't be an empty word.
-- A declared argument is also in `SC_ARG_<NAME>`, which a flag before it doesn't move. `$1` would be the flag.
+- Every word after the name reaches it as `$1`, `$2`..., flags included. A first `--` is passed on as it is.
 - Its exit code is shortcut's.
 
 ```
 SHORTCUT_NAME          what ran: <name>, or <ns> <name>
 SHORTCUT_NAMESPACE     its namespace, or empty
 SHORTCUT_CALLER_CWD    the directory shortcut was run from
-SC_ARG_<NAME>          each declared argument, upper case with - as _. A rest argument's words are
-                       shell-quoted and joined, so read "$@" for them. SC_ARG_ variables from the
-                       caller's environment are removed first.
 ```
 
 ## Writing a namespace
