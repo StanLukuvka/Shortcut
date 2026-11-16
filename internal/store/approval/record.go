@@ -89,7 +89,7 @@ func Save(c *store.Context, g store.Group, files map[string]string) error {
 		return fmt.Errorf("cannot approve: %q is not valid UTF-8; rename it", g.Key())
 	}
 	path := c.ApprovalPath(g)
-	return c.WithRegistryLock(c.Global, func() error {
+	return c.WithLock(func() error {
 		if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 			return err
 		}

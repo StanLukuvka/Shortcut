@@ -1,8 +1,6 @@
 package store
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -89,25 +87,15 @@ func (c *Context) LocalProjectRoot() (string, error) {
 	return here, nil
 }
 
-// lockPath is where the registry lock is: <store>/.lock for the global store; otherwise, to keep a repo's root clean,
-// <global>/locks/<sha256(realpath(store))>.lock.
-func (c *Context) lockPath(storeDir string) string {
-	if c.IsGlobal(storeDir) {
-		return platform.Join(storeDir, ".lock")
-	}
-	sum := sha256.Sum256([]byte(platform.Realpath(storeDir)))
-	return platform.Join(c.Global, "locks", hex.EncodeToString(sum[:])+".lock")
-}
-
-// WithRegistryLock serializes read-modify-write of a store's registry across processes. Not reentrant: never nest
-// it, and never call InitStore inside it.
-func (c *Context) WithRegistryLock(storeDir string, fn func() error) error {
-	return platform.WithLock(c.lockPath(storeDir), fn)
+// WithLock runs fn holding the one lock file, <global store>/.lock, which every write takes: the registry, a
+// namespace file, .shortcuts.local and an approval record. Not reentrant: never nest it, and never call InitStore inside it.
+func (c *Context) WithLock(fn func() error) error {
+	return platform.WithLock(platform.Join(c.Global, ".lock"), fn)
 }
 
 // InitStore creates the global store's empty registry if it has none.
 func (c *Context) InitStore(storeDir string) error {
-	return c.WithRegistryLock(storeDir, func() error {
+	return c.WithLock(func() error {
 		if RegistryExists(storeDir) {
 			return nil
 		}

@@ -344,27 +344,14 @@ func TestStores_WriteJSONAtomicLeavesNoTempFileOnError(t *testing.T) {
 	}
 }
 
-func TestStores_LockPathsAndSymlinkedLock(t *testing.T) {
+func TestStores_LockIsInTheGlobalStoreAndASymlinkedLockIsRefused(t *testing.T) {
 	env := testkit.New(t)
 	c := NewContext(env.Home, nil)
-	if got := c.lockPath(env.Store); got != filepath.Join(env.Store, ".lock") {
-		t.Error(got)
-	}
-	proj := env.Project(map[string]any{})
-	// sha256("<realpath>"), hex
-	got := c.lockPath(proj)
-	if !strings.HasPrefix(got, filepath.Join(env.Store, "locks")+"/") || !strings.HasSuffix(got, ".lock") || len(filepath.Base(got)) != 64+len(".lock") {
-		t.Error(got)
-	}
+	// the lock is <global>/.lock; a symlink there is refused and its victim untouched
 	ran := false
-	if err := c.WithRegistryLock(proj, func() error { ran = true; return nil }); err != nil || !ran {
-		t.Errorf("%v %v", ran, err)
-	}
-	// a symlinked .lock is refused and its victim untouched
 	victim := env.WriteFile(filepath.Join(env.Tmp, "victim"), "keep\n", 0)
 	env.Symlink(victim, filepath.Join(env.Store, ".lock"))
-	ran = false
-	if err := c.WithRegistryLock(env.Store, func() error { ran = true; return nil }); err == nil || ran {
+	if err := c.WithLock(func() error { ran = true; return nil }); err == nil || ran {
 		t.Errorf("ran=%v err=%v", ran, err)
 	}
 	if b, _ := os.ReadFile(victim); string(b) != "keep\n" {
