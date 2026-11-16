@@ -25,8 +25,8 @@ type Found struct {
 // and a store's load errors for the name it has. Without it (show, rm) a broken file is looked in as far as
 // it reads, so you can still see and fix what's there. both lookup failures are just errors here:
 // main prints either as "error: <text>".
-func FindEntry(words []string, callerCwd string, skipLocal, strict bool) (Found, error) {
-	stores := VisibleStores(callerCwd, skipLocal)
+func FindEntry(c *Context, words []string, skipLocal, strict bool) (Found, error) {
+	stores := c.Visible(skipLocal)
 	first, rest := words[0], words[1:]
 	homeIdx := len(stores) - 1
 	home := stores[homeIdx]
@@ -94,14 +94,14 @@ func FindEntry(words []string, callerCwd string, skipLocal, strict bool) (Found,
 	if home.Main.Error != nil {
 		notes = append(notes, *home.Main.Error)
 	}
-	root := FindProjectRoot(callerCwd)
+	root := c.Project
 	switch {
 	case root != "" && skipLocal:
-		if hasName(LoadStore(root), first) {
+		if hasName(c.Store(root), first) {
 			notes = append(notes, fmt.Sprintf("The project in %s has its own '%s': leave out --global to use it.", root, first))
 		}
 	case root != "":
-		if outer := FindProjectRoot(filepath.Dir(root)); outer != "" && outer != root && hasName(LoadStore(outer), first) {
+		if outer := c.FindProjectRoot(filepath.Dir(root)); outer != "" && outer != root && hasName(c.Store(outer), first) {
 			notes = append(notes, fmt.Sprintf("The project in %s has a '%s', but only the nearest project, %s, is used here.", outer, first, root))
 		}
 	}
@@ -116,12 +116,9 @@ func hasName(s Store, name string) bool {
 }
 
 // ResolveShortcut returns what `shortcut run <words>` runs, and where, and the words left over as
-// arguments. An empty callerCwd is the physical cwd.
-func ResolveShortcut(words []string, callerCwd string, skipLocal, strict bool) (*ResolvedShortcut, []string, error) {
-	if callerCwd == "" {
-		callerCwd, _ = osutil.Getwd()
-	}
-	f, err := FindEntry(words, callerCwd, skipLocal, strict)
+// arguments.
+func ResolveShortcut(c *Context, words []string, skipLocal, strict bool) (*ResolvedShortcut, []string, error) {
+	f, err := FindEntry(c, words, skipLocal, strict)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -129,12 +126,12 @@ func ResolveShortcut(words []string, callerCwd string, skipLocal, strict bool) (
 	if err != nil {
 		return nil, nil, err
 	}
-	return &ResolvedShortcut{Entry: entry, Group: f.Group, RunCwd: ResolveRunDir(entry.Cwd, f.Group, callerCwd), HidesGlobal: f.Hides}, f.Rest, nil
+	return &ResolvedShortcut{Entry: entry, Group: f.Group, RunCwd: ResolveRunDir(entry.Cwd, f.Group, c.Cwd), HidesGlobal: f.Hides}, f.Rest, nil
 }
 
 // ResolveName resolves a name for commands that name a shortcut: `name` or `namespace name`, and nothing else.
-func ResolveName(words []string, skipLocal bool) (*ResolvedShortcut, error) {
-	r, rest, err := ResolveShortcut(words, "", skipLocal, false)
+func ResolveName(c *Context, words []string, skipLocal bool) (*ResolvedShortcut, error) {
+	r, rest, err := ResolveShortcut(c, words, skipLocal, false)
 	if err != nil {
 		return nil, err
 	}

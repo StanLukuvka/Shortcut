@@ -25,14 +25,14 @@ import (
 
 // noteIfUnapproved says so, after a change made through shortcut, if the group needs approving before
 // it runs.
-func noteIfUnapproved(s *textio.Streams, g model.Group) {
-	if g.NeedsApproval() && approval.State(model.ReloadGroup(g)) != "ok" {
+func noteIfUnapproved(c *model.Context, s *textio.Streams, g model.Group) {
+	if g.NeedsApproval(c) && approval.State(c, c.ReloadGroup(g)) != "ok" {
 		s.Err.WriteString("note: " + g.Label() + " needs approving before it runs: " + g.UpdateCmd() + "\n")
 	}
 }
 
 // targetGroup returns the file a new shortcut goes in. It creates nothing; register does.
-func targetGroup(ns Namespace, cwd string) (model.Group, error) {
+func targetGroup(c *model.Context, ns Namespace) (model.Group, error) {
 	if err := model.ValidateName(ns.Str("name")); err != nil {
 		return model.Group{}, err
 	}
@@ -41,14 +41,14 @@ func targetGroup(ns Namespace, cwd string) (model.Group, error) {
 		return model.Group{}, Die("--namespace can't be used with --local: " + model.LocalFile + " is one file, and " +
 			model.ProjectFile + " is yours to edit")
 	}
-	storeDir := model.GlobalStoreDir()
+	storeDir := c.Global
 	if local {
 		var err error
-		if storeDir, err = model.LocalProjectRoot(cwd); err != nil {
+		if storeDir, err = c.LocalProjectRoot(); err != nil {
 			return model.Group{}, err
 		}
 	}
-	store := model.LoadStore(storeDir)
+	store := c.Store(storeDir)
 	group := store.Main
 	if namespace != "" {
 		if err := model.ValidateName(namespace); err != nil {
@@ -110,16 +110,16 @@ func confirmed(s *textio.Streams, c textio.Confirm, assumeYes bool) error {
 // lockedGroupWrite runs mutate under the group's store lock. If the group's approval held before it, the approval
 // follows the write, saved after the lock is released: Save takes the global store's lock, which a namespace's
 // registry write holds.
-func lockedGroupWrite(group model.Group, mutate func() error) error {
+func lockedGroupWrite(c *model.Context, group model.Group, mutate func() error) error {
 	var keep map[string]string
-	err := model.WithRegistryLock(group.StoreDir, func() error {
-		approved := namespaceIsApproved(group)
+	err := c.WithRegistryLock(group.StoreDir, func() error {
+		approved := namespaceIsApproved(c, group)
 		if err := mutate(); err != nil {
 			return err
 		}
 		if approved {
 			var err error
-			keep, err = approval.SharedFiles(model.ReloadGroup(group))
+			keep, err = approval.SharedFiles(c.ReloadGroup(group))
 			return err
 		}
 		return nil
@@ -127,39 +127,39 @@ func lockedGroupWrite(group model.Group, mutate func() error) error {
 	if err != nil || keep == nil {
 		return err
 	}
-	return approval.Save(group, keep, map[string]string{})
+	return approval.Save(c, group, keep, map[string]string{})
 }
 
 // register adds entry to group's file under the registry lock. It creates a missing store or namespace file. A project's group means .shortcuts.local.
-func register(s *textio.Streams, group model.Group, entry *model.Entry) error {
+func register(c *model.Context, s *textio.Streams, group model.Group, entry *model.Entry) error {
 	storeDir := group.StoreDir
 	if group.LocalFile != "" {
 		change := func(shortcuts *ordjson.Object) error {
 			if _, has := shortcuts.Get(entry.Name); has {
 				return Die("shortcut '" + entry.Name + "' already exists in " + group.LocalFile)
 			}
-			if _, clash := model.LoadStore(storeDir).Namespace(entry.Name); clash {
+			if _, clash := c.ReadStore(storeDir).Namespace(entry.Name); clash {
 				return Die("'" + entry.Name + "' is a namespace in " + storeDir)
 			}
 			shortcuts.Set(entry.Name, entry.ToObject())
 			return nil
 		}
-		after, err := writeLocal(storeDir, change)
+		after, err := writeLocal(c, storeDir, change)
 		if err != nil {
 			return err
 		}
-		noteIfUnapproved(s, after)
+		noteIfUnapproved(c, s, after)
 		if _, shared := group.SharedShortcuts().Get(entry.Name); shared {
 			s.Err.WriteString("note: this overrides '" + entry.Name + "' from " + model.ProjectFile + " for you\n")
 		}
 		return nil
 	}
 	if !model.RegistryExists(storeDir) {
-		if err := model.InitStore(storeDir); err != nil {
+		if err := c.InitStore(storeDir); err != nil {
 			return err
 		}
 	}
-	err := lockedGroupWrite(group, func() error {
+	err := lockedGroupWrite(c, group, func() error {
 		reg, shortcuts, err := loadForEdit(group.File, group.Name != "" && !osutil.Exists(group.File))
 		if err != nil {
 			return err
@@ -168,7 +168,7 @@ func register(s *textio.Streams, group model.Group, entry *model.Entry) error {
 			return Die("shortcut '" + entry.Name + "' already exists in " + group.File)
 		}
 		if group.Name == "" {
-			if _, clash := model.LoadStore(storeDir).Namespace(entry.Name); clash {
+			if _, clash := c.ReadStore(storeDir).Namespace(entry.Name); clash {
 				return Die("'" + entry.Name + "' is a namespace in store " + storeDir)
 			}
 		}
@@ -181,29 +181,29 @@ func register(s *textio.Streams, group model.Group, entry *model.Entry) error {
 	if err != nil {
 		return err
 	}
-	noteIfUnapproved(s, group)
+	noteIfUnapproved(c, s, group)
 	return nil
 }
 
 // namespaceIsApproved reports, before shortcut writes to a global namespace and under its lock,
 // whether the file matches its approval. Only then does the approval follow the write, as writeLocal does, so a hand
 // edit still needs update.
-func namespaceIsApproved(g model.Group) bool {
-	return g.Name != "" && osutil.Exists(g.File) && approval.State(model.ReloadGroup(g)) == "ok"
+func namespaceIsApproved(c *model.Context, g model.Group) bool {
+	return g.Name != "" && osutil.Exists(g.File) && approval.State(c, c.ReloadGroup(g)) == "ok"
 }
 
 // writeLocal changes .shortcuts.local through change(shortcuts), the only way shortcut writes to a
 // project. The approval record follows, but only if .local matched it first: a hand edit, or anything in .shortcuts,
 // must not get approved by the way.
-func writeLocal(root string, change func(*ordjson.Object) error) (model.Group, error) {
+func writeLocal(c *model.Context, root string, change func(*ordjson.Object) error) (model.Group, error) {
 	var after model.Group
-	err := model.WithRegistryLock(root, func() error {
+	err := c.WithRegistryLock(root, func() error {
 		before := model.LoadProjectGroup(root)
-		if err := approval.CheckKey(before); err != nil { // before anything is written: the approval could not follow
+		if err := approval.CheckKey(c, before); err != nil { // before anything is written: the approval could not follow
 			return err
 		}
-		record := approval.Load(before)
-		approved := approval.LocalIsApproved(before, record)
+		record := approval.Load(c, before)
+		approved := approval.LocalIsApproved(c, before, record)
 		path := before.LocalFile
 		isNewFile := !osutil.Exists(path)
 		reg, shortcuts, err := loadForEdit(path, isNewFile)
@@ -229,7 +229,7 @@ func writeLocal(root string, change func(*ordjson.Object) error) (model.Group, e
 			if err != nil {
 				return err
 			}
-			return approval.Save(after, snapshot, local)
+			return approval.Save(c, after, snapshot, local)
 		}
 		return nil
 	})
@@ -274,7 +274,7 @@ func excludeFromGit(root string) {
 
 // storedCwd converts --cwd as typed (relative to the user's shell) to the 'cwd' field (relative to the
 // defining file).
-func storedCwd(value *string, g model.Group) (*string, error) {
+func storedCwd(c *model.Context, value *string, g model.Group) (*string, error) {
 	if value == nil || *value == model.Caller {
 		return value, nil
 	}
@@ -282,7 +282,7 @@ func storedCwd(value *string, g model.Group) (*string, error) {
 	if !osutil.IsDir(path) {
 		return nil, Die("--cwd directory does not exist: " + path)
 	}
-	if !model.IsGlobalStore(g.StoreDir) && osutil.IsRelativeTo(path, osutil.Realpath(g.StoreDir)) {
+	if !c.IsGlobal(g.StoreDir) && osutil.IsRelativeTo(path, osutil.Realpath(g.StoreDir)) {
 		rel := osutil.Relpath(path, osutil.Realpath(g.Folder()))
 		return &rel, nil
 	}

@@ -73,7 +73,7 @@ func (g Group) DefiningFile(name string) string {
 	return g.File
 }
 
-func (g Group) IsProject() bool { return !IsGlobalStore(g.StoreDir) }
+func (g Group) IsProject(c *Context) bool { return !c.IsGlobal(g.StoreDir) }
 
 // Folder is where relative 'cwd' values resolve: the folder of the defining file.
 func (g Group) Folder() string { return filepath.Dir(osutil.Abs(g.File)) }
@@ -101,7 +101,7 @@ func (g Group) Display(name string) string {
 	return name
 }
 
-func (g Group) NeedsApproval() bool { return g.Name != "" || !IsGlobalStore(g.StoreDir) }
+func (g Group) NeedsApproval(c *Context) bool { return g.Name != "" || !c.IsGlobal(g.StoreDir) }
 
 // Key is what the approval is recorded against: the project's path, or for a namespace the store it's in, its name
 // there and its file. Pointing a name at another file, even one approved elsewhere, is new.
@@ -131,11 +131,6 @@ func (g Group) UpdateCmd() string {
 func RecordName(key string) string {
 	sum := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(sum[:]) + ".json"
-}
-
-// ApprovalPath is <global store>/approvals/<RecordName(key)>.
-func ApprovalPath(g Group) string {
-	return osutil.Join(GlobalStoreDir(), approvalsDir, RecordName(g.Key()))
 }
 
 // keyText is the text a namespace's approval record is named after: the parts, each strconv.QuoteToASCII-quoted,

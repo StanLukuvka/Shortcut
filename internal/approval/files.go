@@ -141,8 +141,8 @@ func checkPaths(files map[string]string) error {
 
 // snapshot is SharedFiles and LocalFiles, or the error for text that cannot be approved. State, Save and Require
 // get the maps this way.
-func snapshot(g model.Group) (shared, local map[string]string, err error) {
-	if err = CheckKey(g); err != nil {
+func snapshot(c *model.Context, g model.Group) (shared, local map[string]string, err error) {
+	if err = CheckKey(c, g); err != nil {
 		return nil, nil, err
 	}
 	if shared, err = SharedFiles(g); err != nil {
@@ -159,8 +159,8 @@ func snapshot(g model.Group) (shared, local map[string]string, err error) {
 
 // CheckKey refuses a group whose approval key would be built from a path that is not valid UTF-8: the store
 // folder, and for a namespace its file. Before any listing or prompt, so nothing is shown for a record that cannot be kept.
-func CheckKey(g model.Group) error {
-	if !g.NeedsApproval() {
+func CheckKey(c *model.Context, g model.Group) error {
+	if !g.NeedsApproval(c) {
 		return nil
 	}
 	parts := []string{osutil.Realpath(g.StoreDir)}
@@ -176,7 +176,7 @@ func CheckKey(g model.Group) error {
 }
 
 // Check is nil when the group's files can be approved, else the error that says why not.
-func Check(g model.Group) error {
-	_, _, err := snapshot(g)
+func Check(c *model.Context, g model.Group) error {
+	_, _, err := snapshot(c, g)
 	return err
 }

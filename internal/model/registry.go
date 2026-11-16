@@ -1,15 +1,12 @@
 package model
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"math/big"
 	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -31,97 +28,8 @@ func isJSONError(err error) bool {
 	return !errors.As(err, &pe)
 }
 
-// GlobalStoreDir returns $SHORTCUTS_HOME (when not empty) or ~/.shortcuts, made absolute.
-func GlobalStoreDir() string {
-	home := os.Getenv("SHORTCUTS_HOME")
-	if home == "" {
-		home = "~/.shortcuts"
-	}
-	return osutil.Abs(osutil.ExpandUser(home))
-}
-
 func RegistryExists(storeDir string) bool {
 	return osutil.IsFile(osutil.Join(storeDir, "shortcuts.json"))
-}
-
-// IsGlobalStore: Path(store_dir).resolve() == Path(global).resolve().
-func IsGlobalStore(storeDir string) bool {
-	return osutil.Realpath(storeDir) == osutil.Realpath(GlobalStoreDir())
-}
-
-// neverAProject: ~/.shortcuts is never a project, also when SHORTCUTS_HOME points the global store elsewhere.
-func neverAProject(p string) bool {
-	return p == osutil.Realpath(GlobalStoreDir()) || p == osutil.Realpath(osutil.Join(osutil.ExpandUser("~"), ProjectFile))
-}
-
-func isProjectRoot(folder string) bool {
-	if neverAProject(osutil.Realpath(osutil.Join(folder, ProjectFile))) {
-		return false
-	}
-	return osutil.IsFile(osutil.Join(folder, ProjectFile)) || osutil.IsFile(osutil.Join(folder, LocalFile))
-}
-
-// FindProjectRoot returns the nearest folder at or above start (default the cwd) with a .shortcuts or
-// .shortcuts.local that is not the global store. "" = none.
-func FindProjectRoot(start string) string {
-	if start == "" {
-		start, _ = osutil.Getwd()
-	}
-	for cur := osutil.Realpath(start); ; {
-		if isProjectRoot(cur) {
-			return cur
-		}
-		parent := filepath.Dir(cur)
-		if parent == cur {
-			return ""
-		}
-		cur = parent
-	}
-}
-
-// LocalProjectRoot returns where --local writes, this folder and never a parent. Its errors are
-// the messages die prints.
-func LocalProjectRoot(cwd string) (string, error) {
-	here := osutil.Realpath(cwd)
-	if root := FindProjectRoot(here); root != "" && root != here {
-		return "", fmt.Errorf("%s is inside the project at %s. Run this from there.", here, root)
-	}
-	if neverAProject(osutil.Realpath(osutil.Join(here, ProjectFile))) {
-		return "", fmt.Errorf("%s holds the global store, so it can't hold local shortcuts. Run this inside a project folder.", here)
-	}
-	if osutil.IsRelativeTo(here, osutil.Realpath(GlobalStoreDir())) {
-		return "", fmt.Errorf("%s is inside the global store, so it can't hold local shortcuts. Run this inside a project folder.", here)
-	}
-	if st, err := os.Lstat(osutil.Join(here, LocalFile)); err == nil && st.Mode()&os.ModeSymlink != 0 {
-		return "", fmt.Errorf("%s is a symlink, so writing it would go somewhere else.", osutil.Join(here, LocalFile))
-	}
-	return here, nil
-}
-
-// lockPath is where the registry lock is: <store>/.lock for the global store; otherwise, to keep a repo's root clean,
-// <global>/locks/<sha256(realpath(store))>.lock. The same names as the older version, so the two exclude each other.
-func lockPath(storeDir string) string {
-	if IsGlobalStore(storeDir) {
-		return osutil.Join(storeDir, ".lock")
-	}
-	sum := sha256.Sum256([]byte(osutil.Realpath(storeDir)))
-	return osutil.Join(GlobalStoreDir(), "locks", hex.EncodeToString(sum[:])+".lock")
-}
-
-// WithRegistryLock serializes read-modify-write of a store's registry across processes. Not reentrant: never nest
-// it, and never call InitStore inside it.
-func WithRegistryLock(storeDir string, fn func() error) error {
-	return osutil.WithLock(lockPath(storeDir), fn)
-}
-
-// InitStore creates the global store's empty registry if it has none.
-func InitStore(storeDir string) error {
-	return WithRegistryLock(storeDir, func() error {
-		if RegistryExists(storeDir) {
-			return nil
-		}
-		return SaveRegistryAtomic(storeDir, emptyRegistry())
-	})
 }
 
 func emptyRegistry() *ordjson.Object {

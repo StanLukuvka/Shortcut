@@ -15,7 +15,7 @@ import (
 var positionalAnywhere = regexp.MustCompile(`\$(?:[1-9@*]|\{[1-9@*])`)
 
 // cmdNew makes a shortcut from an inline command after -- or --script.
-func cmdNew(s *textio.Streams, args []string) error {
+func cmdNew(c *model.Context, s *textio.Streams, args []string) error {
 	// everything after the first -- is the command, and argparse never sees it
 	pre, inline, hasInline := args, []string(nil), false
 	if i := slices.Index(args, "--"); i >= 0 {
@@ -41,27 +41,26 @@ func cmdNew(s *textio.Streams, args []string) error {
 		return argparse.UsageError("new", "give a command after '--', or --script PATH")
 	}
 
-	cwd, err := osutil.Getwd()
-	if err != nil {
-		return err
+	if c.CwdErr != nil {
+		return c.CwdErr
 	}
-	group, err := targetGroup(ns, cwd)
+	group, err := targetGroup(c, ns)
 	if err != nil {
 		return err
 	}
 	name := ns.Str("name")
-	fields, err := entryFields(name, ns, group)
+	fields, err := entryFields(c, name, ns, group)
 	if err != nil {
 		return err
 	}
 	if script != "" {
-		return newFromScript(s, ns, group, fields)
+		return newFromScript(c, s, ns, group, fields)
 	}
 	text := joinCommand(inline)
 	entry := *fields
 	entry.Inline = &text
 	entry.Description = descOr(ns, text)
-	if err := register(s, group, &entry); err != nil {
+	if err := register(c, s, group, &entry); err != nil {
 		return err
 	}
 	if !positionalAnywhere.MatchString(text) {
@@ -80,12 +79,12 @@ func descOr(ns Namespace, def string) string {
 }
 
 // entryFields returns the parts of an entry the flags of new set.
-func entryFields(name string, ns Namespace, g model.Group) (*model.Entry, error) {
+func entryFields(c *model.Context, name string, ns Namespace, g model.Group) (*model.Entry, error) {
 	var cwd *string
 	if ns.Set("cwd") {
 		v := ns.Str("cwd")
 		var err error
-		if cwd, err = storedCwd(&v, g); err != nil {
+		if cwd, err = storedCwd(c, &v, g); err != nil {
 			return nil, err
 		}
 	}
@@ -96,7 +95,7 @@ func entryFields(name string, ns Namespace, g model.Group) (*model.Entry, error)
 // newFromScript makes an entry that names the file where it is. A file inside the folder its paths
 // resolve from (the project, the namespace file's folder, the global store) is kept relative, so the folder can
 // move.
-func newFromScript(s *textio.Streams, ns Namespace, group model.Group, fields *model.Entry) error {
+func newFromScript(c *model.Context, s *textio.Streams, ns Namespace, group model.Group, fields *model.Entry) error {
 	path := ns.Str("script")
 	abs := osutil.Abs(osutil.ExpandUser(path))
 	if path == "-" || !osutil.IsFile(abs) {
@@ -111,7 +110,7 @@ func newFromScript(s *textio.Streams, ns Namespace, group model.Group, fields *m
 	entry := *fields
 	entry.Script = &field
 	entry.Description = descOr(ns, "(no description)")
-	if err := register(s, group, &entry); err != nil {
+	if err := register(c, s, group, &entry); err != nil {
 		return err
 	}
 	_, err := s.Out.WriteString("Created shortcut '" + group.Display(entry.Name) + "' using " + abs + ".\n")

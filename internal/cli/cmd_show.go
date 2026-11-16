@@ -12,11 +12,11 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
-func scopeOf(g model.Group) string {
+func scopeOf(c *model.Context, g model.Group) string {
 	switch {
 	case g.Name != "":
 		return "namespace"
-	case g.NeedsApproval():
+	case g.NeedsApproval(c):
 		return "project"
 	}
 	return "global"
@@ -30,7 +30,7 @@ func orCaller(s *string) string {
 }
 
 // cmdShow prints a shortcut's definition and where it resolves.
-func cmdShow(s *textio.Streams, args []string) error {
+func cmdShow(c *model.Context, s *textio.Streams, args []string) error {
 	ns, err := parsers["show"].Parse(args)
 	if err != nil {
 		return err
@@ -39,12 +39,12 @@ func cmdShow(s *textio.Streams, args []string) error {
 		if ns.Bool("json") {
 			return Die("--field and --json can't be used together")
 		}
-		return showField(s, ns.List("name"), ns.Bool("skipLocal"), ns.Str("field"))
+		return showField(c, s, ns.List("name"), ns.Bool("skipLocal"), ns.Str("field"))
 	}
 	if ns.Bool("json") {
-		return showJSON(s, ns.List("name"), ns.Bool("skipLocal"))
+		return showJSON(c, s, ns.List("name"), ns.Bool("skipLocal"))
 	}
-	resolved, err := model.ResolveName(ns.List("name"), ns.Bool("skipLocal"))
+	resolved, err := model.ResolveName(c, ns.List("name"), ns.Bool("skipLocal"))
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func cmdShow(s *textio.Streams, args []string) error {
 
 	display := resolved.Display()
 	out("Name:        " + display)
-	scope := "Scope:       " + scopeOf(group)
+	scope := "Scope:       " + scopeOf(c, group)
 	if resolved.HidesGlobal {
 		scope += "  (hides your global '" + strings.Fields(display)[0] + "')"
 	}
@@ -68,7 +68,7 @@ func cmdShow(s *textio.Streams, args []string) error {
 	if entry.Confirm {
 		out("Confirm:     yes")
 	}
-	if state := approval.State(group); state != "ok" {
+	if state := approval.State(c, group); state != "ok" {
 		what := "changed"
 		if state == "new" {
 			what = "not approved"
@@ -101,8 +101,8 @@ func cmdShow(s *textio.Streams, args []string) error {
 
 // showJSON prints one JSON object, the entry as written plus where it resolves. A broken entry still prints,
 // with its error and null for what can't be worked out.
-func showJSON(s *textio.Streams, words []string, skipLocal bool) error {
-	out, err := showObject(words, skipLocal)
+func showJSON(c *model.Context, s *textio.Streams, words []string, skipLocal bool) error {
+	out, err := showObject(c, words, skipLocal)
 	if err != nil {
 		return err
 	}
@@ -122,11 +122,11 @@ var (
 )
 
 // showField prints one field of what `show --json` describes, bare. It only reads: nothing is written or approved.
-func showField(s *textio.Streams, words []string, skipLocal bool, key string) error {
+func showField(c *model.Context, s *textio.Streams, words []string, skipLocal bool, key string) error {
 	if !slices.Contains(showFields, key) {
 		return Die("unknown field '" + key + "' (one of: " + strings.Join(showFields, ", ") + ")")
 	}
-	obj, err := showObject(words, skipLocal)
+	obj, err := showObject(c, words, skipLocal)
 	if err != nil {
 		return err
 	}
@@ -153,8 +153,8 @@ func showField(s *textio.Streams, words []string, skipLocal bool, key string) er
 
 // showObject is the entry as written plus where it resolves. A broken entry still gives an object,
 // with its error and null for what can't be worked out.
-func showObject(words []string, skipLocal bool) (*ordjson.Object, error) {
-	f, err := model.FindEntry(words, "", skipLocal, false)
+func showObject(c *model.Context, words []string, skipLocal bool) (*ordjson.Object, error) {
+	f, err := model.FindEntry(c, words, skipLocal, false)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func showObject(words []string, skipLocal bool) (*ordjson.Object, error) {
 	out := &ordjson.Object{}
 	out.Set("name", name)
 	out.Set("namespace", nullable(g.Name))
-	out.Set("scope", scopeOf(g))
+	out.Set("scope", scopeOf(c, g))
 	out.Set("defined_in", g.DefiningFile(name))
 	if g.LocalFile != "" {
 		out.Set("source", g.Source(name))
@@ -179,7 +179,7 @@ func showObject(words []string, skipLocal bool) (*ordjson.Object, error) {
 		out.Set("source", nil)
 	}
 	out.Set("hides_global", f.Hides)
-	out.Set("approval", approval.State(g))
+	out.Set("approval", approval.State(c, g))
 	for _, k := range []string{"cwd", "run_cwd", "script_path", "error"} {
 		out.Set(k, nil)
 	}
@@ -189,8 +189,7 @@ func showObject(words []string, skipLocal bool) (*ordjson.Object, error) {
 		if entry.Cwd != nil {
 			out.Set("cwd", *entry.Cwd)
 		}
-		cwd, _ := osutil.Getwd()
-		out.Set("run_cwd", model.ResolveRunDir(entry.Cwd, g, cwd))
+		out.Set("run_cwd", model.ResolveRunDir(entry.Cwd, g, c.Cwd))
 		if entry.Script != nil {
 			var path string
 			if path, err = model.ResolveScriptPath(g.ScriptBase(), *entry.Script); err == nil {
