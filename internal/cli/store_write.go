@@ -10,9 +10,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/StanLukuvka/Shortcut/internal/approval"
-	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/platform"
+	"github.com/StanLukuvka/Shortcut/internal/store"
+	"github.com/StanLukuvka/Shortcut/internal/store/approval"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -23,46 +23,46 @@ import (
 
 // noteIfUnapproved says so, after a change made through shortcut, if the group needs approving before
 // it runs.
-func noteIfUnapproved(c *model.Context, s *textio.Streams, g model.Group) {
-	if g.NeedsApproval() && approval.Refresh(c, c.ReloadGroup(g)) != model.StateOK {
+func noteIfUnapproved(c *store.Context, s *textio.Streams, g store.Group) {
+	if g.NeedsApproval() && approval.Refresh(c, c.ReloadGroup(g)) != store.StateOK {
 		s.Err.WriteString("note: " + g.Label() + " needs approving before it runs: " + g.UpdateCmd() + "\n")
 	}
 }
 
 // targetGroup returns the file a new shortcut goes in. It creates nothing; register does.
-func targetGroup(c *model.Context, ns Namespace) (model.Group, error) {
-	if err := model.ValidateName(ns.Str("name")); err != nil {
-		return model.Group{}, err
+func targetGroup(c *store.Context, ns Namespace) (store.Group, error) {
+	if err := store.ValidateName(ns.Str("name")); err != nil {
+		return store.Group{}, err
 	}
 	local, namespace := ns.Bool("local"), ns.Str("namespace")
 	if local && namespace != "" {
-		return model.Group{}, Die("--namespace can't be used with --local: " + model.LocalFile + " is one file, and " +
-			model.ProjectFile + " is yours to edit")
+		return store.Group{}, Die("--namespace can't be used with --local: " + store.LocalFile + " is one file, and " +
+			store.ProjectFile + " is yours to edit")
 	}
 	storeDir := c.Global
 	if local {
 		var err error
 		if storeDir, err = c.LocalProjectRoot(); err != nil {
-			return model.Group{}, err
+			return store.Group{}, err
 		}
 	}
-	store := c.Store(storeDir)
-	group := store.Main
+	st := c.Store(storeDir)
+	group := st.Main
 	if namespace != "" {
-		if err := model.ValidateName(namespace); err != nil {
-			return model.Group{}, err
+		if err := store.ValidateName(namespace); err != nil {
+			return store.Group{}, err
 		}
-		if _, clash := store.Main.Shortcuts().Get(namespace); clash {
-			return model.Group{}, Die("'" + namespace + "' is a shortcut in store " + storeDir + ", so it can't be a namespace")
+		if _, clash := st.Main.Shortcuts().Get(namespace); clash {
+			return store.Group{}, Die("'" + namespace + "' is a shortcut in store " + storeDir + ", so it can't be a namespace")
 		}
 		var ok bool
-		if group, ok = store.Namespace(namespace); !ok {
-			group = model.Group{Kind: model.KindNamespace, InProject: !c.IsGlobal(storeDir), Name: namespace, File: platform.Join(storeDir, "imports", namespace+model.ImportSuffix),
+		if group, ok = st.Namespace(namespace); !ok {
+			group = store.Group{Kind: store.KindNamespace, InProject: !c.IsGlobal(storeDir), Name: namespace, File: platform.Join(storeDir, "imports", namespace+store.ImportSuffix),
 				StoreDir: storeDir, Doc: &platform.Doc{}}
 		}
 	}
 	if group.Error != nil {
-		return model.Group{}, Die(*group.Error)
+		return store.Group{}, Die(*group.Error)
 	}
 	return group, nil
 }
@@ -72,9 +72,9 @@ func targetGroup(c *model.Context, ns Namespace) (model.Group, error) {
 func loadForEdit(path string, isNew bool) (reg, shortcuts *platform.Doc, err error) {
 	if isNew {
 		reg = &platform.Doc{}
-		reg.Set("version", []byte(strconv.Itoa(model.RegistryVersion)))
+		reg.Set("version", []byte(strconv.Itoa(store.RegistryVersion)))
 		reg.Set("shortcuts", []byte("{}"))
-	} else if reg, err = model.LoadRegistryFile(path); err != nil {
+	} else if reg, err = store.LoadRegistryFile(path); err != nil {
 		return nil, nil, err
 	}
 	if !reg.Has("shortcuts") {
@@ -94,7 +94,7 @@ func saveEdited(path string, reg, shortcuts *platform.Doc) error {
 		return err
 	}
 	reg.Set("shortcuts", raw)
-	return model.SaveRegistryFile(path, reg)
+	return store.SaveRegistryFile(path, reg)
 }
 
 // confirmed asks c and turns a "no" into exit 1; nil means go ahead.
@@ -112,7 +112,7 @@ func confirmed(s *textio.Streams, c textio.Confirm, assumeYes bool) error {
 // lockedGroupWrite runs mutate under the group's store lock. If the group's approval held before it, the approval
 // follows the write, saved after the lock is released: Save takes the global store's lock, which a namespace's
 // registry write holds.
-func lockedGroupWrite(c *model.Context, group model.Group, mutate func() error) error {
+func lockedGroupWrite(c *store.Context, group store.Group, mutate func() error) error {
 	var keep map[string]string
 	err := c.WithRegistryLock(group.StoreDir, func() error {
 		approved := namespaceIsApproved(c, group)
@@ -133,9 +133,9 @@ func lockedGroupWrite(c *model.Context, group model.Group, mutate func() error) 
 }
 
 // register adds entry to group's file under the registry lock. It creates a missing store or namespace file. A project's group means .shortcuts.local.
-func register(c *model.Context, s *textio.Streams, group model.Group, entry *model.Entry) error {
+func register(c *store.Context, s *textio.Streams, group store.Group, entry *store.Entry) error {
 	storeDir := group.StoreDir
-	if group.Kind == model.KindProject {
+	if group.Kind == store.KindProject {
 		change := func(shortcuts *platform.Doc) error {
 			if shortcuts.Has(entry.Name) {
 				return Die("shortcut '" + entry.Name + "' already exists in " + group.LocalFile)
@@ -156,24 +156,24 @@ func register(c *model.Context, s *textio.Streams, group model.Group, entry *mod
 		}
 		noteIfUnapproved(c, s, after)
 		if _, shared := group.Shared.Get(entry.Name); shared {
-			s.Err.WriteString("note: this overrides '" + entry.Name + "' from " + model.ProjectFile + " for you\n")
+			s.Err.WriteString("note: this overrides '" + entry.Name + "' from " + store.ProjectFile + " for you\n")
 		}
 		return nil
 	}
-	if !model.RegistryExists(storeDir) {
+	if !store.RegistryExists(storeDir) {
 		if err := c.InitStore(storeDir); err != nil {
 			return err
 		}
 	}
 	err := lockedGroupWrite(c, group, func() error {
-		reg, shortcuts, err := loadForEdit(group.File, group.Kind == model.KindNamespace && !platform.Exists(group.File))
+		reg, shortcuts, err := loadForEdit(group.File, group.Kind == store.KindNamespace && !platform.Exists(group.File))
 		if err != nil {
 			return err
 		}
 		if shortcuts.Has(entry.Name) {
 			return Die("shortcut '" + entry.Name + "' already exists in " + group.File)
 		}
-		if group.Kind != model.KindNamespace {
+		if group.Kind != store.KindNamespace {
 			if _, clash := c.ReadStore(storeDir).Namespace(entry.Name); clash {
 				return Die("'" + entry.Name + "' is a namespace in store " + storeDir)
 			}
@@ -198,17 +198,17 @@ func register(c *model.Context, s *textio.Streams, group model.Group, entry *mod
 // namespaceIsApproved reports, before shortcut writes to a global namespace and under its lock,
 // whether the file matches its approval. Only then does the approval follow the write, as writeLocal does, so a hand
 // edit still needs update.
-func namespaceIsApproved(c *model.Context, g model.Group) bool {
-	return g.Kind == model.KindNamespace && platform.Exists(g.File) && approval.Refresh(c, c.ReloadGroup(g)) == model.StateOK
+func namespaceIsApproved(c *store.Context, g store.Group) bool {
+	return g.Kind == store.KindNamespace && platform.Exists(g.File) && approval.Refresh(c, c.ReloadGroup(g)) == store.StateOK
 }
 
 // writeLocal changes .shortcuts.local through change(shortcuts), the only way shortcut writes to a
 // project. The approval record follows, but only if .local matched it first: a hand edit, or anything in .shortcuts,
 // must not get approved by the way.
-func writeLocal(c *model.Context, root string, change func(*platform.Doc) error) (model.Group, error) {
-	var after model.Group
+func writeLocal(c *store.Context, root string, change func(*platform.Doc) error) (store.Group, error) {
+	var after store.Group
 	err := c.WithRegistryLock(root, func() error {
-		before := model.LoadProjectGroup(root)
+		before := store.LoadProjectGroup(root)
 		if err := approval.CheckKey(c, before); err != nil { // before anything is written: the approval could not follow
 			return err
 		}
@@ -229,7 +229,7 @@ func writeLocal(c *model.Context, root string, change func(*platform.Doc) error)
 		if isNewFile {
 			excludeFromGit(root)
 		}
-		after = model.LoadProjectGroup(root)
+		after = store.LoadProjectGroup(root)
 		if approved {
 			snapshot := map[string]string{}
 			if record != nil {
@@ -266,7 +266,7 @@ func excludeFromGit(root string) {
 		return
 	}
 	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
-		if line == model.LocalFile {
+		if line == store.LocalFile {
 			return
 		}
 	}
@@ -278,14 +278,14 @@ func excludeFromGit(root string) {
 	if err != nil {
 		return
 	}
-	f.WriteString(sep + model.LocalFile + "\n")
+	f.WriteString(sep + store.LocalFile + "\n")
 	f.Close()
 }
 
 // storedCwd converts --cwd as typed (relative to the user's shell) to the 'cwd' field (relative to the
 // defining file).
-func storedCwd(c *model.Context, value *string, g model.Group) (*string, error) {
-	if value == nil || *value == model.Caller {
+func storedCwd(c *store.Context, value *string, g store.Group) (*string, error) {
+	if value == nil || *value == store.Caller {
 		return value, nil
 	}
 	path := platform.Realpath(platform.ExpandUser(*value))
@@ -311,7 +311,7 @@ func unlinkFile(path string) error {
 
 // removeNamespaceFiles removes a namespace's file in imports/ and its scripts folder. A symlinked
 // folder loses only the link.
-func removeNamespaceFiles(group model.Group) error {
+func removeNamespaceFiles(group store.Group) error {
 	folder := group.ScriptsDir()
 	if err := unlinkFile(group.File); err != nil {
 		return err
@@ -327,7 +327,7 @@ func removeNamespaceFiles(group model.Group) error {
 
 // isListedImport reports whether a namespace comes from the store file's "imports" rather than its
 // imports/ folder.
-func isListedImport(store model.Store, name string) bool {
-	imports, ok := store.Main.Doc.Object("imports")
+func isListedImport(st store.Store, name string) bool {
+	imports, ok := st.Main.Doc.Object("imports")
 	return ok && imports.Has(name)
 }

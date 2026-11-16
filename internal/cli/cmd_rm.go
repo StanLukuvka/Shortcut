@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
-	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/platform"
+	"github.com/StanLukuvka/Shortcut/internal/store"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -15,7 +15,7 @@ import (
 // one, and a symlinked scripts folder loses only the link.
 
 // cmdRm removes a shortcut or a namespace.
-func cmdRm(c *model.Context, s *textio.Streams, args []string) error {
+func cmdRm(c *store.Context, s *textio.Streams, args []string) error {
 	ns, err := parse("rm", args)
 	if err != nil {
 		return err
@@ -51,17 +51,17 @@ func cmdRm(c *model.Context, s *textio.Streams, args []string) error {
 	}
 
 	// Raw lookup: an entry that can't run must still be removable
-	found, err := model.FindEntry(c, names, model.Lookup{GlobalOnly: ns.Bool("skipLocal")})
+	found, err := store.FindEntry(c, names, store.Lookup{GlobalOnly: ns.Bool("skipLocal")})
 	if err != nil {
 		return err
 	}
 	if len(found.Rest) > 0 {
-		return model.TooManyNames(names)
+		return store.TooManyNames(names)
 	}
 	group, name := found.Group, found.Name
 	display := group.Display(name)
 	if group.InProject {
-		return Die("'" + display + "' is a project shortcut, and shortcut doesn't change " + model.ProjectFile + ". " +
+		return Die("'" + display + "' is a project shortcut, and shortcut doesn't change " + store.ProjectFile + ". " +
 			"Edit it by hand, or use: shortcut rm --local " + display)
 	}
 
@@ -92,13 +92,13 @@ func cmdRm(c *model.Context, s *textio.Streams, args []string) error {
 }
 
 // rmLocal takes a name out of .shortcuts.local, which also undoes an override.
-func rmLocal(c *model.Context, s *textio.Streams, ns Namespace) error {
+func rmLocal(c *store.Context, s *textio.Streams, ns Namespace) error {
 	if ns.Bool("skipLocal") {
 		return Die("--local and --global can't be used together")
 	}
 	names := ns.List("name")
 	if len(names) > 1 {
-		return Die("--local takes one name: namespaces aren't in " + model.LocalFile)
+		return Die("--local takes one name: namespaces aren't in " + store.LocalFile)
 	}
 	name := names[0]
 	root, err := c.LocalProjectRoot()
@@ -108,9 +108,9 @@ func rmLocal(c *model.Context, s *textio.Streams, ns Namespace) error {
 	group := c.Store(root).Main
 	if _, inLocal := group.Local.Get(name); !inLocal {
 		if _, inShared := group.Shared.Get(name); inShared {
-			return Die("'" + name + "' isn't in " + model.LocalFile + ", and shortcut doesn't change " + model.ProjectFile)
+			return Die("'" + name + "' isn't in " + store.LocalFile + ", and shortcut doesn't change " + store.ProjectFile)
 		}
-		return Die("'" + name + "' isn't in " + model.ProjectFile + " or " + model.LocalFile + " here")
+		return Die("'" + name + "' isn't in " + store.ProjectFile + " or " + store.LocalFile + " here")
 	}
 	if err := confirmed(s, textio.Confirm{Question: "remove '" + name + "'?", NoTerminal: "remove '" + name + "' in a terminal, or pass -y",
 		Message: rmLocalMessage(group, name), TellOnYes: true}, ns.Bool("yes")); err != nil {
@@ -124,24 +124,24 @@ func rmLocal(c *model.Context, s *textio.Streams, ns Namespace) error {
 		return err
 	}
 	noteIfUnapproved(c, s, after)
-	s.Out.WriteString("Removed '" + name + "' from " + model.LocalFile + ".\n")
+	s.Out.WriteString("Removed '" + name + "' from " + store.LocalFile + ".\n")
 	return nil
 }
 
 // rmNamespace removes a global namespace, whole. One in imports/ goes with its scripts folder. One that
 // shortcuts.json imports from elsewhere is only no longer imported: its files are someone's own.
-func rmNamespace(c *model.Context, s *textio.Streams, name string, assumeYes bool) error {
+func rmNamespace(c *store.Context, s *textio.Streams, name string, assumeYes bool) error {
 	storeDir := c.Global
-	store := c.Store(storeDir)
-	group, found := store.Namespace(name)
+	st := c.Store(storeDir)
+	group, found := st.Namespace(name)
 	if !found {
 		return Die("no namespace named '" + name + "' in your global store (" + platform.Join(storeDir, "imports") + ")")
 	}
-	listed := isListedImport(store, name)
+	listed := isListedImport(st, name)
 	folder := group.ScriptsDir()
 	var lines []string
 	if listed {
-		lines = []string{"Stops importing '" + name + "' in " + store.Main.File, "Keeps its file: " + group.File}
+		lines = []string{"Stops importing '" + name + "' in " + st.Main.File, "Keeps its file: " + group.File}
 	} else {
 		lines = []string{"Removes namespace '" + name + "' (" + strconv.Itoa(len(group.Shortcuts())) + " shortcuts): " + group.File}
 		if platform.Lexists(folder) {
@@ -155,7 +155,7 @@ func rmNamespace(c *model.Context, s *textio.Streams, name string, assumeYes boo
 	approvalFile := c.ApprovalPath(group) // its key needs the file, so before it goes
 	err := c.WithRegistryLock(storeDir, func() error {
 		if listed {
-			reg, err := model.LoadRegistry(storeDir)
+			reg, err := store.LoadRegistry(storeDir)
 			if err != nil {
 				return err
 			}
@@ -171,7 +171,7 @@ func rmNamespace(c *model.Context, s *textio.Streams, name string, assumeYes boo
 					reg.Set("imports", raw)
 				}
 			}
-			if err := model.SaveRegistryAtomic(storeDir, reg); err != nil {
+			if err := store.SaveRegistryAtomic(storeDir, reg); err != nil {
 				return err
 			}
 		} else if err := removeNamespaceFiles(group); err != nil {
@@ -187,21 +187,21 @@ func rmNamespace(c *model.Context, s *textio.Streams, name string, assumeYes boo
 }
 
 // keptScript returns the script an entry names, as a path, for saying it stays. "" is none.
-func keptScript(group model.Group, it model.Item) string {
+func keptScript(group store.Group, it store.Item) string {
 	if it.Entry == nil || it.Entry.Script == nil || *it.Entry.Script == "" {
 		return ""
 	}
 	script := *it.Entry.Script
-	if path, err := model.ResolveScriptPath(group.ScriptBase(), script); err == nil {
+	if path, err := store.ResolveScriptPath(group.ScriptBase(), script); err == nil {
 		return path
 	}
 	return script
 }
 
 // rmMessage returns what rm is about to change, shown above its question.
-func rmMessage(group model.Group, display string, it model.Item) string {
+func rmMessage(group store.Group, display string, it store.Item) string {
 	where := "your global shortcuts"
-	if group.Kind == model.KindNamespace {
+	if group.Kind == store.KindNamespace {
 		where = "namespace " + group.Name
 	}
 	lines := []string{"Removes '" + display + "' from " + where + ": " + group.File}
@@ -212,11 +212,11 @@ func rmMessage(group model.Group, display string, it model.Item) string {
 }
 
 // rmLocalMessage returns what rm --local is about to change in .shortcuts.local, shown above its question.
-func rmLocalMessage(group model.Group, name string) string {
+func rmLocalMessage(group store.Group, name string) string {
 	mine, _ := group.Local.Get(name)
 	lines := []string{"Removes your '" + name + "' from " + group.LocalFile + "."}
 	if _, shared := group.Shared.Get(name); shared {
-		lines = append(lines, "The '"+name+"' in "+model.ProjectFile+" applies again.")
+		lines = append(lines, "The '"+name+"' in "+store.ProjectFile+" applies again.")
 	}
 	if kept := keptScript(group, mine); kept != "" {
 		lines = append(lines, "Keeps its script: "+kept)

@@ -1,4 +1,4 @@
-package model
+package store
 
 import (
 	"crypto/sha256"
@@ -13,7 +13,7 @@ import (
 )
 
 // Context is what a run knows about where it is: built once per run, passed to every command and to every
-// model and approval function that needs the cwd, the global store or the project root. One Context is one run:
+// store and approval function that needs the cwd, the global store or the project root. One Context is one run:
 // the stores it has read are not read again, except by ReadStore and ReloadGroup; approval states likewise, until Forget.
 type Context struct {
 	Cwd     string // physical working directory; "" when CwdErr != nil

@@ -8,8 +8,8 @@ import (
 	"slices"
 	"unicode/utf8"
 
-	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/platform"
+	"github.com/StanLukuvka/Shortcut/internal/store"
 )
 
 // Record is approvals/<sha256(key)>.json: the snapshot last approved, and Local for .shortcuts.local on its own
@@ -51,7 +51,7 @@ func digests(d *platform.Doc, key string) (map[string]string, bool) {
 // Load returns the record, or nil when there is none, it can't be read, or it isn't shaped as one (a
 // JSON object with a "snapshot" and a "local" object, each holding only 64-character lowercase hex strings).
 // Keys are matched exactly, not case-insensitively.
-func Load(c *model.Context, g model.Group) *Record {
+func Load(c *store.Context, g store.Group) *Record {
 	text, err := platform.ReadJSONFile(c.ApprovalPath(g))
 	if err != nil {
 		return nil
@@ -83,7 +83,7 @@ func mapDoc(m map[string]string) ([]byte, error) {
 }
 
 // Save records what was shown and approved, under the global store's lock.
-func Save(c *model.Context, g model.Group, shared, local map[string]string) error {
+func Save(c *store.Context, g store.Group, shared, local map[string]string) error {
 	if err := checkPaths(shared); err != nil {
 		return err
 	}
@@ -124,7 +124,7 @@ func Save(c *model.Context, g model.Group, shared, local map[string]string) erro
 }
 
 // LocalIsApproved: whether .shortcuts.local matches what the record holds for it.
-func LocalIsApproved(c *model.Context, g model.Group, r *Record) bool {
+func LocalIsApproved(c *store.Context, g store.Group, r *Record) bool {
 	var held map[string]string
 	if r != nil {
 		held = r.Local
@@ -136,45 +136,45 @@ func LocalIsApproved(c *model.Context, g model.Group, r *Record) bool {
 // State is the group's approval state, computed once per run (Context.State) from the files on disk: StateOK,
 // StateNew (never approved), StateChanged, or StateInvalid (a path or registry text that is not valid UTF-8 can't be
 // recorded; Require says which). Anything but StateOK means not approved. Save, and a check under a lock or after a prompt, Forget it first.
-func State(c *model.Context, g model.Group) model.ApprovalState {
-	return c.State(g.Key(), func() model.ApprovalState { return computeState(c, g) })
+func State(c *store.Context, g store.Group) store.ApprovalState {
+	return c.State(g.Key(), func() store.ApprovalState { return computeState(c, g) })
 }
 
 // Refresh drops the cached state of g and reads it from disk again.
-func Refresh(c *model.Context, g model.Group) model.ApprovalState {
+func Refresh(c *store.Context, g store.Group) store.ApprovalState {
 	c.Forget(g.Key())
 	return State(c, g)
 }
 
-func computeState(c *model.Context, g model.Group) model.ApprovalState {
+func computeState(c *store.Context, g store.Group) store.ApprovalState {
 	if !g.NeedsApproval() {
-		return model.StateOK
+		return store.StateOK
 	}
 	shared, local, err := snapshot(c, g)
 	if err != nil {
-		return model.StateInvalid
+		return store.StateInvalid
 	}
 	r := Load(c, g)
 	if r == nil {
-		return model.StateNew
+		return store.StateNew
 	}
 	if maps.Equal(r.Snapshot, shared) && maps.Equal(r.Local, local) { // both halves exactly as recorded
-		return model.StateOK
+		return store.StateOK
 	}
 	if len(r.Snapshot) > 0 {
-		return model.StateChanged
+		return store.StateChanged
 	}
-	return model.StateNew // with no snapshot, only CLI writes to .local were recorded
+	return store.StateNew // with no snapshot, only CLI writes to .local were recorded
 }
 
 // Require returns an error unless the group is approved.
-func Require(c *model.Context, g model.Group) error {
+func Require(c *store.Context, g store.Group) error {
 	switch State(c, g) {
-	case model.StateInvalid:
+	case store.StateInvalid:
 		return Check(c, g)
-	case model.StateNew:
+	case store.StateNew:
 		return fmt.Errorf("%s isn't approved yet; review it with: %s", g.Label(), g.UpdateCmd())
-	case model.StateChanged:
+	case store.StateChanged:
 		return fmt.Errorf("%s changed since you approved it; run: %s", g.Label(), g.UpdateCmd())
 	}
 	return nil

@@ -4,29 +4,29 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/StanLukuvka/Shortcut/internal/approval"
-	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/platform"
+	"github.com/StanLukuvka/Shortcut/internal/store"
+	"github.com/StanLukuvka/Shortcut/internal/store/approval"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
 // cmdUpdate reviews changes to project shortcuts and namespaces, and approve them.
-func cmdUpdate(c *model.Context, s *textio.Streams, args []string) error {
+func cmdUpdate(c *store.Context, s *textio.Streams, args []string) error {
 	ns, err := parse("update", args)
 	if err != nil {
 		return err
 	}
-	stores := c.Visible(model.Lookup{})
-	var groups []model.Group
-	for _, store := range stores {
-		for _, g := range store.Groups() {
+	stores := c.Visible(store.Lookup{})
+	var groups []store.Group
+	for _, st := range stores {
+		for _, g := range st.Groups() {
 			if g.NeedsApproval() {
 				groups = append(groups, g)
 			}
 		}
 	}
-	keep := func(want func(model.Group) bool) {
-		var kept []model.Group
+	keep := func(want func(store.Group) bool) {
+		var kept []store.Group
 		for _, g := range groups {
 			if want(g) {
 				kept = append(kept, g)
@@ -36,27 +36,27 @@ func cmdUpdate(c *model.Context, s *textio.Streams, args []string) error {
 	}
 	switch group := ns.Str("group"); {
 	case group == ".":
-		keep(func(g model.Group) bool { return g.Kind == model.KindProject })
+		keep(func(g store.Group) bool { return g.Kind == store.KindProject })
 		if len(groups) == 0 {
-			return Die("no project shortcuts here: no " + model.ProjectFile + " or " + model.LocalFile + " in this folder or its parents")
+			return Die("no project shortcuts here: no " + store.ProjectFile + " or " + store.LocalFile + " in this folder or its parents")
 		}
 	case group != "":
-		keep(func(g model.Group) bool { return g.Name == group })
+		keep(func(g store.Group) bool { return g.Name == group })
 		if len(groups) == 0 {
 			return Die("no namespace named '" + group + "' here")
 		}
 		groups = groups[:1]
 	default:
-		keep(func(g model.Group) bool {
+		keep(func(g store.Group) bool {
 			return g.Error != nil || len(g.Shortcuts()) > 0 || approval.Load(c, g) != nil
 		})
-		keep(func(g model.Group) bool { return g.Error != nil || approval.State(c, g) != model.StateOK })
+		keep(func(g store.Group) bool { return g.Error != nil || approval.State(c, g) != store.StateOK })
 		if len(groups) == 0 {
 			s.Out.WriteString("Nothing to approve here.\n")
 			return nil
 		}
 	}
-	globalNames := globalNamesOf(stores)
+	globalNames := store.GlobalNamesOf(stores)
 	code := 0
 	named := ns.Str("group") != ""
 	for _, g := range groups {
@@ -79,7 +79,7 @@ type approveOpts struct{ Yes, Named bool }
 // hashed. globalNames are your global shortcuts and namespaces, which a project's names hide inside it. It returns
 // the exit code; an error is a die (no terminal to ask on, or the record can't be written). A broken group
 // is skipped with a warning (exit 0) unless the group was named, then it is an error (exit 1).
-func approveGroup(c *model.Context, s *textio.Streams, g model.Group, globalNames map[string]bool, opts approveOpts) (int, error) {
+func approveGroup(c *store.Context, s *textio.Streams, g store.Group, globalNames map[string]bool, opts approveOpts) (int, error) {
 	prefix, rc := "warning: skipped ", 0
 	if opts.Named {
 		prefix, rc = "error: cannot approve ", 1
@@ -92,7 +92,7 @@ func approveGroup(c *model.Context, s *textio.Streams, g model.Group, globalName
 		s.Err.WriteString("error: " + err.Error() + "\n")
 		return 1, nil
 	}
-	if errs := model.EntryErrors(g); len(errs) > 0 {
+	if errs := store.EntryErrors(g); len(errs) > 0 {
 		for _, e := range errs {
 			s.Err.WriteString(prefix + g.Label() + ": " + e + "\n")
 		}
@@ -110,7 +110,7 @@ func approveGroup(c *model.Context, s *textio.Streams, g model.Group, globalName
 	}
 	files := maps.Clone(shared)
 	maps.Copy(files, local)
-	if approval.State(c, g) == model.StateOK {
+	if approval.State(c, g) == store.StateOK {
 		s.Out.WriteString(g.Label() + ": already approved, nothing has changed.\n")
 		return 0, nil
 	}
@@ -120,7 +120,7 @@ func approveGroup(c *model.Context, s *textio.Streams, g model.Group, globalName
 		maps.Copy(old, record.Local)
 	}
 	where := ""
-	if g.Kind == model.KindNamespace {
+	if g.Kind == store.KindNamespace {
 		where = " (" + platform.Realpath(g.File) + ")" // the real place, wherever it points
 	}
 	head := "New to you:"
@@ -145,13 +145,13 @@ func approveGroup(c *model.Context, s *textio.Streams, g model.Group, globalName
 	local2 := g.Local
 	for _, name := range slices.Sorted(slices.Values(g.Shared.Names())) {
 		if _, both := local2.Get(name); both {
-			s.Out.WriteString("'" + name + "' in " + model.ProjectFile + " is " + string(g.Source(name)) + " by " + model.LocalFile + " for you.\n")
+			s.Out.WriteString("'" + name + "' in " + store.ProjectFile + " is " + string(g.Source(name)) + " by " + store.LocalFile + " for you.\n")
 		}
 	}
 	shortcuts := g.Shortcuts()
 	if g.InProject {
 		hidden := shortcuts.Names()
-		if g.Kind == model.KindNamespace {
+		if g.Kind == store.KindNamespace {
 			hidden = []string{g.Name}
 		}
 		for _, name := range slices.Sorted(slices.Values(hidden)) {
@@ -171,7 +171,7 @@ func approveGroup(c *model.Context, s *textio.Streams, g model.Group, globalName
 		return 0, err
 	}
 	covers := "its definitions"
-	if g.Kind == model.KindNamespace {
+	if g.Kind == store.KindNamespace {
 		covers = "its definitions and its scripts folder"
 	}
 	s.Out.WriteString("Approved " + g.Label() + ". This covers " + covers + ", not what they call. " +

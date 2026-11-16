@@ -6,26 +6,26 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/approval"
-	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/platform"
+	"github.com/StanLukuvka/Shortcut/internal/store"
+	"github.com/StanLukuvka/Shortcut/internal/store/approval"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
 func orCaller(s *string) string {
 	if s == nil || *s == "" {
-		return model.Caller
+		return store.Caller
 	}
 	return *s
 }
 
 // cmdShow prints a shortcut's definition and where it resolves.
-func cmdShow(c *model.Context, s *textio.Streams, args []string) error {
+func cmdShow(c *store.Context, s *textio.Streams, args []string) error {
 	ns, err := parse("show", args)
 	if err != nil {
 		return err
 	}
-	lk := model.Lookup{GlobalOnly: ns.Bool("skipLocal")}
+	lk := store.Lookup{GlobalOnly: ns.Bool("skipLocal")}
 	if ns.Set("field") {
 		if ns.Bool("json") {
 			return Die("--field and --json can't be used together")
@@ -35,7 +35,7 @@ func cmdShow(c *model.Context, s *textio.Streams, args []string) error {
 	if ns.Bool("json") {
 		return showJSON(c, s, ns.List("name"), lk)
 	}
-	resolved, err := model.ResolveName(c, ns.List("name"), lk)
+	resolved, err := store.ResolveName(c, ns.List("name"), lk)
 	if err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func cmdShow(c *model.Context, s *textio.Streams, args []string) error {
 	}
 	out(scope)
 	out("Defined in:  " + group.DefiningFile(entry.Name))
-	if group.Kind == model.KindProject {
+	if group.Kind == store.KindProject {
 		out("Source:      " + string(group.Source(entry.Name)))
 	}
 	out("CWD:         " + orCaller(entry.Cwd))
@@ -59,9 +59,9 @@ func cmdShow(c *model.Context, s *textio.Streams, args []string) error {
 	if entry.Confirm {
 		out("Confirm:     yes")
 	}
-	if state := approval.State(c, group); state != model.StateOK {
+	if state := approval.State(c, group); state != store.StateOK {
 		what := "changed"
-		if state == model.StateNew {
+		if state == store.StateNew {
 			what = "not approved"
 		}
 		out("Approval:    " + what + " (run: " + group.UpdateCmd() + ")")
@@ -71,7 +71,7 @@ func cmdShow(c *model.Context, s *textio.Streams, args []string) error {
 		out("\nInline command:\n  " + *entry.Inline)
 		return nil
 	}
-	path, err := model.ResolveScriptPath(group.ScriptBase(), *entry.Script)
+	path, err := store.ResolveScriptPath(group.ScriptBase(), *entry.Script)
 	if err != nil {
 		return err
 	}
@@ -105,7 +105,7 @@ func setOpt(d *platform.Doc, key string, val *string) error {
 }
 
 // showJSON prints one JSON object, the entry as written plus where it resolves.
-func showJSON(c *model.Context, s *textio.Streams, words []string, lk model.Lookup) error {
+func showJSON(c *store.Context, s *textio.Streams, words []string, lk store.Lookup) error {
 	vals, entry, err := showObject(c, words, lk)
 	if err != nil {
 		return err
@@ -130,7 +130,7 @@ func showJSON(c *model.Context, s *textio.Streams, words []string, lk model.Look
 // showFields are the keys `--field` reads: the top-level keys of `show --json`, then the entry's fields marked Show.
 func showFields() []string {
 	keys := showTop() // already a fresh slice
-	for _, f := range model.Fields() {
+	for _, f := range store.Fields() {
 		if f.Show {
 			keys = append(keys, f.Name)
 		}
@@ -140,7 +140,7 @@ func showFields() []string {
 
 // showField prints one field of what `show --json` describes, bare. It only reads: nothing is written or approved.
 // A field is printed as it is, so a name that is not valid UTF-8 prints; only `show --json` refuses it.
-func showField(c *model.Context, s *textio.Streams, words []string, lk model.Lookup, key string) error {
+func showField(c *store.Context, s *textio.Streams, words []string, lk store.Lookup, key string) error {
 	if keys := showFields(); !slices.Contains(keys, key) {
 		return Die("unknown field '" + key + "' (one of: " + strings.Join(keys, ", ") + ")")
 	}
@@ -166,13 +166,13 @@ func showField(c *model.Context, s *textio.Streams, words []string, lk model.Loo
 
 // showObject is the values of showTop (nil for null) and the entry as written. A broken entry still gives them,
 // with its error and nil for what can't be worked out.
-func showObject(c *model.Context, words []string, lk model.Lookup) (vals map[string]*string, entry []byte, err error) {
-	f, err := model.FindEntry(c, words, lk)
+func showObject(c *store.Context, words []string, lk store.Lookup) (vals map[string]*string, entry []byte, err error) {
+	f, err := store.FindEntry(c, words, lk)
 	if err != nil {
 		return nil, nil, err
 	}
 	if len(f.Rest) > 0 {
-		return nil, nil, model.TooManyNames(words)
+		return nil, nil, store.TooManyNames(words)
 	}
 	g, name := f.Group, f.Name
 	str := func(s string) *string { return &s }
@@ -184,17 +184,17 @@ func showObject(c *model.Context, words []string, lk model.Lookup) (vals map[str
 	if g.Name != "" {
 		vals["namespace"] = &g.Name
 	}
-	if g.Kind == model.KindProject {
+	if g.Kind == store.KindProject {
 		vals["source"] = str(string(g.Source(name)))
 	}
 	err = f.Item.Err
 	if err == nil {
 		e := f.Item.Entry
 		vals["cwd"] = e.Cwd
-		vals["run_cwd"] = str(model.ResolveRunDir(e.Cwd, g, c.Cwd))
+		vals["run_cwd"] = str(store.ResolveRunDir(e.Cwd, g, c.Cwd))
 		if e.Script != nil {
 			var path string
-			if path, err = model.ResolveScriptPath(g.ScriptBase(), *e.Script); err == nil {
+			if path, err = store.ResolveScriptPath(g.ScriptBase(), *e.Script); err == nil {
 				vals["script_path"] = &path
 			}
 		}

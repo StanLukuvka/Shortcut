@@ -1,4 +1,4 @@
-package model
+package store
 
 import (
 	"crypto/sha256"

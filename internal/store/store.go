@@ -1,4 +1,4 @@
-package model
+package store
 
 import (
 	"errors"
@@ -122,4 +122,17 @@ func LoadProjectGroup(root string) Group {
 		}
 	}
 	return g
+}
+
+// GlobalNamesOf is the names your global store holds: its shortcuts and its namespaces, which a project's names hide.
+func GlobalNamesOf(stores []Store) map[string]bool {
+	names := map[string]bool{}
+	home := stores[len(stores)-1]
+	for _, k := range home.Main.Shortcuts().Names() {
+		names[k] = true
+	}
+	for _, n := range home.Namespaces {
+		names[n.Name] = true
+	}
+	return names
 }

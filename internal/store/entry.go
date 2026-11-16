@@ -1,6 +1,6 @@
-// Package model holds shortcut's data: entries, groups, stores, and the files they are read from and written to.
-// It never prints and never imports cli.
-package model
+// Package store holds shortcut's data: entries, groups, stores, and the files they are read from and written to.
+// It never prints and never imports commands or term.
+package store
 
 import (
 	"fmt"

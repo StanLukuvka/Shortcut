@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
-	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/platform"
+	"github.com/StanLukuvka/Shortcut/internal/store"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -25,12 +25,12 @@ func Die(msg string) error { return &ExitError{Code: 1, Stderr: "error: " + msg 
 
 // handler is a command: it gets what follows the command word, and ends with nil (exit 0), an *ExitError or any
 // other error, which dispatch prints as "error: <text>" with exit 1.
-type handler func(c *model.Context, s *textio.Streams, args []string) error
+type handler func(c *store.Context, s *textio.Streams, args []string) error
 
 // invoke builds the run's one Context and runs h.
 func invoke(s *textio.Streams, h handler, args []string) int {
 	cwd, err := platform.Getwd()
-	return finish(s, h(model.NewContext(cwd, err), s, args))
+	return finish(s, h(store.NewContext(cwd, err), s, args))
 }
 
 // Main runs the command and returns the process's exit code. A write to a closed stdout or stderr ends the
@@ -80,7 +80,7 @@ func finish(s *textio.Streams, err error) int {
 }
 
 // cmdHelp prints a command's help, or the usage text.
-func cmdHelp(_ *model.Context, s *textio.Streams, args []string) error {
+func cmdHelp(_ *store.Context, s *textio.Streams, args []string) error {
 	text := usageText()
 	if len(args) > 0 && find(args[0]) != nil {
 		text = helpText(args[0])

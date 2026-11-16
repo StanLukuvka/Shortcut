@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
-	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/platform"
+	"github.com/StanLukuvka/Shortcut/internal/store"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -15,7 +15,7 @@ import (
 var positionalAnywhere = regexp.MustCompile(`\$(?:[1-9@*]|\{[1-9@*])`)
 
 // cmdNew makes a shortcut from an inline command after -- or --script.
-func cmdNew(c *model.Context, s *textio.Streams, args []string) error {
+func cmdNew(c *store.Context, s *textio.Streams, args []string) error {
 	// everything after the first -- is the command, and argparse never sees it
 	pre, inline, hasInline := args, []string(nil), false
 	if i := slices.Index(args, "--"); i >= 0 {
@@ -79,7 +79,7 @@ func descOr(ns Namespace, def string) string {
 }
 
 // entryFields returns the parts of an entry the flags of new set.
-func entryFields(c *model.Context, name string, ns Namespace, g model.Group) (*model.Entry, error) {
+func entryFields(c *store.Context, name string, ns Namespace, g store.Group) (*store.Entry, error) {
 	var cwd *string
 	if ns.Set("cwd") {
 		v := ns.Str("cwd")
@@ -88,14 +88,14 @@ func entryFields(c *model.Context, name string, ns Namespace, g model.Group) (*m
 			return nil, err
 		}
 	}
-	e := &model.Entry{Name: name, Cwd: cwd, Confirm: ns.Bool("confirm")}
+	e := &store.Entry{Name: name, Cwd: cwd, Confirm: ns.Bool("confirm")}
 	return e, nil
 }
 
 // newFromScript makes an entry that names the file where it is. A file inside the folder its paths
 // resolve from (the project, the namespace file's folder, the global store) is kept relative, so the folder can
 // move.
-func newFromScript(c *model.Context, s *textio.Streams, ns Namespace, group model.Group, fields *model.Entry) error {
+func newFromScript(c *store.Context, s *textio.Streams, ns Namespace, group store.Group, fields *store.Entry) error {
 	path := ns.Str("script")
 	abs := platform.Abs(platform.ExpandUser(path))
 	if path == "-" || !platform.IsFile(abs) {

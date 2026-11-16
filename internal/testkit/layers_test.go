@@ -15,14 +15,14 @@ import (
 // layers is the import table: for each package (a path from the module root, "." for the root), the module-internal
 // packages its non-test files may import. Stdlib is always allowed. A package not listed fails, so a new one gets placed here.
 var layers = map[string][]string{
-	"cmd/shortcut":          {"internal/cli"},
-	"internal/platform":     {},
-	"internal/model":        {"internal/platform"},
-	"internal/textio":       {"internal/platform"},
-	"internal/approval":     {"internal/model", "internal/platform"},
-	"internal/cli/argparse": {},
-	"internal/cli":          {"internal/cli/argparse", "internal/approval", "internal/model", "internal/textio", "internal/platform"},
-	"internal/testkit":      {},
+	"cmd/shortcut":            {"internal/cli"},
+	"internal/platform":       {},
+	"internal/store":          {"internal/platform"},
+	"internal/textio":         {"internal/platform"},
+	"internal/store/approval": {"internal/store", "internal/platform"},
+	"internal/cli/argparse":   {},
+	"internal/cli":            {"internal/cli/argparse", "internal/store/approval", "internal/store", "internal/textio", "internal/platform"},
+	"internal/testkit":        {},
 }
 
 // The packages may only import what the table says, read from the import lines of their non-test files.

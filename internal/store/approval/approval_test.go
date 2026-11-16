@@ -12,8 +12,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/platform"
+	"github.com/StanLukuvka/Shortcut/internal/store"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
@@ -69,16 +69,16 @@ func strMap(t *testing.T, v any) map[string]string {
 func TestApproval_KeysAndRecordNames(t *testing.T) {
 	base := testkit.New(t).Tmp
 	names := map[string]string{}
-	seen := func(g model.Group, what string) {
+	seen := func(g store.Group, what string) {
 		t.Helper()
 		sum := sha256.Sum256([]byte(g.Key()))
-		if want := hex.EncodeToString(sum[:]) + ".json"; model.RecordName(g.Key()) != want {
-			t.Errorf("%s: record name %s, want %s", what, model.RecordName(g.Key()), want)
+		if want := hex.EncodeToString(sum[:]) + ".json"; store.RecordName(g.Key()) != want {
+			t.Errorf("%s: record name %s, want %s", what, store.RecordName(g.Key()), want)
 		}
-		if prev, dup := names[model.RecordName(g.Key())]; dup {
+		if prev, dup := names[store.RecordName(g.Key())]; dup {
 			t.Errorf("%s and %s share a record", prev, what)
 		}
-		names[model.RecordName(g.Key())] = what
+		names[store.RecordName(g.Key())] = what
 	}
 	for _, d := range []string{"plain", "café", "😀", "a b/c", "p\xffroj"} {
 		dir := filepath.Join(base, d)
@@ -86,31 +86,31 @@ func TestApproval_KeysAndRecordNames(t *testing.T) {
 			t.Logf("this filesystem refuses %q: %v", d, err)
 			continue
 		}
-		g := model.Group{Kind: model.KindProject, InProject: true, StoreDir: dir, File: dir + "/.shortcuts", LocalFile: dir + "/.shortcuts.local"}
+		g := store.Group{Kind: store.KindProject, InProject: true, StoreDir: dir, File: dir + "/.shortcuts", LocalFile: dir + "/.shortcuts.local"}
 		if g.Key() != platform.Realpath(dir) {
 			t.Errorf("project key %q, want %q", g.Key(), platform.Realpath(dir))
 		}
 		seen(g, "project "+d)
 	}
-	store := platform.Realpath(base)
+	realBase := platform.Realpath(base)
 	for _, c := range []struct{ name, file string }{{"ns", "a.sh"}, {"ns", "b.sh"}, {"other", "a.sh"}, {"ns", "café.sh"}, {"ns", "caf\xe9.sh"}, {"ns", `caf\xe9.sh`}, {"n\"s", "a\\b"}} {
-		g := model.Group{Kind: model.KindNamespace, Name: c.name, StoreDir: base, File: filepath.Join(base, c.file)}
-		want := "[" + strconv.QuoteToASCII(store) + ", " + strconv.QuoteToASCII(c.name) + ", " + strconv.QuoteToASCII(platform.Realpath(g.File)) + "]"
+		g := store.Group{Kind: store.KindNamespace, Name: c.name, StoreDir: base, File: filepath.Join(base, c.file)}
+		want := "[" + strconv.QuoteToASCII(realBase) + ", " + strconv.QuoteToASCII(c.name) + ", " + strconv.QuoteToASCII(platform.Realpath(g.File)) + "]"
 		if g.Key() != want {
 			t.Errorf("namespace key %s, want %s", g.Key(), want)
 		}
 		seen(g, "namespace "+c.name+" "+c.file)
 	}
-	if k := (model.Group{Kind: model.KindNamespace, Name: "n", StoreDir: "/s", File: "/s/é"}).Key(); k != `["/s", "n", "/s/\u00e9"]` {
+	if k := (store.Group{Kind: store.KindNamespace, Name: "n", StoreDir: "/s", File: "/s/é"}).Key(); k != `["/s", "n", "/s/\u00e9"]` {
 		t.Errorf("example key %s", k)
 	}
 }
 
 func TestApproval_ApprovalPathIsInTheGlobalStore(t *testing.T) {
 	env := testkit.New(t)
-	ctx := model.NewContext(env.Home, nil)
-	g := model.Group{Kind: model.KindProject, StoreDir: env.Home, File: env.Home + "/.shortcuts", LocalFile: env.Home + "/.shortcuts.local"}
-	if got, want := ctx.ApprovalPath(g), filepath.Join(env.Store, "approvals", model.RecordName(env.Home)); got != want {
+	ctx := store.NewContext(env.Home, nil)
+	g := store.Group{Kind: store.KindProject, StoreDir: env.Home, File: env.Home + "/.shortcuts", LocalFile: env.Home + "/.shortcuts.local"}
+	if got, want := ctx.ApprovalPath(g), filepath.Join(env.Store, "approvals", store.RecordName(env.Home)); got != want {
 		t.Errorf("%s, want %s", got, want)
 	}
 }
@@ -169,17 +169,17 @@ func TestApproval_GoldenTrees(t *testing.T) {
 	for _, c := range cases {
 		t.Run(str(c, "name"), func(t *testing.T) {
 			env := testkit.New(t)
-			ctx := model.NewContext(env.Home, nil)
+			ctx := store.NewContext(env.Home, nil)
 			root := env.Folder("tree")
 			buildTree(t, env, root, c["tree"].([]any))
-			store := model.NewContext(env.Home, nil).Store(root)
+			st := store.NewContext(env.Home, nil).Store(root)
 			want := c["groups"].([]any)
-			got := store.Groups()
+			got := st.Groups()
 			if len(got) != len(want) {
 				t.Fatalf("%d groups, want %d", len(got), len(want))
 			}
-			if wp := c["problems"].([]any); len(store.Problems) != len(wp) {
-				t.Errorf("problems %q, want %v", store.Problems, wp)
+			if wp := c["problems"].([]any); len(st.Problems) != len(wp) {
+				t.Errorf("problems %q, want %v", st.Problems, wp)
 			}
 			for i, g := range got {
 				w := want[i].(map[string]any)
@@ -242,9 +242,9 @@ func equalMaps(a, b map[string]string) bool {
 }
 
 // checkRecord: a record in the stored form reads as ok; one written now parses to the same object.
-func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template string, shared, local map[string]string) {
+func checkRecord(t *testing.T, env *testkit.Env, g store.Group, root, template string, shared, local map[string]string) {
 	t.Helper()
-	ctx := model.NewContext(env.Home, nil)
+	ctx := store.NewContext(env.Home, nil)
 	text := strings.ReplaceAll(template, "@ROOT@", root)
 	var want any
 	if err := json.Unmarshal([]byte(text), &want); err != nil {
@@ -255,7 +255,7 @@ func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template s
 		t.Errorf("before any record: %s", State(ctx, g))
 	}
 	env.WriteFile(path, text, 0)
-	if got := State(model.NewContext(env.Home, nil), g); got != "ok" {
+	if got := State(store.NewContext(env.Home, nil), g); got != "ok" {
 		t.Errorf("a stored record: state %s, want ok", got)
 	}
 	if r := Load(ctx, g); r == nil || !equalMaps(r.Snapshot, shared) || !equalMaps(r.Local, local) {
@@ -291,13 +291,13 @@ func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template s
 
 func TestApproval_ProjectInANonUTF8FolderCannotBeApproved(t *testing.T) {
 	env := testkit.New(t)
-	ctx := model.NewContext(env.Home, nil)
+	ctx := store.NewContext(env.Home, nil)
 	probe := filepath.Join(env.Tmp, "caf\xe9")
 	if err := os.Mkdir(probe, 0o755); err != nil {
 		t.Skipf("this filesystem refuses non-UTF-8 names: %v", err)
 	}
 	env.WriteStore(filepath.Join(probe, ".shortcuts"), map[string]any{"a": map[string]any{"inline": "x"}})
-	g := model.NewContext(env.Home, nil).Store(probe).Main
+	g := store.NewContext(env.Home, nil).Store(probe).Main
 	if g.Key() != probe {
 		t.Fatalf("key %q", g.Key())
 	}
@@ -321,9 +321,9 @@ func TestApproval_ProjectInANonUTF8FolderCannotBeApproved(t *testing.T) {
 
 func TestApproval_StateAndRequire(t *testing.T) {
 	env := testkit.New(t)
-	ctx := model.NewContext(env.Home, nil)
+	ctx := store.NewContext(env.Home, nil)
 	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
-	load := func() model.Group { return model.NewContext(env.Home, nil).Store(proj).Main }
+	load := func() store.Group { return store.NewContext(env.Home, nil).Store(proj).Main }
 	g := load()
 	if State(ctx, g) != "new" {
 		t.Fatal(State(ctx, g))
@@ -338,7 +338,7 @@ func TestApproval_StateAndRequire(t *testing.T) {
 		t.Fatal("not ok after Save")
 	}
 	env.WriteFile(filepath.Join(proj, "bin", "t"), "echo two\n", 0)
-	ctx, g = model.NewContext(env.Home, nil), load()
+	ctx, g = store.NewContext(env.Home, nil), load()
 	if State(ctx, g) != "changed" {
 		t.Errorf("after a script change: %s", State(ctx, g))
 	}
@@ -350,7 +350,7 @@ func TestApproval_StateAndRequire(t *testing.T) {
 		t.Fatal(err)
 	}
 	env.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"m": {"inline": "x"}}}`, 0)
-	ctx, g = model.NewContext(env.Home, nil), load()
+	ctx, g = store.NewContext(env.Home, nil), load()
 	if State(ctx, g) != "changed" || LocalIsApproved(ctx, g, Load(ctx, g)) {
 		t.Errorf("after adding .shortcuts.local: %s", State(ctx, g))
 	}
@@ -362,16 +362,16 @@ func TestApproval_StateAndRequire(t *testing.T) {
 		t.Errorf("empty snapshot: %s", State(ctx, g))
 	}
 	// the global store never needs approval
-	if gl := model.NewContext(env.Home, nil).Store(env.Store).Main; State(ctx, gl) != "ok" || Require(ctx, gl) != nil {
+	if gl := store.NewContext(env.Home, nil).Store(env.Store).Main; State(ctx, gl) != "ok" || Require(ctx, gl) != nil {
 		t.Error("global store")
 	}
 }
 
 func TestApproval_LoadRefusesWhatIsNotARecord(t *testing.T) {
 	env := testkit.New(t)
-	ctx := model.NewContext(env.Home, nil)
+	ctx := store.NewContext(env.Home, nil)
 	proj := env.Project(map[string]any{})
-	g := model.NewContext(env.Home, nil).Store(proj).Main
+	g := store.NewContext(env.Home, nil).Store(proj).Main
 	path := ctx.ApprovalPath(g)
 	for _, bad := range []string{`{not json`, `[]`, `{"hash": "x"}`, `{"snapshot": []}`, `{"snapshot": {"a": 1}}`, `{"snapshot": {}, "local": []}`, `{"snapshot": {}}`,
 		`{"Snapshot": {}, "local": {}}`, `{"snapshot": {}, "Local": {}}`, `{"SNAPSHOT": {}, "LOCAL": {}}`} { // keys match exactly
@@ -379,7 +379,7 @@ func TestApproval_LoadRefusesWhatIsNotARecord(t *testing.T) {
 		if r := Load(ctx, g); r != nil {
 			t.Errorf("%s loaded as %+v", bad, r)
 		}
-		if got := State(model.NewContext(env.Home, nil), g); got != "new" {
+		if got := State(store.NewContext(env.Home, nil), g); got != "new" {
 			t.Errorf("%s: state %s", bad, got)
 		}
 	}
@@ -404,7 +404,7 @@ func TestApproval_EntryFilesEdges(t *testing.T) {
 		"rel":    map[string]any{"inline": "x", "cwd": "sub/../work"},
 		"fifo":   map[string]any{"script": "pipe"},
 	}, testkit.Dirs("work"))
-	g := model.NewContext(env.Home, nil).Store(proj).Main
+	g := store.NewContext(env.Home, nil).Store(proj).Main
 	files := must(SharedFiles(g))
 	if files[elsewhere] != sum("echo out\n") { // an absolute script is used as given, so its key is the absolute path
 		t.Errorf("absolute script: %q", files)
@@ -430,9 +430,9 @@ func TestEntryFiles_BrokenEntryStillCountsItsScriptAndCwd(t *testing.T) {
 	env := testkit.New(t)
 	proj := env.Project(map[string]any{"b": map[string]any{"script": "bin/b", "cwd": "work", "future": 1}},
 		testkit.Files(map[string]any{"bin/b": "echo b\n"}), testkit.Dirs("work"))
-	g := model.NewContext(env.Home, nil).Store(proj).Main
-	if len(model.EntryErrors(g)) != 1 {
-		t.Fatalf("the entry should be broken: %q", model.EntryErrors(g))
+	g := store.NewContext(env.Home, nil).Store(proj).Main
+	if len(store.EntryErrors(g)) != 1 {
+		t.Fatalf("the entry should be broken: %q", store.EntryErrors(g))
 	}
 	files := must(SharedFiles(g))
 	if files["bin/b"] != sum("echo b\n") || files["./cwd of b"] != sum(filepath.Join(proj, "work")+"\n") {
@@ -441,7 +441,7 @@ func TestEntryFiles_BrokenEntryStillCountsItsScriptAndCwd(t *testing.T) {
 }
 
 func TestApproval_DisplayPathTreatsADotDotPrefixAsOutside(t *testing.T) {
-	g := model.Group{Kind: model.KindProject, StoreDir: "/p", File: "/p/.shortcuts"}
+	g := store.Group{Kind: store.KindProject, StoreDir: "/p", File: "/p/.shortcuts"}
 	for path, want := range map[string]string{"/p/a.sh": "a.sh", "/p/..x/a.sh": "/p/..x/a.sh", "/q/a.sh": "/q/a.sh", "/p/d/../a.sh": "a.sh"} {
 		if got := displayPath(g, path); got != want {
 			t.Errorf("%s: %s", path, got)
@@ -456,8 +456,8 @@ func TestApproval_AScriptCannotStandInForACwdRecord(t *testing.T) {
 		"pad": map[string]any{"script": "cwd of go"},
 	}, testkit.Dirs("safe"), testkit.Files(map[string]any{"cwd of go": "x"}))
 	env.Symlink(filepath.Join(proj, "safe"), filepath.Join(proj, "work"))
-	store := model.NewContext(env.Home, nil).Store(proj)
-	files := must(SharedFiles(store.Main))
+	st := store.NewContext(env.Home, nil).Store(proj)
+	files := must(SharedFiles(st.Main))
 	if files["cwd of go"] != sum("x") {
 		t.Errorf("script: %q", files["cwd of go"])
 	}
@@ -468,14 +468,14 @@ func TestApproval_AScriptCannotStandInForACwdRecord(t *testing.T) {
 
 func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
 	env := testkit.New(t)
-	ctx := model.NewContext(env.Home, nil)
+	ctx := store.NewContext(env.Home, nil)
 	proj := env.Project(map[string]any{"a": map[string]any{"inline": "x"}}, testkit.Dirs("scripts"))
 	// a file named with the ASCII text caf\udce9.sh is an ordinary file, distinct from caf<0xe9>.sh
 	env.WriteFile(filepath.Join(proj, "scripts", `caf\udce9.sh`), "echo ascii\n", 0o644)
-	ns := func() model.Group {
+	ns := func() store.Group {
 		env.WriteFile(filepath.Join(proj, "ns.shortcut"), `{"version": 1, "shortcuts": {"go": {"inline": "x"}}}`, 0)
 		env.WriteFile(filepath.Join(proj, ".shortcuts"), `{"version": 1, "shortcuts": {}, "imports": {"ns": "ns.shortcut"}}`, 0)
-		g, ok := model.NewContext(env.Home, nil).Store(proj).Namespace("ns")
+		g, ok := store.NewContext(env.Home, nil).Store(proj).Namespace("ns")
 		if !ok {
 			t.Fatal("no namespace")
 		}
@@ -501,7 +501,7 @@ func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
 	if err := os.WriteFile(bad, []byte("echo bad\n"), 0o644); err != nil {
 		t.Skipf("this filesystem refuses non-UTF-8 names: %v", err)
 	}
-	ctx = model.NewContext(env.Home, nil)
+	ctx = store.NewContext(env.Home, nil)
 	err = Check(ctx, g)
 	if err == nil || !strings.Contains(err.Error(), `"scripts/ns/caf\xe9.sh"`) || !strings.Contains(err.Error(), "not valid UTF-8") {
 		t.Fatalf("Check: %v", err)
@@ -513,9 +513,9 @@ func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
 
 func TestApproval_ARecordWithNonUTF8TextIsNoRecord(t *testing.T) {
 	env := testkit.New(t)
-	ctx := model.NewContext(env.Home, nil)
+	ctx := store.NewContext(env.Home, nil)
 	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
-	g := model.NewContext(env.Home, nil).Store(proj).Main
+	g := store.NewContext(env.Home, nil).Store(proj).Main
 	// a record whose file name is not valid UTF-8 is no record
 	env.WriteFile(ctx.ApprovalPath(g), "{\"snapshot\": {\"caf\xe9.sh\": \""+sum("x")+"\"}, \"local\": {}}", 0)
 	if Load(ctx, g) != nil || State(ctx, g) != "new" {
@@ -532,7 +532,7 @@ func TestApproval_FolderFilesNamespace(t *testing.T) {
 	env.WriteFile(filepath.Join(proj, "scripts", "other", "x.sh"), "echo other\n", 0)
 	env.Symlink("sub", filepath.Join(proj, "scripts", "ns", "dirlink"))
 	env.Symlink("nowhere", filepath.Join(proj, "scripts", "ns", "dangling"))
-	g, ok := model.NewContext(env.Home, nil).Store(proj).Namespace("ns")
+	g, ok := store.NewContext(env.Home, nil).Store(proj).Namespace("ns")
 	if !ok {
 		t.Fatal("no namespace")
 	}
@@ -544,7 +544,7 @@ func TestApproval_FolderFilesNamespace(t *testing.T) {
 		t.Errorf("got %q\nwant %q", got, want)
 	}
 	// a main group has no scripts folder in this sense
-	if len(folderFiles(model.NewContext(env.Home, nil).Store(proj).Main)) != 0 {
+	if len(folderFiles(store.NewContext(env.Home, nil).Store(proj).Main)) != 0 {
 		t.Error("main group")
 	}
 	// the namespace's script reaches SharedFiles once, under its real path
@@ -572,9 +572,9 @@ func extraFieldRecord(root string) string {
 
 func TestApproval_RecordWithAnUnknownFieldStillApproves(t *testing.T) {
 	env := testkit.New(t)
-	ctx := model.NewContext(env.Home, nil)
+	ctx := store.NewContext(env.Home, nil)
 	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
-	g := model.NewContext(env.Home, nil).Store(proj).Main
+	g := store.NewContext(env.Home, nil).Store(proj).Main
 	rec := ctx.ApprovalPath(g)
 	env.WriteFile(rec, extraFieldRecord(proj), 0)
 	if got := State(ctx, g); got != "ok" {
@@ -602,9 +602,9 @@ func TestApproval_RecordWithAnUnknownFieldStillApproves(t *testing.T) {
 
 func TestApproval_RecordWithoutSnapshotOrLocal(t *testing.T) {
 	env := testkit.New(t)
-	ctx := model.NewContext(env.Home, nil)
+	ctx := store.NewContext(env.Home, nil)
 	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
-	g := model.NewContext(env.Home, nil).Store(proj).Main
+	g := store.NewContext(env.Home, nil).Store(proj).Main
 	rec := ctx.ApprovalPath(g)
 	env.WriteFile(rec, `{"key": "x", "hash": "abc", "local": {}}`, 0) // no snapshot: not a record, never approved
 	if got := State(ctx, g); got != "new" {
@@ -612,7 +612,7 @@ func TestApproval_RecordWithoutSnapshotOrLocal(t *testing.T) {
 	}
 	// no "local": not a record either (fail closed)
 	env.WriteFile(rec, `{"snapshot": {".shortcuts": "{\n  \"shortcuts\": {\n    \"t\": {\n      \"script\": \"bin/t\"\n    }\n  },\n  \"version\": 1\n}\n", "bin/t": "echo one\n"}}`, 0)
-	if got := State(model.NewContext(env.Home, nil), g); got != "new" {
+	if got := State(store.NewContext(env.Home, nil), g); got != "new" {
 		t.Errorf("no local: %s", got)
 	}
 }
@@ -630,8 +630,8 @@ func must[T any](v T, err error) T {
 
 func TestApproval_ANamespaceFileWithBadBytesInItsPathIsRefusedBeforeAnythingIsSaved(t *testing.T) {
 	env := testkit.New(t)
-	ctx := model.NewContext(env.Home, nil)
-	g := model.Group{Kind: model.KindNamespace, Name: "ns", StoreDir: env.Store, File: filepath.Join(env.Store, "imports", "caf\xe9.shortcut")}
+	ctx := store.NewContext(env.Home, nil)
+	g := store.Group{Kind: store.KindNamespace, Name: "ns", StoreDir: env.Store, File: filepath.Join(env.Store, "imports", "caf\xe9.shortcut")}
 	for name, err := range map[string]error{"Check": Check(ctx, g), "Save": Save(ctx, g, map[string]string{}, map[string]string{})} {
 		if err == nil || !strings.Contains(err.Error(), `caf\xe9.shortcut"`) || !strings.Contains(err.Error(), "not valid UTF-8") {
 			t.Errorf("%s: %v", name, err)
@@ -647,9 +647,9 @@ func TestApproval_ANamespaceFileWithBadBytesInItsPathIsRefusedBeforeAnythingIsSa
 
 func TestApproval_ARecordInTheTextFormatIsNotApprovedYet(t *testing.T) {
 	env := testkit.New(t)
-	ctx := model.NewContext(env.Home, nil)
+	ctx := store.NewContext(env.Home, nil)
 	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
-	g := model.NewContext(env.Home, nil).Store(proj).Main
+	g := store.NewContext(env.Home, nil).Store(proj).Main
 	env.WriteFile(ctx.ApprovalPath(g), `{"key": "x", "snapshot": {"bin/t": "echo one\n"}, "local": {}}`, 0)
 	if Load(ctx, g) != nil || State(ctx, g) != "new" {
 		t.Errorf("text record: %+v, state %s", Load(ctx, g), State(ctx, g))
@@ -663,30 +663,30 @@ func TestApproval_ARecordInTheTextFormatIsNotApprovedYet(t *testing.T) {
 }
 
 // stateOnDisk is the state of proj's group as a new run would read it.
-func stateOnDisk(env *testkit.Env, proj string) model.ApprovalState {
-	c := model.NewContext(env.Home, nil)
+func stateOnDisk(env *testkit.Env, proj string) store.ApprovalState {
+	c := store.NewContext(env.Home, nil)
 	return State(c, c.Store(proj).Main)
 }
 
 func TestApproval_StateIsComputedOncePerRun(t *testing.T) {
 	env := testkit.New(t)
 	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
-	ctx := model.NewContext(env.Home, nil)
+	ctx := store.NewContext(env.Home, nil)
 	g := ctx.Store(proj).Main
 	if err := Save(ctx, g, must(SharedFiles(g)), must(LocalFiles(g))); err != nil {
 		t.Fatal(err)
 	}
-	if got := State(ctx, g); got != model.StateOK {
+	if got := State(ctx, g); got != store.StateOK {
 		t.Fatal(got)
 	}
 	env.WriteFile(filepath.Join(proj, "bin", "t"), "echo two\n", 0)
-	if got := State(ctx, g); got != model.StateOK {
+	if got := State(ctx, g); got != store.StateOK {
 		t.Errorf("the state was computed again: %s", got)
 	}
-	if got := Refresh(ctx, g); got != model.StateChanged {
+	if got := Refresh(ctx, g); got != store.StateChanged {
 		t.Errorf("Refresh: %s", got)
 	}
-	if got := stateOnDisk(env, proj); got != model.StateChanged {
+	if got := stateOnDisk(env, proj); got != store.StateChanged {
 		t.Errorf("a new run: %s", got)
 	}
 }
@@ -694,15 +694,15 @@ func TestApproval_StateIsComputedOncePerRun(t *testing.T) {
 func TestApproval_SaveForgetsTheCachedState(t *testing.T) {
 	env := testkit.New(t)
 	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
-	ctx := model.NewContext(env.Home, nil)
+	ctx := store.NewContext(env.Home, nil)
 	g := ctx.Store(proj).Main
-	if got := State(ctx, g); got != model.StateNew {
+	if got := State(ctx, g); got != store.StateNew {
 		t.Fatal(got)
 	}
 	if err := Save(ctx, g, must(SharedFiles(g)), must(LocalFiles(g))); err != nil {
 		t.Fatal(err)
 	}
-	if got := State(ctx, g); got != model.StateOK {
+	if got := State(ctx, g); got != store.StateOK {
 		t.Errorf("after Save: %s", got)
 	}
 }

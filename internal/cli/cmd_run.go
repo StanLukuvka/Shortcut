@@ -9,15 +9,15 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/StanLukuvka/Shortcut/internal/approval"
-	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/platform"
+	"github.com/StanLukuvka/Shortcut/internal/store"
+	"github.com/StanLukuvka/Shortcut/internal/store/approval"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
 // cmdRun runs a shortcut. --global, -y and --yes are the only options it reads, and only before the name; everything
 // after that, -h included, is the shortcut's.
-func cmdRun(c *model.Context, s *textio.Streams, args []string) error {
+func cmdRun(c *store.Context, s *textio.Streams, args []string) error {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
 		_, err := s.Out.WriteString(helpText("run"))
 		return err
@@ -31,18 +31,18 @@ func cmdRun(c *model.Context, s *textio.Streams, args []string) error {
 	if len(args) == 0 {
 		return &ExitError{Code: 2, Stderr: "error: missing shortcut name\n" + find("run").usageLine() + "\n"}
 	}
-	return runShortcut(c, s, args, model.Lookup{GlobalOnly: skipLocal}, assumeYes)
+	return runShortcut(c, s, args, store.Lookup{GlobalOnly: skipLocal}, assumeYes)
 }
 
 func oneLine(text string) string { return strings.ReplaceAll(text, "\n", "\\n") }
 
 // runShortcut handles approval, the confirmation and the child process, which replaces this one.
 // It returns only when something stops the run.
-func runShortcut(c *model.Context, s *textio.Streams, words []string, lk model.Lookup, assumeYes bool) error {
+func runShortcut(c *store.Context, s *textio.Streams, words []string, lk store.Lookup, assumeYes bool) error {
 	if c.CwdErr != nil {
 		return c.CwdErr
 	}
-	resolved, args, err := model.ResolveShortcut(c, words, model.Lookup{GlobalOnly: lk.GlobalOnly, Strict: true})
+	resolved, args, err := store.ResolveShortcut(c, words, store.Lookup{GlobalOnly: lk.GlobalOnly, Strict: true})
 	if err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func runShortcut(c *model.Context, s *textio.Streams, words []string, lk model.L
 		return err
 	}
 	entry, name := resolved.Entry, resolved.Display()
-	if err := model.ValidateName(entry.Name); err != nil { // list warns about a hand-written one; run refuses it
+	if err := store.ValidateName(entry.Name); err != nil { // list warns about a hand-written one; run refuses it
 		return err
 	}
 	if !platform.IsDir(resolved.RunCwd) {
@@ -128,11 +128,11 @@ type childPlan struct {
 
 // childCommand is the argv of the child: bash -c for an inline command, else the script, run through its #! line;
 // an executable with no #! is exec'd as it is, and a file that is not executable and has no #! runs through bash.
-func childCommand(resolved *model.ResolvedShortcut, entry *model.Entry, name string, args []string) (childPlan, error) {
+func childCommand(resolved *store.ResolvedShortcut, entry *store.Entry, name string, args []string) (childPlan, error) {
 	if entry.Inline != nil {
 		return childPlan{argv: append([]string{"bash", "-c", *entry.Inline, name}, args...)}, nil
 	}
-	path, err := model.ResolveScriptPath(resolved.Group.ScriptBase(), *entry.Script)
+	path, err := store.ResolveScriptPath(resolved.Group.ScriptBase(), *entry.Script)
 	if err != nil {
 		return childPlan{}, err
 	}

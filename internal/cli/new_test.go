@@ -9,7 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/StanLukuvka/Shortcut/internal/model"
+	"github.com/StanLukuvka/Shortcut/internal/store"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
@@ -155,7 +155,7 @@ func TestStores_AddAndLinkPaths(t *testing.T) {
 	testkit.Eq(t, "linked", fileShortcuts(t, filepath.Join(e.Store, "shortcuts.json"))["linked"].(map[string]any)["script"], realpath(t, ext))
 
 	// 2. Path containment check
-	if _, err := model.ResolveScriptPath(e.Store, "../../../etc/passwd"); err == nil || !strings.Contains(err.Error(), "path traversal detected") {
+	if _, err := store.ResolveScriptPath(e.Store, "../../../etc/passwd"); err == nil || !strings.Contains(err.Error(), "path traversal detected") {
 		t.Errorf("traversal: %v", err)
 	}
 }
