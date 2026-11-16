@@ -110,7 +110,7 @@ func (c Command) parser() *argparse.Parser {
 	for i, a := range c.Args {
 		switch {
 		case a.Choices != nil:
-			acts[i] = argparse.Choice(a.Dest, "", a.Choices...)
+			acts[i] = argparse.Choice(a.Dest, a.Choices...)
 		case a.Flags == nil:
 			acts[i] = argparse.Positional(a.Dest, a.Nargs)
 		case a.Takes == oneValue:

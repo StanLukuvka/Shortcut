@@ -53,7 +53,7 @@ func callName(e ast.Expr) string {
 }
 
 // raisers are the calls whose first argument is a user-facing message (plus problems.append); the
-// calls of the argparse emulation (argError) are stdlib text and out of scope.
+// messages built inside internal/cli/argparse are out of scope.
 var raisers = map[string]bool{"Die": true, "fail": true, "bad": true, "errors.New": true, "fmt.Errorf": true,
 	"append": true}
 

@@ -2,12 +2,13 @@
 package argparse
 
 import (
+	"slices"
 	"strings"
 )
 
-// The parser takes `--opt value`, `--opt=value`, short flags (`-y`, never combined), `--`, and positionals anywhere
-// between the options. An option matches by its full name only. Types, required options and subparsers are not
-// supported: no command uses them.
+// Parse takes "--opt value", "--opt=value", short flags ("-y"; they are not combined), "--", and positional words
+// anywhere between the options. An option matches by its full name only. Options have no types and none is required;
+// a command has no subcommands.
 
 type kind int
 
@@ -15,7 +16,6 @@ const (
 	kStore    kind = iota // --opt VALUE
 	kTrue                 // --opt
 	kOptional             // --opt [VALUE], "" when there is none
-	kAppend               // --opt VALUE, repeatable
 )
 
 // Action is one argument of a parser: an option when flags is set, else a positional.
@@ -23,24 +23,15 @@ type Action struct {
 	flags   []string
 	dest    string
 	kind    kind // options
-	nargs   byte // positionals: 0 = exactly one, '?', '*' or '+'
-	def     any  // positionals: the value when none is given
+	nargs   byte // positional: 0 is exactly one word, '?' one or none, '*' any, '+' at least one
 	choices []string
 }
 
-func (a *Action) name() string {
-	if a.flags != nil {
-		return strings.Join(a.flags, "/")
-	}
-	return a.dest
-}
-
 type Parser struct {
-	cmd       string                  // the command word, for the Try line
-	help      func(cmd string) string // the -h text of a command
-	actions   []*Action
-	byFlag    map[string]*Action
-	exclusive [][]string // groups of dests of which at most one may be given
+	cmd     string                  // the command word, for the Try line
+	help    func(cmd string) string // the -h text of a command
+	actions []*Action
+	byFlag  map[string]*Action
 }
 
 // New makes the parser of one command, with its -h. help gives the -h text of the command.
@@ -54,12 +45,6 @@ func New(cmd string, help func(cmd string) string, add ...*Action) *Parser {
 	return p
 }
 
-// Exclusive makes the options with these dests mutually exclusive.
-func (p *Parser) Exclusive(dests ...string) *Parser {
-	p.exclusive = append(p.exclusive, dests)
-	return p
-}
-
 // Flag is an option without a value.
 func Flag(dest string, flags ...string) *Action {
 	return &Action{flags: flags, dest: dest, kind: kTrue}
@@ -70,11 +55,6 @@ func Value(dest string, flags ...string) *Action {
 	return &Action{flags: flags, dest: dest, kind: kStore}
 }
 
-// Repeated is --opt VALUE, given any number of times.
-func Repeated(dest string, flags ...string) *Action {
-	return &Action{flags: flags, dest: dest, kind: kAppend}
-}
-
 // Optional is --opt [VALUE]: "" when it has no value.
 func Optional(dest string, flags ...string) *Action {
 	return &Action{flags: flags, dest: dest, kind: kOptional}
@@ -83,17 +63,11 @@ func Optional(dest string, flags ...string) *Action {
 // Positional takes nargs 0 (one word), '?', '*' or '+'.
 func Positional(dest string, nargs byte) *Action { return &Action{dest: dest, nargs: nargs} }
 
-// Choice is a positional that must be one of choices: def when it is left out, or required when def is "".
-func Choice(dest, def string, choices ...string) *Action {
-	a := &Action{dest: dest, def: def, choices: choices}
-	if def != "" {
-		a.nargs = '?'
-	}
-	return a
-}
+// Choice is a positional that must be one of choices.
+func Choice(dest string, choices ...string) *Action { return &Action{dest: dest, choices: choices} }
 
-// Namespace maps the dest of each argument to its value, which is a string, a bool, a []string or
-// nil (not given).
+// Namespace maps the dest of each argument to its value: a string, a bool, a []string (positional words) or nil
+// (not given).
 type Namespace map[string]any
 
 // Str is a string value, "" when it was not given.
@@ -104,7 +78,7 @@ func (n Namespace) Set(dest string) bool { _, ok := n[dest].(string); return ok 
 
 func (n Namespace) Bool(dest string) bool { b, _ := n[dest].(bool); return b }
 
-// List is a repeated option's values, or a positional with several.
+// List is the words of a positional that takes several.
 func (n Namespace) List(dest string) []string { l, _ := n[dest].([]string); return l }
 
 // ExitError is what a command exits with: 2 and a message on stderr, or 0 and the help on stdout for -h.
@@ -129,19 +103,13 @@ func (p *Parser) Parse(argv []string) (Namespace, error) {
 	ns := Namespace{}
 	var pos *Action
 	for _, a := range p.actions {
-		switch {
-		case a.flags == nil:
-			pos = a // lazy: one positional per parser, as every command has; a second one would need a fill rule
-			ns[a.dest] = a.def
-		case a.kind == kTrue:
+		ns[a.dest] = nil
+		if a.flags == nil {
+			pos = a // one positional per parser, as every command has
+		} else if a.kind == kTrue {
 			ns[a.dest] = false
-		case a.kind == kAppend:
-			ns[a.dest] = []string{}
-		default:
-			ns[a.dest] = nil
 		}
 	}
-	given := map[string]string{} // dest -> the option string as written
 	var words []string
 	for i := 0; i < len(argv); i++ {
 		a := argv[i]
@@ -162,7 +130,6 @@ func (p *Parser) Parse(argv []string) (Namespace, error) {
 			if act == nil {
 				return nil, UsageError(p.cmd, "unrecognized option '"+a+"'")
 			}
-			given[act.dest] = name
 			switch act.kind {
 			case kTrue:
 				if hasVal {
@@ -183,27 +150,12 @@ func (p *Parser) Parse(argv []string) (Namespace, error) {
 					i++
 					val = argv[i]
 				}
-				if act.kind == kAppend {
-					ns[act.dest] = append(ns.List(act.dest), val)
-				} else {
-					ns[act.dest] = val
-				}
+				ns[act.dest] = val
 			}
 		}
 	}
 	if err := p.assign(ns, pos, words); err != nil {
 		return nil, err
-	}
-	for _, group := range p.exclusive {
-		var set []string
-		for _, d := range group {
-			if given[d] != "" {
-				set = append(set, given[d])
-			}
-		}
-		if len(set) > 1 {
-			return nil, UsageError(p.cmd, strings.Join(set, " and ")+" cannot be used together")
-		}
 	}
 	return ns, nil
 }
@@ -234,14 +186,7 @@ func (p *Parser) assign(ns Namespace, pos *Action, words []string) error {
 		return nil
 	}
 	for _, w := range words {
-		if pos.choices == nil {
-			break
-		}
-		ok := false
-		for _, c := range pos.choices {
-			ok = ok || c == w
-		}
-		if !ok {
+		if pos.choices != nil && !slices.Contains(pos.choices, w) {
 			return UsageError(p.cmd, "invalid choice '"+w+"' (choose from "+strings.Join(pos.choices, ", ")+")")
 		}
 	}
