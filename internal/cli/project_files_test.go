@@ -96,7 +96,7 @@ func TestProjectFiles_NewLocalTakesACommandAndAddRecordsThePath(t *testing.T) {
 	proj := e.Project(map[string]any{}, testkit.Files(map[string]any{"tools/run.sh": "#!/usr/bin/env bash\n"}))
 	outside := e.Script("outside.sh", "#!/usr/bin/env bash\n")
 	res := e.RunWith(in(proj), "new", "x", "--local", "--desc", "d")
-	res.WantCode(t, 1)
+	res.WantCode(t, 2)
 	testkit.Contains(t, "stderr", res.Stderr, "after '--'")
 	testkit.Eq(t, "in", e.RunWith(in(proj), "new", "in", "--script", "tools/run.sh", "--desc", "d", "--local").Code, 0)
 	testkit.Eq(t, "out", e.RunWith(in(proj), "new", "out", "--script", outside, "--desc", "d", "--local").Code, 0)

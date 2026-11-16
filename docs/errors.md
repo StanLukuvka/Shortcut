@@ -32,7 +32,6 @@ A command's own arguments print `error: <message>` and a second line, `Try 'shor
 | `missing <name>` | A required argument is left out: `name`, `shell` |
 | `unexpected argument '<word>'` | More arguments than the command takes |
 | `invalid choice '<word>' (choose from <list>)` | `shortcut completion` takes `bash`, `fish` or `zsh` |
-| `--script and --copy cannot be used together` | `shortcut new` takes one source |
 
 A word that starts with `-` is an option. To pass one as a name or a value, put it after `--`.
 
@@ -90,7 +89,6 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 |---|---|
 | `invalid shortcut name '<name>'. Must match ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ (alphanumeric start, up to 64 characters of letters, digits, underscores, and dashes).` | |
 | `path traversal detected: '<script>' resolves to '<target>', outside '<base>'.` | A `script` path leads out of its store |
-| `<path> is a symlink, so this would write somewhere else` | shortcut won't write through a symlink in a store |
 
 ## Finding and running
 
@@ -125,22 +123,17 @@ A shortcut that declares `args` checks them before it runs. These print `error: 
 | Message | Meaning |
 |---|---|
 | `command expected after '--'` | |
-| `--script and --copy need a file name` | |
-| `use one of: '-- CMD', --script, --copy` | |
+| `--script needs a file name` | |
+| `use one of: '-- CMD', --script` | |
 | `--desc can't be empty` | `new` |
 | `--namespace can't be empty` | `new` |
-| `--copy can't be used with --local: .shortcuts.local is one file. Use --script` | |
-| `a local shortcut needs a command after '--', or --script PATH` | |
-| `script file not found: <path>` | The file given to `--script` or `--copy` |
-| `stdin is closed` | `new --copy -` with no standard input |
-| `'<src>' and '<dst>' are the same file` | `new --copy` of the file the store already holds under that name |
+| `script file not found: <path>` | The file given to `--script` |
 | `--cwd directory does not exist: <dir>` | |
 | `--namespace can't be used with --local: .shortcuts.local is one file, and .shortcuts is yours to edit` | |
 | `--arg-desc <flag>: needs NAME=TEXT, with NAME declared by --arg` | |
 | `--arg-desc <flag>: '<arg>' already has a desc` | |
 | `'<ns>' is a shortcut in store <store>, so it can't be a namespace` | |
 | `shortcut '<name>' already exists in <file>` | `new` never replaces an entry. Remove it first |
-| `<path> already exists; remove it or pick another name` | `new` (script or `--copy`) never overwrites a script file in the scripts folder, even one no entry uses |
 | `'<name>' is a namespace in store <store>` | |
 | `'<name>' is a namespace in <store>` | The same, for `--local` |
 

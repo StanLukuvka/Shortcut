@@ -18,7 +18,6 @@
 - Diffs split lines on `\n` only, so a `\r`, form feed or U+2028 stays inside its line.
 - `~` and `~/...` are expanded in paths, using $HOME; `~name` is not.
 - An empty `--desc` or `--namespace` is an error. A `null` for a text field, `args` or an arg's `default` or `desc` is an error; a `null` entry in `.shortcuts.local` hides a shared entry.
-- `new --copy` gives the copy the source's permission bits plus execute, without setuid, setgid or sticky; `new --copy -` takes stdin bytes as they are.
 - An executable script with no `#!` is run directly; only an executable text file the kernel refuses is run with bash.
 - A shortcut's environment lists `SHORTCUT_NAME`, `SHORTCUT_NAMESPACE`, `SHORTCUT_CALLER_CWD` and its `SC_ARG_` variables after the caller's own variables.
 - `$PAGER` is split on blanks; quotes in it are not interpreted. If the pager ran, the diff is not printed again, whatever its exit status. The row count comes from the terminal (24 if unknown).

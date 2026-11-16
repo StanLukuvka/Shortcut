@@ -14,8 +14,7 @@ Agents use the same commands as people. In a project, `--local` writes to `.shor
    - General-purpose tool: use the defaults, the global store and `cwd: caller`.
    - Your own project-specific work: use `--local`, from the project root. For something the whole project shares, propose an entry for `.shortcuts` and let the user commit it.
    - A process that must run in a specific directory: use `--cwd <dir>`.
-   - A script that already exists: `--script PATH` uses it where it is, `--copy FILE` copies it into the global store. With `--local`, only `--script`.
-   - A new script: `shortcut new <name>` without `-- CMD` creates a bash script and prints `Edit it at: <path>`. Write to that file. Not with `--local`.
+   - A script that already exists: `--script PATH` uses it where it is.
 
 3. **Single-quote the command.** Read arguments with `$1` or `"$@"`. A shortcut doesn't append them, and flags reach it too. `--arg NAME` declares a required argument and `--arg NAME=DEFAULT` an optional one. `--arg NAME...` takes the rest of the arguments, and `--arg-desc NAME=TEXT` describes one. A declared argument is also in `$SC_ARG_<NAME>`. See [What a shortcut runs with](README.md#what-a-shortcut-runs-with).
 

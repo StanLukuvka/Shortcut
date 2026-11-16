@@ -95,7 +95,7 @@ func (g Group) ScriptBase() string {
 	return g.StoreDir
 }
 
-// ScriptsDir is where shortcut keeps its copies of a group's scripts, one folder per namespace.
+// ScriptsDir is a group's own scripts folder, one per namespace: what rm --namespace deletes and approval covers.
 func (g Group) ScriptsDir() string {
 	if g.Name != "" {
 		return osutil.Join(g.ScriptBase(), "scripts", g.Name)

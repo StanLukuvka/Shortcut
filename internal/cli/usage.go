@@ -7,9 +7,8 @@ Usage:
   shortcut run [--global] [-y] <name> [args...]
                                             Run a shortcut, or ` + "`" + `<namespace> <name>` + "`" + `; r is short for run.
                                             --global skips project shortcuts, -y answers a confirm prompt
-  shortcut new <name> [FLAGS] [-- CMD...]   Create a shortcut: an inline command after --, a new
-                                            script with a bash header at the path it prints, or a
-                                            file with --script or --copy
+  shortcut new <name> [FLAGS] [-- CMD...]   Create a shortcut: an inline command after --,
+                                            or a script file with --script
   shortcut list [--names [NAMESPACE]]       List visible shortcuts, with where each runs
   shortcut show [--global] [--json] <name>  Show shortcut metadata and script contents, or the entry as JSON
   shortcut rm [--global|--local] <name> [-y]
@@ -23,7 +22,6 @@ Usage:
 
 FLAGS for new:
   --script PATH             Run this file where it is
-  --copy FILE|-             Copy this file, or stdin, into the store
   --desc D                  Description
   --cwd caller|DIR          Where it runs (default: caller, your current directory)
   --arg NAME[=DEFAULT]      Declare a required argument, or an optional one with a default.

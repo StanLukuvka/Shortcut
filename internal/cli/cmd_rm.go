@@ -3,7 +3,6 @@ package cli
 import (
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
 	"github.com/StanLukuvka/Shortcut/internal/model"
@@ -12,10 +11,9 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
-// What rm deletes: the entry's line in its registry, and for rm the script copy shortcut itself made in the group's
-// scripts folder; for rm --namespace the namespace's file and its scripts folder. Nothing else, and nothing that
-// is only reached through a link: unlinkFile never follows one, a symlinked scripts folder loses only the link, and
-// a copy is only deleted when its fully resolved path is inside the resolved scripts folder.
+// What rm deletes: the entry's line in its registry, never a script file; for rm --namespace the namespace's file
+// and its scripts folder. Nothing else, and nothing that is only reached through a link: unlinkFile never follows
+// one, and a symlinked scripts folder loses only the link.
 
 // cmdRm removes a shortcut or a namespace.
 func cmdRm(s *textio.Streams, args []string) error {
@@ -69,14 +67,12 @@ func cmdRm(s *textio.Streams, args []string) error {
 			"Edit it by hand, or use: shortcut rm --local " + display)
 	}
 
-	cp := storedCopy(group, found.Raw)
 	if err := confirmed(s, textio.Confirm{Question: "remove '" + display + "'?", NoTerminal: "remove '" + display + "' in a terminal, or pass -y",
-		Message: rmMessage(group, display, found.Raw, cp), TellOnYes: true}, ns.Bool("yes")); err != nil {
+		Message: rmMessage(group, display, found.Raw), TellOnYes: true}, ns.Bool("yes")); err != nil {
 		return err
 	}
 
 	err = lockedGroupWrite(group, func() error {
-		// 1. Remove from registry
 		reg, shortcuts, err := loadForEdit(group.File, false)
 		if err != nil {
 			return err
@@ -86,10 +82,6 @@ func cmdRm(s *textio.Streams, args []string) error {
 			if err := model.SaveRegistryFile(group.File, reg); err != nil {
 				return err
 			}
-		}
-		// 2. Remove the stored copy, never a --script file
-		if cp != "" {
-			syscall.Unlink(cp) // failure is ignored
 		}
 		return nil
 	})
@@ -215,21 +207,6 @@ func scriptField(raw ordjson.Value) (string, bool) {
 	return script, ok && script != ""
 }
 
-// storedCopy returns the copy shortcut keeps of an entry's script, which rm deletes with it: a relative path
-// inside the group's scripts folder. new --script never records one there as relative, so it's never one. "" is none.
-// The path is resolved, so it is where the file really is, and it must still be inside the resolved folder.
-func storedCopy(group model.Group, raw ordjson.Value) string {
-	script, ok := scriptField(raw)
-	if !ok || strings.HasPrefix(script, "/") {
-		return ""
-	}
-	path, err := model.ResolveScriptPath(group.ScriptBase(), script)
-	if err != nil || !osutil.IsRelativeTo(path, osutil.Realpath(group.ScriptsDir())) {
-		return ""
-	}
-	return path
-}
-
 // keptScript returns the script an entry names, as a path, for saying it stays. "" is none.
 func keptScript(group model.Group, raw ordjson.Value) string {
 	script, ok := scriptField(raw)
@@ -243,15 +220,13 @@ func keptScript(group model.Group, raw ordjson.Value) string {
 }
 
 // rmMessage returns what rm is about to change, shown above its question.
-func rmMessage(group model.Group, display string, raw ordjson.Value, cp string) string {
+func rmMessage(group model.Group, display string, raw ordjson.Value) string {
 	where := "your global shortcuts"
 	if group.Name != "" {
 		where = "namespace " + group.Name
 	}
 	lines := []string{"Removes '" + display + "' from " + where + ": " + group.File}
-	if cp != "" {
-		lines = append(lines, "Deletes its script copy: "+cp)
-	} else if kept := keptScript(group, raw); kept != "" {
+	if kept := keptScript(group, raw); kept != "" {
 		lines = append(lines, "Keeps its script: "+kept)
 	}
 	return strings.Join(lines, "\n")

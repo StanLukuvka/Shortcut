@@ -21,17 +21,6 @@ func fileShortcuts(t *testing.T, path string) map[string]any {
 	return s
 }
 
-func isExec(t *testing.T, path string) bool {
-	t.Helper()
-	st, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return st.Mode().Perm()&0o111 != 0
-}
-
-func inputOf(text string) *string { return &text }
-
 func TestRunning_CommandWordsAreOrdinaryShortcutNames(t *testing.T) {
 	e := testkit.New(t)
 	for _, name := range []string{"new", "list", "run", "r", "nano"} {
@@ -209,11 +198,8 @@ func TestStores_NewTakesOneSource(t *testing.T) {
 		message string
 	}{
 		{[]string{"new", "x", "--script", source, "--", "true"}, "use one of"},
-		{[]string{"new", "x", "--script", source, "--copy", source}, "cannot be used together"},
-		{[]string{"new", "x", "--local", "--copy", source}, "Use --script"},
-		{[]string{"new", "x", "--script", "", "--", "true"}, "need a file name"},
-		{[]string{"new", "x", "--copy", ""}, "need a file name"},
-		{[]string{"new", "x", "--script", ""}, "need a file name"},
+		{[]string{"new", "x", "--script", "", "--", "true"}, "needs a file name"},
+		{[]string{"new", "x", "--script", ""}, "needs a file name"},
 	} {
 		res := e.RunWith(in(proj), c.args...)
 		if res.Code == 0 {
@@ -227,62 +213,24 @@ func TestStores_NewTakesOneSource(t *testing.T) {
 
 func TestStores_AddAndLinkPaths(t *testing.T) {
 	e := testkit.New(t)
-	// 1. Add copy from file
-	src := e.Script("source.sh", "#!/usr/bin/env bash\necho source\n")
-	os.Chmod(src, 0o644)
-	runOK(t, e, testkit.Opts{}, "new", "copied", "--copy", src, "--desc", "Copied script")
-	copied := filepath.Join(e.Store, "scripts", "copied.sh")
-	if !isExec(t, copied) {
-		t.Errorf("the copy is not executable")
-	}
-	if st, err := os.Stat(src); err != nil || st.Mode().Perm() != 0o644 {
-		t.Errorf("the original changed: %v %v", st, err)
-	}
-
-	// 2. Add from stdin
-	runOK(t, e, testkit.Opts{Input: inputOf("#!/usr/bin/env bash\necho piped\n")}, "new", "piped", "--copy", "-", "--desc", "Piped script")
-	testkit.Eq(t, "piped", testkit.ReadFile(t, filepath.Join(e.Store, "scripts", "piped.sh")), "#!/usr/bin/env bash\necho piped\n")
-
-	// 3. Link absolute external file
+	// 1. Link absolute external file
 	ext := e.Script("external.sh", "#!/usr/bin/env bash\necho external\n")
 	runOK(t, e, testkit.Opts{}, "new", "linked", "--script", ext, "--desc", "Linked script")
 	testkit.NotExist(t, filepath.Join(e.Store, "scripts", "linked.sh"))
 	testkit.Eq(t, "linked", fileShortcuts(t, filepath.Join(e.Store, "shortcuts.json"))["linked"].(map[string]any)["script"], realpath(t, ext))
 
-	// 4. Path containment check
+	// 2. Path containment check
 	if _, err := model.ResolveScriptPath(e.Store, "../../../etc/passwd"); err == nil || !strings.Contains(err.Error(), "path traversal detected") {
 		t.Errorf("traversal: %v", err)
 	}
 }
 
-func TestStores_NewOneLinerAndTemplate(t *testing.T) {
+func TestStores_NewOneLiner(t *testing.T) {
 	e := testkit.New(t)
 	runOK(t, e, testkit.Opts{}, "new", "hello", "--", "echo", "hello", "world")
 	hello := e.LoadGlobal()["hello"].(map[string]any)
 	testkit.Eq(t, "inline", hello["inline"], "echo hello world")
 	testkit.Eq(t, "description", hello["description"], "echo hello world")
-
-	runOK(t, e, testkit.Opts{}, "new", "template")
-	script := filepath.Join(e.Store, "scripts", "template.sh")
-	if !isExec(t, script) {
-		t.Errorf("the template is not executable")
-	}
-	testkit.Eq(t, "content", testkit.ReadFile(t, script), "#!/usr/bin/env bash\nset -euo pipefail\n\n")
-	testkit.Eq(t, "description", e.LoadGlobal()["template"].(map[string]any)["description"], "(no description)")
-}
-
-func TestStores_NewOpensNoEditorAndPrintsTheScriptPath(t *testing.T) {
-	e := testkit.New(t)
-	rc, out := e.InTerminal(testkit.Opts{Env: map[string]string{"VISUAL": "false", "EDITOR": "false"}}, nil, "new", "tmpl", "--desc", "x")
-	script := filepath.Join(e.Store, "scripts", "tmpl.sh")
-	if rc != 0 {
-		t.Fatalf("exit %d\n%s", rc, out)
-	}
-	testkit.Contains(t, "output", out, "Edit it at: "+script)
-	testkit.Eq(t, "content", testkit.ReadFile(t, script), "#!/usr/bin/env bash\nset -euo pipefail\n\n")
-	if _, has := e.LoadGlobal()["tmpl"]; !has {
-		t.Errorf("tmpl was not stored")
-	}
 }
 
 func TestStores_NewScriptInsideTheStoreIsKeptRelative(t *testing.T) {
@@ -356,12 +304,6 @@ func TestStores_NamespaceFlagIsRefusedWithLocal(t *testing.T) {
 	res.WantCode(t, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "--namespace can't be used with --local")
 	testkit.NotExist(t, filepath.Join(proj, ".shortcuts.local"))
-}
-
-func TestStores_NewInANamespaceGivesItsScriptPath(t *testing.T) {
-	e := testkit.New(t)
-	res := e.Run("new", "ps", "--namespace", "docker", "--desc", "d")
-	testkit.Contains(t, "stdout", res.Stdout, "Edit it at: "+filepath.Join(e.Store, "imports", "scripts", "docker", "ps.sh"))
 }
 
 func TestStores_ConcurrentNewKeepsEveryEntry(t *testing.T) {
@@ -506,44 +448,13 @@ func TestStores_NewerStoreIsRefusedNotRewritten(t *testing.T) {
 	testkit.Eq(t, "file", testkit.ReadFile(t, file), before)
 }
 
-// A namespace's scripts folder may be a symlink a repo committed: nothing is made or written where it leads.
-func TestNew_RefusesAScriptsFolderThatIsASymlink(t *testing.T) {
-	e := testkit.New(t)
-	elsewhere := e.Folder("elsewhere")
-	e.Symlink(elsewhere, filepath.Join(e.Store, "imports", "scripts"))
-	res := e.Run("new", "ps", "--namespace", "dk", "--desc", "d")
-	res.WantCode(t, 1)
-	testkit.Contains(t, "stderr", res.Stderr, "is a symlink, so this would write somewhere else")
-	entries, _ := os.ReadDir(elsewhere)
-	testkit.Eq(t, "elsewhere", len(entries), 0)
-	testkit.NotExist(t, filepath.Join(e.Store, "imports", "dk.shortcut"))
-}
-
-// A script file no entry registers is not overwritten, and nothing reaches the registry.
-func TestNew_RefusesAnExistingScriptFile(t *testing.T) {
-	e := testkit.New(t)
-	scripts := filepath.Join(e.Store, "scripts")
-	e.WriteFile(filepath.Join(scripts, "mine.sh"), "keep me\n", 0o755)
-	src := filepath.Join(e.Tmp, "src.sh")
-	e.WriteFile(src, "echo new\n", 0o755)
-	for _, argv := range [][]string{{"new", "mine"}, {"new", "mine", "--copy", src}} {
-		res := e.Run(argv...)
-		testkit.Eq(t, strings.Join(argv, " "), res.Code, 1)
-		testkit.Contains(t, strings.Join(argv, " "), res.Stderr, filepath.Join(scripts, "mine.sh")+" already exists; remove it or pick another name")
-		testkit.Eq(t, "content", testkit.ReadFile(t, filepath.Join(scripts, "mine.sh")), "keep me\n")
-		if _, has := e.LoadGlobal()["mine"]; has {
-			t.Errorf("%v registered mine", argv)
-		}
-	}
-}
-
 // A namespace entry is named with its namespace, as rm names it.
 func TestNew_CreatedMessageNamesTheNamespace(t *testing.T) {
 	e := testkit.New(t)
 	res := runOK(t, e, testkit.Opts{}, "new", "ps", "--namespace", "docker", "--", "echo ps")
 	testkit.Contains(t, "inline", res.Stdout, "Created inline shortcut 'docker ps'.")
-	res = runOK(t, e, testkit.Opts{}, "new", "up", "--namespace", "docker")
-	testkit.Contains(t, "script", res.Stdout, "Created script shortcut 'docker up'.")
+	res = runOK(t, e, testkit.Opts{}, "new", "up", "--namespace", "docker", "--script", e.Script("up.sh", "#!/bin/sh\n"))
+	testkit.Contains(t, "script", res.Stdout, "Created shortcut 'docker up' using")
 }
 
 // An empty --desc or --namespace is an error, not "absent", and nothing is written.
@@ -556,7 +467,7 @@ func TestNew_EmptyFlagsAreErrors(t *testing.T) {
 	}{
 		{[]string{"new", "plain", "--desc", ""}, "error: --desc can't be empty\n"},
 		{[]string{"new", "x", "--desc=", "--", "true"}, "error: --desc can't be empty\n"},
-		{[]string{"new", "x", "--copy", script, "--desc", ""}, "error: --desc can't be empty\n"},
+		{[]string{"new", "x", "--script", script, "--desc", ""}, "error: --desc can't be empty\n"},
 		{[]string{"new", "x", "--namespace", "", "--", "true"}, "error: --namespace can't be empty\n"},
 		{[]string{"new", "x", "--namespace=", "--desc", "d"}, "error: --namespace can't be empty\n"},
 	} {
@@ -566,50 +477,8 @@ func TestNew_EmptyFlagsAreErrors(t *testing.T) {
 		}
 	}
 	testkit.NotExist(t, filepath.Join(e.Store, "shortcuts.json"))
-	runOK(t, e, testkit.Opts{}, "new", "dflt")
+	runOK(t, e, testkit.Opts{}, "new", "dflt", "--script", script)
 	testkit.Eq(t, "no desc", e.LoadGlobal()["dflt"].(map[string]any)["description"], "(no description)")
-}
-
-// A copy keeps the source's permission bits, made executable, and nothing else: no setuid, no old mtime.
-func TestNew_CopyModeAndTime(t *testing.T) {
-	e := testkit.New(t)
-	src := e.Script("src.sh", "#!/bin/sh\necho hi\n")
-	if err := os.Chmod(src, 0o4755); err != nil {
-		t.Fatal(err)
-	}
-	old := time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
-	if err := os.Chtimes(src, old, old); err != nil {
-		t.Fatal(err)
-	}
-	runOK(t, e, testkit.Opts{}, "new", "c", "--copy", src, "--desc", "d")
-	st, err := os.Stat(filepath.Join(e.Store, "scripts", "c.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if st.Mode() != 0o755 || time.Since(st.ModTime()) > time.Hour {
-		t.Errorf("mode %v, mtime %v", st.Mode(), st.ModTime())
-	}
-	os.Chmod(src, 0o640)
-	runOK(t, e, testkit.Opts{}, "new", "d", "--copy", src, "--desc", "d")
-	st, _ = os.Stat(filepath.Join(e.Store, "scripts", "d.sh"))
-	testkit.Eq(t, "mode", st.Mode().String(), os.FileMode(0o751).String())
-}
-
-// The stored copy keeps the source's extension; a dotfile's whole name counts as one, a name with none gets .sh.
-func TestNew_CopyKeepsTheSourceExtension(t *testing.T) {
-	e := testkit.New(t)
-	for _, c := range []struct{ src, name, stored string }{{"notes.txt", "x0", "x0.txt"}, {".bashrc", "x1", "x1.bashrc"}, {"tool", "x2", "x2.sh"}} {
-		src := e.Script(c.src, "echo hi\n")
-		runOK(t, e, testkit.Opts{}, "new", c.name, "--copy", src, "--desc", "d")
-		testkit.Eq(t, c.src, testkit.ReadFile(t, filepath.Join(e.Store, "scripts", c.stored)), "echo hi\n")
-	}
-}
-
-// stdin bytes are taken as they come, valid UTF-8 or not.
-func TestNew_CopyFromStdinTakesAnyBytes(t *testing.T) {
-	e := testkit.New(t)
-	runOK(t, e, testkit.Opts{Input: inputOf("\xe9\n")}, "new", "x", "--copy", "-", "--desc", "d")
-	testkit.Eq(t, "script", testkit.ReadFile(t, filepath.Join(e.Store, "scripts", "x.sh")), "\xe9\n")
 }
 
 func TestNew_LocalInAFolderThatCannotBeApprovedWritesNothing(t *testing.T) {
