@@ -5,7 +5,6 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
@@ -66,11 +65,11 @@ func Load(c *store.Context, g store.Group) *Record {
 	return &Record{Files: files}
 }
 
-// mapDoc is m as an object's text, its keys sorted: readers sort, so the order is free, and sorted is stable.
+// mapDoc is m as an object's text.
 func mapDoc(m map[string]string) ([]byte, error) {
 	d := platform.Doc{}
-	for _, k := range slices.Sorted(maps.Keys(m)) {
-		if err := d.SetString(k, m[k]); err != nil {
+	for k, v := range m {
+		if err := d.SetString(k, v); err != nil {
 			return nil, err
 		}
 	}

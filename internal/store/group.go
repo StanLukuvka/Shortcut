@@ -48,7 +48,7 @@ type Item struct {
 	Raw   []byte // the value as written: show --json prints it
 }
 
-// Items are the entries of one file, in file order.
+// Items are the entries of one file, sorted by name.
 type Items []Item
 
 func (is Items) Get(name string) (Item, bool) {

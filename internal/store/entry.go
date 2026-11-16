@@ -37,7 +37,7 @@ type Field struct {
 	Show bool   // `show --field` reads it by its name
 }
 
-// Fields are the entry's fields, in the order they are checked and written. Validation, Raw and
+// Fields are the entry's fields, in the order they are checked. Validation, Raw and
 // `show --field` read them, and a test checks docs/shortcut.schema.json against them.
 func Fields() []Field {
 	return []Field{
@@ -103,7 +103,7 @@ func DecodeEntry(name string, raw []byte) (*Entry, error) {
 	return e, nil
 }
 
-// Raw is the entry as an object's text, its fields in table order: description always, the others when set.
+// Raw is the entry as an object's text, its fields sorted by name: description always, the others when set.
 func (e *Entry) Raw() ([]byte, error) {
 	text := map[string]*string{"inline": e.Inline, "script": e.Script, "cwd": e.Cwd}
 	d := platform.Doc{}
