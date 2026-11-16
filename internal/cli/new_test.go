@@ -546,7 +546,7 @@ func TestNew_CreatedMessageNamesTheNamespace(t *testing.T) {
 	testkit.Contains(t, "script", res.Stdout, "Created script shortcut 'docker up'.")
 }
 
-// An empty --desc, --namespace or --as is an error, not "absent", and nothing is written.
+// An empty --desc or --namespace is an error, not "absent", and nothing is written.
 func TestNew_EmptyFlagsAreErrors(t *testing.T) {
 	e := testkit.New(t)
 	script := e.Script("f.sh", "#!/bin/sh\necho hi\n")

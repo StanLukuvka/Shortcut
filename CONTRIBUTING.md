@@ -44,7 +44,7 @@ CI also checks `gofmt` and runs `go vet ./...`.
 ## What doesn't change
 
 - The standard library only: `go.mod` has no `require`.
-- The README's Security model, statements 1–6, word for word.
+- The README's Security model, statements 1–5, word for word.
 - Entries are immutable: no edit command. To change one, `rm` it and make it again.
 - shortcut never writes a project's `.shortcuts`.
 - Text from a file is printed through `textio.Safe`.

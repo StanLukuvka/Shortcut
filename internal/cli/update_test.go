@@ -324,11 +324,10 @@ func TestUpdate_Refusals(t *testing.T) {
 	if res.Code != 1 || strings.Count(res.Stderr, "error: cannot approve "+proj+": ") != 2 {
 		t.Errorf("update . -y: exit %d stderr %q", res.Code, res.Stderr)
 	}
-	// the exported-but-relative-cwd warning and the local-over-shared line
-	proj = e.Project(map[string]any{"x": map[string]any{"inline": "true", "cwd": "sub", "export": true}, "y": testkit.Inline("true")}, testkit.Name("p2"))
+	// the local-over-shared line
+	proj = e.Project(map[string]any{"x": map[string]any{"inline": "true", "cwd": "sub"}, "y": testkit.Inline("true")}, testkit.Name("p2"))
 	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"y": {"inline": "false"}}}`, 0)
 	res = e.RunWith(in(proj), "update", "-y")
-	testkit.Contains(t, "warning", res.Stderr, "warning: 'x' is exported, but its cwd 'sub' only exists in this checkout\n")
 	testkit.Contains(t, "local", res.Stdout, "'y' in .shortcuts is overridden by .shortcuts.local for you.\n")
 }
 

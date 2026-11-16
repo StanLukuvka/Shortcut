@@ -10,8 +10,8 @@ _shortcut() {
         prev="${COMP_WORDS[COMP_CWORD-1]}"
     fi
 
-    local subcommands="run r new list show rm promote update completion help"
-    local name_commands="run r show rm promote"
+    local subcommands="run r new list show rm update completion help"
+    local name_commands="run r show rm"
 
     if [ "${COMP_CWORD:-1}" -eq 1 ]; then
         COMPREPLY=( $(compgen -W "${subcommands}" -- "$cur") )
@@ -32,7 +32,6 @@ _shortcut() {
                 case "$cmd" in
                     run|r) flags="--global -y" ;;
                     rm) flags="--global --local --namespace -y" ;;
-                    promote) flags="--as -y --force" ;;
                     show) flags="--global --json --field" ;;
                 esac
                 COMPREPLY=( $(compgen -W "${flags}" -- "$cur") )

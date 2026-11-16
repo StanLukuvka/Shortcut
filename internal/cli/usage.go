@@ -16,10 +16,6 @@ Usage:
                                             Remove a shortcut. With --local, take it out of .shortcuts.local,
                                             or hide a shared one from you
   shortcut rm --namespace <ns> [-y]         Remove a global namespace and its scripts/<ns>/ folder
-  shortcut promote <name> [--as NEW] [-y] [--force]
-                                            Add an approved, exported project shortcut to your global
-                                            shortcuts. It runs this checkout's files as they are, not a
-                                            copy. --force takes one that isn't exported
   shortcut update [group] [-y]              Review changes to project shortcuts and namespaces, and approve them
   shortcut completion bash|zsh|fish         Print a shell completion script
   shortcut help [command], -h, --help       Show this help message, or a command's

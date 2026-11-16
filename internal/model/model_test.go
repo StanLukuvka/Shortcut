@@ -32,6 +32,7 @@ func TestEntry_FromValueMessages(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{`[]`, "'x' is not a valid entry: expected a dictionary"},
 		{`{"inline": "a", "zed": 1, "bar": 2}`, "'x' is not a valid entry: unknown field: bar, zed"},
+		{`{"inline": "a", "export": true, "from": {}}`, "'x' is not a valid entry: unknown field: export, from"},
 		{`{"inline": "a", "description": null}`, "'x' is not a valid entry: 'description' must be a string"},
 		{`{"inline": 1}`, "'x' is not a valid entry: 'inline' must be a string"},
 		{`{"inline": "a", "cwd": 5}`, "'x' is not a valid entry: 'cwd' must be a string"},
@@ -42,17 +43,12 @@ func TestEntry_FromValueMessages(t *testing.T) {
 		{`{"inline": "a", "created_by": null}`, "'x' is not a valid entry: 'created_by' must be a string"},
 		{`{"inline": "a", "created": null}`, "'x' is not a valid entry: 'created' must be a string"},
 		{`{"inline": "a", "args": null}`, "'x' is not a valid entry: 'args' must be a list"},
-		{`{"inline": "a", "from": null}`, "'x' is not a valid entry: 'from' must be an object with a string 'source' and 'name'"},
 		{`{"inline": "a", "args": [{"name": "a", "default": null}]}`, "'x' is not a valid entry: args 'default' must be a string"},
 		{`{"inline": "a", "args": [{"name": "a", "desc": null}]}`, "'x' is not a valid entry: args 'desc' must be a string"},
 		{`{"inline": "a", "confirm": "yes"}`, "'x' is not a valid entry: 'confirm' must be a boolean"},
-		{`{"inline": "a", "export": null}`, "'x' is not a valid entry: 'export' must be a boolean"},
 		{`{}`, "'x' is not a valid entry: it needs exactly one of 'inline' and 'script'"},
 		{`{"inline": "a", "script": "b"}`, "'x' is not a valid entry: it needs exactly one of 'inline' and 'script'"},
 		{`{"inline": "a", "args": {}}`, "'x' is not a valid entry: 'args' must be a list"},
-		{`{"inline": "a", "from": {"source": "s"}}`, "'x' is not a valid entry: 'from' must be an object with a string 'source' and 'name'"},
-		{`{"inline": "a", "from": {"source": "s", "name": 1}}`, "'x' is not a valid entry: 'from' must be an object with a string 'source' and 'name'"},
-		{`{"inline": "a", "from": {"source": "s", "name": "n", "x": "y"}}`, "'x' is not a valid entry: 'from' must be an object with a string 'source' and 'name'"},
 	}
 	for _, c := range cases {
 		_, err := EntryFromValue("x", parse(t, c.in))
@@ -99,8 +95,8 @@ func compact(t *testing.T, v ordjson.Value) string {
 }
 
 func TestEntry_RoundTripKeepsArgsAndOrder(t *testing.T) {
-	src := `{"description": "d", "script": "s.sh", "cwd": "c", "confirm": true, "export": true,` +
-		` "args": [{"name": "a", "desc": "x", "required": true}, {"name": "b"}], "from": {"source": "/p", "name": "n"}}`
+	src := `{"description": "d", "script": "s.sh", "cwd": "c", "confirm": true,` +
+		` "args": [{"name": "a", "desc": "x", "required": true}, {"name": "b"}]}`
 	e, err := EntryFromValue("x", parse(t, src))
 	if err != nil {
 		t.Fatal(err)
@@ -108,7 +104,7 @@ func TestEntry_RoundTripKeepsArgsAndOrder(t *testing.T) {
 	if got, want := compact(t, e.ToObject()), compact(t, parse(t, src)); got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
 	}
-	if e.Inline != nil || *e.Script != "s.sh" || e.Origin.Name != "n" || !e.Confirm || len(e.Args) != 2 {
+	if e.Inline != nil || *e.Script != "s.sh" || !e.Confirm || len(e.Args) != 2 {
 		t.Errorf("fields: %+v", e)
 	}
 	// An empty inline is still set; an empty args list is not "absent".
@@ -132,20 +128,6 @@ func TestEntry_ValidateNameRefusesATrailingNewline(t *testing.T) {
 		if err == nil || !strings.HasPrefix(err.Error(), "invalid shortcut name '"+bad+"'. Must match ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ (alphanumeric start") {
 			t.Errorf("%q: %v", bad, err)
 		}
-	}
-}
-
-func TestEntry_PlacementError(t *testing.T) {
-	exp := &Entry{Name: "x", Export: true}
-	if got := PlacementError(exp, false, true); got != "'x' is not a valid entry: 'export' is only for .shortcuts and .shortcuts.local" {
-		t.Error(got)
-	}
-	from := &Entry{Name: "x", Origin: &Origin{"s", "n"}}
-	if got := PlacementError(from, true, false); got != "'x' is not a valid entry: 'from' is only for the global store's shortcuts.json" {
-		t.Error(got)
-	}
-	if PlacementError(exp, true, false) != "" || PlacementError(from, false, true) != "" {
-		t.Error("allowed placements refused")
 	}
 }
 
@@ -613,8 +595,6 @@ func TestStores_EntryErrors(t *testing.T) {
 		"gone":   map[string]any{"script": "bin/nope"},
 		"escape": map[string]any{"script": "../x"},
 		"bad":    map[string]any{"inline": "a", "script": "b"},
-		"export": map[string]any{"inline": "x", "export": true},
-		"from":   map[string]any{"inline": "x", "from": map[string]any{"source": "s", "name": "n"}},
 		"a b":    map[string]any{"inline": "x"},
 		"isdir":  map[string]any{"script": "bin"},
 	}, testkit.Files(map[string]any{"bin/tool": "x"}))
@@ -623,7 +603,7 @@ func TestStores_EntryErrors(t *testing.T) {
 	for _, e := range EntryErrors(g) {
 		got = append(got, e[:min(len(e), 60)])
 	}
-	if len(got) != 6 {
+	if len(got) != 5 {
 		t.Fatalf("errors: %q", EntryErrors(g))
 	}
 	joined := strings.Join(EntryErrors(g), "\n")
@@ -631,7 +611,6 @@ func TestStores_EntryErrors(t *testing.T) {
 		"'gone' is not a valid entry: script not found: bin/nope",
 		"path traversal detected: '../x' resolves to",
 		"'bad' is not a valid entry: it needs exactly one of 'inline' and 'script'",
-		"'from' is only for the global store's shortcuts.json",
 		"invalid shortcut name 'a b'.",
 		"'isdir' is not a valid entry: script not found: bin",
 	} {
@@ -639,7 +618,7 @@ func TestStores_EntryErrors(t *testing.T) {
 			t.Errorf("missing %q in\n%s", want, joined)
 		}
 	}
-	if strings.Contains(joined, "'ok'") || strings.Contains(joined, "'export'") {
+	if strings.Contains(joined, "'ok'") {
 		t.Errorf("a valid entry was reported:\n%s", joined)
 	}
 }

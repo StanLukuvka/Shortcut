@@ -9,7 +9,7 @@
 - A project keeps its shared shortcuts in a `.shortcuts` file, and your own in `.shortcuts.local`.
 - Projects and namespaces run only after `shortcut update`, and again after each change.
 - Namespaces: `<ns>.shortcut` files, run as `shortcut r <ns> <name>`.
-- Declared arguments, `confirm`, `export`, `promote`.
+- Declared arguments, and `confirm`.
 - `show --field KEY <name>` prints one field, bare, and only reads. The `edit` and `desktop` in examples/tools use it.
 - Every error message is listed in [docs/errors.md](docs/errors.md).
 - Every store file (`shortcuts.json`, `.shortcuts`, `.shortcuts.local`, namespace `.shortcut` files) needs `"version": 1`. A missing or lower version is an error; a higher one asks you to upgrade shortcut.
@@ -17,7 +17,7 @@
 - Options are spelled in full; `-yh` is not `-y -h`. A usage error reads `error: <message>` and a `Try 'shortcut <command> -h'` line, and exits 2.
 - Diffs split lines on `\n` only, so a `\r`, form feed or U+2028 stays inside its line.
 - `~` and `~/...` are expanded in paths, using $HOME; `~name` is not.
-- An empty `--desc`, `--namespace` or `--as` is an error. A `null` for a text field, `args`, `from` or an arg's `default` or `desc` is an error; a `null` entry in `.shortcuts.local` hides a shared entry.
+- An empty `--desc` or `--namespace` is an error. A `null` for a text field, `args` or an arg's `default` or `desc` is an error; a `null` entry in `.shortcuts.local` hides a shared entry.
 - `new --copy` gives the copy the source's permission bits plus execute, without setuid, setgid or sticky; `new --copy -` takes stdin bytes as they are.
 - An executable script with no `#!` is run directly; only an executable text file the kernel refuses is run with bash.
 - A shortcut's environment lists `SHORTCUT_NAME`, `SHORTCUT_NAMESPACE`, `SHORTCUT_CALLER_CWD` and its `SC_ARG_` variables after the caller's own variables.

@@ -15,7 +15,7 @@ import (
 type Found struct {
 	Group Group
 	Name  string
-	Raw   ordjson.Value // the entry as written; LoadEntry judges it
+	Raw   ordjson.Value // the entry as written; EntryFromValue judges it
 	Rest  []string      // the words left over, a run's arguments
 	Hides bool          // a project's name hides a global one of either kind
 }
@@ -125,7 +125,7 @@ func ResolveShortcut(words []string, callerCwd string, skipLocal, strict bool) (
 	if err != nil {
 		return nil, nil, err
 	}
-	entry, err := LoadEntry(f.Group, f.Name, f.Raw)
+	entry, err := EntryFromValue(f.Name, f.Raw)
 	if err != nil {
 		return nil, nil, err
 	}

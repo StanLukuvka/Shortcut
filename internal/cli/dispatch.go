@@ -29,7 +29,7 @@ var handlers map[string]handler
 
 func init() {
 	handlers = map[string]handler{"run": cmdRun, "r": cmdRun, "completion": cmdCompletion,
-		"list": cmdList, "show": cmdShow, "update": cmdUpdate, "new": cmdNew, "rm": cmdRm, "promote": cmdPromote}
+		"list": cmdList, "show": cmdShow, "update": cmdUpdate, "new": cmdNew, "rm": cmdRm}
 }
 
 // Main runs the command and returns the process's exit code. A write to a closed stdout or stderr ends the

@@ -50,18 +50,6 @@ func ResolveRunDir(cwd *string, g Group, callerCwd string) string {
 	return filepath.Clean(osutil.Join(g.Folder(), osutil.ExpandUser(*cwd)))
 }
 
-// LoadEntry is an entry as its group allows it: EntryFromValue, plus where 'export' and 'from' can be.
-func LoadEntry(g Group, name string, v ordjson.Value) (*Entry, error) {
-	e, err := EntryFromValue(name, v)
-	if err != nil {
-		return nil, err
-	}
-	if msg := PlacementError(e, g.LocalFile != "", g.Name == "" && !g.IsProject()); msg != "" {
-		return nil, errors.New(msg)
-	}
-	return e, nil
-}
-
 // LoadGroup reads one file into a Group. It never fails: why a file can't be used is on the Group.
 func LoadGroup(path, storeDir, name string) Group {
 	g := Group{Name: name, File: path, StoreDir: storeDir, Data: &ordjson.Object{}}
@@ -101,7 +89,7 @@ func entryError(g Group, name string, data ordjson.Value) error {
 	if err := ValidateName(name); err != nil {
 		return err
 	}
-	e, err := LoadEntry(g, name, data)
+	e, err := EntryFromValue(name, data)
 	if err != nil {
 		return err
 	}
