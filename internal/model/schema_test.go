@@ -2,13 +2,9 @@ package model
 
 import (
 	"encoding/json"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -37,7 +33,6 @@ type schemaDoc struct {
 	} `json:"properties"`
 	Defs struct {
 		Entry struct{ Properties schemaProps } `json:"entry"`
-		Arg   struct{ Properties schemaProps } `json:"arg"`
 	} `json:"$defs"`
 }
 
@@ -80,45 +75,10 @@ func modelSource(t *testing.T) string {
 	return b.String()
 }
 
-// argFields finds the case list of ValidateArgs that holds "rest": the fields an arg may have.
-func argFields(t *testing.T) []string {
-	t.Helper()
-	file, err := parser.ParseFile(token.NewFileSet(), "entry.go", nil, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var found []string
-	ast.Inspect(file, func(n ast.Node) bool {
-		cc, ok := n.(*ast.CaseClause)
-		if !ok || found != nil {
-			return true
-		}
-		var fields []string
-		for _, e := range cc.List {
-			if lit, ok := e.(*ast.BasicLit); ok && lit.Kind == token.STRING {
-				s, _ := strconv.Unquote(lit.Value)
-				fields = append(fields, s)
-			}
-		}
-		if slices.Contains(fields, "rest") {
-			found = fields
-		}
-		return true
-	})
-	if found == nil {
-		t.Fatal("no list of args fields in entry.go")
-	}
-	slices.Sort(found)
-	return found
-}
-
 func TestSchema_FieldsMatchTheCode(t *testing.T) {
 	s := loadSchema(t)
 	if got, want := sortedKeys(s.Defs.Entry.Properties), sortedKeys(knownFields); !slices.Equal(got, want) {
 		t.Errorf("entry: schema %v, code %v", got, want)
-	}
-	if got, want := sortedKeys(s.Defs.Arg.Properties), argFields(t); !slices.Equal(got, want) {
-		t.Errorf("arg: schema %v, code %v", got, want)
 	}
 }
 
@@ -130,9 +90,6 @@ func TestSchema_FormatMatchesTheCode(t *testing.T) {
 	}
 	if p := s.Properties.Shortcuts.PropertyNames.Pattern; !strings.Contains(src, p) {
 		t.Errorf("the name pattern %s is not in the code", p)
-	}
-	if p := strings.Trim(s.Defs.Arg.Properties["name"].Pattern, "^$"); !strings.Contains(src, p) {
-		t.Errorf("the arg name pattern %s is not in the code", p)
 	}
 }
 
@@ -146,13 +103,6 @@ func TestSchema_EveryFieldIsAccepted(t *testing.T) {
 		entry[k] = schemaSamples[v.Type]
 	}
 	delete(entry, "script")
-	arg := map[string]any{}
-	for k, v := range s.Defs.Arg.Properties {
-		arg[k] = schemaSamples[v.Type]
-	}
-	arg["name"] = "x"
-	arg["required"] = false // required can't go with a default
-	entry["args"] = []any{arg}
 	e.WriteImport(e.Store, "ns", map[string]any{"version": 1, "description": "x", "shortcuts": map[string]any{"go": entry}})
 
 	// what `update ns -y` checks before it approves: the file is usable and every entry can run

@@ -10,7 +10,7 @@ In the tables, `<word>` stands for a value filled in when the error happens. A m
 |---|---|
 | 0 | Done |
 | 1 | Any error below, or no to a question; `Aborted.` is printed. Ctrl-C at a question counts as no |
-| 2 | A usage error: an unknown command or option, a bad flag for a command, or the wrong arguments for a shortcut that declares `args` |
+| 2 | A usage error: an unknown command or option, a bad flag for a command |
 | 141 | shortcut was ended by SIGPIPE because what it was printing to stopped reading, as in `shortcut list \| head -1`. A shell shows this as 141. Nothing more is printed |
 | anything else | `run` passes the shortcut's own exit code through, and a signal that kills it |
 
@@ -75,15 +75,6 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `'confirm' must be a boolean` | |
 | `it needs exactly one of 'inline' and 'script'` | |
 | `script not found: <script>` | The entry's script file is missing |
-| `'args' must be a list` | A `null` counts as the wrong type |
-| `every entry in 'args' needs a 'name' (letters, digits, _ and -)` | |
-| `unknown args field: <fields>` | |
-| `args '<field>' must be a string` | `default` or `desc`. A `null` counts as the wrong type |
-| `args '<field>' must be a boolean` | `required` or `rest` |
-| `only the last entry in 'args' can be 'rest'` | |
-| `arg '<arg>' can't be both 'required' and have a 'default'` | |
-| `arg '<arg>' is declared twice` | |
-| `args '<arg>' and '<arg>' would both be SC_ARG_<NAME>` | Two names that differ only in case, or in `-` and `_` |
 
 | Message | Meaning |
 |---|---|
@@ -110,14 +101,6 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `<path> has Windows line endings, so its #! line can't start it. Convert it: sed -i 's/\r$//' <path>` | The script's lines end in `\r\n` |
 | `'<name>' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y <name> <args>)` | A `confirm` entry run without a terminal. The command is the one that was run, with `-y` |
 
-A shortcut that declares `args` checks them before it runs. These print `error: <message>`, then `usage: shortcut r <name> <args>`, then each argument and its `desc` if any argument has one, and exit 2.
-
-| Message | Meaning |
-|---|---|
-| `missing <<arg>>` | A required argument wasn't given |
-| `too many arguments` | More words than declared, and no `rest` argument |
-| `<<arg>> can't be empty` | A required argument was given as `""` |
-
 ## new
 
 | Message | Meaning |
@@ -130,8 +113,6 @@ A shortcut that declares `args` checks them before it runs. These print `error: 
 | `script file not found: <path>` | The file given to `--script` |
 | `--cwd directory does not exist: <dir>` | |
 | `--namespace can't be used with --local: .shortcuts.local is one file, and .shortcuts is yours to edit` | |
-| `--arg-desc <flag>: needs NAME=TEXT, with NAME declared by --arg` | |
-| `--arg-desc <flag>: '<arg>' already has a desc` | |
 | `'<ns>' is a shortcut in store <store>, so it can't be a namespace` | |
 | `shortcut '<name>' already exists in <file>` | `new` never replaces an entry. Remove it first |
 | `'<name>' is a namespace in store <store>` | |

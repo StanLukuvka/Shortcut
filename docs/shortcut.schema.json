@@ -54,44 +54,6 @@
         "confirm": {
           "description": "Ask before running. Default false.",
           "type": "boolean"
-        },
-        "args": {
-          "description": "Declared arguments.",
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/arg"
-          }
-        }
-      }
-    },
-    "arg": {
-      "description": "One declared argument.",
-      "type": "object",
-      "required": ["name"],
-      "additionalProperties": false,
-      "if": { "required": ["required"], "properties": { "required": { "const": true } } },
-      "then": { "not": { "required": ["default"] } },
-      "properties": {
-        "name": {
-          "description": "Argument name. Unique within an entry.",
-          "type": "string",
-          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
-        },
-        "required": {
-          "description": "Refuse to run when this argument is missing. Can't be used with default.",
-          "type": "boolean"
-        },
-        "default": {
-          "description": "Value used when the argument is missing.",
-          "type": "string"
-        },
-        "desc": {
-          "description": "What the argument is. Shown by show and by usage errors.",
-          "type": "string"
-        },
-        "rest": {
-          "description": "Take all remaining arguments. Last entry only.",
-          "type": "boolean"
         }
       }
     }

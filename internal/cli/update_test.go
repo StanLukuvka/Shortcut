@@ -387,18 +387,6 @@ func TestStores_AVersionThatIsntAWholeNumberIsRefused(t *testing.T) {
 	testkit.Contains(t, "project", res.Stderr, "'version' must be a whole number")
 }
 
-func TestStores_ArgsNeedANameThatIsAString(t *testing.T) {
-	e := testkit.New(t)
-	for _, arg := range []map[string]any{{"required": true}, {"name": nil}, {"name": true}} {
-		entry := map[string]any{"inline": "echo hi", "args": []any{arg}}
-		e.WriteImport(e.Store, "ns", testkit.NS(map[string]any{"go": entry}))
-		res := e.Run("update", "ns", "-y")
-		raw, _ := json.Marshal(arg)
-		res.WantCode(t, 1)
-		testkit.Contains(t, string(raw), res.Stderr, "needs a 'name'")
-	}
-}
-
 // C9: `update -y` approves the good namespace and skips an unrelated broken one; naming the broken one fails.
 func TestUpdate_UnnamedSkipsABrokenNamespace(t *testing.T) {
 	e := testkit.New(t)

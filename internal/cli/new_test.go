@@ -32,70 +32,12 @@ func TestRunning_CommandWordsAreOrdinaryShortcutNames(t *testing.T) {
 	}
 }
 
-func TestRunning_NewDeclaresArgs(t *testing.T) {
-	e := testkit.New(t)
-	runOK(t, e, testkit.Opts{}, "new", "greet", "--arg", "who", "--arg", "greeting=hello", "--", `echo "$2 $1"`)
-	testkit.Eq(t, "args", e.LoadGlobal()["greet"].(map[string]any)["args"], []any{
-		map[string]any{"name": "who", "required": true}, map[string]any{"name": "greeting", "default": "hello"}})
-	testkit.Eq(t, "run", e.Run("r", "greet", "you").Stdout, "hello you\n")
-	testkit.Eq(t, "run without who", e.Run("r", "greet").Code, 2)
-	res := e.Run("new", "bad", "--arg", "no spaces", "--", "true")
-	testkit.Eq(t, "bad exit", res.Code, 1)
-	testkit.Contains(t, "stderr", res.Stderr, "'bad' is not a valid entry")
-}
-
-func TestRunning_NewDeclaresRestArgsAndDescs(t *testing.T) {
-	e := testkit.New(t)
-	runOK(t, e, testkit.Opts{}, "new", "ex", "--arg", "container", "--arg", "cmd...", "--arg-desc", "container=Which one",
-		"--arg-desc", "cmd=What to run", "--", `echo "$SC_ARG_CONTAINER|$SC_ARG_CMD"`)
-	testkit.Eq(t, "args", e.LoadGlobal()["ex"].(map[string]any)["args"], []any{
-		map[string]any{"name": "container", "required": true, "desc": "Which one"},
-		map[string]any{"name": "cmd", "rest": true, "required": true, "desc": "What to run"}})
-	testkit.Eq(t, "run", e.Run("r", "ex", "web", "ls", "/tmp").Stdout, "web|ls /tmp\n")
-	res := e.Run("r", "ex", "web")
-	testkit.Eq(t, "missing exit", res.Code, 2)
-	testkit.Contains(t, "stderr", res.Stderr, "missing <cmd>")
-	testkit.Contains(t, "stderr", res.Stderr, "What to run")
-
-	// NAME...= is optional, with no default; NAME...=x has one
-	e.Run("new", "opt", "--arg", "rest...=", "--", `echo "$#"`)
-	testkit.Eq(t, "opt args", e.LoadGlobal()["opt"].(map[string]any)["args"], []any{map[string]any{"name": "rest", "rest": true}})
-	testkit.Eq(t, "opt run", e.Run("r", "opt").Stdout, "0\n")
-	e.Run("new", "dflt", "--arg", "rest...=x", "--", `echo "$*"`)
-	testkit.Eq(t, "dflt args", e.LoadGlobal()["dflt"].(map[string]any)["args"],
-		[]any{map[string]any{"name": "rest", "rest": true, "default": "x"}})
-
-	// --arg-desc takes the name with or without its ...; a newline shows as \\n
-	e.Run("new", "dots", "--arg", "files...", "--arg-desc", "files...=Two\nlines", "--", `echo "$@"`)
-	testkit.Eq(t, "dots desc", e.LoadGlobal()["dots"].(map[string]any)["args"].([]any)[0].(map[string]any)["desc"], "Two\nlines")
-	testkit.Contains(t, "show", e.Run("show", "dots").Stdout, "  files...  required  Two\\nlines\n")
-
-	for _, c := range []struct {
-		flags   []string
-		message string
-	}{
-		{[]string{"--arg", "a...", "--arg", "b"}, "only the last entry in 'args' can be 'rest'"},
-		{[]string{"--arg", "a", "--arg", "a"}, "arg 'a' is declared twice"},
-		{[]string{"--arg", "a", "--arg-desc", "a=one", "--arg-desc", "a=two"}, "--arg-desc a=two: 'a' already has a desc"},
-		{[]string{"--arg", "a", "--arg-desc", "b=Nope"}, "--arg-desc b=Nope: needs NAME=TEXT, with NAME declared by --arg"},
-		{[]string{"--arg", "a", "--arg-desc", "a"}, "--arg-desc a: needs NAME=TEXT"},
-		{[]string{"--arg-desc", "a=No args"}, "--arg-desc a=No args: needs NAME=TEXT"},
-	} {
-		res := e.Run(append(append([]string{"new", "bad"}, c.flags...), "--", `echo "$@"`)...)
-		testkit.Eq(t, strings.Join(c.flags, " "), res.Code, 1)
-		testkit.Contains(t, "stderr", res.Stderr, c.message)
-		if _, has := e.LoadGlobal()["bad"]; has {
-			t.Errorf("%v: bad was stored", c.flags)
-		}
-	}
-}
-
 func TestRunning_NewSaysWhenACommandIgnoresArguments(t *testing.T) {
 	e := testkit.New(t)
 	const hint = "won't see any arguments"
 	testkit.Contains(t, "a", e.Run("new", "a", "--", "rg --hidden").Stderr, hint)
 	testkit.Contains(t, "b", e.Run("new", "b", "--", "rg", "--hidden").Stderr, hint)
-	for _, c := range [][2]string{{"c", `rg "$@"`}, {"d", "echo $1"}, {"e", "echo ${2}"}, {"f", "echo $*"}, {"g", "echo $SC_ARG_WHO"}} {
+	for _, c := range [][2]string{{"c", `rg "$@"`}, {"d", "echo $1"}, {"e", "echo ${2}"}, {"f", "echo $*"}} {
 		res := runOK(t, e, testkit.Opts{}, "new", c[0], "--", c[1])
 		if strings.Contains(res.Stderr, hint) {
 			t.Errorf("%s: unexpected hint in %q", c[1], res.Stderr)
@@ -124,13 +66,6 @@ func TestRunning_SeveralWordCommandsKeepPositionalArgumentsLive(t *testing.T) {
 	testkit.Eq(t, "cmd1", e.Run("r", "cmd1", "a b", "c").Stdout, "[a b][c]")
 	testkit.Eq(t, "cmd3", e.Run("r", "cmd3").Stdout, "$HOME\n")
 	testkit.Eq(t, "cmd5", e.Run("r", "cmd5", "x").Stdout, "$(id) `id` \\ x\n")
-}
-
-func TestRunning_ArgsThatWouldShareAVariableAreRefused(t *testing.T) {
-	e := testkit.New(t)
-	res := e.Run("new", "two", "--arg", "a-b", "--arg", "a_b", "--", "true")
-	res.WantCode(t, 1)
-	testkit.Contains(t, "stderr", res.Stderr, "args 'a-b' and 'a_b' would both be SC_ARG_A_B")
 }
 
 func TestStores_CreationScopeRules(t *testing.T) {
@@ -360,8 +295,8 @@ func TestStores_UnknownFieldsAreErrors(t *testing.T) {
 		{"top", "unknown field: owner", map[string]any{"version": 1, "owner": "x", "shortcuts": map[string]any{}}},
 		{"entry", "unknown field: sandbox", testkit.NS(map[string]any{
 			"a": map[string]any{"inline": "true", "sandbox": true}})},
-		{"arg", "unknown args field: secret", testkit.NS(map[string]any{
-			"a": map[string]any{"inline": "true", "args": []any{map[string]any{"name": "x", "secret": true}}}})},
+		{"args", "unknown field: args", testkit.NS(map[string]any{
+			"a": map[string]any{"inline": "true", "args": []any{map[string]any{"name": "x"}}}})},
 	} {
 		e.WriteImport(e.Store, c.name, c.data)
 		res := e.Run("update", c.name, "-y")
@@ -508,5 +443,23 @@ func TestList_NamesComeOutInByteOrder(t *testing.T) {
 	got := strings.Fields(runOK(t, e, testkit.Opts{}, "list", "--names").Stdout)
 	if want := []string{"10", "B", "a", "a-1"}; !slices.Equal(got, want) {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestJoinCommand(t *testing.T) {
+	cases := []struct {
+		words []string
+		want  string
+	}{
+		{[]string{"echo a | wc"}, "echo a | wc"},
+		{[]string{"echo", "a b"}, "echo 'a b'"},
+		{[]string{"echo", "$1"}, `echo "$1"`},
+		{[]string{"echo", "$HOME $@"}, `echo "\$HOME $@"`},
+		{[]string{"echo", "${1}x"}, `echo "${1}x"`},
+	}
+	for _, c := range cases {
+		if got := joinCommand(c.words); got != c.want {
+			t.Errorf("%q: got %s, want %s", c.words, got, c.want)
+		}
 	}
 }

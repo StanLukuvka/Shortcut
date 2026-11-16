@@ -1,7 +1,6 @@
 usage: shortcut new [-h] [--desc DESC] [--script PATH]
                     [--cwd CWD] [--local] [--namespace NAME]
-                    [--arg NAME[=DEFAULT]] [--arg-desc NAME=TEXT] [--confirm]
-                    name
+                    [--confirm] name
 
 Create a new shortcut
 
@@ -17,9 +16,4 @@ options:
                         globally
   --namespace NAME      Put it in this namespace, creating
                         imports/NAME.shortcut if needed
-  --arg NAME[=DEFAULT]  Declare an argument: required, or optional with a
-                        default. NAME... takes the rest of the arguments;
-                        NAME...= makes that optional. Repeatable
-  --arg-desc NAME=TEXT  Describe a declared argument, for show and usage
-                        errors. Repeatable
   --confirm             Ask before running it

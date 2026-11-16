@@ -65,12 +65,6 @@ func cmdShow(s *textio.Streams, args []string) error {
 	out("CWD:         " + orCaller(entry.Cwd))
 	out("Run CWD:     " + resolved.RunCwd)
 	out("Description: " + entry.Description)
-	if entry.Args != nil {
-		out("Usage:       " + usageLine(display, entry.Args))
-		if len(entry.Args) > 0 {
-			out("Arguments:\n" + strings.Join(argLines(entry.Args), "\n"))
-		}
-	}
 	if entry.Confirm {
 		out("Confirm:     yes")
 	}

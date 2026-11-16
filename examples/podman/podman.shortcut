@@ -15,41 +15,15 @@
     },
     "logs": {
       "description": "Follow a container's logs (the picked one by default)",
-      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman logs -f --tail \"$SC_ARG_LINES\" \"$c\"",
-      "args": [
-        {
-          "name": "container",
-          "default": "",
-          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
-        },
-        {
-          "name": "lines",
-          "default": "100",
-          "desc": "How many lines to show before following"
-        }
-      ]
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"${1:-}\") && podman logs -f --tail \"${2:-100}\" \"$c\""
     },
     "sh": {
       "description": "Shell in a container (the picked one by default)",
-      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman exec -it \"$c\" sh -c \"command -v bash >/dev/null && exec bash || exec sh\"",
-      "args": [
-        {
-          "name": "container",
-          "default": "",
-          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
-        }
-      ]
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"${1:-}\") && podman exec -it \"$c\" sh -c \"command -v bash >/dev/null && exec bash || exec sh\""
     },
     "restart": {
       "description": "Restart a container (the picked one by default)",
-      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman restart \"$c\"",
-      "args": [
-        {
-          "name": "container",
-          "default": "",
-          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
-        }
-      ]
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"${1:-}\") && podman restart \"$c\""
     },
     "run": {
       "description": "Run a new container. Flags and the image pass to podman run",
@@ -61,112 +35,39 @@
     },
     "start": {
       "description": "Start containers by name, or this terminal's pick when none are given",
-      "inline": "if [ $# -eq 0 ]; then c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current) || exit; set -- \"$c\"; fi; podman start \"$@\"",
-      "args": [
-        {
-          "name": "containers",
-          "rest": true,
-          "desc": "Container names"
-        }
-      ]
+      "inline": "if [ $# -eq 0 ]; then c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current) || exit; set -- \"$c\"; fi; podman start \"$@\""
     },
     "inspect": {
       "description": "Inspect a container (the picked one by default)",
-      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman inspect \"$c\"",
-      "args": [
-        {
-          "name": "container",
-          "default": "",
-          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
-        }
-      ]
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"${1:-}\") && podman inspect \"$c\""
     },
     "pause": {
       "description": "Pause a container (the picked one by default)",
-      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman pause \"$c\"",
-      "args": [
-        {
-          "name": "container",
-          "default": "",
-          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
-        }
-      ]
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"${1:-}\") && podman pause \"$c\""
     },
     "unpause": {
       "description": "Unpause a container (the picked one by default)",
-      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman unpause \"$c\"",
-      "args": [
-        {
-          "name": "container",
-          "default": "",
-          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
-        }
-      ]
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"${1:-}\") && podman unpause \"$c\""
     },
     "kill": {
       "description": "Kill a container (the picked one by default)",
-      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman kill \"$c\"",
-      "args": [
-        {
-          "name": "container",
-          "default": "",
-          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
-        }
-      ]
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"${1:-}\") && podman kill \"$c\""
     },
     "rm": {
       "description": "Remove a container (the picked one by default)",
-      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman rm \"$c\"",
-      "args": [
-        {
-          "name": "container",
-          "default": "",
-          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
-        }
-      ]
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"${1:-}\") && podman rm \"$c\""
     },
     "top": {
       "description": "Processes of a container (the picked one by default). Later words are ps fields",
-      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") || exit; shift $(($# > 0)); podman top \"$c\" \"$@\"",
-      "args": [
-        {
-          "name": "container",
-          "default": "",
-          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
-        },
-        {
-          "name": "fields",
-          "rest": true,
-          "desc": "ps fields, such as pid user"
-        }
-      ]
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"${1:-}\") || exit; shift $(($# > 0)); podman top \"$c\" \"$@\""
     },
     "cp": {
       "description": "Copy files between a container and the host: shortcut r podman cp web:/etc/hosts .",
-      "inline": "podman cp \"$SC_ARG_SRC\" \"$SC_ARG_DEST\"",
-      "args": [
-        {
-          "name": "src",
-          "required": true,
-          "desc": "Source path, or CONTAINER:PATH"
-        },
-        {
-          "name": "dest",
-          "required": true,
-          "desc": "Destination path, or CONTAINER:PATH"
-        }
-      ]
+      "inline": "podman cp \"$1\" \"$2\""
     },
     "ports": {
       "description": "Port mappings of a container (the picked one by default)",
-      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"$SC_ARG_CONTAINER\") && podman port \"$c\"",
-      "args": [
-        {
-          "name": "container",
-          "default": "",
-          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
-        }
-      ]
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current \"${1:-}\") && podman port \"$c\""
     },
     "up": {
       "description": "podman compose up -d in this folder",
@@ -196,48 +97,19 @@
     },
     "use": {
       "description": "Pick a container for this terminal by number from list, or by name. No argument: show the pick's row. none: clear it",
-      "script": "scripts/podman/use.sh",
-      "args": [
-        {
-          "name": "target",
-          "default": "",
-          "desc": "A number from list, a name, or none to clear"
-        }
-      ]
+      "script": "scripts/podman/use.sh"
     },
     "current": {
       "description": "Print the container a number, a name or this terminal's pick refers to: its list row on a terminal, its name when captured",
-      "script": "scripts/podman/current.sh",
-      "args": [
-        {
-          "name": "target",
-          "default": "",
-          "desc": "A number from list, a name, or . for this terminal's pick (the default)"
-        }
-      ]
+      "script": "scripts/podman/current.sh"
     },
     "exec": {
       "description": "Run a command in this terminal's picked container: shortcut r podman exec -- ls -la",
-      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current) || exit; t=; [ -t 0 ] && t=-t; podman exec -i $t \"$c\" \"$@\"",
-      "args": [
-        {
-          "name": "cmd",
-          "rest": true,
-          "required": true,
-          "desc": "The command and its arguments"
-        }
-      ]
+      "inline": "c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current) || exit; t=; [ -t 0 ] && t=-t; podman exec -i $t \"$c\" \"$@\""
     },
     "stop": {
       "description": "Stop containers by name, or this terminal's pick when none are given",
-      "inline": "if [ $# -eq 0 ]; then c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current) || exit; set -- \"$c\"; fi; podman stop \"$@\"",
-      "args": [
-        {
-          "name": "containers",
-          "rest": true,
-          "desc": "Container names"
-        }
-      ]
+      "inline": "if [ $# -eq 0 ]; then c=$(SHORTCUT_SHOW_DIR=0 shortcut r \"$SHORTCUT_NAMESPACE\" current) || exit; set -- \"$c\"; fi; podman stop \"$@\""
     },
     "pods": {
       "description": "Pods and their containers",

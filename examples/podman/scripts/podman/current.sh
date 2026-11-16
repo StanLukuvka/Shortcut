@@ -4,7 +4,7 @@
 set -euo pipefail
 state=${XDG_STATE_HOME:-$HOME/.local/state}/shortcut-podman
 if t=$(tty 2>/dev/null); then key=${t#/dev/}; key=${key//\//-}.$(ps -o sid= -p $$ | tr -d ' '); else key=shared; fi
-target=${SC_ARG_TARGET:-}
+target=${1:-}
 [ "$target" = . ] && target=  # . is the pick, for commands that take more after it
 
 if [ -z "$target" ]; then

@@ -40,45 +40,16 @@ func TestEntry_FromValueMessages(t *testing.T) {
 		{`{"inline": null}`, "'x' is not a valid entry: 'inline' must be a string"},
 		{`{"script": null}`, "'x' is not a valid entry: 'script' must be a string"},
 		{`{"inline": "a", "icon": "x", "created": "x", "created_by": "x"}`, "'x' is not a valid entry: unknown field: created, created_by, icon"},
-		{`{"inline": "a", "args": null}`, "'x' is not a valid entry: 'args' must be a list"},
-		{`{"inline": "a", "args": [{"name": "a", "default": null}]}`, "'x' is not a valid entry: args 'default' must be a string"},
-		{`{"inline": "a", "args": [{"name": "a", "desc": null}]}`, "'x' is not a valid entry: args 'desc' must be a string"},
+		{`{"inline": "a", "args": [{"name": "a"}]}`, "'x' is not a valid entry: unknown field: args"},
 		{`{"inline": "a", "confirm": "yes"}`, "'x' is not a valid entry: 'confirm' must be a boolean"},
 		{`{}`, "'x' is not a valid entry: it needs exactly one of 'inline' and 'script'"},
 		{`{"inline": "a", "script": "b"}`, "'x' is not a valid entry: it needs exactly one of 'inline' and 'script'"},
-		{`{"inline": "a", "args": {}}`, "'x' is not a valid entry: 'args' must be a list"},
 	}
 	for _, c := range cases {
 		_, err := EntryFromValue("x", parse(t, c.in))
 		if err == nil || err.Error() != c.want {
 			t.Errorf("%s: got %v, want %q", c.in, err, c.want)
 		}
-	}
-}
-
-func TestEntry_ValidateArgsMessages(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{`[1]`, "every entry in 'args' needs a 'name' (letters, digits, _ and -)"},
-		{`[{"name": "1a"}]`, "every entry in 'args' needs a 'name' (letters, digits, _ and -)"},
-		{`[{"name": "a\n"}]`, "every entry in 'args' needs a 'name' (letters, digits, _ and -)"},
-		{`[{"name": "a", "x": 1, "b": 1}]`, "unknown args field: b, x"},
-		{`[{"name": "a", "default": 1}]`, "args 'default' must be a string"},
-		{`[{"name": "a", "desc": 1}]`, "args 'desc' must be a string"},
-		{`[{"name": "a", "required": 1}]`, "args 'required' must be a boolean"},
-		{`[{"name": "a", "rest": "y"}]`, "args 'rest' must be a boolean"},
-		{`[{"name": "a", "rest": true}, {"name": "b"}]`, "only the last entry in 'args' can be 'rest'"},
-		{`[{"name": "a", "required": true, "default": "d"}]`, "arg 'a' can't be both 'required' and have a 'default'"},
-		{`[{"name": "a"}, {"name": "a"}]`, "arg 'a' is declared twice"},
-		{`[{"name": "a-b"}, {"name": "a_b"}]`, "args 'a-b' and 'a_b' would both be SC_ARG_A_B"},
-	}
-	for _, c := range cases {
-		err := ValidateArgs("x", parse(t, c.in))
-		if want := "'x' is not a valid entry: " + c.want; err == nil || err.Error() != want {
-			t.Errorf("%s: got %v, want %q", c.in, err, want)
-		}
-	}
-	if err := ValidateArgs("x", parse(t, `[{"name": "a", "rest": true, "desc": "d", "default": "z"}]`)); err != nil {
-		t.Error(err)
 	}
 }
 
@@ -92,9 +63,8 @@ func compact(t *testing.T, v ordjson.Value) string {
 	return string(b)
 }
 
-func TestEntry_RoundTripKeepsArgsAndOrder(t *testing.T) {
-	src := `{"description": "d", "script": "s.sh", "cwd": "c", "confirm": true,` +
-		` "args": [{"name": "a", "desc": "x", "required": true}, {"name": "b"}]}`
+func TestEntry_RoundTripKeepsOrder(t *testing.T) {
+	src := `{"description": "d", "script": "s.sh", "cwd": "c", "confirm": true}`
 	e, err := EntryFromValue("x", parse(t, src))
 	if err != nil {
 		t.Fatal(err)
@@ -102,15 +72,15 @@ func TestEntry_RoundTripKeepsArgsAndOrder(t *testing.T) {
 	if got, want := compact(t, e.ToObject()), compact(t, parse(t, src)); got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
 	}
-	if e.Inline != nil || *e.Script != "s.sh" || !e.Confirm || len(e.Args) != 2 {
+	if e.Inline != nil || *e.Script != "s.sh" || !e.Confirm {
 		t.Errorf("fields: %+v", e)
 	}
-	// An empty inline is still set; an empty args list is not "absent".
-	e, err = EntryFromValue("y", parse(t, `{"inline": "", "args": []}`))
-	if err != nil || e.Inline == nil || e.Args == nil {
+	// An empty inline is still set.
+	e, err = EntryFromValue("y", parse(t, `{"inline": ""}`))
+	if err != nil || e.Inline == nil {
 		t.Fatalf("%+v %v", e, err)
 	}
-	if got := compact(t, e.ToObject()); got != `{"description":"","inline":"","args":[]}` {
+	if got := compact(t, e.ToObject()); got != `{"description":"","inline":""}` {
 		t.Error(got)
 	}
 }

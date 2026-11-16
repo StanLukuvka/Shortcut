@@ -53,7 +53,7 @@ CI also checks `gofmt` and runs `go vet ./...`.
 ## Layout
 
 - `cmd/shortcut/`: the main package.
-- `internal/cli/`: dispatch and the commands. `dispatch.go` is the entry, `parsers.go` each command's arguments, `cmd_*.go` one file per command, `run_args.go` a shortcut's declared arguments and `store_write.go` what changes the stores; `usage.go` is the usage text, `help/` the per-command help, and `completion/` the bash, zsh and fish scripts.
+- `internal/cli/`: dispatch and the commands. `dispatch.go` is the entry, `parsers.go` each command's arguments, `cmd_*.go` one file per command and `store_write.go` what changes the stores; `usage.go` is the usage text, `help/` the per-command help, and `completion/` the bash, zsh and fish scripts.
 - `internal/cli/argparse/`: the argument parser. It imports nothing of the CLI.
 - `internal/model/`: store files, entries, groups and lookup. It never prints.
 - `internal/approval/`: what a project or namespace is approved for, the approval records, and the review diff.

@@ -131,7 +131,7 @@ func TestEveryMessageIsInTheTable(t *testing.T) {
 	}
 	doc := string(raw)
 	found := goMessages(t)
-	if len(found) <= 80 {
+	if len(found) <= 60 {
 		t.Fatalf("found only %d messages", len(found))
 	}
 	t.Logf("%d messages", len(found))
