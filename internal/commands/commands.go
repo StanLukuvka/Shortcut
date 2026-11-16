@@ -25,18 +25,17 @@ type entry struct {
 	term.Command
 }
 
-// runUsage is run's usage line. Before the name run reads only --global, -y and --yes; everything after it is the shortcut's.
-const runUsage = "run|r [--global] [-y] <name> [args...]\n       shortcut run|r [--global] [-y] <namespace> <name> [args...]"
+// runUsage is run's usage line. Before the name run reads only -y and --yes, and a . that selects the project; everything after the name is the shortcut's.
+const runUsage = "run|r [-y] [.] <name> [args...]\n       shortcut run|r [-y] [.] <namespace> <name> [args...]"
 
 // commands is the table. It is a function so that handlers may read it without an initialization cycle.
 func commands() []entry {
-	global := term.Arg{Dest: "skipLocal", Flags: []string{"--global"}, Help: "Skip this project's shortcuts, to reach a global one it hides"}
 	yes := term.Arg{Dest: "yes", Flags: []string{"-y", "--yes"}, Help: "Do not ask for confirmation"}
 	return []entry{
 		{Run: run.Run, Command: term.Command{Name: "run", Aliases: []string{"r"}, Usage: runUsage,
 			Summary: "Run a shortcut, or a namespace's",
-			Help:    "Options go before the name; everything after the name is the shortcut's.",
-			Args:    []term.Arg{global, yes, {Dest: "name", Nargs: '+'}}}},
+			Help:    "Options go before the name; everything after the name is the shortcut's.\nWithout a dot it runs your global shortcut; with a dot (shortcut r . <name>), the project's.",
+			Args:    []term.Arg{yes, {Dest: "name", Nargs: '+'}}}},
 		{Run: new.Run, Command: term.Command{Name: "new", Summary: "Create a shortcut: an inline command after --, or a script with --script",
 			Help: "Give a command after --, or a script file with --script.",
 			Args: []term.Arg{
@@ -47,16 +46,18 @@ func commands() []entry {
 				{Dest: "namespace", Flags: []string{"--namespace"}, Takes: term.OneValue, Meta: "NAME", Help: "Put it in this namespace, creating imports/NAME.shortcut if needed"},
 				{Dest: "confirm", Flags: []string{"--confirm"}, Help: "Ask before running it"},
 				{Dest: "name", Help: "Shortcut name"}}}},
-		{Run: list.Run, Command: term.Command{Name: "list", Summary: "List visible shortcuts, with where each runs",
-			Args: []term.Arg{{Dest: "names", Flags: []string{"--names"}, Takes: term.OptValue, Meta: "NAMESPACE", Help: "Print bare visible names only, or the names in one namespace"}}}},
+		{Run: list.Run, Command: term.Command{Name: "list", Summary: "List global and project shortcuts, with where each runs",
+			Args: []term.Arg{{Dest: "names", Flags: []string{"--names"}, Takes: term.OptValue, Meta: "NAMESPACE", Help: "Print bare global names only, or the names in one global namespace; with . the project's names"}}}},
 		{Run: show.Run, Command: term.Command{Name: "show", Summary: "Show a shortcut's metadata and script, or the entry as JSON",
-			Args: []term.Arg{global,
+			Usage: "show [--json] [--field KEY] [.] name...",
+			Help:  "Without a dot it shows your global shortcut; with a dot (shortcut show . <name>), the project's.",
+			Args: []term.Arg{
 				{Dest: "json", Flags: []string{"--json"}, Help: "Print the entry and where it resolves, as one JSON object"},
 				{Dest: "field", Flags: []string{"--field"}, Takes: term.OneValue, Meta: "KEY", Help: "Print one field, bare"},
 				{Dest: "name", Nargs: '+', Help: "Shortcut name, or namespace and name"}}}},
 		{Run: rm.Run, Command: term.Command{Name: "rm", Summary: "Remove a shortcut, or a whole namespace",
-			Help: "With --local, take it out of .shortcuts.local: undo an override, or remove a local shortcut.",
-			Args: []term.Arg{global,
+			Help: "Takes it out of your global store. With --local, out of .shortcuts.local: undo an override, or remove a local shortcut.",
+			Args: []term.Arg{
 				{Dest: "local", Flags: []string{"--local"}, Help: "Remove it from .shortcuts.local"},
 				{Dest: "namespace", Flags: []string{"--namespace"}, Takes: term.OneValue, Meta: "NS", Help: "Remove this namespace from the global store, with its scripts folder"},
 				yes,

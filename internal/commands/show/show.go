@@ -3,13 +3,13 @@ package show
 import (
 	"os"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
 	"github.com/StanLukuvka/Shortcut/internal/store/approval"
 	"github.com/StanLukuvka/Shortcut/internal/term"
+	"github.com/StanLukuvka/Shortcut/internal/term/argparse"
 )
 
 func orCaller(s *string) string {
@@ -25,17 +25,21 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	if err != nil {
 		return err
 	}
-	lk := store.Lookup{GlobalOnly: ns.Bool("skipLocal")}
+	scope, names := store.SplitScope(ns.List("name"))
+	if len(names) == 0 {
+		return argparse.UsageError("show", "missing name")
+	}
+	lk := store.Lookup{Scope: scope, Cmd: "show"}
 	if ns.Set("field") {
 		if ns.Bool("json") {
 			return term.Die("--field and --json can't be used together")
 		}
-		return showField(c, s, ns.List("name"), lk, ns.Str("field"))
+		return showField(c, s, names, lk, ns.Str("field"))
 	}
 	if ns.Bool("json") {
-		return showJSON(c, s, ns.List("name"), lk)
+		return showJSON(c, s, names, lk)
 	}
-	resolved, err := store.ResolveName(c, ns.List("name"), lk)
+	resolved, err := store.ResolveName(c, names, lk)
 	if err != nil {
 		return err
 	}
@@ -44,11 +48,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 
 	display := resolved.Display()
 	out("Name:        " + display)
-	scope := "Scope:       " + string(group.Kind)
-	if resolved.HidesGlobal {
-		scope += "  (hides your global '" + strings.Fields(display)[0] + "')"
-	}
-	out(scope)
+	out("Scope:       " + string(group.Kind))
 	out("Defined in:  " + group.DefiningFile(entry.Name))
 	if group.Kind == store.KindProject {
 		out("Source:      " + string(group.Source(entry.Name)))
@@ -92,7 +92,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 
 // showTop are the top-level keys of `show --json`.
 func showTop() []string {
-	return []string{"name", "namespace", "scope", "defined_in", "source", "hides_global", "approval", "cwd", "run_cwd", "script_path", "error"}
+	return []string{"name", "namespace", "scope", "defined_in", "source", "approval", "cwd", "run_cwd", "script_path", "error"}
 }
 
 // setOpt writes null for nil, else the string.
@@ -112,11 +112,7 @@ func showJSON(c *store.Context, s *term.Streams, words []string, lk store.Lookup
 	}
 	d := platform.Doc{}
 	for _, k := range showTop() {
-		if k == "hides_global" {
-			d[k] = []byte(*vals[k]) // true or false
-		} else {
-			setOpt(d, k, vals[k])
-		}
+		setOpt(d, k, vals[k])
 	}
 	if o, ok := platform.ObjectOf(entry); ok { // an object's fields come out sorted, whatever the file's order
 		if entry, err = o.Bytes(); err != nil {
@@ -182,7 +178,7 @@ func showObject(c *store.Context, words []string, lk store.Lookup) (vals map[str
 	g, name := f.Group, f.Name
 	str := func(s string) *string { return &s }
 	vals = map[string]*string{"name": &name, "scope": str(string(g.Kind)), "defined_in": str(g.DefiningFile(name)),
-		"hides_global": str(strconv.FormatBool(f.Hides)), "approval": str(string(approval.State(c, g)))}
+		"approval": str(string(approval.State(c, g)))}
 	for _, k := range []string{"namespace", "source", "cwd", "run_cwd", "script_path", "error"} {
 		vals[k] = nil
 	}

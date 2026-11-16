@@ -250,24 +250,6 @@ func TestStores_CliWritesNeedUpdateOnANamespace(t *testing.T) {
 	testkit.Eq(t, "a", e.Run("r", "dk", "a").Stdout, "a\n")
 }
 
-func TestStores_RmInABrokenProjectNeverReachesAGlobalOne(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"build": testkit.Inline("echo global")})
-	proj := e.Project(map[string]any{"build": testkit.Inline("echo project")}, testkit.Approved())
-	e.CorruptStore(filepath.Join(proj, ".shortcuts"))
-	res := e.RunWith(in(proj), "rm", "build", "-y")
-	res.WantCode(t, 1)
-	testkit.Contains(t, "stderr", res.Stderr, "Inside this project rm only takes --local")
-	testkit.Contains(t, "stderr", res.Stderr, "for your own: shortcut rm --global build")
-	if _, has := e.LoadGlobal()["build"]; !has {
-		t.Error("rm reached the global one")
-	}
-	runOK(t, e, in(proj), "rm", "--global", "build", "-y")
-	if _, has := e.LoadGlobal()["build"]; has {
-		t.Error("rm --global left it")
-	}
-}
-
 func TestStores_LocalRefusesAnywhereInTheGlobalStore(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{})
@@ -283,44 +265,6 @@ func TestStores_LocalRefusesAnywhereInTheGlobalStore(t *testing.T) {
 	}
 	testkit.Eq(t, "global", len(e.LoadGlobal()), 0)
 	testkit.NotExist(t, filepath.Join(e.Store, ".shortcuts.local"))
-}
-
-func TestStores_GlobalFlagReachesAHiddenShortcut(t *testing.T) {
-	e := testkit.New(t)
-	proj := e.Project(map[string]any{})
-	script := e.WriteFile(filepath.Join(e.Tmp, "tool.sh"), bashShebang, 0o755)
-	runOK(t, e, testkit.Opts{}, "new", "build", "--", "echo global")
-	runOK(t, e, in(proj), "new", "build", "--local", "--", "echo project")
-	runOK(t, e, testkit.Opts{}, "new", "tool", "--script", script, "--desc", "d")
-	runOK(t, e, in(proj), "new", "tool", "--script", script, "--desc", "d", "--local")
-	e.Approve(filepath.Join(proj, ".shortcuts"))
-
-	testkit.Contains(t, "show", e.RunWith(in(proj), "show", "build").Stdout, "echo project")
-	res := e.RunWith(in(proj), "show", "--global", "build")
-	testkit.Contains(t, "show --global", res.Stdout, "Scope:       global\n")
-	testkit.Contains(t, "show --global", res.Stdout, "echo global")
-	testkit.Eq(t, "script_path", e.RunWith(in(proj), "show", "--global", "--field", "script_path", "tool").Stdout, script+"\n")
-
-	runOK(t, e, in(proj), "rm", "build", "--global", "-y")
-	if _, has := e.LoadGlobal()["build"]; has {
-		t.Error("build is still global")
-	}
-	testkit.Eq(t, "run", e.RunWith(in(proj), "r", "build").Stdout, "project\n")
-	// The project still has one: every --global command says so
-	hint := "The project in " + proj + " has its own 'build': leave out --global to use it."
-	for _, args := range [][]string{{"show", "--global", "build"}, {"r", "--global", "build"},
-		{"rm", "--global", "-y", "build"}, {"show", "--json", "--global", "build"}} {
-		res := e.RunWith(in(proj), args...)
-		testkit.Eq(t, strings.Join(args, " "), res.Code, 1)
-		testkit.Contains(t, strings.Join(args, " "), res.Stderr, "shortcut 'build' not found.")
-		testkit.Contains(t, strings.Join(args, " "), res.Stderr, hint)
-	}
-	if strings.Contains(e.RunWith(in(proj), "show", "--global", "nothing").Stderr, "has its own") {
-		t.Error("a name the project lacks gets the hint")
-	}
-	if strings.Contains(e.RunWith(in(e.Tmp), "show", "build").Stderr, "has its own") {
-		t.Error("outside a project gets the hint")
-	}
 }
 
 // What rm removes is only what the entry or namespace owns, and never through a link.

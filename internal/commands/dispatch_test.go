@@ -12,7 +12,7 @@ func TestMain(m *testing.M) { testkit.Main(m) }
 // What the binary prints before any parser runs.
 func TestDispatch_ErrorsBeforeAnyParser(t *testing.T) {
 	e := testkit.New(t)
-	const runMissing = "error: missing shortcut name\nusage: shortcut run|r [--global] [-y] <name> [args...]\n       shortcut run|r [--global] [-y] <namespace> <name> [args...]\n"
+	const runMissing = "error: missing shortcut name\nusage: shortcut run|r [-y] [.] <name> [args...]\n       shortcut run|r [-y] [.] <namespace> <name> [args...]\n"
 	const unknown = "error: unknown command 'bogus' (to run a shortcut: shortcut run bogus)\n"
 	for _, c := range []struct {
 		argv []string

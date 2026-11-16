@@ -40,10 +40,10 @@ func overlaid(t *testing.T, e *testkit.Env) string {
 func TestProjectFiles_LocalAddsAndReplacesAWholeEntry(t *testing.T) {
 	e := testkit.New(t)
 	proj := overlaid(t, e)
-	testkit.Eq(t, "keep", e.RunWith(in(proj), "r", "keep").Stdout, "shared keep\n")
-	testkit.Eq(t, "mine", e.RunWith(in(proj), "r", "mine").Stdout, "mine\n")
+	testkit.Eq(t, "keep", e.RunWith(in(proj), "r", ".", "keep").Stdout, "shared keep\n")
+	testkit.Eq(t, "mine", e.RunWith(in(proj), "r", ".", "mine").Stdout, "mine\n")
 	// The whole entry: the shared one's confirm doesn't carry over, so this needs no -y
-	testkit.Eq(t, "swap", e.RunWith(in(proj), "r", "swap").Stdout, "local swap\n")
+	testkit.Eq(t, "swap", e.RunWith(in(proj), "r", ".", "swap").Stdout, "local swap\n")
 }
 
 func TestProjectFiles_RelativePathsResolveFromTheProjectRootInBothFiles(t *testing.T) {
@@ -53,8 +53,8 @@ func TestProjectFiles_RelativePathsResolveFromTheProjectRootInBothFiles(t *testi
 	writeLocalFile(t, e, proj, map[string]any{"mine": map[string]any{"script": "bin/run.sh", "cwd": "src"}})
 	e.Approve(filepath.Join(proj, ".shortcuts"))
 	src := filepath.Join(proj, "src")
-	testkit.Eq(t, "shared", e.RunWith(in(src), "r", "shared").Stdout, proj+"\n")
-	testkit.Eq(t, "mine", e.RunWith(in(src), "r", "mine").Stdout, src+"\n")
+	testkit.Eq(t, "shared", e.RunWith(in(src), "r", ".", "shared").Stdout, proj+"\n")
+	testkit.Eq(t, "mine", e.RunWith(in(src), "r", ".", "mine").Stdout, src+"\n")
 }
 
 func TestProjectFiles_AProjectCanBeOnlyALocalFile(t *testing.T) {
@@ -62,7 +62,7 @@ func TestProjectFiles_AProjectCanBeOnlyALocalFile(t *testing.T) {
 	proj := e.Project(nil, testkit.Dirs("src"))
 	testkit.Eq(t, "new", e.RunWith(in(proj), "new", "solo", "--local", "--", "echo solo").Code, 0)
 	testkit.Eq(t, "update", e.RunWith(in(proj), "update", ".", "-y").Code, 0)
-	testkit.Eq(t, "run", e.RunWith(in(filepath.Join(proj, "src")), "r", "solo").Stdout, "solo\n")
+	testkit.Eq(t, "run", e.RunWith(in(filepath.Join(proj, "src")), "r", ".", "solo").Stdout, "solo\n")
 }
 
 func TestProjectFiles_ImportsStayInTheSharedFile(t *testing.T) {
@@ -79,7 +79,7 @@ func TestProjectFiles_NewLocalOverridesASharedNameAndSaysSo(t *testing.T) {
 	res := e.RunWith(in(proj), "new", "keep", "--local", "--", "echo mine now")
 	testkit.Contains(t, "stderr", res.Stderr, "this overrides 'keep'")
 	testkit.Eq(t, "update", e.RunWith(in(proj), "update", ".", "-y").Code, 0)
-	testkit.Eq(t, "run", e.RunWith(in(proj), "r", "keep").Stdout, "mine now\n")
+	testkit.Eq(t, "run", e.RunWith(in(proj), "r", ".", "keep").Stdout, "mine now\n")
 }
 
 func TestProjectFiles_NewLocalTakesACommandAndAddRecordsThePath(t *testing.T) {
@@ -110,7 +110,7 @@ func TestProjectFiles_LocalOnlyWorksAtTheProjectRoot(t *testing.T) {
 	res.WantCode(t, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "is inside the project at")
 	testkit.NotExist(t, filepath.Join(src, ".shortcuts.local"))
-	testkit.Eq(t, "keep", e.RunWith(in(src), "r", "keep").Stdout, "shared keep\n")
+	testkit.Eq(t, "keep", e.RunWith(in(src), "r", ".", "keep").Stdout, "shared keep\n")
 }
 
 func TestProjectFiles_ANewLocalFileIsExcludedFromGitOnce(t *testing.T) {
@@ -140,7 +140,7 @@ func TestProjectFiles_OutsideGitNothingIsExcluded(t *testing.T) {
 func TestProjectFiles_ShowJSONSaysWhichFileAnEntryComesFrom(t *testing.T) {
 	e := testkit.New(t)
 	proj := overlaid(t, e)
-	info := decodeObject(t, e.RunWith(in(proj), "show", "--json", "mine").Stdout)
+	info := decodeObject(t, e.RunWith(in(proj), "show", "--json", ".", "mine").Stdout)
 	testkit.Eq(t, "entry", info["entry"], map[string]any{"inline": "echo mine"})
 	testkit.Eq(t, "name", info["name"], "mine")
 	testkit.Eq(t, "namespace", info["namespace"], nil)
@@ -154,19 +154,19 @@ func TestProjectFiles_AHandEditToLocalNeedsApproving(t *testing.T) {
 	e := testkit.New(t)
 	proj := overlaid(t, e)
 	writeLocalFile(t, e, proj, map[string]any{"mine": testkit.Inline("echo evil")})
-	res := e.RunWith(in(proj), "r", "keep")
+	res := e.RunWith(in(proj), "r", ".", "keep")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "changed since you approved it")
 	res = e.RunWith(in(proj), "update", "-y")
 	testkit.Contains(t, "list", res.Stdout, "  changed  .shortcuts.local\n")
-	testkit.Eq(t, "mine", e.RunWith(in(proj), "r", "mine").Stdout, "evil\n")
+	testkit.Eq(t, "mine", e.RunWith(in(proj), "r", ".", "mine").Stdout, "evil\n")
 }
 
 func TestProjectFiles_ALocalFileFromACloneNeedsApproving(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(map[string]any{"keep": testkit.Inline("echo keep")})
 	writeLocalFile(t, e, proj, map[string]any{"evil": testkit.Inline("echo evil")})
-	res := e.RunWith(in(proj), "r", "evil")
+	res := e.RunWith(in(proj), "r", ".", "evil")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "isn't approved yet")
 }
@@ -177,8 +177,8 @@ func TestProjectFiles_ACLIWriteDoesNotApproveAHandEditToLocal(t *testing.T) {
 	writeLocalFile(t, e, proj, map[string]any{"mine": testkit.Inline("echo evil")})
 	res := e.RunWith(in(proj), "new", "more", "--local", "--", "echo more")
 	testkit.Contains(t, "stderr", res.Stderr, "needs approving")
-	testkit.Eq(t, "mine", e.RunWith(in(proj), "r", "mine").Code, 1)
-	testkit.Eq(t, "more", e.RunWith(in(proj), "r", "more").Code, 1)
+	testkit.Eq(t, "mine", e.RunWith(in(proj), "r", ".", "mine").Code, 1)
+	testkit.Eq(t, "more", e.RunWith(in(proj), "r", ".", "more").Code, 1)
 }
 
 func TestProjectFiles_ACLIWriteDoesNotApproveAChangeToShared(t *testing.T) {
@@ -189,8 +189,8 @@ func TestProjectFiles_ACLIWriteDoesNotApproveAChangeToShared(t *testing.T) {
 	e.WriteStore(filepath.Join(proj, ".shortcuts"), changed)
 	res := e.RunWith(in(proj), "new", "more", "--local", "--", "echo more")
 	testkit.Contains(t, "stderr", res.Stderr, "needs approving")
-	testkit.Eq(t, "keep", e.RunWith(in(proj), "r", "keep").Code, 1)
-	testkit.Eq(t, "more", e.RunWith(in(proj), "r", "more").Code, 1)
+	testkit.Eq(t, "keep", e.RunWith(in(proj), "r", ".", "keep").Code, 1)
+	testkit.Eq(t, "more", e.RunWith(in(proj), "r", ".", "more").Code, 1)
 }
 
 func TestProjectFiles_ACLIWriteToAFreshCloneDoesNotApproveShared(t *testing.T) {
@@ -198,12 +198,12 @@ func TestProjectFiles_ACLIWriteToAFreshCloneDoesNotApproveShared(t *testing.T) {
 	proj := e.Project(map[string]any{"keep": testkit.Inline("echo keep")})
 	res := e.RunWith(in(proj), "new", "more", "--local", "--", "echo more")
 	testkit.Contains(t, "stderr", res.Stderr, "needs approving")
-	res = e.RunWith(in(proj), "r", "keep")
+	res = e.RunWith(in(proj), "r", ".", "keep")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "isn't approved yet")
 	res = e.RunWith(in(proj), "update", "-y")
 	testkit.Contains(t, "list", res.Stdout, "  new      .shortcuts\n")
-	testkit.Eq(t, "keep", e.RunWith(in(proj), "r", "keep").Stdout, "keep\n")
+	testkit.Eq(t, "keep", e.RunWith(in(proj), "r", ".", "keep").Stdout, "keep\n")
 }
 
 func TestProjectFiles_AScriptNamedInLocalIsCovered(t *testing.T) {
@@ -211,9 +211,9 @@ func TestProjectFiles_AScriptNamedInLocalIsCovered(t *testing.T) {
 	proj := e.Project(map[string]any{}, testkit.Files(map[string]any{"run.sh": "#!/usr/bin/env bash\necho one\n"}), testkit.Mode(0o755))
 	testkit.Eq(t, "new", e.RunWith(in(proj), "new", "go", "--script", "run.sh", "--desc", "d", "--local").Code, 0)
 	e.Approve(filepath.Join(proj, ".shortcuts"))
-	testkit.Eq(t, "run", e.RunWith(in(proj), "r", "go").Stdout, "one\n")
+	testkit.Eq(t, "run", e.RunWith(in(proj), "r", ".", "go").Stdout, "one\n")
 	e.WriteFile(filepath.Join(proj, "run.sh"), "#!/usr/bin/env bash\necho two\n", 0)
-	testkit.Eq(t, "changed", e.RunWith(in(proj), "r", "go").Code, 1)
+	testkit.Eq(t, "changed", e.RunWith(in(proj), "r", ".", "go").Code, 1)
 }
 
 func TestProjectFiles_ADiffMarksWhatLocalOverrides(t *testing.T) {
@@ -235,7 +235,7 @@ func TestProjectFiles_ListShowsEachEntrysSource(t *testing.T) {
 func TestProjectFiles_ShowNamesTheFileThatDefinesIt(t *testing.T) {
 	e := testkit.New(t)
 	proj := overlaid(t, e)
-	res := e.RunWith(in(proj), "show", "swap")
+	res := e.RunWith(in(proj), "show", ".", "swap")
 	testkit.Contains(t, "show", res.Stdout, "Defined in:  "+filepath.Join(proj, ".shortcuts.local"))
 	testkit.Contains(t, "show", res.Stdout, "Source:      overridden")
 }
@@ -255,14 +255,16 @@ func TestProjectFiles_TheCliNeverWritesTheSharedFile(t *testing.T) {
 	testkit.Eq(t, "shared", testkit.ReadFile(t, filepath.Join(proj, ".shortcuts")), before)
 }
 
-func TestProjectFiles_AWriteWithoutLocalIsRefusedForAProjectEntry(t *testing.T) {
+func TestProjectFiles_RmWithoutLocalNeverReachesAProjectEntry(t *testing.T) {
 	e := testkit.New(t)
 	proj := overlaid(t, e)
+	before := testkit.ReadFile(t, filepath.Join(proj, ".shortcuts.local"))
 	for _, args := range [][]string{{"rm", "keep", "-y"}, {"rm", "mine", "-y"}} {
 		res := e.RunWith(in(proj), args...)
 		testkit.Eq(t, strings.Join(args, " "), res.Code, 1)
-		testkit.Contains(t, strings.Join(args, " "), res.Stderr, "shortcut doesn't change .shortcuts")
+		testkit.Contains(t, strings.Join(args, " "), res.Stderr, "shortcut '"+args[1]+"' not found.")
 	}
+	testkit.Eq(t, "local file", testkit.ReadFile(t, filepath.Join(proj, ".shortcuts.local")), before)
 }
 
 func TestProjectFiles_RmLocalOfAnOverrideBringsTheSharedEntryBack(t *testing.T) {
@@ -270,7 +272,7 @@ func TestProjectFiles_RmLocalOfAnOverrideBringsTheSharedEntryBack(t *testing.T) 
 	proj := overlaid(t, e)
 	testkit.Eq(t, "rm", e.RunWith(in(proj), "rm", "--local", "swap", "-y").Code, 0)
 	testkit.Eq(t, "update", e.RunWith(in(proj), "update", ".", "-y").Code, 0)
-	testkit.Eq(t, "run", e.RunWith(in(proj), "r", "-y", "swap").Stdout, "shared swap\n")
+	testkit.Eq(t, "run", e.RunWith(in(proj), "r", "-y", ".", "swap").Stdout, "shared swap\n")
 }
 
 func TestProjectFiles_RmLocalSaysTheSharedEntryAppliesAgain(t *testing.T) {
@@ -287,13 +289,13 @@ func TestProjectFiles_ACliWriteNeedsUpdate(t *testing.T) {
 	proj := overlaid(t, e)
 	res := e.RunWith(in(proj), "new", "more", "--local", "--", "echo more")
 	testkit.Contains(t, "new", res.Stderr, "needs approving before it runs: shortcut update")
-	testkit.Contains(t, "more", e.RunWith(in(proj), "r", "more").Stderr, "changed since you approved it")
-	testkit.Contains(t, "keep", e.RunWith(in(proj), "r", "keep").Stderr, "changed since you approved it")
+	testkit.Contains(t, "more", e.RunWith(in(proj), "r", ".", "more").Stderr, "changed since you approved it")
+	testkit.Contains(t, "keep", e.RunWith(in(proj), "r", ".", "keep").Stderr, "changed since you approved it")
 	testkit.Eq(t, "update", e.RunWith(in(proj), "update", ".", "-y").Code, 0)
-	testkit.Eq(t, "more", e.RunWith(in(proj), "r", "more").Stdout, "more\n")
+	testkit.Eq(t, "more", e.RunWith(in(proj), "r", ".", "more").Stdout, "more\n")
 	res = e.RunWith(in(proj), "rm", "--local", "more", "-y")
 	testkit.Contains(t, "rm", res.Stderr, "needs approving before it runs: shortcut update")
-	testkit.Contains(t, "keep again", e.RunWith(in(proj), "r", "keep").Stderr, "changed since you approved it")
+	testkit.Contains(t, "keep again", e.RunWith(in(proj), "r", ".", "keep").Stderr, "changed since you approved it")
 }
 
 // An exclude file whose last line has no newline keeps that line intact.
@@ -315,7 +317,7 @@ func TestProjectFiles_RmLocalOfANameOnlyInTheSharedFileFails(t *testing.T) {
 	res := e.RunWith(in(proj), "rm", "--local", "keep", "-y")
 	testkit.Eq(t, "exit", res.Code, 1)
 	testkit.Contains(t, "err", res.Stderr, "'keep' isn't in .shortcuts.local, and shortcut doesn't change .shortcuts")
-	testkit.Eq(t, "still shared", e.RunWith(in(proj), "r", "keep").Stdout, "shared keep\n")
+	testkit.Eq(t, "still shared", e.RunWith(in(proj), "r", ".", "keep").Stdout, "shared keep\n")
 }
 
 func TestProjectFiles_ANullLocalEntryIsAnInvalidEntry(t *testing.T) {
@@ -323,7 +325,7 @@ func TestProjectFiles_ANullLocalEntryIsAnInvalidEntry(t *testing.T) {
 	proj := e.Project(sharedEntries(), testkit.Approved())
 	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"keep": null}}`, 0)
 	for _, cmd := range []string{"show", "r"} {
-		res := e.RunWith(in(proj), cmd, "keep")
+		res := e.RunWith(in(proj), cmd, ".", "keep")
 		testkit.Eq(t, cmd, res.Code, 1)
 		testkit.Contains(t, cmd, res.Stderr+res.Stdout, "'keep' is not a valid entry: expected a JSON object")
 	}

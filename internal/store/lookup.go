@@ -10,10 +10,27 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 )
 
-// Lookup says which stores a name is looked up in, and how a broken one is treated.
+// Scope is the one store a name is looked up in. There is no fallback from one to the other.
+type Scope uint8
+
+const (
+	ScopeGlobal  Scope = iota // your own shortcuts and global namespaces
+	ScopeProject              // the nearest project: its .shortcuts with .shortcuts.local over it, and what it imports
+)
+
+// Lookup says which store a name is looked up in, and how a broken one is treated.
 type Lookup struct {
-	GlobalOnly bool // --global: skip the project
-	Strict     bool // run: refuse every name in a project that can't be used
+	Scope  Scope
+	Strict bool   // run: refuse every name in a project that can't be used
+	Cmd    string // the command a hint at the other scope names: "r" or "show"; "" gives no hint
+}
+
+// SplitScope reads the dot: a first word "." selects the project, and is not part of the name.
+func SplitScope(words []string) (Scope, []string) {
+	if len(words) > 0 && words[0] == "." {
+		return ScopeProject, words[1:]
+	}
+	return ScopeGlobal, words
 }
 
 // Found is what FindEntry finds, before anyone judges the entry.
@@ -22,91 +39,113 @@ type Found struct {
 	Name  string
 	Item  Item     // the entry as loaded; Item.Err says whether it can run
 	Rest  []string // the words left over, a run's arguments
-	Hides bool     // a project's name hides a global one of either kind
 }
 
-// FindEntry finds `name` or `namespace name` in the project, then the global store, without judging
-// the entry. words must not be empty. lk.Strict (for run) refuses every name inside a project whose file can't be used,
-// and a store's load errors for the name it has. Without it (show, rm) a broken file is looked in as far as
-// it reads, so you can still see and fix what's there. both lookup failures are just errors here:
-// the caller prints either as "error: <text>".
-func FindEntry(c *Context, words []string, lk Lookup) (Found, error) {
-	stores := c.Visible(lk)
+// otherHas reports whether st would resolve words: a shortcut, or a namespace and its shortcut.
+func otherHas(st Store, words []string) bool {
 	first, rest := words[0], words[1:]
-	homeIdx := len(stores) - 1
-	home := stores[homeIdx]
+	group, isNS := st.Namespace(first)
+	if has(st.Main.Shortcuts(), first) && (len(rest) == 0 || !isNS) {
+		return true
+	}
+	return isNS && (len(rest) == 0 || has(group.Shortcuts(), rest[0]))
+}
 
-	for i, store := range stores {
-		if lk.Strict && i != homeIdx && store.Main.Error != nil {
-			return Found{}, fmt.Errorf("%s. Nothing runs inside this project until it's fixed; for your own: shortcut r --global %s",
-				*store.Main.Error, first)
+// otherHint is the sentence that says the other scope has words and how to reach it, "" when it doesn't or when
+// the command gives no hint.
+func otherHint(c *Context, lk Lookup, words []string) string {
+	if lk.Cmd == "" {
+		return ""
+	}
+	joined := platform.ShellJoin(words)
+	if lk.Scope == ScopeProject {
+		if otherHas(c.Store(c.Global), words) {
+			return fmt.Sprintf("Your global store has it: shortcut %s %s", lk.Cmd, joined)
 		}
-		var problems []string
-		if store.Main.Error != nil {
-			problems = append(problems, *store.Main.Error)
+	} else if c.Project != "" && otherHas(c.Store(c.Project), words) {
+		return fmt.Sprintf("The project in %s has it: shortcut %s . %s", c.Project, lk.Cmd, joined)
+	}
+	return ""
+}
+
+// FindEntry finds `name` or `namespace name` in the one store lk.Scope names, without judging the entry. words must
+// not be empty. lk.Strict (for run) refuses every name inside a project whose file can't be used, and a store's load
+// errors for the name it has. Without it (show, rm) a broken file is looked in as far as it reads, so you can still
+// see and fix what's there. both lookup failures are just errors here: the caller prints either as "error: <text>".
+func FindEntry(c *Context, words []string, lk Lookup) (Found, error) {
+	first, rest := words[0], words[1:]
+	var store Store
+	if lk.Scope == ScopeProject {
+		if c.Project == "" {
+			return Found{}, errors.New("no project here: no " + ProjectFile + " or " + LocalFile + " in this folder or its parents")
 		}
-		problems = append(problems, store.Problems...)
-		named := has(store.Main.Shortcuts(), first)
-		if _, ns := store.Namespace(first); ns {
-			named = true
+		store = c.Store(c.Project)
+		if lk.Strict && store.Main.Error != nil {
+			return Found{}, fmt.Errorf("%s. Nothing runs inside this project until it's fixed.", *store.Main.Error)
 		}
-		if imports, ok := store.Main.Doc.Object("imports"); ok && imports.Has(first) {
-			named = true
+	} else {
+		store = c.Store(c.Global)
+	}
+	var problems []string
+	if store.Main.Error != nil {
+		problems = append(problems, *store.Main.Error)
+	}
+	problems = append(problems, store.Problems...)
+	named := has(store.Main.Shortcuts(), first)
+	if _, ns := store.Namespace(first); ns {
+		named = true
+	}
+	if imports, ok := store.Main.Doc.Object("imports"); ok && imports.Has(first) {
+		named = true
+	}
+	if lk.Strict && len(problems) > 0 && named {
+		return Found{}, errors.New(strings.Join(problems, "; "))
+	}
+	shortcuts := store.Main.Shortcuts()
+	_, isNS := store.Namespace(first)
+	if it, ok := shortcuts.Get(first); ok && (len(rest) == 0 || !isNS) {
+		return Found{store.Main, first, it, rest}, nil
+	}
+	if group, ok := store.Namespace(first); ok {
+		if group.Error != nil {
+			return Found{}, errors.New(*group.Error)
 		}
-		if lk.Strict && len(problems) > 0 && named {
-			return Found{}, errors.New(strings.Join(problems, "; "))
+		gs := group.Shortcuts()
+		members := strings.Join(slices.Sorted(slices.Values(gs.Names())), ", ")
+		if members == "" {
+			members = "(none)"
 		}
-		// A project's name, shortcut or namespace, hides a global one of either kind
-		_, homeNS := home.Namespace(first)
-		hides := i != homeIdx && (has(home.Main.Shortcuts(), first) || homeNS)
-		shortcuts := store.Main.Shortcuts()
-		_, isNS := store.Namespace(first)
-		if it, ok := shortcuts.Get(first); ok && (len(rest) == 0 || !isNS) {
-			return Found{store.Main, first, it, rest, hides}, nil
+		if len(rest) == 0 {
+			return Found{}, fmt.Errorf("'%s' is a namespace; run one of its shortcuts: %s", first, members)
 		}
-		if group, ok := store.Namespace(first); ok {
-			if group.Error != nil {
-				return Found{}, errors.New(*group.Error)
+		it, ok := gs.Get(rest[0])
+		if !ok {
+			note := ""
+			if hint := otherHint(c, lk, words); hint != "" {
+				note = ". " + hint
 			}
-			gs := group.Shortcuts()
-			members := strings.Join(slices.Sorted(slices.Values(gs.Names())), ", ")
-			if members == "" {
-				members = "(none)"
-			}
-			if len(rest) == 0 {
-				return Found{}, fmt.Errorf("'%s' is a namespace; run one of its shortcuts: %s", first, members)
-			}
-			it, ok := gs.Get(rest[0])
-			if !ok {
-				note := ""
-				if hides {
-					if yours, ok := home.Namespace(first); ok && has(yours.Shortcuts(), rest[0]) {
-						note = fmt.Sprintf(". Your global '%s' has it: shortcut r --global %s %s", first, first, rest[0])
-					}
-				}
-				return Found{}, fmt.Errorf("'%s' not found in namespace '%s'. It has: %s%s", rest[0], first, members, note)
-			}
-			return Found{group, rest[0], it, rest[1:], hides}, nil
+			return Found{}, fmt.Errorf("'%s' not found in namespace '%s'. It has: %s%s", rest[0], first, members, note)
 		}
+		return Found{group, rest[0], it, rest[1:]}, nil
 	}
 	var missing string
-	if len(rest) > 0 { // `first` may be meant as a namespace
+	switch {
+	case len(rest) > 0 && lk.Scope == ScopeGlobal: // `first` may be meant as a namespace
 		missing = fmt.Sprintf("shortcut or namespace '%s' not found. A global namespace is the file %s.",
-			first, platform.Join(home.Main.StoreDir, "imports", first+ImportSuffix))
-	} else {
+			first, platform.Join(store.Main.StoreDir, "imports", first+ImportSuffix))
+	case len(rest) > 0:
+		missing = fmt.Sprintf("shortcut or namespace '%s' not found.", first)
+	default:
 		missing = fmt.Sprintf("shortcut '%s' not found.", first)
 	}
 	notes := []string{missing}
-	if home.Main.Error != nil {
-		notes = append(notes, *home.Main.Error)
+	if store.Main.Error != nil {
+		notes = append(notes, *store.Main.Error)
 	}
-	root := c.Project
-	switch {
-	case root != "" && lk.GlobalOnly:
-		if hasName(c.Store(root), first) {
-			notes = append(notes, fmt.Sprintf("The project in %s has its own '%s': leave out --global to use it.", root, first))
-		}
-	case root != "":
+	if hint := otherHint(c, lk, words); hint != "" {
+		notes = append(notes, hint)
+	}
+	if root := c.Project; root != "" && lk.Scope == ScopeProject {
 		if outer := c.FindProjectRoot(filepath.Dir(root)); outer != "" && outer != root && hasName(c.Store(outer), first) {
 			notes = append(notes, fmt.Sprintf("The project in %s has a '%s', but only the nearest project, %s, is used here.", outer, first, root))
 		}
@@ -132,12 +171,12 @@ func ResolveShortcut(c *Context, words []string, lk Lookup) (*ResolvedShortcut, 
 		return nil, nil, f.Item.Err
 	}
 	entry := f.Item.Entry
-	return &ResolvedShortcut{Entry: entry, Group: f.Group, RunCwd: ResolveRunDir(entry.Cwd, f.Group, c.Cwd), HidesGlobal: f.Hides}, f.Rest, nil
+	return &ResolvedShortcut{Entry: entry, Group: f.Group, RunCwd: ResolveRunDir(entry.Cwd, f.Group, c.Cwd)}, f.Rest, nil
 }
 
 // ResolveName resolves a name for commands that name a shortcut: `name` or `namespace name`, and nothing else.
 func ResolveName(c *Context, words []string, lk Lookup) (*ResolvedShortcut, error) {
-	r, rest, err := ResolveShortcut(c, words, Lookup{GlobalOnly: lk.GlobalOnly})
+	r, rest, err := ResolveShortcut(c, words, Lookup{Scope: lk.Scope, Cmd: lk.Cmd})
 	if err != nil {
 		return nil, err
 	}
@@ -154,10 +193,9 @@ func TooManyNames(words []string) error {
 
 // ResolvedShortcut is a name looked up: the entry, its group and where it runs.
 type ResolvedShortcut struct {
-	Entry       *Entry
-	Group       Group
-	RunCwd      string // computed execution directory
-	HidesGlobal bool   // project entry with the same name as a global one
+	Entry  *Entry
+	Group  Group
+	RunCwd string // computed execution directory
 }
 
 func (r ResolvedShortcut) Display() string { return r.Group.Display(r.Entry.Name) }

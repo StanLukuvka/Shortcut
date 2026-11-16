@@ -39,20 +39,8 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 		return rmLocal(c, s, ns)
 	}
 
-	// A project that can't be read might hide the name, so rm doesn't reach past it to a global one
-	root := ""
-	if !ns.Bool("skipLocal") {
-		root = c.Project
-	}
-	if root != "" {
-		if broken := c.Store(root).Main.Error; broken != nil {
-			return term.Die(*broken + ". Inside this project rm only takes --local until it's fixed; " +
-				"for your own: shortcut rm --global " + platform.ShellJoin(names))
-		}
-	}
-
 	// Raw lookup: an entry that can't run must still be removable
-	found, err := store.FindEntry(c, names, store.Lookup{GlobalOnly: ns.Bool("skipLocal")})
+	found, err := store.FindEntry(c, names, store.Lookup{})
 	if err != nil {
 		return err
 	}
@@ -61,10 +49,6 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	}
 	group, name := found.Group, found.Name
 	display := group.Display(name)
-	if group.InProject {
-		return term.Die("'" + display + "' is a project shortcut, and shortcut doesn't change " + store.ProjectFile + ". " +
-			"Edit it by hand, or use: shortcut rm --local " + display)
-	}
 
 	if err := term.Confirmed(s, term.Confirm{Question: "remove '" + display + "'?", NoTerminal: "remove '" + display + "' in a terminal, or pass -y",
 		Message: rmMessage(group, display, found.Item), TellOnYes: true}, ns.Bool("yes")); err != nil {
@@ -94,9 +78,6 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 
 // rmLocal takes a name out of .shortcuts.local, which also undoes an override.
 func rmLocal(c *store.Context, s *term.Streams, ns term.Namespace) error {
-	if ns.Bool("skipLocal") {
-		return term.Die("--local and --global can't be used together")
-	}
 	names := ns.List("name")
 	if len(names) > 1 {
 		return term.Die("--local takes one name: namespaces aren't in " + store.LocalFile)

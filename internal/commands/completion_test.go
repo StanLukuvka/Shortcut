@@ -65,20 +65,23 @@ func TestCompletion_BashPastFlagsAndIntoNamespaces(t *testing.T) {
 		}
 	}
 	// Flags: the script offers them without asking the binary.
-	check([]string{"--global", "-y"}, "r", "-")
-	check([]string{"--global", "--json", "--field"}, "show", "-")
+	check([]string{"-y"}, "r", "-")
+	check([]string{"--json", "--field"}, "show", "-")
 	check(nil, "r", "other", "--")
 	// Names: the script runs `shortcut list --names`.
 	if !slices.Contains(e.BashComplete("r", "o"), "other") {
 		t.Errorf("complete r o: no other")
 	}
-	check([]string{"other"}, "r", "--global", "ot")
-	check([]string{"docker"}, "r", "-y", "--global", "doc")
-	check([]string{"other"}, "show", "--global", "ot")
+	check([]string{"other"}, "r", "ot")
+	check([]string{"docker"}, "r", "-y", "doc")
+	check([]string{"other"}, "show", "ot")
 	check([]string{"delete", "ps"}, "r", "docker", "")
-	check([]string{"delete"}, "rm", "--global", "docker", "d")
+	check([]string{"delete"}, "rm", "docker", "d")
 	check(nil, "r", "docker", "ps", "")
 	check(nil, "r", "other", "")
+	// After the dot the names are the project's (`list --names .`): none outside a project, and no error
+	check(nil, "r", ".", "")
+	check(nil, "r", ".", "docker", "")
 }
 
 // The static completion scripts name every command and alias, the options of the commands that take names, and the

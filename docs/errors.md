@@ -85,14 +85,16 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 
 | Message | Meaning |
 |---|---|
-| `shortcut '<name>' not found.` | Not in this project or your global store |
-| `shortcut or namespace '<name>' not found. A global namespace is the file <store>/imports/<name>.shortcut.` | The same, with words after the name, so it may be meant as a namespace |
-| `... The project in <dir> has its own '<name>': leave out --global to use it.` | Added to either one above when `--global` skipped a project entry by that name |
+| `shortcut '<name>' not found.` | Not in the one store looked in: your global store, or with the dot (`r .`, `show .`) the nearest project. There is no fallback to the other |
+| `shortcut or namespace '<name>' not found. A global namespace is the file <store>/imports/<name>.shortcut.` | The same, with words after the name, so it may be meant as a namespace. The file sentence is for the global store only |
+| `... The project in <dir> has it: shortcut <r or show> . <words>` | Added to any of these when your global store lacks the name and the nearest project has it. Nothing runs |
+| `... Your global store has it: shortcut <r or show> <words>` | The same the other way round, after a lookup with the dot |
+| `no project here: no .shortcuts or .shortcuts.local in this folder or its parents` | `run .` or `show .` outside any project |
 | `... The project in <outer> has a '<name>', but only the nearest project, <dir>, is used here.` | Added when a project holds another, and only the outer one has the name |
-| `'<name>' not found in namespace '<ns>'. It has: <names>` | When the project's namespace hides a global one that has the name, `. Your global '<ns>' has it: shortcut r --global <ns> <name>` follows |
+| `'<name>' not found in namespace '<ns>'. It has: <names>` | When the namespace of the other scope has the name, the same hint as above follows |
 | `'<ns>' is a namespace; run one of its shortcuts: <names>` | |
 | `too many names: <words>` | `show` and `rm` take a name, or a namespace and a name |
-| `<file error>. Nothing runs inside this project until it's fixed; for your own: shortcut r --global <name>` | The project's file is broken, so no name is looked up through it |
+| `<file error>. Nothing runs inside this project until it's fixed.` | `run .` with the project's file broken. Your global shortcuts are not behind it |
 | `<group> isn't approved yet; review it with: <command>` | Run the `shortcut update` command it names |
 | `<group> changed since you approved it; run: <command>` | |
 | `cannot approve: "<path>" is not valid UTF-8; rename it` | A file name in the project or the namespace's scripts folder, or a project's own folder name, is not valid UTF-8, so it can't be recorded. `run` and `update` stop there until it's renamed |
@@ -100,7 +102,7 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `script file not found: <path>` | |
 | `<path> is not executable. Make it so: chmod +x <path>` | A script runs as it is, so it needs the execute bit. `list` warns and `update` refuses with `'<name>': ` before it |
 | `<path> has Windows line endings, so its #! line can't start it. Convert it: sed -i 's/\r$//' <path>` | The script's lines end in `\r\n` |
-| `'<name>' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y <name> <args>)` | A `confirm` entry run without a terminal. The command is the one that was run, with `-y` |
+| `'<name>' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y [.] <name> <args>)` | A `confirm` entry run without a terminal. The command is the one that was run, with `-y`, and the dot if it had one |
 
 ## new
 
@@ -140,12 +142,9 @@ A new local shortcut needs a project folder:
 
 | Message | Meaning |
 |---|---|
-| `--local and --global can't be used together` | |
 | `--local takes one name: namespaces aren't in .shortcuts.local` | |
 | `'<name>' isn't in .shortcuts or .shortcuts.local here` | |
 | `'<name>' isn't in .shortcuts.local, and shortcut doesn't change .shortcuts` | `rm --local` of a name only in `.shortcuts` |
-| `'<name>' is a project shortcut, and shortcut doesn't change .shortcuts. Edit it by hand, or use: shortcut rm --local <name>` | |
-| `<file error>. Inside this project rm only takes --local until it's fixed; for your own: shortcut rm --global <name>` | |
 | `--namespace takes the namespace alone: shortcut rm --namespace <ns>` | |
 | `--namespace takes the namespace alone: shortcut rm --namespace <ns>. To remove one entry: shortcut rm <ns> <name>` | A name was given too |
 | `no namespace named '<ns>' in your global store (<store>/imports)` | `rm --namespace` removes only global namespaces |

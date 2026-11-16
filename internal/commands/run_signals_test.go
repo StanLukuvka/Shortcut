@@ -138,7 +138,7 @@ func TestCwd_ASymlinkedCwdIsThePhysicalOne(t *testing.T) {
 	proj := e.Project(testkit.GO, testkit.Approved())
 	plink := filepath.Join(e.Tmp, "plink")
 	e.Symlink(proj, plink)
-	res = e.RunWith(testkit.Opts{Cwd: plink}, "r", "go")
+	res = e.RunWith(testkit.Opts{Cwd: plink}, "r", ".", "go")
 	if res.Code != 0 || res.Stdout != "ran\n" {
 		t.Errorf("project through a link: exit %d stdout %q stderr %q", res.Code, res.Stdout, res.Stderr)
 	}

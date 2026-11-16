@@ -79,7 +79,7 @@ func TestRunning_RIsShortForRun(t *testing.T) {
 	if out := e.Run("r", "hello", "you").Stdout; out != "hello you\n" {
 		t.Errorf("r hello you: %q", out)
 	}
-	testkit.Contains(t, "r --help", e.Run("r", "--help").Stdout, "shortcut run|r [--global] [-y] <name>")
+	testkit.Contains(t, "r --help", e.Run("r", "--help").Stdout, "shortcut run|r [-y] [.] <name>")
 }
 
 // A script is handed to the kernel as it is: its #! line runs it, a binary runs, a file the kernel refuses says so,
@@ -133,7 +133,7 @@ func TestRunning_RunHelp(t *testing.T) {
 	for _, flag := range []string{"--help", "-h"} {
 		res := e.Run("run", flag)
 		res.WantCode(t, 0)
-		testkit.Contains(t, "run "+flag, res.Stdout, "shortcut run|r [--global] [-y] <name> [args...]")
+		testkit.Contains(t, "run "+flag, res.Stdout, "shortcut run|r [-y] [.] <name> [args...]")
 	}
 	e.WriteStore(e.Store, map[string]any{"echo_args": testkit.Inline(`echo "args: $@"`)})
 	res := e.Run("run", "echo_args", "--help")
@@ -154,13 +154,13 @@ func TestRunning_RunCwdModes(t *testing.T) {
 	}, testkit.Dirs("frontend", "src"), testkit.Approved())
 	here := filepath.Join(proj, "src")
 	for _, c := range [][2]string{{"default", here}, {"caller", here}, {"root", proj}, {"sibling", filepath.Join(proj, "frontend")}, {"fixed", fixed}} {
-		res := e.RunWith(in(here), "r", c[0])
+		res := e.RunWith(in(here), "r", ".", c[0])
 		if res.Stdout != c[1]+"\n" {
 			t.Errorf("%s: stdout %q, want %q", c[0], res.Stdout, c[1]+"\n")
 		}
 		testkit.Contains(t, c[0], res.Stderr, "→ "+c[1]+"\n")
 	}
-	res := e.RunWith(in(here), "r", "gone")
+	res := e.RunWith(in(here), "r", ".", "gone")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "gone", res.Stderr, "run directory does not exist")
 }
@@ -232,7 +232,7 @@ func TestRunning_ShowJSONIsOneObjectWithWhereItResolves(t *testing.T) {
 	info := decodeObject(t, e.Run("show", "--json", "s").Stdout)
 	for k, want := range map[string]any{"name": "s", "namespace": nil, "scope": "global", "defined_in": filepath.Join(e.Store, "shortcuts.json"),
 		"source": nil, "script_path": filepath.Join(e.Store, "scripts", "s.sh"), "cwd": "/tmp", "run_cwd": "/tmp", "approval": "ok",
-		"error": nil, "hides_global": false, "entry": map[string]any{"script": "scripts/s.sh", "cwd": "/tmp"}} {
+		"error": nil, "entry": map[string]any{"script": "scripts/s.sh", "cwd": "/tmp"}} {
 		testkit.Eq(t, k, info[k], want)
 	}
 	info = decodeObject(t, e.RunWith(in(e.Tmp), "show", "--json", "c").Stdout)
@@ -311,4 +311,62 @@ func TestRun_CwdLineEscapesNonUTF8(t *testing.T) {
 	res := e.RunWith(testkit.Opts{Cwd: dir}, "run", "hello")
 	res.WantCode(t, 0)
 	testkit.Contains(t, "stderr", res.Stderr, "p\\xffroj")
+}
+
+// run reaches the global store without the dot and only the project with it, for a name and for a group, and each side
+// says where the other has the name. Nothing runs on a miss.
+func TestRunning_TheDotSelectsTheScope(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"build": testkit.Inline("echo global-build"), "gonly": testkit.Inline("echo gonly")})
+	e.WriteImport(e.Store, "docker", testkit.NS(map[string]any{"ps": testkit.Inline("echo global-ps")}))
+	proj := e.Project(map[string]any{"build": testkit.Inline("echo project-build"), "ponly": testkit.Inline("echo ponly")})
+	e.WriteImport(filepath.Join(proj, ".shortcuts"), "terraform", testkit.NS(map[string]any{"plan": testkit.Inline("echo plan")}))
+	e.WriteImport(filepath.Join(proj, ".shortcuts"), "docker", testkit.NS(map[string]any{"delete": testkit.Inline("echo project-delete")}))
+	e.Approve(filepath.Join(proj, ".shortcuts"))
+	for _, ns := range []string{"terraform", "docker"} {
+		runOK(t, e, in(proj), "update", ns, "-y")
+	}
+	o := testkit.Opts{Cwd: proj, Env: map[string]string{"SHORTCUT_SHOW_DIR": "0"}}
+
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"r", "build"}, "global-build\n"},
+		{[]string{"r", "gonly"}, "gonly\n"},
+		{[]string{"r", "docker", "ps"}, "global-ps\n"},
+		{[]string{"r", ".", "build"}, "project-build\n"},
+		{[]string{"r", ".", "ponly"}, "ponly\n"},
+		{[]string{"r", ".", "terraform", "plan"}, "plan\n"},
+		{[]string{"r", ".", "docker", "delete"}, "project-delete\n"},
+		{[]string{"r", "-y", ".", "build"}, "project-build\n"},
+	} {
+		testkit.Eq(t, strings.Join(c.args, " "), e.RunWith(o, c.args...).Stdout, c.want)
+	}
+
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"r", "ponly"}, "shortcut 'ponly' not found. The project in " + proj + " has it: shortcut r . ponly"},
+		{[]string{"r", "terraform", "plan"}, "The project in " + proj + " has it: shortcut r . terraform plan"},
+		{[]string{"r", "docker", "delete"}, "'delete' not found in namespace 'docker'. It has: ps. The project in " + proj + " has it: shortcut r . docker delete"},
+		{[]string{"r", ".", "gonly"}, "shortcut 'gonly' not found. Your global store has it: shortcut r gonly"},
+		{[]string{"r", ".", "docker", "ps"}, "Your global store has it: shortcut r docker ps"},
+	} {
+		res := e.RunWith(o, c.args...)
+		testkit.Eq(t, strings.Join(c.args, " ")+" exit", res.Code, 1)
+		testkit.Eq(t, strings.Join(c.args, " ")+" stdout", res.Stdout, "")
+		testkit.Contains(t, strings.Join(c.args, " "), res.Stderr, c.want)
+	}
+
+	// The dot outside every project, and the dot alone
+	res := e.RunWith(testkit.Opts{Cwd: e.Tmp}, "r", ".", "build")
+	testkit.Eq(t, "outside exit", res.Code, 1)
+	testkit.Eq(t, "outside stdout", res.Stdout, "")
+	testkit.Contains(t, "outside", res.Stderr, "error: no project here: no .shortcuts or .shortcuts.local in this folder or its parents")
+	e.RunWith(o, "r", ".").WantCode(t, 2)
+	// the dot is only the first word after the options: later, it is the shortcut's
+	e.WriteStore(e.Store, map[string]any{"echoes": testkit.Inline(`echo "$@"`)})
+	testkit.Eq(t, "late dot", e.RunWith(o, "r", "echoes", ".").Stdout, ".\n")
 }

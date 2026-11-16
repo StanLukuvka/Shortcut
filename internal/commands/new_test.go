@@ -81,13 +81,13 @@ func TestStores_CreationScopeRules(t *testing.T) {
 	// 2. --local creates .shortcuts.local on demand, and what it adds runs once `update` has approved it
 	res := runOK(t, e, in(proj), "new", "local_cmd", "--local", "--", "echo local")
 	testkit.Contains(t, "stderr", res.Stderr, "needs approving before it runs: shortcut update")
-	testkit.Contains(t, "run before update", e.RunWith(in(proj), "run", "local_cmd").Stderr, "isn't approved yet")
+	testkit.Contains(t, "run before update", e.RunWith(in(proj), "run", ".", "local_cmd").Stderr, "isn't approved yet")
 	runOK(t, e, in(proj), "update", ".", "-y")
 	if _, err := os.Stat(filepath.Join(proj, ".shortcuts.local")); err != nil {
 		t.Errorf("no .shortcuts.local: %v", err)
 	}
 	testkit.NotExist(t, filepath.Join(proj, ".shortcuts"))
-	testkit.Eq(t, "run", e.RunWith(in(proj), "run", "local_cmd").Stdout, "local\n")
+	testkit.Eq(t, "run", e.RunWith(in(proj), "run", ".", "local_cmd").Stdout, "local\n")
 
 	// 3. --cwd is stored against the defining file: absolute globally, relative inside the project
 	runOK(t, e, testkit.Opts{}, "new", "fixed", "--cwd", e.Tmp, "--", "pwd")

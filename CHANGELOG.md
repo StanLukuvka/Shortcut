@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `shortcut r <name>` and `show <name>` look only in your global store; `shortcut r . <name>` and `show . <name>` look only in the nearest project. A name found only in the other one is an error that gives the command. `--global` and every "hides your global" note and `hides_global` are gone from `run`, `show`, `rm`, `list` and `update`; `rm` works on the global store, or with `--local` on `.shortcuts.local`; `list --names` prints global names, and `list --names .` the project's.
 - A single binary.
 - One lock file, `.lock` in the global store, serialises every write.
 - [examples/tools](examples/tools/) is a namespace to copy: `edit`, `nano`, `logged`, `desktop` and `search`.
