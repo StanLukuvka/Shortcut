@@ -11,7 +11,7 @@ import (
 const usageNotes = `Project shortcuts and namespaces don't run until approved with ` + "`" + `shortcut update` + "`" + `,
 and must be approved again after any change to their definitions. Approval covers
 .shortcuts, .shortcuts.local, imports, the scripts they name and each namespace's
-scripts/<ns>/ folder, not the programs those call. A change shortcut makes to .shortcuts.local or a namespace keeps its approval.
+scripts/<ns>/ folder, not the programs those call.
 Global shortcuts have no approval step, so a global link target can change freely.
 Set SHORTCUT_SHOW_DIR=0 to hide the "→ <run directory>" line.
 `

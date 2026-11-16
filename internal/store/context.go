@@ -14,7 +14,7 @@ import (
 
 // Context is what a run knows about where it is: built once per run, passed to every command and to every
 // store and approval function that needs the cwd, the global store or the project root. One Context is one run:
-// the stores it has read are not read again, except by ReadStore and ReloadGroup; approval states likewise, until Forget.
+// the stores it has read are not read again, except by ReadStore; approval states likewise, until Forget.
 type Context struct {
 	Cwd     string // physical working directory; "" when CwdErr != nil
 	CwdErr  error  // read by run and new, which refuse to go on without a cwd
@@ -145,7 +145,7 @@ func (c *Context) State(key string, compute func() ApprovalState) ApprovalState 
 	return s
 }
 
-// Forget drops the state under key, for after a write and for a check made under a lock or after a prompt.
+// Forget drops the state under key, for after a write or a prompt.
 func (c *Context) Forget(key string) { delete(c.states, key) }
 
 // Visible are the stores a name is looked up in, nearest first.
@@ -155,16 +155,6 @@ func (c *Context) Visible(lk Lookup) []Store {
 		stores = append(stores, c.Store(c.Project))
 	}
 	return append(stores, c.Store(c.Global))
-}
-
-// ReloadGroup reads a group's file(s) again, a fresh read each time.
-func (c *Context) ReloadGroup(g Group) Group {
-	if g.Kind == KindProject {
-		return LoadProjectGroup(g.StoreDir)
-	}
-	r := LoadGroup(g.File, g.StoreDir, g.Name)
-	r.InProject = g.InProject
-	return r
 }
 
 // loadStore reads a store and its namespaces. It never fails on bad content: that is reported on the Group or the

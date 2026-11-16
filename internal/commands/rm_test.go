@@ -231,35 +231,23 @@ func TestStores_NamespaceFlagKeepsEachGroupsScriptsApart(t *testing.T) {
 	}
 }
 
-func TestStores_CliWritesKeepAnApprovedNamespaceApproved(t *testing.T) {
+func TestStores_CliWritesNeedUpdateOnANamespace(t *testing.T) {
 	e := testkit.New(t)
 	runOK(t, e, testkit.Opts{}, "new", "a", "--namespace", "dk", "--", "echo a")
 	runOK(t, e, testkit.Opts{}, "update", "dk", "-y")
-
-	res := runOK(t, e, testkit.Opts{}, "new", "ps", "--namespace", "dk", "--", "echo ps")
-	if strings.Contains(res.Stderr, "needs approving") {
-		t.Errorf("new: %q", res.Stderr)
-	}
-	testkit.Eq(t, "ps", e.Run("r", "dk", "ps").Stdout, "ps\n")
-
-	runOK(t, e, testkit.Opts{}, "rm", "dk", "ps", "-y")
 	testkit.Eq(t, "a", e.Run("r", "dk", "a").Stdout, "a\n")
 
-	source := e.WriteFile(filepath.Join(e.Tmp, "src.sh"), bashShebang+"echo copied\n", 0)
-	runOK(t, e, testkit.Opts{}, "new", "cp", "--script", source, "--namespace", "dk", "--desc", "d")
-	testkit.Eq(t, "cp", e.Run("r", "dk", "cp").Stdout, "copied\n")
+	res := runOK(t, e, testkit.Opts{}, "new", "ps", "--namespace", "dk", "--", "echo ps")
+	testkit.Contains(t, "new", res.Stderr, "needs approving before it runs: shortcut update dk")
+	testkit.Contains(t, "run ps", e.Run("r", "dk", "ps").Stderr, "changed since you approved it")
+	runOK(t, e, testkit.Opts{}, "update", "dk", "-y")
+	testkit.Eq(t, "ps", e.Run("r", "dk", "ps").Stdout, "ps\n")
 
-	// A hand edit still needs update, and a later CLI write doesn't approve it on the way
-	path := filepath.Join(e.Store, "imports", "dk.shortcut")
-	data := decodeObject(t, testkit.ReadFile(t, path))
-	data["shortcuts"].(map[string]any)["a"].(map[string]any)["inline"] = "echo edited"
-	e.WriteFile(path, docText(t, data), 0)
-	testkit.Contains(t, "edited", e.Run("r", "dk", "a").Stderr, "changed since you approved it")
-	res = e.Run("new", "more", "--namespace", "dk", "--", "echo more")
-	testkit.Contains(t, "more", res.Stderr, "needs approving before it runs: shortcut update dk")
-	testkit.Contains(t, "run more", e.Run("r", "dk", "more").Stderr, "changed since you approved it")
-	runOK(t, e, testkit.Opts{}, "rm", "dk", "more", "-y")
+	res = runOK(t, e, testkit.Opts{}, "rm", "dk", "ps", "-y")
+	testkit.Contains(t, "rm", res.Stderr, "needs approving before it runs: shortcut update dk")
 	testkit.Contains(t, "run a", e.Run("r", "dk", "a").Stderr, "changed since you approved it")
+	runOK(t, e, testkit.Opts{}, "update", "dk", "-y")
+	testkit.Eq(t, "a", e.Run("r", "dk", "a").Stdout, "a\n")
 }
 
 func TestStores_RmInABrokenProjectNeverReachesAGlobalOne(t *testing.T) {

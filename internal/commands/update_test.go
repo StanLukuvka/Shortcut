@@ -111,8 +111,8 @@ func TestApproval_IsKeptOutsideWhatItApproves(t *testing.T) {
 	}
 	raw, _ := os.ReadFile(records[0])
 	var record struct {
-		Key      string
-		Snapshot map[string]string
+		Key   string
+		Files map[string]string
 	}
 	if err := json.Unmarshal(raw, &record); err != nil {
 		t.Fatal(err)
@@ -120,8 +120,8 @@ func TestApproval_IsKeptOutsideWhatItApproves(t *testing.T) {
 	if record.Key != proj {
 		t.Errorf("key %q, want %q", record.Key, proj)
 	}
-	if _, ok := record.Snapshot[".shortcuts"]; !ok {
-		t.Errorf("snapshot lacks .shortcuts: %v", record.Snapshot)
+	if _, ok := record.Files[".shortcuts"]; !ok {
+		t.Errorf("record lacks .shortcuts: %v", record.Files)
 	}
 }
 

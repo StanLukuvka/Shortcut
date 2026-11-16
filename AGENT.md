@@ -18,7 +18,7 @@ Agents use the same commands as people. In a project, `--local` writes to `.shor
 
 3. **Single-quote the command.** Read arguments with `$1` or `"$@"`. A shortcut doesn't append them, and flags reach it too. See [What a shortcut runs with](README.md#what-a-shortcut-runs-with).
 
-4. **Leave approval to the user.** Anything in `.shortcuts` doesn't run until the user has run `shortcut update`. A change made with `--namespace` keeps an approved namespace approved, and a new namespace, or one changed by hand, needs `shortcut update` too. A change made with `--local` keeps an approved `.shortcuts.local` approved, and in a project that isn't approved yet it needs `shortcut update` too. When it needs approving, `new` prints the exact command. Don't approve on their behalf with `-y`.
+4. **Leave approval to the user.** Anything in `.shortcuts` doesn't run until the user has run `shortcut update`. Every change to a project's or namespace's files needs it again, including one made with `--local` or `--namespace`. `new` and `rm` print the exact command. Don't approve on their behalf with `-y`.
 
 5. **Tell the user how to run it.**
 

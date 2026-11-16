@@ -8,6 +8,7 @@
 - Run a shortcut with `shortcut run <name>` or `shortcut r <name>`. It runs in the caller's directory unless its `cwd` says otherwise.
 - A project keeps its shared shortcuts in a `.shortcuts` file, and your own in `.shortcuts.local`.
 - Projects and namespaces run only after `shortcut update`, and again after each change. `update` lists each path that is new, changed or removed, one per line, and asks once; the approval record keeps one SHA-256 per covered file, not its text.
+- A change `new` or `rm` makes to `.shortcuts.local` or a namespace needs `shortcut update` too; `new` and `rm` print the command.
 - Namespaces: `<ns>.shortcut` files, run as `shortcut r <ns> <name>`.
 - `confirm` asks before a shortcut runs, showing its description and the words given.
 - `show --field KEY <name>` prints one field, bare, and only reads. The `edit` and `desktop` in examples/tools use it.

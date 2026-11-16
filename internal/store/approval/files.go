@@ -101,29 +101,28 @@ func merge(maps ...map[string]string) map[string]string {
 	return out
 }
 
-// SharedFiles is the group's own file and what it names, the JSON normalised, and for a namespace its scripts
-// folder: exactly what is compared and snapshotted, each as its SHA-256. A project may have no .shortcuts; then this is empty.
-func SharedFiles(g store.Group) (map[string]string, error) {
-	if g.Kind == store.KindProject && !platform.Exists(g.File) {
-		return map[string]string{}, nil
+// Files is every file the group's approval covers, each as its SHA-256: .shortcuts and .shortcuts.local when they
+// exist, what their entries name, and for a namespace its scripts folder.
+func Files(g store.Group) (map[string]string, error) {
+	files := merge(folderFiles(g), entryFiles(g, g.Shared, ""), entryFiles(g, g.Local, " in "+store.LocalFile))
+	for _, f := range []struct {
+		path string
+		doc  *platform.Doc
+		ok   bool
+	}{
+		{g.File, g.Doc, g.Kind != store.KindProject || platform.Exists(g.File)},
+		{g.LocalFile, g.LocalDoc, g.Kind == store.KindProject && platform.Exists(g.LocalFile)},
+	} {
+		if !f.ok {
+			continue
+		}
+		own, err := jsonFile(g, f.path, f.doc)
+		if err != nil {
+			return nil, err
+		}
+		maps.Copy(files, own)
 	}
-	own, err := jsonFile(g, g.File, g.Doc)
-	if err != nil {
-		return nil, err
-	}
-	return merge(own, folderFiles(g), entryFiles(g, g.Shared, "")), nil
-}
-
-// LocalFiles is the same for .shortcuts.local.
-func LocalFiles(g store.Group) (map[string]string, error) {
-	if g.Kind != store.KindProject || !platform.Exists(g.LocalFile) {
-		return map[string]string{}, nil
-	}
-	own, err := jsonFile(g, g.LocalFile, g.LocalDoc)
-	if err != nil {
-		return nil, err
-	}
-	return merge(own, entryFiles(g, g.Local, " in "+store.LocalFile)), nil
+	return files, nil
 }
 
 // checkPaths refuses a snapshot with a path that is not valid UTF-8: the record is JSON, and JSON cannot hold it
@@ -137,22 +136,16 @@ func checkPaths(files map[string]string) error {
 	return nil
 }
 
-// snapshot is SharedFiles and LocalFiles, or the error for text that cannot be approved. State, Save and Require
-// get the maps this way.
-func snapshot(c *store.Context, g store.Group) (shared, local map[string]string, err error) {
-	if err = CheckKey(c, g); err != nil {
-		return nil, nil, err
+// snapshot is Files, or the error for text that cannot be approved. State, Save and Require get the map this way.
+func snapshot(c *store.Context, g store.Group) (map[string]string, error) {
+	if err := CheckKey(c, g); err != nil {
+		return nil, err
 	}
-	if shared, err = SharedFiles(g); err != nil {
-		return nil, nil, err
+	files, err := Files(g)
+	if err != nil {
+		return nil, err
 	}
-	if local, err = LocalFiles(g); err != nil {
-		return nil, nil, err
-	}
-	if err = checkPaths(shared); err == nil {
-		err = checkPaths(local)
-	}
-	return shared, local, err
+	return files, checkPaths(files)
 }
 
 // CheckKey refuses a group whose approval key would be built from a path that is not valid UTF-8: the store
@@ -175,6 +168,6 @@ func CheckKey(c *store.Context, g store.Group) error {
 
 // Check is nil when the group's files can be approved, else the error that says why not.
 func Check(c *store.Context, g store.Group) error {
-	_, _, err := snapshot(c, g)
+	_, err := snapshot(c, g)
 	return err
 }

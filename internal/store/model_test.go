@@ -548,9 +548,6 @@ func TestStores_LoadProjectGroupErrors(t *testing.T) {
 	if g = LoadProjectGroup(only); g.Error != nil || len(g.Shortcuts()) != 1 {
 		t.Errorf("%+v", g)
 	}
-	if g = NewContext(env.Home, nil).ReloadGroup(g); g.LocalFile == "" {
-		t.Error("ReloadGroup of a project lost its local file")
-	}
 }
 
 func TestStores_EntryErrors(t *testing.T) {
@@ -730,10 +727,10 @@ func TestGroup_KindFromLoaders(t *testing.T) {
 	e.WriteFile(filepath.Join(proj, ".shortcuts"), `{"version": 1, "shortcuts": {}, "imports": {"n": "`+ns+`"}}`, 0)
 	e.WriteFile(filepath.Join(e.Store, "shortcuts.json"), `{"version": 1, "shortcuts": {}, "imports": {"n": "`+ns+`"}}`, 0)
 	c := NewContext(proj, nil)
-	if g, ok := c.Store(c.Project).Namespace("n"); !ok || g.Kind != KindNamespace || !g.InProject || !c.ReloadGroup(g).InProject {
+	if g, ok := c.Store(c.Project).Namespace("n"); !ok || g.Kind != KindNamespace || !g.InProject {
 		t.Errorf("project namespace: %+v", g)
 	}
-	if g, ok := c.Store(e.Store).Namespace("n"); !ok || g.Kind != KindNamespace || g.InProject || c.ReloadGroup(g).InProject {
+	if g, ok := c.Store(e.Store).Namespace("n"); !ok || g.Kind != KindNamespace || g.InProject {
 		t.Errorf("global namespace: %+v", g)
 	}
 }

@@ -61,6 +61,7 @@ func TestProjectFiles_AProjectCanBeOnlyALocalFile(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(nil, testkit.Dirs("src"))
 	testkit.Eq(t, "new", e.RunWith(in(proj), "new", "solo", "--local", "--", "echo solo").Code, 0)
+	testkit.Eq(t, "update", e.RunWith(in(proj), "update", ".", "-y").Code, 0)
 	testkit.Eq(t, "run", e.RunWith(in(filepath.Join(proj, "src")), "r", "solo").Stdout, "solo\n")
 }
 
@@ -77,6 +78,7 @@ func TestProjectFiles_NewLocalOverridesASharedNameAndSaysSo(t *testing.T) {
 	proj := overlaid(t, e)
 	res := e.RunWith(in(proj), "new", "keep", "--local", "--", "echo mine now")
 	testkit.Contains(t, "stderr", res.Stderr, "this overrides 'keep'")
+	testkit.Eq(t, "update", e.RunWith(in(proj), "update", ".", "-y").Code, 0)
 	testkit.Eq(t, "run", e.RunWith(in(proj), "r", "keep").Stdout, "mine now\n")
 }
 
@@ -267,6 +269,7 @@ func TestProjectFiles_RmLocalOfAnOverrideBringsTheSharedEntryBack(t *testing.T) 
 	e := testkit.New(t)
 	proj := overlaid(t, e)
 	testkit.Eq(t, "rm", e.RunWith(in(proj), "rm", "--local", "swap", "-y").Code, 0)
+	testkit.Eq(t, "update", e.RunWith(in(proj), "update", ".", "-y").Code, 0)
 	testkit.Eq(t, "run", e.RunWith(in(proj), "r", "-y", "swap").Stdout, "shared swap\n")
 }
 
@@ -279,17 +282,18 @@ func TestProjectFiles_RmLocalSaysTheSharedEntryAppliesAgain(t *testing.T) {
 	testkit.Contains(t, "again", out, "The 'swap' in .shortcuts applies again.")
 }
 
-func TestProjectFiles_ACliWriteKeepsTheApproval(t *testing.T) {
+func TestProjectFiles_ACliWriteNeedsUpdate(t *testing.T) {
 	e := testkit.New(t)
 	proj := overlaid(t, e)
 	res := e.RunWith(in(proj), "new", "more", "--local", "--", "echo more")
-	if strings.Contains(res.Stderr, "needs approving") {
-		t.Errorf("new: %q", res.Stderr)
-	}
+	testkit.Contains(t, "new", res.Stderr, "needs approving before it runs: shortcut update")
+	testkit.Contains(t, "more", e.RunWith(in(proj), "r", "more").Stderr, "changed since you approved it")
+	testkit.Contains(t, "keep", e.RunWith(in(proj), "r", "keep").Stderr, "changed since you approved it")
+	testkit.Eq(t, "update", e.RunWith(in(proj), "update", ".", "-y").Code, 0)
 	testkit.Eq(t, "more", e.RunWith(in(proj), "r", "more").Stdout, "more\n")
-	testkit.Eq(t, "keep", e.RunWith(in(proj), "r", "keep").Stdout, "shared keep\n")
-	testkit.Eq(t, "rm", e.RunWith(in(proj), "rm", "--local", "more", "-y").Code, 0)
-	testkit.Eq(t, "keep again", e.RunWith(in(proj), "r", "keep").Stdout, "shared keep\n")
+	res = e.RunWith(in(proj), "rm", "--local", "more", "-y")
+	testkit.Contains(t, "rm", res.Stderr, "needs approving before it runs: shortcut update")
+	testkit.Contains(t, "keep again", e.RunWith(in(proj), "r", "keep").Stderr, "changed since you approved it")
 }
 
 // An exclude file whose last line has no newline keeps that line intact.
