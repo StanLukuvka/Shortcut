@@ -12,11 +12,8 @@ import (
 // U+000B-001F and U+007F as ^X (the character xor 0x40), U+0080-009F, U+2028, U+2029, U+202A-202E and U+2066-2069
 // as \uXXXX (lowercase hex). A byte that is not UTF-8 passes through untouched.
 func Safe(text string) string {
-	i := 0
-	for i < len(text) && !control(rune(text[i]), text[i:]) {
-		i++
-	}
-	if i == len(text) {
+	i := strings.IndexFunc(text, isControl)
+	if i < 0 {
 		return text
 	}
 	var b strings.Builder
@@ -32,24 +29,11 @@ func Safe(text string) string {
 			b.WriteByte('^')
 			b.WriteByte(byte(r) ^ 0x40)
 		default:
-			const hex = "0123456789abcdef"
-			b.WriteString("\\u")
-			for _, shift := range [...]uint{12, 8, 4, 0} {
-				b.WriteByte(hex[r>>shift&0xf])
-			}
+			fmt.Fprintf(&b, "\\u%04x", r)
 		}
 		i += n
 	}
 	return b.String()
-}
-
-// control reports whether the character starting rest is one to replace (the quick scan before any copying).
-func control(first rune, rest string) bool {
-	if first < 0x80 {
-		return isControl(first)
-	}
-	r, _ := utf8.DecodeRuneInString(rest)
-	return isControl(r)
 }
 
 // isControl reports whether r is a control character that Safe replaces.

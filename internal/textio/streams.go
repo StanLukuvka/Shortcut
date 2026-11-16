@@ -31,9 +31,6 @@ type Writer struct {
 	tty bool
 }
 
-// File is the underlying file, for a child that inherits it.
-func (w *Writer) File() *os.File { return w.f }
-
 // IsTerminal is isatty on the stream: the dim "→ dir" line (stderr).
 func (w *Writer) IsTerminal() bool { return w.tty }
 
