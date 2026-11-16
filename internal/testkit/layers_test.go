@@ -20,7 +20,6 @@ import (
 //	internal/commands            the table, dispatch, usage text
 //	internal/commands/<cmd>      one package per command; none imports another, none imports commands
 //	internal/store/write         everything that changes a store
-//	internal/store/approval      approval records and hashing
 //	internal/store               files, entries, groups, lookup, the context
 //	internal/term                output, prompts, the command description; term/argparse is its parser
 //	internal/platform            paths, exec, locks, JSON; imports nothing internal
@@ -29,27 +28,24 @@ const (
 	argparse = "internal/term/argparse"
 	term     = "internal/term"
 	store    = "internal/store"
-	approval = "internal/store/approval"
 	write    = "internal/store/write"
 	commands = "internal/commands"
 )
 
 // below is what a command may import: the store, term and platform trees. A command is never in it.
-var below = []string{write, approval, store, argparse, term, platform}
+var below = []string{write, store, argparse, term, platform}
 
 var layers = map[string][]string{
 	"cmd/shortcut": {commands},
 	commands: {commands + "/completion", commands + "/list", commands + "/new", commands + "/rm", commands + "/run",
-		commands + "/show", commands + "/update", store, term, platform},
+		commands + "/show", store, term, platform},
 	commands + "/completion": below,
 	commands + "/list":       below,
 	commands + "/new":        below,
 	commands + "/rm":         below,
 	commands + "/run":        below,
 	commands + "/show":       below,
-	commands + "/update":     below,
-	write:                    {approval, store, term, platform},
-	approval:                 {store, platform},
+	write:                    {store, term, platform},
 	store:                    {platform},
 	term:                     {argparse, platform},
 	argparse:                 {},

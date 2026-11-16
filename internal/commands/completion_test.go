@@ -17,7 +17,7 @@ func TestCompletion_Bash(t *testing.T) {
 	if res.Code != 0 {
 		t.Fatalf("exit %d: %s", res.Code, res.Stderr)
 	}
-	for _, want := range []string{"_shortcut", "complete -F _shortcut shortcut", "list --names", "run r", "show", "rm", "update"} {
+	for _, want := range []string{"_shortcut", "complete -F _shortcut shortcut", "list --names", "run r", "show", "rm"} {
 		if !strings.Contains(res.Stdout, want) {
 			t.Errorf("bash script lacks %q", want)
 		}
@@ -56,7 +56,6 @@ func TestCompletion_BashPastFlagsAndIntoNamespaces(t *testing.T) {
 	e.WriteStore(e.Store, map[string]any{"other": map[string]any{"inline": "true"}})
 	e.WriteImport(e.Store, "docker", testkit.NS(map[string]any{
 		"delete": map[string]any{"inline": "true"}, "ps": map[string]any{"inline": "true"}}))
-	runOK(t, e, testkit.Opts{}, "update", "docker", "-y") // namespaces list once approved
 	check := func(want []string, words ...string) {
 		t.Helper()
 		got := e.BashComplete(words...)

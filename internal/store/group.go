@@ -1,8 +1,6 @@
 package store
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"maps"
 	"path/filepath"
 	"slices"
@@ -19,16 +17,6 @@ const (
 	KindGlobal    Kind = "global"    // the global store's shortcuts.json
 	KindProject   Kind = "project"   // a project's .shortcuts with .shortcuts.local over it
 	KindNamespace Kind = "namespace" // an imported file, in a global or a project store
-)
-
-// ApprovalState is where a group stands against its recorded approval.
-type ApprovalState string
-
-const (
-	StateOK      ApprovalState = "ok"
-	StateNew     ApprovalState = "new"
-	StateChanged ApprovalState = "changed"
-	StateInvalid ApprovalState = "invalid" // a path or registry text that is not valid UTF-8 cannot be recorded; script contents are hashed as bytes
 )
 
 // Source is where a project entry comes from.
@@ -175,8 +163,6 @@ func (g Group) Display(name string) string {
 	return name
 }
 
-func (g Group) NeedsApproval() bool { return g.Kind != KindGlobal }
-
 // Key is what the approval is recorded against: the project's path, or for a namespace the store it's in, its name
 // there and its file. Pointing a name at another file, even one approved elsewhere, is new.
 func (g Group) Key() string {
@@ -192,19 +178,6 @@ func (g Group) Label() string {
 		return g.Name
 	}
 	return g.Key()
-}
-
-func (g Group) UpdateCmd() string {
-	if g.Kind == KindNamespace {
-		return "shortcut update " + g.Name
-	}
-	return "shortcut update"
-}
-
-// RecordName is the approval record's file name: sha256(key) hex + ".json".
-func RecordName(key string) string {
-	sum := sha256.Sum256([]byte(key))
-	return hex.EncodeToString(sum[:]) + ".json"
 }
 
 // keyText is the text a namespace's approval record is named after: the parts, each strconv.QuoteToASCII-quoted,

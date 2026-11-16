@@ -12,8 +12,8 @@ import (
 )
 
 // Context is what a run knows about where it is: built once per run, passed to every command and to every
-// store and approval function that needs the cwd, the global store or the project root. One Context is one run:
-// the stores it has read are not read again, except by ReadStore; approval states likewise, until Forget.
+// store function that needs the cwd, the global store or the project root. One Context is one run:
+// the stores it has read are not read again, except by ReadStore.
 type Context struct {
 	Cwd     string // physical working directory; "" when CwdErr != nil
 	CwdErr  error  // read by run and new, which refuse to go on without a cwd
@@ -22,7 +22,6 @@ type Context struct {
 
 	globalReal string           // platform.Realpath(Global), once
 	stores     map[string]Store // by the dir as the caller passed it: Global, or a realpath'd project root
-	states     map[string]ApprovalState
 }
 
 // NewContext resolves the global store and the project root once. It never fails.
@@ -31,7 +30,7 @@ func NewContext(cwd string, cwdErr error) *Context {
 	if home == "" {
 		home = "~/.shortcuts"
 	}
-	c := &Context{Cwd: cwd, CwdErr: cwdErr, Global: platform.Abs(platform.ExpandUser(home)), stores: map[string]Store{}, states: map[string]ApprovalState{}}
+	c := &Context{Cwd: cwd, CwdErr: cwdErr, Global: platform.Abs(platform.ExpandUser(home)), stores: map[string]Store{}}
 	c.globalReal = platform.Realpath(c.Global)
 	if cwdErr == nil {
 		c.Project = c.FindProjectRoot(cwd)
@@ -89,7 +88,7 @@ func (c *Context) LocalProjectRoot() (string, error) {
 }
 
 // WithLock runs fn holding the one lock file, <global store>/.lock, which every write takes: the registry, a
-// namespace file, .shortcuts.local and an approval record. Not reentrant: never nest it, and never call InitStore inside it.
+// namespace file and .shortcuts.local. Not reentrant: never nest it, and never call InitStore inside it.
 func (c *Context) WithLock(fn func() error) error {
 	return platform.WithLock(platform.Join(c.Global, ".lock"), fn)
 }
@@ -102,11 +101,6 @@ func (c *Context) InitStore(storeDir string) error {
 		}
 		return SaveRegistryAtomic(storeDir, emptyRegistry())
 	})
-}
-
-// ApprovalPath is <global store>/approvals/<RecordName(key)>.
-func (c *Context) ApprovalPath(g Group) string {
-	return platform.Join(c.Global, approvalsDir, RecordName(g.Key()))
 }
 
 // Store is the store at dir, read the first time and not again in this run.
@@ -122,20 +116,6 @@ func (c *Context) Store(dir string) Store {
 // ReadStore reads the store at dir from disk, not through the cache. For a check made under a registry lock,
 // which must see what another process wrote.
 func (c *Context) ReadStore(dir string) Store { return c.loadStore(dir) }
-
-// State is the approval state under key (a Group.Key()), computed by compute the first time and not again in this
-// run until Forget(key).
-func (c *Context) State(key string, compute func() ApprovalState) ApprovalState {
-	s, ok := c.states[key]
-	if !ok {
-		s = compute()
-		c.states[key] = s
-	}
-	return s
-}
-
-// Forget drops the state under key, for after a write or a prompt.
-func (c *Context) Forget(key string) { delete(c.states, key) }
 
 // Stores are the project's store, if there is one, then the global one: what list shows.
 func (c *Context) Stores() []Store {

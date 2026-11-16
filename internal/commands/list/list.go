@@ -6,11 +6,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/store"
-	"github.com/StanLukuvka/Shortcut/internal/store/approval"
 	"github.com/StanLukuvka/Shortcut/internal/term"
 )
-
-func approved(c *store.Context, g store.Group) bool { return approval.State(c, g) == store.StateOK }
 
 // Run lists shortcuts.
 func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) error {
@@ -39,7 +36,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 
 	if names := ns.Str("names"); names != "" && names != "." {
 		for _, st := range stores {
-			if group, isNS := st.Namespace(names); isNS && usable(group) && approved(c, group) {
+			if group, isNS := st.Namespace(names); isNS && usable(group) {
 				s.Out.WriteString(strings.Join(slices.Sorted(slices.Values(group.Shortcuts().Names())), "\n") + "\n")
 			}
 		}
@@ -56,13 +53,11 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 			}
 		}
 		for _, st := range stores {
-			if approved(c, st.Main) {
-				for _, n := range slices.Sorted(slices.Values(st.Main.Shortcuts().Names())) {
-					add(n)
-				}
+			for _, n := range slices.Sorted(slices.Values(st.Main.Shortcuts().Names())) {
+				add(n)
 			}
 			for _, n := range st.Namespaces {
-				if usable(n.Group) && approved(c, n.Group) {
+				if usable(n.Group) {
 					add(n.Name)
 				}
 			}
@@ -85,27 +80,10 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 
 	sections := 0
 	section := func(title string, g store.Group, prefix string) {
-		state := approval.State(c, g)
 		if sections > 0 {
 			s.Out.WriteString("\n")
 		}
 		sections++
-		if state != store.StateOK {
-			one := g.Kind == store.KindNamespace
-			pick := func(singular, plural string) string {
-				if one {
-					return singular
-				}
-				return plural
-			}
-			verb := pick("changed since you approved it", "changed since you approved them")
-			if state == store.StateNew {
-				verb = pick("isn't approved yet", "aren't approved yet")
-			}
-			review := pick("it", "them")
-			s.Out.WriteString(title + " " + verb + ". Review " + review + " with: " + g.UpdateCmd() + "\n")
-			return
-		}
 		s.Out.WriteString(title + ":\n")
 		if d, _ := g.Doc.String("description"); d != "" {
 			s.Out.WriteString("  " + d + "\n")

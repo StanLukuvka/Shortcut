@@ -11,7 +11,6 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
-	"github.com/StanLukuvka/Shortcut/internal/store/approval"
 	"github.com/StanLukuvka/Shortcut/internal/term"
 )
 
@@ -36,7 +35,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 
 func oneLine(text string) string { return strings.ReplaceAll(text, "\n", "\\n") }
 
-// runShortcut handles approval, the confirmation and the child process, which replaces this one.
+// runShortcut handles the confirmation and the child process, which replaces this one.
 // It returns only when something stops the run.
 func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Lookup, assumeYes bool) error {
 	if c.CwdErr != nil {
@@ -44,9 +43,6 @@ func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Loo
 	}
 	resolved, args, err := store.ResolveShortcut(c, words, store.Lookup{Scope: lk.Scope, Cmd: lk.Cmd, Strict: true})
 	if err != nil {
-		return err
-	}
-	if err := approval.Require(c, resolved.Group); err != nil {
 		return err
 	}
 	entry, name := resolved.Entry, resolved.Display()
@@ -76,11 +72,6 @@ func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Loo
 			NoTerminal: "'" + name + "' asks for confirmation: run it in a terminal, or pass -y (" + oneLine(platform.ShellJoin(again)) + ")",
 			Message:    message,
 		}, assumeYes); err != nil {
-			return err
-		}
-		// again, from disk: the files could change while the question waited
-		c.Forget(resolved.Group.Key())
-		if err := approval.Require(c, resolved.Group); err != nil {
 			return err
 		}
 	}

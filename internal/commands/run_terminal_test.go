@@ -125,18 +125,3 @@ func TestRunning_CtrlCReachesTheShortcut(t *testing.T) {
 		t.Errorf("took %v", time.Since(start))
 	}
 }
-
-func TestApproval_AScriptChangedWhileConfirmWaitsDoesntRun(t *testing.T) {
-	e := testkit.New(t)
-	proj := e.Project(map[string]any{"d": map[string]any{"description": "d", "script": "d.sh", "confirm": true}},
-		testkit.Files(map[string]any{"d.sh": "#!/usr/bin/env bash\necho approved\n"}), testkit.Approved(), testkit.Mode(0o755))
-	swap := func() { e.WriteFile(filepath.Join(proj, "d.sh"), "#!/usr/bin/env bash\necho swapped\n", 0) }
-	rc, out := e.InTerminal(in(proj), []testkit.Key{{Wait: "[y/N]", Do: swap}, {Wait: "[y/N]", Send: y("y\n")}}, "r", ".", "d")
-	if rc != 1 {
-		t.Errorf("exit %d\n%s", rc, out)
-	}
-	testkit.Contains(t, "output", out, "changed since you approved it")
-	if strings.Contains(out, "swapped") {
-		t.Errorf("the swapped script ran:\n%s", out)
-	}
-}

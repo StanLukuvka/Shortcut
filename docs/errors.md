@@ -95,12 +95,9 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `'<ns>' is a namespace; run one of its shortcuts: <names>` | |
 | `too many names: <words>` | `show` and `rm` take a name, or a namespace and a name |
 | `<file error>. Nothing runs inside this project until it's fixed.` | `run .` with the project's file broken. Your global shortcuts are not behind it |
-| `<group> isn't approved yet; review it with: <command>` | Run the `shortcut update` command it names |
-| `<group> changed since you approved it; run: <command>` | |
-| `cannot approve: "<path>" is not valid UTF-8; rename it` | A file name in the project or the namespace's scripts folder, or a project's own folder name, is not valid UTF-8, so it can't be recorded. `run` and `update` stop there until it's renamed |
 | `run directory does not exist: <dir>` | The entry's `cwd` is gone |
 | `script file not found: <path>` | |
-| `<path> is not executable. Make it so: chmod +x <path>` | A script runs as it is, so it needs the execute bit. `list` warns and `update` refuses with `'<name>': ` before it |
+| `<path> is not executable. Make it so: chmod +x <path>` | A script runs as it is, so it needs the execute bit. `list` warns |
 | `<path> has Windows line endings, so its #! line can't start it. Convert it: sed -i 's/\r$//' <path>` | The script's lines end in `\r\n` |
 | `'<name>' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y [.] <name> <args>)` | A `confirm` entry run without a terminal. The command is the one that was run, with `-y`, and the dot if it had one |
 
@@ -150,14 +147,3 @@ A new local shortcut needs a project folder:
 | `no namespace named '<ns>' in your global store (<store>/imports)` | `rm --namespace` removes only global namespaces |
 | `remove namespace '<ns>' in a terminal, or pass -y` | |
 | `remove '<name>' in a terminal, or pass -y` | No terminal to ask in. `rm --local` says `<verb> '<name>' ...` with what it would do |
-
-## update
-
-`update <group>` and `update .` print `error: cannot approve <group>: <reason>` and exit 1, where the reason is a store file or entry error above.
-
-| Message | Meaning |
-|---|---|
-| `warning: skipped <group>: <reason>` | `update` or `update -y` with no group named found a group whose file or entries have errors. It is skipped and the exit status stays 0 |
-| `no project shortcuts here: no .shortcuts or .shortcuts.local in this folder or its parents` | `update .` outside a project |
-| `no namespace named '<ns>' here` | |
-| `approve <group> in a terminal, or pass -y` | No terminal to show the review in |

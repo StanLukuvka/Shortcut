@@ -135,7 +135,7 @@ func TestCwd_ASymlinkedCwdIsThePhysicalOne(t *testing.T) {
 	info := decodeObject(t, e.RunWith(testkit.Opts{Cwd: link}, "show", "--json", "c").Stdout)
 	testkit.Eq(t, "run_cwd", info["run_cwd"], real)
 
-	proj := e.Project(testkit.GO, testkit.Approved())
+	proj := e.Project(testkit.GO)
 	plink := filepath.Join(e.Tmp, "plink")
 	e.Symlink(proj, plink)
 	res = e.RunWith(testkit.Opts{Cwd: plink}, "r", ".", "go")

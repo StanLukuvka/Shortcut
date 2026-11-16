@@ -2,7 +2,7 @@
 
 _shortcut() {
     local -a subcommands
-    subcommands=(run r new list show rm update completion help)
+    subcommands=(run r new list show rm completion help)
 
     if (( CURRENT == 2 )); then
         compadd -- $subcommands

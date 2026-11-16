@@ -47,7 +47,6 @@ func TestDispatch_ParserErrorsEndToEnd(t *testing.T) {
 		{[]string{"show"}, "error: missing name\n" + try("show")},
 		{[]string{"rm", "-yh"}, "error: unrecognized option '-yh'\n" + try("rm")},
 		{[]string{"rm"}, "error: missing name\n" + try("rm")},
-		{[]string{"update", "a", "b"}, "error: unexpected argument 'b'\n" + try("update")},
 		{[]string{"completion", "sh"}, "error: invalid choice 'sh' (choose from bash, fish, zsh)\n" + try("completion")},
 	} {
 		res := e.Run(c.argv...)
@@ -82,9 +81,6 @@ func TestRunning_UnknownCommandsPointToRun(t *testing.T) {
 	res := e.Run("--bogus")
 	if res.Code != 2 || !strings.HasPrefix(res.Stderr, "error: unrecognized option '--bogus'\n") {
 		t.Errorf("--bogus: exit %d stderr %q", res.Code, res.Stderr)
-	}
-	if code := e.Run("update", "-g").Code; code != 2 {
-		t.Errorf("update -g: exit %d", code)
 	}
 }
 

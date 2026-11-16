@@ -72,7 +72,6 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 		return err
 	}
 	s.Out.WriteString("Removed shortcut '" + display + "'.\n")
-	write.NoteNeedsApproval(s, group)
 	return nil
 }
 
@@ -105,7 +104,6 @@ func rmLocal(c *store.Context, s *term.Streams, ns term.Namespace) error {
 	if err != nil {
 		return err
 	}
-	write.NoteNeedsApproval(s, group)
 	s.Out.WriteString("Removed '" + name + "' from " + store.LocalFile + ".\n")
 	return nil
 }
@@ -134,7 +132,6 @@ func rmNamespace(c *store.Context, s *term.Streams, name string, assumeYes bool)
 		Message: strings.Join(lines, "\n"), TellOnYes: true}, assumeYes); err != nil {
 		return err
 	}
-	approvalFile := c.ApprovalPath(group) // its key needs the file, so before it goes
 	err := c.WithLock(func() error {
 		if listed {
 			reg, err := store.LoadRegistry(storeDir)
@@ -159,7 +156,7 @@ func rmNamespace(c *store.Context, s *term.Streams, name string, assumeYes bool)
 		} else if err := write.RemoveNamespaceFiles(group); err != nil {
 			return err
 		}
-		return write.UnlinkFile(approvalFile)
+		return nil
 	})
 	if err != nil {
 		return err

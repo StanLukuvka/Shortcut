@@ -55,7 +55,7 @@ A project shares its shortcuts in a `.shortcuts` file at its root, committed wit
 {"version": 1, "shortcuts": {"test": {"description": "Run the tests", "inline": "pytest \"$@\""}}}
 ```
 
-Each person reviews it once with `shortcut update`, and again after it changes. Then `shortcut r test` runs it from anywhere in the project.
+`shortcut r . test` runs it from anywhere in the project.
 
 ## Where shortcuts live
 
@@ -69,11 +69,10 @@ Each person reviews it once with `shortcut update`, and again after it changes. 
 ~/.shortcuts/
 ├── shortcuts.json          entries
 ├── imports/<ns>.shortcut   namespaces
-├── approvals/              approval records
 └── .lock                   the global store's lock file
 ```
 
-[Projects and approval](#projects-and-approval) has the rules.
+[Projects and the dot](#projects-and-the-dot) has the rules.
 
 ## Commands
 
@@ -96,7 +95,6 @@ shortcut rm --local <name>            undo your override, or remove a local entr
 shortcut rm --namespace <ns> [-y]     remove a global namespace and its scripts/<ns>/ folder; one imported
                                       from elsewhere is only no longer imported
 
-shortcut update [ns|.] [-y]           list what is new, changed or removed, and approve
 shortcut completion bash|zsh|fish
 shortcut help [command]
 shortcut --version
@@ -116,18 +114,23 @@ Flags for `new`:
 
 `rm` works on your global store; `rm --local` on the project's `.shortcuts.local`. In a project, `--local` works only from the project root.
 
-`show --field KEY` prints one field of that object bare, or of the entry (`description`, `inline`, `script`); `true` and `false` print as words, and a null or absent field prints nothing. It only reads: it never approves. `show --json` prints one object: `name`, `namespace`, `scope`, `defined_in`, `source`, `approval`, `cwd`, `run_cwd`, `script_path`, `error` and `entry`, with its own keys and the entry's sorted. A field that can't be worked out is null.
+`show --field KEY` prints one field of that object bare, or of the entry (`description`, `inline`, `script`); `true` and `false` print as words, and a null or absent field prints nothing. `show --json` prints one object: `name`, `namespace`, `scope`, `defined_in`, `source`, `cwd`, `run_cwd`, `script_path`, `error` and `entry`, with its own keys and the entry's sorted. A field that can't be worked out is null.
 
-## Projects and approval
+## Projects and the dot
+
+| You type | It looks in | Never looks in |
+|---|---|---|
+| `shortcut r build` | the global store's own shortcuts | any project |
+| `shortcut r docker run` | the global group `docker` | any project |
+| `shortcut r . build` | the nearest project's `.shortcuts` with `.shortcuts.local` over it | the global store |
+| `shortcut r . terraform plan` | the group `terraform` that the project's `.shortcuts` imports | the global store |
 
 - The project is the nearest folder, walking up, with `.shortcuts` or `.shortcuts.local`. Only that one is read, also inside another project.
 - `.shortcuts.local` overrides `.shortcuts` per entry.
-- `shortcut r <name>` and `shortcut show <name>` look only in your global store. `shortcut r . <name>` and `shortcut show . <name>` look only in the project: its `.shortcuts` with `.shortcuts.local` over it, and the namespaces it imports. The dot is the first word after the options, and a shortcut or namespace can't be named `.`.
+- The dot is the first word after the options, and a shortcut or namespace can't be named `.`. `shortcut show . <name>` takes it too.
 - Nothing falls back to the other store. A name that is only in the other one is an error that gives the command to use, and nothing runs. `r .` outside a project is an error.
 - Relative `script` and `cwd` paths resolve from the folder holding the file.
 - A namespace file is `<name>.shortcut`, such as `docker.shortcut`. A bare `.shortcut` is an error.
-- Projects and namespaces run only after `shortcut update`. A namespace name pointed at another file needs approving again. Global shortcuts need no approval.
-- Any change to a project's or namespace's files, by `new`, `rm` or by hand, needs `shortcut update` before the group runs again. `new` and `rm` print the command.
 - If a project's file can't be read, nothing runs with the dot until it's fixed. Your own shortcuts are not behind it.
 
 ## What a shortcut runs with
@@ -148,10 +151,9 @@ SHORTCUT_CALLER_CWD    the directory shortcut was run from
 A namespace is a file named `<ns>.shortcut`: `{"version": 1, "shortcuts": {...}}`, with entries as in `shortcuts.json`. [docs/shortcut.schema.json](docs/shortcut.schema.json) describes them. Relative `script` and `cwd` paths resolve from the file's folder.
 
 - `~/.shortcuts/imports/<ns>.shortcut` is found by its name.
-- To install one, copy its `<ns>.shortcut` and its `scripts/<ns>/` folder into `~/.shortcuts/imports/`, then run `shortcut update <ns>`. Every script an entry names has to be in that folder.
+- To install one, copy its `<ns>.shortcut` and its `scripts/<ns>/` folder into `~/.shortcuts/imports/`. Every script an entry names has to be in that folder.
 - A file anywhere else is listed in `shortcuts.json`, or in a project's `.shortcuts`: `"imports": {"<ns>": "path/to/<ns>.shortcut"}`. The path is relative to the file that lists it, and can start with `~`.
-- It runs only after `shortcut update <ns>`, and again after each change to its file, a script it names, or anything in its `scripts/<ns>/` folder.
-- `shortcut new --namespace <ns> <name> ...` adds an entry. The namespace needs `shortcut update <ns>` again.
+- `shortcut new --namespace <ns> <name> ...` adds an entry.
 - `scripts/<ns>/`, next to the file, is the namespace's own folder: scripts and helpers belong there. `rm <name>` removes only the entry, never a script file; `rm --namespace` deletes the folder.
 - A script runs a sibling with `shortcut r "$SHORTCUT_NAMESPACE" <name>`. `SHORTCUT_SHOW_DIR=0` keeps the `→ dir` line out when capturing it.
 
@@ -167,10 +169,13 @@ SHORTCUT_SHOW_DIR=0   hide the "→ dir" line
 ## Security model
 
 > 1. shortcut runs exactly what its definitions say, without inspecting them.
-> 2. A project's or import's shortcuts don't run until you approve them with `shortcut update`, and must be re-approved after any change to their definitions.
-> 3. Approval covers definitions and the scripts they name, not the programs those call.
-> 4. Global shortcuts have no approval step, so a global link target can change freely.
-> 5. Anyone who can write to your shortcut store can already run code as you; that's out of scope.
+> 2. `shortcut r <name>` only runs your own global shortcuts. A project's
+>    shortcuts run only when you name the project: `shortcut r . <name>`.
+> 3. shortcut does not review a project's shortcuts or notice when they
+>    change. Running one is running that repo's code, as with `make` or
+>    `npm run`. Read it first.
+> 4. Anyone who can write to your shortcut store can already run code as
+>    you; that's out of scope.
 
 ## More
 
@@ -180,7 +185,7 @@ SHORTCUT_SHOW_DIR=0   hide the "→ dir" line
 - [CHANGELOG.md](CHANGELOG.md): what changed in each version.
 - [docs/](docs/): diagrams, the JSON Schema for shortcut files, and every error message.
 - [examples/podman](examples/podman/): a namespace for podman containers.
-- Code, in Go: [cmd/shortcut](cmd/shortcut/) is the entry point. `internal/commands` has the command table, dispatch and the usage text, with one folder per command (`run`, `new`, `list`, `show`, `rm`, `update`, and `completion`, which holds the completion scripts). `internal/store` has the store files, entries, groups and lookup, `store/approval` the approval records and `store/write` everything that changes a store. `internal/term` has terminal output, prompts and the argument parser; `internal/platform` the file, process, lock and JSON behaviour that shortcut's output depends on, including JSON, which refuses a file that is not valid UTF-8 when it reads it. `internal/testkit` is the test sandbox. [installer/](installer/) is the install script.
+- Code, in Go: [cmd/shortcut](cmd/shortcut/) is the entry point. `internal/commands` has the command table, dispatch and the usage text, with one folder per command (`run`, `new`, `list`, `show`, `rm`, and `completion`, which holds the completion scripts). `internal/store` has the store files, entries, groups and lookup and `store/write` everything that changes a store. `internal/term` has terminal output, prompts and the argument parser; `internal/platform` the file, process, lock and JSON behaviour that shortcut's output depends on, including JSON, which refuses a file that is not valid UTF-8 when it reads it. `internal/testkit` is the test sandbox. [installer/](installer/) is the install script.
 
 ## License
 
