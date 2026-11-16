@@ -110,17 +110,13 @@ func (e *Entry) Raw() ([]byte, error) {
 	for _, f := range Fields() {
 		switch {
 		case f.Name == "description":
-			if err := d.SetString(f.Name, e.Description); err != nil {
-				return nil, err
-			}
+			d.SetString(f.Name, e.Description)
 		case f.Name == "confirm":
 			if e.Confirm {
 				d[f.Name] = []byte("true")
 			}
 		case text[f.Name] != nil:
-			if err := d.SetString(f.Name, *text[f.Name]); err != nil {
-				return nil, err
-			}
+			d.SetString(f.Name, *text[f.Name])
 		}
 	}
 	return d.Bytes()

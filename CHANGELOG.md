@@ -16,7 +16,7 @@
 - `shortcut help <command>` and `<command> -h` list a command's arguments and options.
 - Every error message is listed in [docs/errors.md](docs/errors.md).
 - Every store file (`shortcuts.json`, `.shortcuts`, `.shortcuts.local`, namespace `.shortcut` files) needs `"version": 1`. A missing or lower version is an error; a higher one asks you to upgrade shortcut.
-- Text that is not valid UTF-8 in a store or project file, or in a file name in an approval tree, is refused with a message that names it. Such bytes print as `\xNN`.
+- Text that is not valid UTF-8 is refused in two places only: a store or project file, when it is read, and a file or folder name that approval would record, which `update` and `run` refuse with "rename it". Such bytes print as `\xNN`. A value given on the command line that is not valid UTF-8 is written as U+FFFD.
 - Options are spelled in full; `-yh` is not `-y -h`. A usage error reads `error: <message>` and a `Try 'shortcut <command> -h'` line, and exits 2.
 - `~` and `~/...` are expanded in paths, using $HOME; `~name` is not.
 - An empty `--desc` or `--namespace` is an error. A `null` for a text field is an error.

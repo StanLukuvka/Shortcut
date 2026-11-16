@@ -228,24 +228,6 @@
       ]
     },
     {
-      "name": "project data with a lone surrogate escape is refused",
-      "tree": [
-        {
-          "path": ".shortcuts",
-          "type": "file",
-          "content": "{\"version\": 1, \"shortcuts\": {\"y\": {\"inline\": \"\\ud800\"}}}",
-          "mode": "0o644"
-        }
-      ],
-      "problems": [],
-      "groups": [
-        {
-          "name": "",
-          "error_contains": "not valid UTF-8"
-        }
-      ]
-    },
-    {
       "name": "project script reached through a symlink",
       "tree": [
         {

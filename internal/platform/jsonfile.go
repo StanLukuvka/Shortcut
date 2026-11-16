@@ -8,7 +8,7 @@ import (
 )
 
 // ReadJSONFile reads a JSON file and checks it. A check error is not an *fs.PathError (see isJSONError in store); callers
-// add the file's name. Text that is not valid UTF-8 is refused (ErrNotUTF8).
+// add the file's name. Bytes that are not valid UTF-8 are refused (ErrNotUTF8).
 func ReadJSONFile(path string) ([]byte, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -20,7 +20,7 @@ func ReadJSONFile(path string) ([]byte, error) {
 // WriteJSONAtomic writes a whole file or none of it. A symlinked file is written
 // where the link leads, with the mode it had. The temporary file is hidden, named after it, and removed on error.
 func WriteJSONAtomic(path string, doc Doc) error {
-	text, err := doc.Pretty() // before anything is created: a refused write leaves the old file as it was
+	text, err := doc.Pretty() // before anything is created: a failed encode leaves the old file as it was
 	if err != nil {
 		return err
 	}
