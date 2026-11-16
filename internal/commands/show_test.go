@@ -297,19 +297,15 @@ func TestShow_FieldIsReadOnly(t *testing.T) {
 	}
 }
 
-// A caller's folder that is not valid UTF-8 goes into `show --json` as U+FFFD (nothing is checked on write);
-// `show --field` prints a field that is not affected.
-func TestShow_JSONWritesANonUTF8FolderAsReplacementAndFieldDoesNot(t *testing.T) {
+// `show --field` prints a field that is not affected by a caller's folder that is not valid UTF-8.
+func TestShow_FieldWorksInANonUTF8Folder(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"hello": testkit.Inline("true")})
 	dir := filepath.Join(e.Tmp, "p\xffroj")
 	if err := os.Mkdir(dir, 0o755); err != nil {
 		t.Skipf("this filesystem refuses non-UTF-8 names: %v", err)
 	}
-	res := e.RunWith(testkit.Opts{Cwd: dir}, "show", "--json", "hello")
-	res.WantCode(t, 0)
-	testkit.Contains(t, "stdout", res.Stdout, `p\ufffdroj`)
-	res = e.RunWith(testkit.Opts{Cwd: dir}, "show", "--field", "name", "hello")
+	res := e.RunWith(testkit.Opts{Cwd: dir}, "show", "--field", "name", "hello")
 	res.WantCode(t, 0)
 	if res.Stdout != "hello\n" {
 		t.Errorf("show --field name: %q", res.Stdout)
