@@ -6,7 +6,6 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
@@ -67,7 +66,7 @@ func cmdRm(c *model.Context, s *textio.Streams, args []string) error {
 	}
 
 	if err := confirmed(s, textio.Confirm{Question: "remove '" + display + "'?", NoTerminal: "remove '" + display + "' in a terminal, or pass -y",
-		Message: rmMessage(group, display, found.Raw), TellOnYes: true}, ns.Bool("yes")); err != nil {
+		Message: rmMessage(group, display, found.Item), TellOnYes: true}, ns.Bool("yes")); err != nil {
 		return err
 	}
 
@@ -76,9 +75,9 @@ func cmdRm(c *model.Context, s *textio.Streams, args []string) error {
 		if err != nil {
 			return err
 		}
-		if _, has := shortcuts.Get(name); has {
+		if shortcuts.Has(name) {
 			shortcuts.Delete(name)
-			if err := model.SaveRegistryFile(group.File, reg); err != nil {
+			if err := saveEdited(group.File, reg, shortcuts); err != nil {
 				return err
 			}
 		}
@@ -107,8 +106,8 @@ func rmLocal(c *model.Context, s *textio.Streams, ns Namespace) error {
 		return err
 	}
 	group := c.Store(root).Main
-	if _, inLocal := group.LocalShortcuts().Get(name); !inLocal {
-		if _, inShared := group.SharedShortcuts().Get(name); inShared {
+	if _, inLocal := group.Local.Get(name); !inLocal {
+		if _, inShared := group.Shared.Get(name); inShared {
 			return Die("'" + name + "' isn't in " + model.LocalFile + ", and shortcut doesn't change " + model.ProjectFile)
 		}
 		return Die("'" + name + "' isn't in " + model.ProjectFile + " or " + model.LocalFile + " here")
@@ -117,7 +116,7 @@ func rmLocal(c *model.Context, s *textio.Streams, ns Namespace) error {
 		Message: rmLocalMessage(group, name), TellOnYes: true}, ns.Bool("yes")); err != nil {
 		return err
 	}
-	after, err := writeLocal(c, group.StoreDir, func(shortcuts *ordjson.Object) error {
+	after, err := writeLocal(c, group.StoreDir, func(shortcuts *model.Doc) error {
 		shortcuts.Delete(name)
 		return nil
 	})
@@ -144,7 +143,7 @@ func rmNamespace(c *model.Context, s *textio.Streams, name string, assumeYes boo
 	if listed {
 		lines = []string{"Stops importing '" + name + "' in " + store.Main.File, "Keeps its file: " + group.File}
 	} else {
-		lines = []string{"Removes namespace '" + name + "' (" + strconv.Itoa(len(group.Shortcuts().Keys)) + " shortcuts): " + group.File}
+		lines = []string{"Removes namespace '" + name + "' (" + strconv.Itoa(len(group.Shortcuts())) + " shortcuts): " + group.File}
 		if osutil.Lexists(folder) {
 			lines = append(lines, "Deletes its scripts folder: "+folder)
 		}
@@ -160,10 +159,16 @@ func rmNamespace(c *model.Context, s *textio.Streams, name string, assumeYes boo
 			if err != nil {
 				return err
 			}
-			if imports, ok := reg.Vals["imports"].(*ordjson.Object); ok {
+			if imports, ok := reg.Object("imports"); ok {
 				imports.Delete(name)
 				if len(imports.Keys) == 0 {
 					reg.Delete("imports")
+				} else {
+					raw, err := imports.Bytes()
+					if err != nil {
+						return err
+					}
+					reg.Set("imports", raw)
 				}
 			}
 			if err := model.SaveRegistryAtomic(storeDir, reg); err != nil {
@@ -181,23 +186,12 @@ func rmNamespace(c *model.Context, s *textio.Streams, name string, assumeYes boo
 	return nil
 }
 
-// scriptField is the entry's "script" when it is a non-empty string.
-func scriptField(raw ordjson.Value) (string, bool) {
-	entry, ok := raw.(*ordjson.Object)
-	if !ok {
-		return "", false
-	}
-	v, _ := entry.Get("script")
-	script, ok := v.(string)
-	return script, ok && script != ""
-}
-
 // keptScript returns the script an entry names, as a path, for saying it stays. "" is none.
-func keptScript(group model.Group, raw ordjson.Value) string {
-	script, ok := scriptField(raw)
-	if !ok {
+func keptScript(group model.Group, it model.Item) string {
+	if it.Entry == nil || it.Entry.Script == nil || *it.Entry.Script == "" {
 		return ""
 	}
+	script := *it.Entry.Script
 	if path, err := model.ResolveScriptPath(group.ScriptBase(), script); err == nil {
 		return path
 	}
@@ -205,13 +199,13 @@ func keptScript(group model.Group, raw ordjson.Value) string {
 }
 
 // rmMessage returns what rm is about to change, shown above its question.
-func rmMessage(group model.Group, display string, raw ordjson.Value) string {
+func rmMessage(group model.Group, display string, it model.Item) string {
 	where := "your global shortcuts"
 	if group.Kind == model.KindNamespace {
 		where = "namespace " + group.Name
 	}
 	lines := []string{"Removes '" + display + "' from " + where + ": " + group.File}
-	if kept := keptScript(group, raw); kept != "" {
+	if kept := keptScript(group, it); kept != "" {
 		lines = append(lines, "Keeps its script: "+kept)
 	}
 	return strings.Join(lines, "\n")
@@ -219,9 +213,9 @@ func rmMessage(group model.Group, display string, raw ordjson.Value) string {
 
 // rmLocalMessage returns what rm --local is about to change in .shortcuts.local, shown above its question.
 func rmLocalMessage(group model.Group, name string) string {
-	mine, _ := group.LocalShortcuts().Get(name)
+	mine, _ := group.Local.Get(name)
 	lines := []string{"Removes your '" + name + "' from " + group.LocalFile + "."}
-	if _, shared := group.SharedShortcuts().Get(name); shared {
+	if _, shared := group.Shared.Get(name); shared {
 		lines = append(lines, "The '"+name+"' in "+model.ProjectFile+" applies again.")
 	}
 	if kept := keptScript(group, mine); kept != "" {

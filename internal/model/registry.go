@@ -1,7 +1,6 @@
 package model
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -12,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
@@ -32,36 +30,35 @@ func RegistryExists(storeDir string) bool {
 	return osutil.IsFile(osutil.Join(storeDir, "shortcuts.json"))
 }
 
-func emptyRegistry() *ordjson.Object {
-	o := &ordjson.Object{}
-	o.Set("version", json.Number(strconv.Itoa(RegistryVersion)))
-	o.Set("shortcuts", &ordjson.Object{})
-	return o
+func emptyRegistry() *Doc {
+	d := &Doc{}
+	d.Set("version", []byte(strconv.Itoa(RegistryVersion)))
+	d.Set("shortcuts", []byte("{}"))
+	return d
 }
 
 // LoadRegistryFile reads a registry file, with fixed messages.
-func LoadRegistryFile(path string) (*ordjson.Object, error) {
+func LoadRegistryFile(path string) (*Doc, error) {
 	if !osutil.IsFile(path) {
 		return nil, &RegistryNotFoundError{path}
 	}
-	v, err := ReadJSONFile(path)
+	text, err := ReadJSONFile(path)
+	var data *Doc
+	if err == nil {
+		data, err = ParseDoc(text)
+	}
 	if err != nil {
 		if isJSONError(err) {
 			return nil, fmt.Errorf("corrupt registry %s: %s", path, err)
 		}
 		return nil, err
 	}
-	data, ok := v.(*ordjson.Object)
-	if !ok {
-		return nil, fmt.Errorf("corrupt registry %s: root must be a JSON object", path)
-	}
-	version, present := data.Get("version")
+	version, present := data.Raw["version"]
 	if !present {
 		return nil, fmt.Errorf("%s needs \"version\": %d", path, RegistryVersion)
 	}
-	num, isNum := version.(json.Number)
-	n, isInt := new(big.Int).SetString(string(num), 10) // a whole number as written: not 1.0, 1e0, a string or null
-	if !isNum || !isInt {
+	n, isInt := new(big.Int).SetString(string(version), 10) // a whole number as written: not 1.0, 1e0, a string or null
+	if !isInt {
 		return nil, fmt.Errorf("corrupt registry %s: 'version' must be a whole number, such as %d", path, RegistryVersion)
 	}
 	switch n.Cmp(big.NewInt(RegistryVersion)) {
@@ -73,12 +70,12 @@ func LoadRegistryFile(path string) (*ordjson.Object, error) {
 	return data, nil
 }
 
-func LoadRegistry(storeDir string) (*ordjson.Object, error) {
+func LoadRegistry(storeDir string) (*Doc, error) {
 	return LoadRegistryFile(osutil.Join(storeDir, "shortcuts.json"))
 }
 
 // SaveRegistryFile refuses to write over a file it can't read.
-func SaveRegistryFile(path string, data *ordjson.Object) error {
+func SaveRegistryFile(path string, data *Doc) error {
 	if osutil.IsFile(path) {
 		if _, err := ReadJSONFile(path); err != nil {
 			return fmt.Errorf("cannot overwrite corrupt registry %s: %s", path, err)
@@ -87,7 +84,7 @@ func SaveRegistryFile(path string, data *ordjson.Object) error {
 	return WriteJSONAtomic(path, data)
 }
 
-func SaveRegistryAtomic(storeDir string, data *ordjson.Object) error {
+func SaveRegistryAtomic(storeDir string, data *Doc) error {
 	if err := os.MkdirAll(storeDir, 0o777); err != nil {
 		return err
 	}
@@ -120,27 +117,23 @@ func ResolveScriptPath(baseDir, scriptField string) (string, error) {
 
 // fileError returns what's wrong with a file as a whole ("" = nothing); EntryErrors checks what's inside
 // 'shortcuts'. name is the namespace's, or "" for a main file.
-func fileError(path string, data *ordjson.Object, name string) string {
+func fileError(path string, data *Doc, name string) string {
 	known := map[string]bool{"version": true, "description": true, "shortcuts": true}
 	if name != "" {
-		if _, has := data.Get("imports"); has {
+		if data.Has("imports") {
 			return path + " has its own 'imports', but namespaces don't nest"
 		}
-		if _, has := data.Get("shortcuts"); !has {
+		if !data.Has("shortcuts") {
 			return path + " needs 'shortcuts'"
 		}
 	} else {
 		known["imports"] = true
 	}
-	if s, has := data.Get("shortcuts"); has {
-		if _, isObj := s.(*ordjson.Object); !isObj {
-			return fmt.Sprintf("corrupt registry %s: 'shortcuts' must be an object", path)
-		}
+	if _, isObj := data.Object("shortcuts"); data.Has("shortcuts") && !isObj {
+		return fmt.Sprintf("corrupt registry %s: 'shortcuts' must be an object", path)
 	}
-	if d, has := data.Get("description"); has {
-		if _, isStr := d.(string); !isStr {
-			return fmt.Sprintf("corrupt registry %s: 'description' must be a string", path)
-		}
+	if _, isStr := data.String("description"); data.Has("description") && !isStr {
+		return fmt.Sprintf("corrupt registry %s: 'description' must be a string", path)
 	}
 	var unknown []string
 	for _, k := range data.Keys {

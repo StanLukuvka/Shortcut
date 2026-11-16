@@ -55,10 +55,10 @@ CI also checks `gofmt` and runs `go vet ./...`.
 - `cmd/shortcut/`: the main package.
 - `internal/cli/`: dispatch and the commands. `commands.go` is the command table, from which `dispatch.go`, each command's parser and `help.go` (the usage and help text) are read; `cmd_*.go` is one file per command, `store_write.go` what changes the stores, and `completion/` the bash, zsh and fish scripts.
 - `internal/cli/argparse/`: the argument parser. It imports nothing of the CLI.
-- `internal/model/`: store files, entries, groups and lookup. It never prints.
+- `internal/model/`: store files, entries, groups and lookup, and ordered JSON that refuses text that is not valid UTF-8. It never prints.
 - `internal/approval/`: what a project or namespace is approved for, and the approval records, which hold one SHA-256 per file.
 - `internal/textio/`: printed text and questions.
-- `internal/osutil/`: the parts of the standard library's file behaviour that shortcut's output depends on. `internal/ordjson/`: ordered JSON on encoding/json; it refuses text that is not valid UTF-8.
+- `internal/osutil/`: the parts of the standard library's file behaviour that shortcut's output depends on.
 - `internal/testkit/`: the test sandbox and helpers. `internal/testdata/`: frozen golden data that the tests compare against.
 - `installer/`: `install.sh` and its tests.
 - `examples/`: namespaces to copy from.

@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
@@ -194,9 +193,9 @@ func (c *Context) loadStore(storeDir string) Store {
 			}
 		}
 	}
-	if imports, ok := main.Data.Vals["imports"].(*ordjson.Object); ok {
+	if imports, ok := main.Doc.Object("imports"); ok {
 		for _, name := range imports.Keys {
-			path, isStr := imports.Vals[name].(string)
+			path, isStr := imports.String(name)
 			_, taken := sources[name]
 			switch {
 			case !isStr:

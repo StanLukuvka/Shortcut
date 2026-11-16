@@ -1,14 +1,12 @@
 package cli
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -36,7 +34,7 @@ func cmdList(c *model.Context, s *textio.Streams, args []string) error {
 		for _, store := range stores {
 			group, isNS := store.Namespace(names)
 			if isNS && usable(group) && approved(c, group) {
-				s.Out.WriteString(strings.Join(slices.Sorted(slices.Values(group.Shortcuts().Keys)), "\n") + "\n")
+				s.Out.WriteString(strings.Join(slices.Sorted(slices.Values(group.Shortcuts().Names())), "\n") + "\n")
 			}
 			if _, inMain := store.Main.Shortcuts().Get(names); isNS || inMain {
 				break
@@ -56,7 +54,7 @@ func cmdList(c *model.Context, s *textio.Streams, args []string) error {
 		}
 		for _, store := range stores {
 			if approved(c, store.Main) {
-				for _, n := range slices.Sorted(slices.Values(store.Main.Shortcuts().Keys)) {
+				for _, n := range slices.Sorted(slices.Values(store.Main.Shortcuts().Names())) {
 					add(n)
 				}
 			}
@@ -75,7 +73,7 @@ func cmdList(c *model.Context, s *textio.Streams, args []string) error {
 	globalNames := globalNamesOf(stores)
 	localNames := map[string]bool{}
 	if len(stores) > 1 && approved(c, stores[0].Main) {
-		for _, k := range stores[0].Main.Shortcuts().Keys {
+		for _, k := range stores[0].Main.Shortcuts().Names() {
 			localNames[k] = true
 		}
 	}
@@ -114,32 +112,23 @@ func cmdList(c *model.Context, s *textio.Streams, args []string) error {
 			return
 		}
 		s.Out.WriteString(title + ":\n")
-		if d := textOf(g.Data.Vals["description"]); d != "" {
+		if d, _ := g.Doc.String("description"); d != "" {
 			s.Out.WriteString("  " + d + "\n")
 		}
 		type row struct{ name, mode, source, desc string }
 		var rows []row
-		shared, runnable := g.SharedShortcuts(), g.Shortcuts()
-		merged := &ordjson.Object{}
-		for _, k := range shared.Keys {
-			merged.Set(k, shared.Vals[k])
-		}
-		for _, k := range runnable.Keys {
-			merged.Set(k, runnable.Vals[k])
-		}
-		for _, name := range slices.Sorted(slices.Values(merged.Keys)) {
-			data, _ := merged.Vals[name].(*ordjson.Object)
-			if data == nil {
-				data = &ordjson.Object{}
-			}
-			desc := textOf(data.Vals["description"])
+		items := slices.Clone(g.Shortcuts())
+		slices.SortFunc(items, func(a, b model.Item) int { return strings.Compare(a.Name, b.Name) })
+		for _, it := range items {
+			name := it.Name
+			desc := it.Text("description")
 			if globalNames[name] && g.Kind == model.KindProject {
 				desc += "  [hides global]"
 			} else if localNames[name] && g.Kind == model.KindGlobal {
 				desc += "  [hidden here by project]"
 			}
 			mode := model.Caller
-			if c := textOf(data.Vals["cwd"]); c != "" {
+			if c := it.Text("cwd"); c != "" {
 				mode = c
 			}
 			source := ""
@@ -164,10 +153,10 @@ func cmdList(c *model.Context, s *textio.Streams, args []string) error {
 
 	for _, store := range stores {
 		if store.Main.Kind == model.KindProject {
-			if len(store.Main.SharedShortcuts().Keys) > 0 || len(store.Main.Shortcuts().Keys) > 0 {
+			if len(store.Main.Shortcuts()) > 0 {
 				section("Project shortcuts ("+store.Main.Key()+")", store.Main, "")
 			}
-		} else if len(store.Main.Shortcuts().Keys) > 0 {
+		} else if len(store.Main.Shortcuts()) > 0 {
 			section("Global shortcuts", store.Main, "")
 		}
 		for _, n := range store.Namespaces {
@@ -190,7 +179,7 @@ func cmdList(c *model.Context, s *textio.Streams, args []string) error {
 func globalNamesOf(stores []model.Store) map[string]bool {
 	names := map[string]bool{}
 	home := stores[len(stores)-1]
-	for _, k := range home.Main.Shortcuts().Keys {
+	for _, k := range home.Main.Shortcuts().Names() {
 		names[k] = true
 	}
 	for _, n := range home.Namespaces {
@@ -201,15 +190,3 @@ func globalNamesOf(stores []model.Store) map[string]bool {
 
 // usable reports whether the group's file can be used (it has no error).
 func usable(g model.Group) bool { return g.Error == nil || *g.Error == "" }
-
-// textOf is a field's text. A global store entry is not validated before it is listed, so a field that is not a string
-// shows as it was written (a number as its digits) instead of failing.
-func textOf(v ordjson.Value) string {
-	switch x := v.(type) {
-	case nil:
-		return ""
-	case string:
-		return x
-	}
-	return fmt.Sprint(v)
-}
