@@ -22,7 +22,7 @@ type Env struct {
 	Tmp     string            // filepath.EvalSymlinks(t.TempDir()): macOS /var is a link
 	Home    string            // Tmp/home
 	Store   string            // Home/.shortcuts, the value of SHORTCUTS_HOME
-	ToolBin string            // Tmp/bin: where a `shortcut` link goes (Shell, InstallBundled)
+	ToolBin string            // Tmp/bin: where a `shortcut` link goes (Shell)
 	Vars    map[string]string // HOME, SHORTCUTS_HOME, XDG_DATA_HOME, XDG_CONFIG_HOME, BIN_DIR over os.Environ()
 
 	fail func(error) // test seam: sandbox_test.go swaps t.Fatal for a panic to see a refusal

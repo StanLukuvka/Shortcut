@@ -410,7 +410,7 @@ func TestStores_ASymlinkedStoreFileIsWrittenWhereItLeads(t *testing.T) {
 
 func TestStores_UnknownFieldsAreErrors(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteStore(e.Store, nil) // init --global: an empty store
+	e.WriteStore(e.Store, nil) // an empty store
 	for _, c := range []struct {
 		name, message string
 		data          map[string]any
@@ -431,7 +431,7 @@ func TestStores_UnknownFieldsAreErrors(t *testing.T) {
 
 func TestStores_UpdateRefusesEntriesThatCannotRun(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteStore(e.Store, nil) // init --global: an empty store
+	e.WriteStore(e.Store, nil) // an empty store
 	for _, c := range []struct {
 		name, shortcut, message string
 		entry                   map[string]any
@@ -458,7 +458,7 @@ func TestStores_UpdateRefusesEntriesThatCannotRun(t *testing.T) {
 
 func TestStores_DefaultHomeStoreIsNeverAProject(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteStore(e.Store, nil) // init --global, with the default store: ~/.shortcuts
+	e.WriteStore(e.Store, nil) // with the default store: ~/.shortcuts
 	env := map[string]string{"SHORTCUTS_HOME": filepath.Join(e.Tmp, "custom_store")}
 	work := filepath.Join(e.Home, "work")
 	os.Mkdir(work, 0o755)

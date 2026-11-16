@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shortcut r edit <name>
+# shortcut r tools edit <name>
 # Opens a shortcut's script, or for an inline shortcut the file that defines it.
 path="$(shortcut show --field script_path "$@")" || exit 1
 [ -n "$path" ] || path="$(shortcut show --field defined_in "$@")" || exit 1

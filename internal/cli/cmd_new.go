@@ -291,3 +291,10 @@ func copyScript(src, dst string) error {
 	}
 	return os.Chmod(dst, st.Mode().Perm()|0o111)
 }
+
+func orSh(suffix string) string {
+	if suffix == "" {
+		return ".sh"
+	}
+	return suffix
+}

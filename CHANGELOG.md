@@ -3,14 +3,14 @@
 ## Unreleased
 
 - A single binary.
-- `init --global --bundled` installs the bundled shortcuts.
+- [examples/tools](examples/tools/) is a namespace to copy: `edit`, `nano`, `logged`, `desktop` and `search`.
 - Windows is not supported. Use WSL.
 - Run a shortcut with `shortcut run <name>` or `shortcut r <name>`. It runs in the caller's directory unless its `cwd` says otherwise.
 - A project keeps its shared shortcuts in a `.shortcuts` file, and your own in `.shortcuts.local`.
 - Projects and namespaces run only after `shortcut update`, and again after each change.
 - Namespaces: `<ns>.shortcut` files, run as `shortcut r <ns> <name>`.
-- Declared arguments, `confirm`, `export`, `promote`, `init --global` from a folder or a git URL.
-- `show --field KEY <name>` prints one field, bare, and only reads. The bundled `edit` and `desktop` use it.
+- Declared arguments, `confirm`, `export`, `promote`.
+- `show --field KEY <name>` prints one field, bare, and only reads. The `edit` and `desktop` in examples/tools use it.
 - Every error message is listed in [docs/errors.md](docs/errors.md).
 - Every store file (`shortcuts.json`, `.shortcuts`, `.shortcuts.local`, namespace `.shortcut` files) needs `"version": 1`. A missing or lower version is an error; a higher one asks you to upgrade shortcut.
 - Text that is not valid UTF-8 in a store, project file or approval tree is refused with a message that names it. Such bytes print as `\xNN`.
@@ -25,4 +25,3 @@
 - An empty or `.` PATH entry does not find commands in the current directory.
 - `update` and `update -y` with no group named skip a broken group with `warning: skipped <group>: <reason>` and exit 0; `update <group>` exits 1 for it.
 - `list | head` ends shortcut by SIGPIPE (a shell shows 141); stdout is not buffered.
-- A failed `git clone` in `init --global` reports `git clone exited with status N`.

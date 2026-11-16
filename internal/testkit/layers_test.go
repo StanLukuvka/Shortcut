@@ -15,7 +15,6 @@ import (
 // layers is the import table: for each package (a path from the module root, "." for the root), the module-internal
 // packages its non-test files may import. Stdlib is always allowed. A package not listed fails, so a new one gets placed here.
 var layers = map[string][]string{
-	".":                     {},
 	"cmd/shortcut":          {"internal/cli"},
 	"internal/ordjson":      {},
 	"internal/osutil":       {},
@@ -24,7 +23,7 @@ var layers = map[string][]string{
 	"internal/textio":       {"internal/osutil"},
 	"internal/approval":     {"internal/model", "internal/textio", "internal/difflib", "internal/ordjson", "internal/osutil"},
 	"internal/cli/argparse": {},
-	"internal/cli": {".", "internal/cli/argparse", "internal/approval", "internal/model", "internal/textio", "internal/ordjson",
+	"internal/cli": {"internal/cli/argparse", "internal/approval", "internal/model", "internal/textio", "internal/ordjson",
 		"internal/osutil", "internal/difflib"},
 	"internal/testkit": {},
 }

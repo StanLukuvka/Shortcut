@@ -84,7 +84,6 @@ func (r *release) install(extra map[string]string) testkit.Result {
 		"PATH":                   r.stubs + ":" + r.e.Vars["PATH"],
 		"SHELL":                  filepath.Join(r.stubs, "zsh"),
 		"SHORTCUT_DOWNLOAD_BASE": "file://" + r.dir,
-		"SHORTCUT_NO_BUNDLED":    "1",
 	}
 	for k, v := range extra {
 		env[k] = v
@@ -202,7 +201,7 @@ func TestCutOffDownloadRunsNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	res := r.e.RunCmd(testkit.Opts{Env: map[string]string{
-		"PATH": r.stubs + ":" + r.e.Vars["PATH"], "SHORTCUT_DOWNLOAD_BASE": "file://" + r.dir, "SHORTCUT_NO_BUNDLED": "1",
+		"PATH": r.stubs + ":" + r.e.Vars["PATH"], "SHORTCUT_DOWNLOAD_BASE": "file://" + r.dir,
 	}}, "sh", cut)
 	if strings.Contains(res.Stdout, "Installed") {
 		t.Errorf("a cut-off script installed something: %s", res.Stdout)
@@ -268,26 +267,5 @@ func TestUnsafeVersionIsRefused(t *testing.T) {
 				t.Errorf("a binary was installed: %v", err)
 			}
 		})
-	}
-}
-
-// with no controlling terminal /dev/tty exists but can't be opened: the installer prints the hint, not a shell error
-func TestNoControllingTerminalPrintsHint(t *testing.T) {
-	testkit.Need(t, "setsid")
-	r := newRelease(t)
-	res := r.e.RunCmd(testkit.Opts{Env: map[string]string{
-		"PATH":                   r.stubs + ":" + r.e.Vars["PATH"],
-		"SHELL":                  filepath.Join(r.stubs, "zsh"),
-		"SHORTCUT_DOWNLOAD_BASE": "file://" + r.dir,
-		"SHORTCUT_NO_BUNDLED":    "",
-	}}, "setsid", "-w", "sh", script(t))
-	if res.Code != 0 {
-		t.Fatalf("install.sh failed (%d): %s", res.Code, res.Stderr)
-	}
-	if strings.Contains(res.Stdout+res.Stderr, "/dev/tty") {
-		t.Errorf("a /dev/tty error leaked:\n%s%s", res.Stdout, res.Stderr)
-	}
-	if !strings.Contains(res.Stdout, "Bundled shortcuts: shortcut init --global --bundled") {
-		t.Errorf("no hint printed: %q", res.Stdout)
 	}
 }

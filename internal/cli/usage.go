@@ -21,13 +21,6 @@ Usage:
                                             shortcuts. It runs this checkout's files as they are, not a
                                             copy. --force takes one that isn't exported
   shortcut update [group] [-y]              Review changes to project shortcuts and namespaces, and approve them
-  shortcut init --global [SOURCE] [-y] [--replace]
-                                            Review the exported shortcuts in a folder's or git URL's
-                                            .shortcuts and copy them into the global store. Later
-                                            changes to the source don't reach them. Without a .shortcuts,
-                                            copy its <ns>.shortcut namespaces into imports/; --replace
-                                            puts them in place of installed ones
-  shortcut init --global --bundled [-y]     The same for the shortcuts that come with shortcut
   shortcut completion bash|zsh|fish         Print a shell completion script
   shortcut help [command], -h, --help       Show this help message, or a command's
   shortcut --version                        Show version

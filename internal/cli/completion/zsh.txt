@@ -2,7 +2,7 @@
 
 _shortcut() {
     local -a subcommands
-    subcommands=(run r new list show rm promote update init completion help)
+    subcommands=(run r new list show rm promote update completion help)
 
     if (( CURRENT == 2 )); then
         compadd -- $subcommands
@@ -24,10 +24,6 @@ _shortcut() {
             elif (( $#typed <= 1 )); then
                 compadd -- ${(f)"$(shortcut list --names $typed[1] 2>/dev/null)"}
             fi
-            ;;
-        init)
-            compadd -- --global --bundled --replace -y
-            _files -/
             ;;
         completion)
             (( CURRENT == 3 )) && compadd -- bash zsh fish
