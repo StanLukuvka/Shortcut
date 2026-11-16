@@ -100,7 +100,11 @@ func Save(c *model.Context, g model.Group, shared, local map[string]string) erro
 		rec.Set("key", g.Key())
 		rec.Set("snapshot", sortedObject(shared))
 		rec.Set("local", sortedObject(local))
-		return model.WriteJSONAtomic(path, rec)
+		if err := model.WriteJSONAtomic(path, rec); err != nil {
+			return err
+		}
+		c.Forget(g.Key())
+		return nil
 	})
 }
 
@@ -114,37 +118,48 @@ func LocalIsApproved(c *model.Context, g model.Group, r *Record) bool {
 	return err == nil && maps.Equal(held, local)
 }
 
-// State returns "ok", "new" (never approved), "changed", or "invalid" (text that is not valid UTF-8 cannot be
-// approved; Require says which). Anything but "ok" means not approved.
-func State(c *model.Context, g model.Group) string {
-	if !g.NeedsApproval(c) {
-		return "ok"
+// State is the group's approval state, computed once per run (Context.State) from the files on disk: StateOK,
+// StateNew (never approved), StateChanged, or StateInvalid (a path or registry text that is not valid UTF-8 can't be
+// recorded; Require says which). Anything but StateOK means not approved. Save, and a check under a lock or after a prompt, Forget it first.
+func State(c *model.Context, g model.Group) model.ApprovalState {
+	return c.State(g.Key(), func() model.ApprovalState { return computeState(c, g) })
+}
+
+// Refresh drops the cached state of g and reads it from disk again.
+func Refresh(c *model.Context, g model.Group) model.ApprovalState {
+	c.Forget(g.Key())
+	return State(c, g)
+}
+
+func computeState(c *model.Context, g model.Group) model.ApprovalState {
+	if !g.NeedsApproval() {
+		return model.StateOK
 	}
 	shared, local, err := snapshot(c, g)
 	if err != nil {
-		return "invalid"
+		return model.StateInvalid
 	}
 	r := Load(c, g)
 	if r == nil {
-		return "new"
+		return model.StateNew
 	}
 	if maps.Equal(r.Snapshot, shared) && maps.Equal(r.Local, local) { // both halves exactly as recorded
-		return "ok"
+		return model.StateOK
 	}
 	if len(r.Snapshot) > 0 {
-		return "changed"
+		return model.StateChanged
 	}
-	return "new" // with no snapshot, only CLI writes to .local were recorded
+	return model.StateNew // with no snapshot, only CLI writes to .local were recorded
 }
 
 // Require returns an error unless the group is approved.
 func Require(c *model.Context, g model.Group) error {
 	switch State(c, g) {
-	case "invalid":
+	case model.StateInvalid:
 		return Check(c, g)
-	case "new":
+	case model.StateNew:
 		return fmt.Errorf("%s isn't approved yet; review it with: %s", g.Label(), g.UpdateCmd())
-	case "changed":
+	case model.StateChanged:
 		return fmt.Errorf("%s changed since you approved it; run: %s", g.Label(), g.UpdateCmd())
 	}
 	return nil

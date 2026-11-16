@@ -26,7 +26,7 @@ import (
 // noteIfUnapproved says so, after a change made through shortcut, if the group needs approving before
 // it runs.
 func noteIfUnapproved(c *model.Context, s *textio.Streams, g model.Group) {
-	if g.NeedsApproval(c) && approval.State(c, c.ReloadGroup(g)) != "ok" {
+	if g.NeedsApproval() && approval.Refresh(c, c.ReloadGroup(g)) != model.StateOK {
 		s.Err.WriteString("note: " + g.Label() + " needs approving before it runs: " + g.UpdateCmd() + "\n")
 	}
 }
@@ -59,7 +59,7 @@ func targetGroup(c *model.Context, ns Namespace) (model.Group, error) {
 		}
 		var ok bool
 		if group, ok = store.Namespace(namespace); !ok {
-			group = model.Group{Name: namespace, File: osutil.Join(storeDir, "imports", namespace+model.ImportSuffix),
+			group = model.Group{Kind: model.KindNamespace, InProject: !c.IsGlobal(storeDir), Name: namespace, File: osutil.Join(storeDir, "imports", namespace+model.ImportSuffix),
 				StoreDir: storeDir, Data: &ordjson.Object{}}
 		}
 	}
@@ -133,7 +133,7 @@ func lockedGroupWrite(c *model.Context, group model.Group, mutate func() error) 
 // register adds entry to group's file under the registry lock. It creates a missing store or namespace file. A project's group means .shortcuts.local.
 func register(c *model.Context, s *textio.Streams, group model.Group, entry *model.Entry) error {
 	storeDir := group.StoreDir
-	if group.LocalFile != "" {
+	if group.Kind == model.KindProject {
 		change := func(shortcuts *ordjson.Object) error {
 			if _, has := shortcuts.Get(entry.Name); has {
 				return Die("shortcut '" + entry.Name + "' already exists in " + group.LocalFile)
@@ -160,14 +160,14 @@ func register(c *model.Context, s *textio.Streams, group model.Group, entry *mod
 		}
 	}
 	err := lockedGroupWrite(c, group, func() error {
-		reg, shortcuts, err := loadForEdit(group.File, group.Name != "" && !osutil.Exists(group.File))
+		reg, shortcuts, err := loadForEdit(group.File, group.Kind == model.KindNamespace && !osutil.Exists(group.File))
 		if err != nil {
 			return err
 		}
 		if _, dup := shortcuts.Get(entry.Name); dup {
 			return Die("shortcut '" + entry.Name + "' already exists in " + group.File)
 		}
-		if group.Name == "" {
+		if group.Kind != model.KindNamespace {
 			if _, clash := c.ReadStore(storeDir).Namespace(entry.Name); clash {
 				return Die("'" + entry.Name + "' is a namespace in store " + storeDir)
 			}
@@ -189,7 +189,7 @@ func register(c *model.Context, s *textio.Streams, group model.Group, entry *mod
 // whether the file matches its approval. Only then does the approval follow the write, as writeLocal does, so a hand
 // edit still needs update.
 func namespaceIsApproved(c *model.Context, g model.Group) bool {
-	return g.Name != "" && osutil.Exists(g.File) && approval.State(c, c.ReloadGroup(g)) == "ok"
+	return g.Kind == model.KindNamespace && osutil.Exists(g.File) && approval.Refresh(c, c.ReloadGroup(g)) == model.StateOK
 }
 
 // writeLocal changes .shortcuts.local through change(shortcuts), the only way shortcut writes to a
@@ -282,7 +282,7 @@ func storedCwd(c *model.Context, value *string, g model.Group) (*string, error) 
 	if !osutil.IsDir(path) {
 		return nil, Die("--cwd directory does not exist: " + path)
 	}
-	if !c.IsGlobal(g.StoreDir) && osutil.IsRelativeTo(path, osutil.Realpath(g.StoreDir)) {
+	if g.InProject && osutil.IsRelativeTo(path, osutil.Realpath(g.StoreDir)) {
 		rel := osutil.Relpath(path, osutil.Realpath(g.Folder()))
 		return &rel, nil
 	}

@@ -15,7 +15,7 @@ import (
 
 // Context is what a run knows about where it is: built once per run, passed to every command and to every
 // model and approval function that needs the cwd, the global store or the project root. One Context is one run:
-// the stores it has read are not read again, except by ReadStore and ReloadGroup.
+// the stores it has read are not read again, except by ReadStore and ReloadGroup; approval states likewise, until Forget.
 type Context struct {
 	Cwd     string // physical working directory; "" when CwdErr != nil
 	CwdErr  error  // read by run and new, which refuse to go on without a cwd
@@ -24,6 +24,7 @@ type Context struct {
 
 	globalReal string           // osutil.Realpath(Global), once
 	stores     map[string]Store // by the dir as the caller passed it: Global, or a realpath'd project root
+	states     map[string]ApprovalState
 }
 
 // NewContext resolves the global store and the project root once. It never fails.
@@ -32,7 +33,7 @@ func NewContext(cwd string, cwdErr error) *Context {
 	if home == "" {
 		home = "~/.shortcuts"
 	}
-	c := &Context{Cwd: cwd, CwdErr: cwdErr, Global: osutil.Abs(osutil.ExpandUser(home)), stores: map[string]Store{}}
+	c := &Context{Cwd: cwd, CwdErr: cwdErr, Global: osutil.Abs(osutil.ExpandUser(home)), stores: map[string]Store{}, states: map[string]ApprovalState{}}
 	c.globalReal = osutil.Realpath(c.Global)
 	if cwdErr == nil {
 		c.Project = c.FindProjectRoot(cwd)
@@ -40,7 +41,7 @@ func NewContext(cwd string, cwdErr error) *Context {
 	return c
 }
 
-// IsGlobal: Path(dir).resolve() == Path(global).resolve().
+// IsGlobal reports whether dir is the global store, after resolving symlinks in both.
 func (c *Context) IsGlobal(dir string) bool { return osutil.Realpath(dir) == c.globalReal }
 
 // neverAProject: ~/.shortcuts is never a project, also when SHORTCUTS_HOME points the global store elsewhere.
@@ -134,10 +135,24 @@ func (c *Context) Store(dir string) Store {
 // which must see what another process wrote.
 func (c *Context) ReadStore(dir string) Store { return c.loadStore(dir) }
 
+// State is the approval state under key (a Group.Key()), computed by compute the first time and not again in this
+// run until Forget(key).
+func (c *Context) State(key string, compute func() ApprovalState) ApprovalState {
+	s, ok := c.states[key]
+	if !ok {
+		s = compute()
+		c.states[key] = s
+	}
+	return s
+}
+
+// Forget drops the state under key, for after a write and for a check made under a lock or after a prompt.
+func (c *Context) Forget(key string) { delete(c.states, key) }
+
 // Visible are the stores a name is looked up in, nearest first.
-func (c *Context) Visible(skipLocal bool) []Store {
+func (c *Context) Visible(lk Lookup) []Store {
 	var stores []Store
-	if c.Project != "" && !skipLocal {
+	if c.Project != "" && !lk.GlobalOnly {
 		stores = append(stores, c.Store(c.Project))
 	}
 	return append(stores, c.Store(c.Global))
@@ -145,10 +160,12 @@ func (c *Context) Visible(skipLocal bool) []Store {
 
 // ReloadGroup reads a group's file(s) again, a fresh read each time.
 func (c *Context) ReloadGroup(g Group) Group {
-	if g.LocalFile != "" {
+	if g.Kind == KindProject {
 		return LoadProjectGroup(g.StoreDir)
 	}
-	return LoadGroup(g.File, g.StoreDir, g.Name)
+	r := LoadGroup(g.File, g.StoreDir, g.Name)
+	r.InProject = g.InProject
+	return r
 }
 
 // loadStore reads a store and its namespaces. It never fails on bad content: that is reported on the Group or the
@@ -204,6 +221,7 @@ func (c *Context) loadStore(storeDir string) Store {
 	for _, name := range slices.Sorted(slices.Values(names)) {
 		path := sources[name]
 		g := LoadGroup(path, storeDir, name)
+		g.InProject = !isGlobal
 		if err := ValidateName(name); err != nil {
 			msg := err.Error()
 			if name == "" {

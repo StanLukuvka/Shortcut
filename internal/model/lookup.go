@@ -11,6 +11,12 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
+// Lookup says which stores a name is looked up in, and how a broken one is treated.
+type Lookup struct {
+	GlobalOnly bool // --global: skip the project
+	Strict     bool // run: refuse every name in a project that can't be used
+}
+
 // Found is what FindEntry finds, before anyone judges the entry.
 type Found struct {
 	Group Group
@@ -21,18 +27,18 @@ type Found struct {
 }
 
 // FindEntry finds `name` or `namespace name` in the project, then the global store, without judging
-// the entry. words must not be empty. strict (for run) refuses every name inside a project whose file can't be used,
+// the entry. words must not be empty. lk.Strict (for run) refuses every name inside a project whose file can't be used,
 // and a store's load errors for the name it has. Without it (show, rm) a broken file is looked in as far as
 // it reads, so you can still see and fix what's there. both lookup failures are just errors here:
 // main prints either as "error: <text>".
-func FindEntry(c *Context, words []string, skipLocal, strict bool) (Found, error) {
-	stores := c.Visible(skipLocal)
+func FindEntry(c *Context, words []string, lk Lookup) (Found, error) {
+	stores := c.Visible(lk)
 	first, rest := words[0], words[1:]
 	homeIdx := len(stores) - 1
 	home := stores[homeIdx]
 
 	for i, store := range stores {
-		if strict && i != homeIdx && store.Main.Error != nil {
+		if lk.Strict && i != homeIdx && store.Main.Error != nil {
 			return Found{}, fmt.Errorf("%s. Nothing runs inside this project until it's fixed; for your own: shortcut r --global %s",
 				*store.Main.Error, first)
 		}
@@ -48,7 +54,7 @@ func FindEntry(c *Context, words []string, skipLocal, strict bool) (Found, error
 		if imports, ok := store.Main.Data.Vals["imports"].(*ordjson.Object); ok && has(imports, first) {
 			named = true
 		}
-		if strict && len(problems) > 0 && named {
+		if lk.Strict && len(problems) > 0 && named {
 			return Found{}, errors.New(strings.Join(problems, "; "))
 		}
 		// A project's name, shortcut or namespace, hides a global one of either kind
@@ -96,7 +102,7 @@ func FindEntry(c *Context, words []string, skipLocal, strict bool) (Found, error
 	}
 	root := c.Project
 	switch {
-	case root != "" && skipLocal:
+	case root != "" && lk.GlobalOnly:
 		if hasName(c.Store(root), first) {
 			notes = append(notes, fmt.Sprintf("The project in %s has its own '%s': leave out --global to use it.", root, first))
 		}
@@ -117,8 +123,8 @@ func hasName(s Store, name string) bool {
 
 // ResolveShortcut returns what `shortcut run <words>` runs, and where, and the words left over as
 // arguments.
-func ResolveShortcut(c *Context, words []string, skipLocal, strict bool) (*ResolvedShortcut, []string, error) {
-	f, err := FindEntry(c, words, skipLocal, strict)
+func ResolveShortcut(c *Context, words []string, lk Lookup) (*ResolvedShortcut, []string, error) {
+	f, err := FindEntry(c, words, lk)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -130,8 +136,8 @@ func ResolveShortcut(c *Context, words []string, skipLocal, strict bool) (*Resol
 }
 
 // ResolveName resolves a name for commands that name a shortcut: `name` or `namespace name`, and nothing else.
-func ResolveName(c *Context, words []string, skipLocal bool) (*ResolvedShortcut, error) {
-	r, rest, err := ResolveShortcut(c, words, skipLocal, false)
+func ResolveName(c *Context, words []string, lk Lookup) (*ResolvedShortcut, error) {
+	r, rest, err := ResolveShortcut(c, words, Lookup{GlobalOnly: lk.GlobalOnly})
 	if err != nil {
 		return nil, err
 	}

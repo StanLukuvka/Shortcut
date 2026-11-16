@@ -12,16 +12,6 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
-func scopeOf(c *model.Context, g model.Group) string {
-	switch {
-	case g.Name != "":
-		return "namespace"
-	case g.NeedsApproval(c):
-		return "project"
-	}
-	return "global"
-}
-
 func orCaller(s *string) string {
 	if s == nil || *s == "" {
 		return model.Caller
@@ -35,16 +25,17 @@ func cmdShow(c *model.Context, s *textio.Streams, args []string) error {
 	if err != nil {
 		return err
 	}
+	lk := model.Lookup{GlobalOnly: ns.Bool("skipLocal")}
 	if ns.Set("field") {
 		if ns.Bool("json") {
 			return Die("--field and --json can't be used together")
 		}
-		return showField(c, s, ns.List("name"), ns.Bool("skipLocal"), ns.Str("field"))
+		return showField(c, s, ns.List("name"), lk, ns.Str("field"))
 	}
 	if ns.Bool("json") {
-		return showJSON(c, s, ns.List("name"), ns.Bool("skipLocal"))
+		return showJSON(c, s, ns.List("name"), lk)
 	}
-	resolved, err := model.ResolveName(c, ns.List("name"), ns.Bool("skipLocal"))
+	resolved, err := model.ResolveName(c, ns.List("name"), lk)
 	if err != nil {
 		return err
 	}
@@ -53,14 +44,14 @@ func cmdShow(c *model.Context, s *textio.Streams, args []string) error {
 
 	display := resolved.Display()
 	out("Name:        " + display)
-	scope := "Scope:       " + scopeOf(c, group)
+	scope := "Scope:       " + string(group.Kind)
 	if resolved.HidesGlobal {
 		scope += "  (hides your global '" + strings.Fields(display)[0] + "')"
 	}
 	out(scope)
 	out("Defined in:  " + group.DefiningFile(entry.Name))
-	if group.LocalFile != "" {
-		out("Source:      " + group.Source(entry.Name))
+	if group.Kind == model.KindProject {
+		out("Source:      " + string(group.Source(entry.Name)))
 	}
 	out("CWD:         " + orCaller(entry.Cwd))
 	out("Run CWD:     " + resolved.RunCwd)
@@ -68,9 +59,9 @@ func cmdShow(c *model.Context, s *textio.Streams, args []string) error {
 	if entry.Confirm {
 		out("Confirm:     yes")
 	}
-	if state := approval.State(c, group); state != "ok" {
+	if state := approval.State(c, group); state != model.StateOK {
 		what := "changed"
-		if state == "new" {
+		if state == model.StateNew {
 			what = "not approved"
 		}
 		out("Approval:    " + what + " (run: " + group.UpdateCmd() + ")")
@@ -101,8 +92,8 @@ func cmdShow(c *model.Context, s *textio.Streams, args []string) error {
 
 // showJSON prints one JSON object, the entry as written plus where it resolves. A broken entry still prints,
 // with its error and null for what can't be worked out.
-func showJSON(c *model.Context, s *textio.Streams, words []string, skipLocal bool) error {
-	out, err := showObject(c, words, skipLocal)
+func showJSON(c *model.Context, s *textio.Streams, words []string, lk model.Lookup) error {
+	out, err := showObject(c, words, lk)
 	if err != nil {
 		return err
 	}
@@ -122,11 +113,11 @@ var (
 )
 
 // showField prints one field of what `show --json` describes, bare. It only reads: nothing is written or approved.
-func showField(c *model.Context, s *textio.Streams, words []string, skipLocal bool, key string) error {
+func showField(c *model.Context, s *textio.Streams, words []string, lk model.Lookup, key string) error {
 	if !slices.Contains(showFields, key) {
 		return Die("unknown field '" + key + "' (one of: " + strings.Join(showFields, ", ") + ")")
 	}
-	obj, err := showObject(c, words, skipLocal)
+	obj, err := showObject(c, words, lk)
 	if err != nil {
 		return err
 	}
@@ -153,8 +144,8 @@ func showField(c *model.Context, s *textio.Streams, words []string, skipLocal bo
 
 // showObject is the entry as written plus where it resolves. A broken entry still gives an object,
 // with its error and null for what can't be worked out.
-func showObject(c *model.Context, words []string, skipLocal bool) (*ordjson.Object, error) {
-	f, err := model.FindEntry(c, words, skipLocal, false)
+func showObject(c *model.Context, words []string, lk model.Lookup) (*ordjson.Object, error) {
+	f, err := model.FindEntry(c, words, lk)
 	if err != nil {
 		return nil, err
 	}
@@ -171,15 +162,15 @@ func showObject(c *model.Context, words []string, skipLocal bool) (*ordjson.Obje
 	out := &ordjson.Object{}
 	out.Set("name", name)
 	out.Set("namespace", nullable(g.Name))
-	out.Set("scope", scopeOf(c, g))
+	out.Set("scope", string(g.Kind))
 	out.Set("defined_in", g.DefiningFile(name))
-	if g.LocalFile != "" {
-		out.Set("source", g.Source(name))
+	if g.Kind == model.KindProject {
+		out.Set("source", string(g.Source(name)))
 	} else {
 		out.Set("source", nil)
 	}
 	out.Set("hides_global", f.Hides)
-	out.Set("approval", approval.State(c, g))
+	out.Set("approval", string(approval.State(c, g)))
 	for _, k := range []string{"cwd", "run_cwd", "script_path", "error"} {
 		out.Set(k, nil)
 	}

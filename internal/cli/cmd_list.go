@@ -12,7 +12,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
-func approved(c *model.Context, g model.Group) bool { return approval.State(c, g) == "ok" }
+func approved(c *model.Context, g model.Group) bool { return approval.State(c, g) == model.StateOK }
 
 // cmdList lists shortcuts.
 func cmdList(c *model.Context, s *textio.Streams, args []string) error {
@@ -20,7 +20,7 @@ func cmdList(c *model.Context, s *textio.Streams, args []string) error {
 	if err != nil {
 		return err
 	}
-	stores := c.Visible(false)
+	stores := c.Visible(model.Lookup{})
 	for _, store := range stores {
 		for _, p := range store.Problems {
 			s.Err.WriteString("warning: " + p + "\n")
@@ -97,8 +97,8 @@ func cmdList(c *model.Context, s *textio.Streams, args []string) error {
 			s.Out.WriteString("\n")
 		}
 		sections++
-		if state != "ok" {
-			one := g.Name != ""
+		if state != model.StateOK {
+			one := g.Kind == model.KindNamespace
 			pick := func(singular, plural string) string {
 				if one {
 					return singular
@@ -106,7 +106,7 @@ func cmdList(c *model.Context, s *textio.Streams, args []string) error {
 				return plural
 			}
 			verb := pick("changed since you approved it", "changed since you approved them")
-			if state == "new" {
+			if state == model.StateNew {
 				verb = pick("isn't approved yet", "aren't approved yet")
 			}
 			review := pick("it", "them")
@@ -133,9 +133,9 @@ func cmdList(c *model.Context, s *textio.Streams, args []string) error {
 				data = &ordjson.Object{}
 			}
 			desc := textOf(data.Vals["description"])
-			if globalNames[name] && g.NeedsApproval(c) && g.Name == "" {
+			if globalNames[name] && g.Kind == model.KindProject {
 				desc += "  [hides global]"
-			} else if localNames[name] && !g.NeedsApproval(c) {
+			} else if localNames[name] && g.Kind == model.KindGlobal {
 				desc += "  [hidden here by project]"
 			}
 			mode := model.Caller
@@ -143,8 +143,8 @@ func cmdList(c *model.Context, s *textio.Streams, args []string) error {
 				mode = c
 			}
 			source := ""
-			if g.LocalFile != "" {
-				source = g.Source(name)
+			if g.Kind == model.KindProject {
+				source = string(g.Source(name))
 			}
 			rows = append(rows, row{prefix + name, mode, source, desc})
 		}
@@ -163,7 +163,7 @@ func cmdList(c *model.Context, s *textio.Streams, args []string) error {
 	}
 
 	for _, store := range stores {
-		if store.Main.NeedsApproval(c) {
+		if store.Main.Kind == model.KindProject {
 			if len(store.Main.SharedShortcuts().Keys) > 0 || len(store.Main.Shortcuts().Keys) > 0 {
 				section("Project shortcuts ("+store.Main.Key()+")", store.Main, "")
 			}
@@ -173,7 +173,7 @@ func cmdList(c *model.Context, s *textio.Streams, args []string) error {
 		for _, n := range store.Namespaces {
 			if usable(n.Group) {
 				hides := ""
-				if n.Group.IsProject(c) && globalNames[n.Name] {
+				if n.Group.InProject && globalNames[n.Name] {
 					hides = "  [hides global]"
 				}
 				section("Namespace "+n.Name+" ("+n.Group.File+")"+hides, n.Group, n.Name+" ")

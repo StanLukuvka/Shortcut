@@ -113,8 +113,8 @@ func (s SandboxEscape) Error() string {
 	return fmt.Sprintf("%s is %s, outside this test's temp dir %s", s.What, s.Path, s.Root)
 }
 
-// resolve is Path.resolve() (non-strict): symlinks are followed as far as the path exists, the rest is
-// taken as it stands, and ".." is applied after the link before it, not lexically.
+// resolve makes p absolute and follows symlinks as far as the path exists; the rest is taken as it stands, and
+// ".." is applied after the link before it, not lexically.
 func resolve(p string) string {
 	if !filepath.IsAbs(p) {
 		if a, err := filepath.Abs(p); err == nil {
