@@ -1,1 +1,1 @@
-Read [CONTRIBUTING.md](CONTRIBUTING.md) first. Its rules bind any change to this repository.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and follow it before changing anything in this repository.

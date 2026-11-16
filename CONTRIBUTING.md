@@ -41,15 +41,6 @@ CI also checks `gofmt` and runs `go vet ./...`.
 - A new command or flag: its row in `commands()` in `internal/commands/commands.go` (dispatch, parsing, usage and help follow from it), the three completion scripts in `internal/commands/completion/` (a test fails if they disagree with `commands()`), the README command list, and AGENT.md if agents use it.
 - Anything a user would notice: a line under Unreleased in [CHANGELOG.md](CHANGELOG.md).
 
-## What doesn't change
-
-- The standard library only: `go.mod` has no `require`.
-- The README's Security model, statements 1–5, word for word.
-- Entries are immutable: no edit command. To change one, `rm` it and make it again.
-- shortcut never writes a project's `.shortcuts`.
-- Text from a file is printed through `term.Safe`.
-- Every question goes through `term.Confirm`.
-
 ## How it fails
 
 shortcut does what it was told, or stops with an error. It does not guess,
@@ -70,6 +61,15 @@ repair, or carry on.
   says why.
 - A change that adds a case says which sentence of the README needs it. A
   change that removes more than it adds needs no such reason.
+
+## What doesn't change
+
+- The standard library only: `go.mod` has no `require`.
+- The README's Security model, statements 1–5, word for word.
+- Entries are immutable: no edit command. To change one, `rm` it and make it again.
+- shortcut never writes a project's `.shortcuts`.
+- Text from a file is printed through `term.Safe`.
+- Every question goes through `term.Confirm`.
 
 ## Layout
 
@@ -96,6 +96,8 @@ Imports point down this tree and never up: `cmd/shortcut`, `internal/commands`, 
 ## Agents
 
 [AGENT.md](AGENT.md) is for agents that use shortcut. An agent working on this repo follows this file, and runs anything that writes a store in the separate home above.
+
+The usual mistake is adding a handler where an error would do; see [How it fails](#how-it-fails).
 
 ## Releasing
 
