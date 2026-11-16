@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
+	"github.com/StanLukuvka/Shortcut/internal/model"
+	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -23,13 +25,33 @@ func Die(msg string) error { return &ExitError{Code: 1, Stderr: "error: " + msg 
 
 // handler is a command: it gets what follows the command word, and ends with nil (exit 0), an *ExitError or any
 // other error, which dispatch prints as "error: <text>" with exit 1.
-type handler func(s *textio.Streams, args []string) error
+type handler func(c *model.Context, s *textio.Streams, args []string) error
 
-var handlers map[string]handler
+// handlerFor is the command a word names, or nil.
+func handlerFor(name string) handler {
+	switch name {
+	case "run", "r":
+		return cmdRun
+	case "completion":
+		return cmdCompletion
+	case "list":
+		return cmdList
+	case "show":
+		return cmdShow
+	case "update":
+		return cmdUpdate
+	case "new":
+		return cmdNew
+	case "rm":
+		return cmdRm
+	}
+	return nil
+}
 
-func init() {
-	handlers = map[string]handler{"run": cmdRun, "r": cmdRun, "completion": cmdCompletion,
-		"list": cmdList, "show": cmdShow, "update": cmdUpdate, "new": cmdNew, "rm": cmdRm}
+// invoke builds the run's one Context and runs h.
+func invoke(s *textio.Streams, h handler, args []string) int {
+	cwd, err := osutil.Getwd()
+	return finish(s, h(model.NewContext(cwd, err), s, args))
 }
 
 // Main runs the command and returns the process's exit code. A write to a closed stdout or stderr ends the
@@ -46,16 +68,16 @@ func dispatch(s *textio.Streams, args []string) int {
 	}
 	first := args[0]
 	switch {
-	case first == "help" && len(args) > 1 && handlers[args[1]] != nil:
-		return finish(s, handlers[args[1]](s, []string{"--help"}))
+	case first == "help" && len(args) > 1 && handlerFor(args[1]) != nil:
+		return invoke(s, handlerFor(args[1]), []string{"--help"})
 	case first == "--help" || first == "-h" || first == "help":
 		s.Out.WriteString(usageText)
 		return 0
 	case first == "--version":
 		s.Out.WriteString("shortcut " + Version + "\n")
 		return 0
-	case handlers[first] != nil:
-		return finish(s, handlers[first](s, args[1:]))
+	case handlerFor(first) != nil:
+		return invoke(s, handlerFor(first), args[1:])
 	case strings.HasPrefix(first, "-"):
 		s.Err.WriteString("error: unrecognized option '" + first + "'\nTry 'shortcut --help' for more information.\n")
 		return 2

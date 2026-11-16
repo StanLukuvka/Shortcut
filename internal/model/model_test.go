@@ -230,18 +230,18 @@ func TestStores_StoreDiscoverySkipsGlobalRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Walking up from home or subdirectory must skip ~/.shortcuts
-	if got := FindProjectRoot(env.Home); got != "" {
+	if got := NewContext(env.Home, nil).FindProjectRoot(env.Home); got != "" {
 		t.Errorf("home: %q", got)
 	}
 	deep := filepath.Join(env.Home, "a", "b", "c")
 	if err := os.MkdirAll(deep, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := FindProjectRoot(deep); got != "" {
+	if got := NewContext(deep, nil).FindProjectRoot(deep); got != "" {
 		t.Errorf("deep: %q", got)
 	}
 	// Walking up from inside ~/.shortcuts itself must return none
-	if got := FindProjectRoot(env.Store); got != "" {
+	if got := NewContext(env.Store, nil).FindProjectRoot(env.Store); got != "" {
 		t.Errorf("store: %q", got)
 	}
 	// A real local store in a project must be found
@@ -251,7 +251,7 @@ func TestStores_StoreDiscoverySkipsGlobalRoot(t *testing.T) {
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := FindProjectRoot(sub); got != osutil.Realpath(proj) {
+	if got := NewContext(sub, nil).FindProjectRoot(sub); got != osutil.Realpath(proj) {
 		t.Errorf("sub: %q", got)
 	}
 }
@@ -262,15 +262,15 @@ func TestStores_ProjectRootViaLocalFileOnlyAndNearest(t *testing.T) {
 	env.WriteFile(filepath.Join(outer, ".shortcuts.local"), `{"version": 1, "shortcuts": {}}`, 0)
 	inner := filepath.Join(outer, "in")
 	env.WriteStore(filepath.Join(inner, ".shortcuts"), map[string]any{})
-	if got := FindProjectRoot(filepath.Join(inner, "x")); got != inner {
+	if got := NewContext(filepath.Join(inner, "x"), nil).FindProjectRoot(filepath.Join(inner, "x")); got != inner {
 		t.Errorf("nearest: %q", got)
 	}
-	if got := FindProjectRoot(outer); got != outer {
+	if got := NewContext(outer, nil).FindProjectRoot(outer); got != outer {
 		t.Errorf("local only: %q", got)
 	}
 	// a .shortcuts that is a folder is no project
 	old := env.Project(nil, testkit.Name("old"), testkit.Dirs(".shortcuts"))
-	if got := FindProjectRoot(old); got != "" {
+	if got := NewContext(old, nil).FindProjectRoot(old); got != "" {
 		t.Errorf("a .shortcuts folder: %q", got)
 	}
 }
@@ -280,23 +280,23 @@ func TestStores_LocalProjectRoot(t *testing.T) {
 	proj := env.Project(map[string]any{}, testkit.Name("p"))
 	sub := filepath.Join(proj, "sub")
 	os.MkdirAll(sub, 0o755)
-	if got, err := LocalProjectRoot(proj); err != nil || got != proj {
+	if got, err := NewContext(proj, nil).LocalProjectRoot(); err != nil || got != proj {
 		t.Errorf("%q %v", got, err)
 	}
-	if _, err := LocalProjectRoot(sub); err == nil || err.Error() != sub+" is inside the project at "+proj+". Run this from there." {
+	if _, err := NewContext(sub, nil).LocalProjectRoot(); err == nil || err.Error() != sub+" is inside the project at "+proj+". Run this from there." {
 		t.Error(err)
 	}
-	if _, err := LocalProjectRoot(env.Home); err == nil || err.Error() != env.Home+" holds the global store, so it can't hold local shortcuts. Run this inside a project folder." {
+	if _, err := NewContext(env.Home, nil).LocalProjectRoot(); err == nil || err.Error() != env.Home+" holds the global store, so it can't hold local shortcuts. Run this inside a project folder." {
 		t.Error(err)
 	}
-	if _, err := LocalProjectRoot(env.Store); err == nil || !strings.Contains(err.Error(), "is inside the global store") {
+	if _, err := NewContext(env.Store, nil).LocalProjectRoot(); err == nil || !strings.Contains(err.Error(), "is inside the global store") {
 		t.Error(err)
 	}
 	victim := env.WriteFile(filepath.Join(env.Tmp, "victim"), "keep\n", 0)
 	fresh := env.Folder("fresh")
 	env.Symlink(victim, filepath.Join(fresh, ".shortcuts.local"))
 	// a symlinked .shortcuts.local makes the folder a project; it is its own root, but the link is refused
-	if _, err := LocalProjectRoot(fresh); err == nil || err.Error() != filepath.Join(fresh, ".shortcuts.local")+" is a symlink, so writing it would go somewhere else." {
+	if _, err := NewContext(fresh, nil).LocalProjectRoot(); err == nil || err.Error() != filepath.Join(fresh, ".shortcuts.local")+" is a symlink, so writing it would go somewhere else." {
 		t.Error(err)
 	}
 }
@@ -352,37 +352,39 @@ func TestStores_WriteJSONAtomicLeavesNoTempFileOnError(t *testing.T) {
 
 func TestStores_LockPathsAndSymlinkedLock(t *testing.T) {
 	env := testkit.New(t)
-	if got := lockPath(env.Store); got != filepath.Join(env.Store, ".lock") {
+	c := NewContext(env.Home, nil)
+	if got := c.lockPath(env.Store); got != filepath.Join(env.Store, ".lock") {
 		t.Error(got)
 	}
 	proj := env.Project(map[string]any{})
 	// sha256("<realpath>"), hex
-	got := lockPath(proj)
+	got := c.lockPath(proj)
 	if !strings.HasPrefix(got, filepath.Join(env.Store, "locks")+"/") || !strings.HasSuffix(got, ".lock") || len(filepath.Base(got)) != 64+len(".lock") {
 		t.Error(got)
 	}
 	ran := false
-	if err := WithRegistryLock(proj, func() error { ran = true; return nil }); err != nil || !ran {
+	if err := c.WithRegistryLock(proj, func() error { ran = true; return nil }); err != nil || !ran {
 		t.Errorf("%v %v", ran, err)
 	}
 	// a symlinked .lock is refused and its victim untouched
 	victim := env.WriteFile(filepath.Join(env.Tmp, "victim"), "keep\n", 0)
 	env.Symlink(victim, filepath.Join(env.Store, ".lock"))
 	ran = false
-	if err := WithRegistryLock(env.Store, func() error { ran = true; return nil }); err == nil || ran {
+	if err := c.WithRegistryLock(env.Store, func() error { ran = true; return nil }); err == nil || ran {
 		t.Errorf("ran=%v err=%v", ran, err)
 	}
 	if b, _ := os.ReadFile(victim); string(b) != "keep\n" {
 		t.Error("victim changed")
 	}
-	if err := InitStore(env.Store); err == nil {
+	if err := c.InitStore(env.Store); err == nil {
 		t.Error("InitStore through a symlinked .lock must fail")
 	}
 }
 
 func TestStores_InitStoreCreatesOnlyAMissingRegistry(t *testing.T) {
 	env := testkit.New(t)
-	if err := InitStore(env.Store); err != nil {
+	c := NewContext(env.Home, nil)
+	if err := c.InitStore(env.Store); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(filepath.Join(env.Store, "shortcuts.json"))
@@ -390,7 +392,7 @@ func TestStores_InitStoreCreatesOnlyAMissingRegistry(t *testing.T) {
 		t.Errorf("got %q", b)
 	}
 	env.WriteStore(env.Store, map[string]any{"keep": map[string]any{"inline": "x"}})
-	if err := InitStore(env.Store); err != nil {
+	if err := c.InitStore(env.Store); err != nil {
 		t.Fatal(err)
 	}
 	if b2, _ := os.ReadFile(filepath.Join(env.Store, "shortcuts.json")); !strings.Contains(string(b2), "keep") {
@@ -429,19 +431,20 @@ func TestGroup_ShortcutsOverlayAndSource(t *testing.T) {
 
 func TestGroup_Names(t *testing.T) {
 	env := testkit.New(t)
+	c := NewContext(env.Home, nil)
 	ns := Group{Name: "docker", File: filepath.Join(env.Store, "imports", "docker.shortcut"), StoreDir: env.Store}
 	if ns.Display("ps") != "docker ps" || ns.Label() != "docker" || ns.UpdateCmd() != "shortcut update docker" ||
 		ns.ScriptBase() != filepath.Join(env.Store, "imports") || ns.ScriptsDir() != filepath.Join(env.Store, "imports", "scripts", "docker") ||
-		!ns.NeedsApproval() {
+		!ns.NeedsApproval(c) {
 		t.Errorf("%+v", ns)
 	}
 	global := Group{File: filepath.Join(env.Store, "shortcuts.json"), StoreDir: env.Store}
-	if global.NeedsApproval() || global.IsProject() || global.Display("x") != "x" || global.ScriptBase() != env.Store ||
+	if global.NeedsApproval(c) || global.IsProject(c) || global.Display("x") != "x" || global.ScriptBase() != env.Store ||
 		global.ScriptsDir() != filepath.Join(env.Store, "scripts") || global.UpdateCmd() != "shortcut update" {
 		t.Errorf("%+v", global)
 	}
 	proj := Group{File: filepath.Join(env.Tmp, "p", ".shortcuts"), StoreDir: filepath.Join(env.Tmp, "p")}
-	if !proj.IsProject() || !proj.NeedsApproval() || proj.Label() != proj.Key() || proj.Key() != proj.StoreDir {
+	if !proj.IsProject(c) || !proj.NeedsApproval(c) || proj.Label() != proj.Key() || proj.Key() != proj.StoreDir {
 		t.Errorf("%+v", proj)
 	}
 }
@@ -452,7 +455,7 @@ func TestStores_LoadStoreProjectAndNamespaces(t *testing.T) {
 	env.WriteImport(filepath.Join(proj, ".shortcuts"), "zed", testkit.DockerPS) // a namespace that is also a shortcut
 	env.WriteImport(filepath.Join(proj, ".shortcuts"), "b", testkit.DockerPS)
 	env.WriteImport(filepath.Join(proj, ".shortcuts"), "a", testkit.KubeGet)
-	store := LoadStore(proj)
+	store := NewContext(env.Home, nil).Store(proj)
 	var names []string
 	for _, n := range store.Namespaces {
 		names = append(names, n.Name)
@@ -485,7 +488,7 @@ func TestStores_LoadStoreImportProblems(t *testing.T) {
 	proj := env.Project(nil)
 	file := filepath.Join(proj, ".shortcuts")
 	env.WriteRegistryRaw(file, `{"version": 1, "shortcuts": {}, "imports": {"num": 5, "plain": "x.json", "bare": "dir/.shortcut", "ok": "~/x.shortcut", "Bad Name": "w.shortcut"}}`)
-	store := LoadStore(proj)
+	store := NewContext(env.Home, nil).Store(proj)
 	want := []string{
 		"import 'num' in " + file + " must be a path",
 		"import 'plain' in " + file + " must be a .shortcut file",
@@ -512,7 +515,7 @@ func TestStores_GlobalStoreImportsFolderAndTwice(t *testing.T) {
 	env.WriteImport(env.Store, "docker", testkit.DockerPS)
 	env.WriteFile(filepath.Join(env.Store, "imports", ".shortcut"), "{}", 0) // the bare one
 	env.WriteFile(filepath.Join(env.Store, "imports", "notes.txt"), "x", 0)
-	store := LoadStore(env.Store)
+	store := NewContext(env.Home, nil).Store(env.Store)
 	if want := "namespace 'docker' is imported twice in " + env.Store; len(store.Problems) != 1 || store.Problems[0] != want {
 		t.Errorf("problems %v", store.Problems)
 	}
@@ -551,7 +554,7 @@ func TestStores_LoadProjectGroupErrors(t *testing.T) {
 	if g = LoadProjectGroup(only); g.Error != nil || len(g.Shortcuts().Keys) != 1 {
 		t.Errorf("%+v", g)
 	}
-	if g = ReloadGroup(g); g.LocalFile == "" {
+	if g = NewContext(env.Home, nil).ReloadGroup(g); g.LocalFile == "" {
 		t.Error("ReloadGroup of a project lost its local file")
 	}
 }
@@ -566,7 +569,7 @@ func TestStores_EntryErrors(t *testing.T) {
 		"a b":    map[string]any{"inline": "x"},
 		"isdir":  map[string]any{"script": "bin"},
 	}, testkit.Files(map[string]any{"bin/tool": "x"}))
-	g := LoadStore(proj).Main
+	g := NewContext(env.Home, nil).Store(proj).Main
 	var got []string
 	for _, e := range EntryErrors(g) {
 		got = append(got, e[:min(len(e), 60)])
@@ -708,7 +711,7 @@ func TestStores_VersionRequiredInEveryFile(t *testing.T) {
 			t.Errorf("project %s: %v", c.body, g.Error)
 		}
 		env.WriteFile(filepath.Join(store, "shortcuts.json"), `{"version": 1, "shortcuts": {}, "imports": {"n": "`+ns+`"}}`, 0)
-		g, _ = LoadStore(store).Namespace("n")
+		g, _ = NewContext(env.Home, nil).Store(store).Namespace("n")
 		if c.want == nil && g.Error != nil || c.want != nil && (g.Error == nil || *g.Error != c.want(ns)) {
 			t.Errorf("namespace %s: %v", c.body, g.Error)
 		}

@@ -12,15 +12,15 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
-func approved(g model.Group) bool { return approval.State(g) == "ok" }
+func approved(c *model.Context, g model.Group) bool { return approval.State(c, g) == "ok" }
 
 // cmdList lists shortcuts.
-func cmdList(s *textio.Streams, args []string) error {
+func cmdList(c *model.Context, s *textio.Streams, args []string) error {
 	ns, err := parsers["list"].Parse(args)
 	if err != nil {
 		return err
 	}
-	stores := model.VisibleStores("", false)
+	stores := c.Visible(false)
 	for _, store := range stores {
 		for _, p := range store.Problems {
 			s.Err.WriteString("warning: " + p + "\n")
@@ -35,7 +35,7 @@ func cmdList(s *textio.Streams, args []string) error {
 	if names := ns.Str("names"); names != "" {
 		for _, store := range stores {
 			group, isNS := store.Namespace(names)
-			if isNS && usable(group) && approved(group) {
+			if isNS && usable(group) && approved(c, group) {
 				s.Out.WriteString(strings.Join(slices.Sorted(slices.Values(group.Shortcuts().Keys)), "\n") + "\n")
 			}
 			if _, inMain := store.Main.Shortcuts().Get(names); isNS || inMain {
@@ -55,13 +55,13 @@ func cmdList(s *textio.Streams, args []string) error {
 			}
 		}
 		for _, store := range stores {
-			if approved(store.Main) {
+			if approved(c, store.Main) {
 				for _, n := range slices.Sorted(slices.Values(store.Main.Shortcuts().Keys)) {
 					add(n)
 				}
 			}
 			for _, n := range store.Namespaces {
-				if usable(n.Group) && approved(n.Group) {
+				if usable(n.Group) && approved(c, n.Group) {
 					add(n.Name)
 				}
 			}
@@ -74,7 +74,7 @@ func cmdList(s *textio.Streams, args []string) error {
 
 	globalNames := globalNamesOf(stores)
 	localNames := map[string]bool{}
-	if len(stores) > 1 && approved(stores[0].Main) {
+	if len(stores) > 1 && approved(c, stores[0].Main) {
 		for _, k := range stores[0].Main.Shortcuts().Keys {
 			localNames[k] = true
 		}
@@ -92,7 +92,7 @@ func cmdList(s *textio.Streams, args []string) error {
 
 	sections := 0
 	section := func(title string, g model.Group, prefix string) {
-		state := approval.State(g)
+		state := approval.State(c, g)
 		if sections > 0 {
 			s.Out.WriteString("\n")
 		}
@@ -133,9 +133,9 @@ func cmdList(s *textio.Streams, args []string) error {
 				data = &ordjson.Object{}
 			}
 			desc := textOf(data.Vals["description"])
-			if globalNames[name] && g.NeedsApproval() && g.Name == "" {
+			if globalNames[name] && g.NeedsApproval(c) && g.Name == "" {
 				desc += "  [hides global]"
-			} else if localNames[name] && !g.NeedsApproval() {
+			} else if localNames[name] && !g.NeedsApproval(c) {
 				desc += "  [hidden here by project]"
 			}
 			mode := model.Caller
@@ -163,7 +163,7 @@ func cmdList(s *textio.Streams, args []string) error {
 	}
 
 	for _, store := range stores {
-		if store.Main.NeedsApproval() {
+		if store.Main.NeedsApproval(c) {
 			if len(store.Main.SharedShortcuts().Keys) > 0 || len(store.Main.Shortcuts().Keys) > 0 {
 				section("Project shortcuts ("+store.Main.Key()+")", store.Main, "")
 			}
@@ -173,7 +173,7 @@ func cmdList(s *textio.Streams, args []string) error {
 		for _, n := range store.Namespaces {
 			if usable(n.Group) {
 				hides := ""
-				if n.Group.IsProject() && globalNames[n.Name] {
+				if n.Group.IsProject(c) && globalNames[n.Name] {
 					hides = "  [hides global]"
 				}
 				section("Namespace "+n.Name+" ("+n.Group.File+")"+hides, n.Group, n.Name+" ")

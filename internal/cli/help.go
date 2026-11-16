@@ -10,7 +10,7 @@ var helpFiles embed.FS
 // runUsage is what `run -h` prints, with a newline from print.
 const runUsage = "usage: shortcut run|r [--global] [-y] <name> [args...]\n       shortcut run|r [--global] [-y] <namespace> <name> [args...]"
 
-// helpText is what `shortcut <cmd> -h` and `shortcut help <cmd>` print; cmd is a name in handlers, "r" included.
+// helpText is what `shortcut <cmd> -h` and `shortcut help <cmd>` print; cmd is a name in handlerFor, "r" included.
 func helpText(cmd string) string {
 	if cmd == "run" || cmd == "r" {
 		return runUsage + "\n"

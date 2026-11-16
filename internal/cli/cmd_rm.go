@@ -16,7 +16,7 @@ import (
 // one, and a symlinked scripts folder loses only the link.
 
 // cmdRm removes a shortcut or a namespace.
-func cmdRm(s *textio.Streams, args []string) error {
+func cmdRm(c *model.Context, s *textio.Streams, args []string) error {
 	ns, err := parsers["rm"].Parse(args)
 	if err != nil {
 		return err
@@ -30,30 +30,29 @@ func cmdRm(s *textio.Streams, args []string) error {
 		if ns.Bool("local") {
 			return Die("--namespace takes the namespace alone: shortcut rm --namespace " + ns.Str("namespace"))
 		}
-		return rmNamespace(s, ns.Str("namespace"), ns.Bool("yes"))
+		return rmNamespace(c, s, ns.Str("namespace"), ns.Bool("yes"))
 	}
 	if len(names) == 0 {
 		return argparse.UsageError("rm", "missing name")
 	}
 	if ns.Bool("local") {
-		return rmLocal(s, ns)
+		return rmLocal(c, s, ns)
 	}
 
 	// A project that can't be read might hide the name, so rm doesn't reach past it to a global one
-	cwd, _ := osutil.Getwd()
 	root := ""
 	if !ns.Bool("skipLocal") {
-		root = model.FindProjectRoot(cwd)
+		root = c.Project
 	}
 	if root != "" {
-		if broken := model.LoadProjectGroup(root).Error; broken != nil {
+		if broken := c.Store(root).Main.Error; broken != nil {
 			return Die(*broken + ". Inside this project rm only takes --local until it's fixed; " +
 				"for your own: shortcut rm --global " + osutil.ShellJoin(names))
 		}
 	}
 
 	// Raw lookup: an entry that can't run must still be removable
-	found, err := model.FindEntry(names, cwd, ns.Bool("skipLocal"), false)
+	found, err := model.FindEntry(c, names, ns.Bool("skipLocal"), false)
 	if err != nil {
 		return err
 	}
@@ -62,7 +61,7 @@ func cmdRm(s *textio.Streams, args []string) error {
 	}
 	group, name := found.Group, found.Name
 	display := group.Display(name)
-	if group.IsProject() {
+	if group.IsProject(c) {
 		return Die("'" + display + "' is a project shortcut, and shortcut doesn't change " + model.ProjectFile + ". " +
 			"Edit it by hand, or use: shortcut rm --local " + display)
 	}
@@ -72,7 +71,7 @@ func cmdRm(s *textio.Streams, args []string) error {
 		return err
 	}
 
-	err = lockedGroupWrite(group, func() error {
+	err = lockedGroupWrite(c, group, func() error {
 		reg, shortcuts, err := loadForEdit(group.File, false)
 		if err != nil {
 			return err
@@ -89,12 +88,12 @@ func cmdRm(s *textio.Streams, args []string) error {
 		return err
 	}
 	s.Out.WriteString("Removed shortcut '" + display + "'.\n")
-	noteIfUnapproved(s, group)
+	noteIfUnapproved(c, s, group)
 	return nil
 }
 
 // rmLocal takes a name out of .shortcuts.local, which also undoes an override.
-func rmLocal(s *textio.Streams, ns Namespace) error {
+func rmLocal(c *model.Context, s *textio.Streams, ns Namespace) error {
 	if ns.Bool("skipLocal") {
 		return Die("--local and --global can't be used together")
 	}
@@ -103,12 +102,11 @@ func rmLocal(s *textio.Streams, ns Namespace) error {
 		return Die("--local takes one name: namespaces aren't in " + model.LocalFile)
 	}
 	name := names[0]
-	cwd, _ := osutil.Getwd()
-	root, err := model.LocalProjectRoot(cwd)
+	root, err := c.LocalProjectRoot()
 	if err != nil {
 		return err
 	}
-	group := model.LoadStore(root).Main
+	group := c.Store(root).Main
 	if _, inLocal := group.LocalShortcuts().Get(name); !inLocal {
 		if _, inShared := group.SharedShortcuts().Get(name); inShared {
 			return Die("'" + name + "' isn't in " + model.LocalFile + ", and shortcut doesn't change " + model.ProjectFile)
@@ -119,23 +117,23 @@ func rmLocal(s *textio.Streams, ns Namespace) error {
 		Message: rmLocalMessage(group, name), TellOnYes: true}, ns.Bool("yes")); err != nil {
 		return err
 	}
-	after, err := writeLocal(group.StoreDir, func(shortcuts *ordjson.Object) error {
+	after, err := writeLocal(c, group.StoreDir, func(shortcuts *ordjson.Object) error {
 		shortcuts.Delete(name)
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	noteIfUnapproved(s, after)
+	noteIfUnapproved(c, s, after)
 	s.Out.WriteString("Removed '" + name + "' from " + model.LocalFile + ".\n")
 	return nil
 }
 
 // rmNamespace removes a global namespace, whole. One in imports/ goes with its scripts folder. One that
 // shortcuts.json imports from elsewhere is only no longer imported: its files are someone's own.
-func rmNamespace(s *textio.Streams, name string, assumeYes bool) error {
-	storeDir := model.GlobalStoreDir()
-	store := model.LoadStore(storeDir)
+func rmNamespace(c *model.Context, s *textio.Streams, name string, assumeYes bool) error {
+	storeDir := c.Global
+	store := c.Store(storeDir)
 	group, found := store.Namespace(name)
 	if !found {
 		return Die("no namespace named '" + name + "' in your global store (" + osutil.Join(storeDir, "imports") + ")")
@@ -155,8 +153,8 @@ func rmNamespace(s *textio.Streams, name string, assumeYes bool) error {
 		Message: strings.Join(lines, "\n"), TellOnYes: true}, assumeYes); err != nil {
 		return err
 	}
-	approvalFile := model.ApprovalPath(group) // its key needs the file, so before it goes
-	err := model.WithRegistryLock(storeDir, func() error {
+	approvalFile := c.ApprovalPath(group) // its key needs the file, so before it goes
+	err := c.WithRegistryLock(storeDir, func() error {
 		if listed {
 			reg, err := model.LoadRegistry(storeDir)
 			if err != nil {

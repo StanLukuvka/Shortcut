@@ -49,8 +49,8 @@ func stringMap(v ordjson.Value) (map[string]string, bool) {
 
 // Load returns the record, or nil when there is none, it can't be read, or it isn't shaped as one (a
 // JSON object with a "snapshot" and a "local" object, each holding only 64-character lowercase hex strings).
-func Load(g model.Group) *Record {
-	v, err := model.ReadJSONFile(model.ApprovalPath(g))
+func Load(c *model.Context, g model.Group) *Record {
+	v, err := model.ReadJSONFile(c.ApprovalPath(g))
 	if err != nil {
 		return nil
 	}
@@ -78,21 +78,21 @@ func sortedObject(m map[string]string) *ordjson.Object {
 }
 
 // Save records what was shown and approved, under the global store's lock.
-func Save(g model.Group, shared, local map[string]string) error {
+func Save(c *model.Context, g model.Group, shared, local map[string]string) error {
 	if err := checkPaths(shared); err != nil {
 		return err
 	}
 	if err := checkPaths(local); err != nil {
 		return err
 	}
-	if err := CheckKey(g); err != nil {
+	if err := CheckKey(c, g); err != nil {
 		return err
 	}
 	if !utf8.ValidString(g.Key()) { // a project in a folder whose name is not valid UTF-8: the record could not hold its key
 		return fmt.Errorf("cannot approve: %q is not valid UTF-8; rename it", g.Key())
 	}
-	path := model.ApprovalPath(g)
-	return model.WithRegistryLock(model.GlobalStoreDir(), func() error {
+	path := c.ApprovalPath(g)
+	return c.WithRegistryLock(c.Global, func() error {
 		if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 			return err
 		}
@@ -105,7 +105,7 @@ func Save(g model.Group, shared, local map[string]string) error {
 }
 
 // LocalIsApproved: whether .shortcuts.local matches what the record holds for it.
-func LocalIsApproved(g model.Group, r *Record) bool {
+func LocalIsApproved(c *model.Context, g model.Group, r *Record) bool {
 	var held map[string]string
 	if r != nil {
 		held = r.Local
@@ -116,15 +116,15 @@ func LocalIsApproved(g model.Group, r *Record) bool {
 
 // State returns "ok", "new" (never approved), "changed", or "invalid" (text that is not valid UTF-8 cannot be
 // approved; Require says which). Anything but "ok" means not approved.
-func State(g model.Group) string {
-	if !g.NeedsApproval() {
+func State(c *model.Context, g model.Group) string {
+	if !g.NeedsApproval(c) {
 		return "ok"
 	}
-	shared, local, err := snapshot(g)
+	shared, local, err := snapshot(c, g)
 	if err != nil {
 		return "invalid"
 	}
-	r := Load(g)
+	r := Load(c, g)
 	if r == nil {
 		return "new"
 	}
@@ -138,10 +138,10 @@ func State(g model.Group) string {
 }
 
 // Require returns an error unless the group is approved.
-func Require(g model.Group) error {
-	switch State(g) {
+func Require(c *model.Context, g model.Group) error {
+	switch State(c, g) {
 	case "invalid":
-		return Check(g)
+		return Check(c, g)
 	case "new":
 		return fmt.Errorf("%s isn't approved yet; review it with: %s", g.Label(), g.UpdateCmd())
 	case "changed":

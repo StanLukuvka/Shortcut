@@ -11,16 +11,16 @@ import (
 )
 
 // cmdUpdate reviews changes to project shortcuts and namespaces, and approve them.
-func cmdUpdate(s *textio.Streams, args []string) error {
+func cmdUpdate(c *model.Context, s *textio.Streams, args []string) error {
 	ns, err := parsers["update"].Parse(args)
 	if err != nil {
 		return err
 	}
-	stores := model.VisibleStores("", false)
+	stores := c.Visible(false)
 	var groups []model.Group
 	for _, store := range stores {
 		for _, g := range store.Groups() {
-			if g.NeedsApproval() {
+			if g.NeedsApproval(c) {
 				groups = append(groups, g)
 			}
 		}
@@ -48,9 +48,9 @@ func cmdUpdate(s *textio.Streams, args []string) error {
 		groups = groups[:1]
 	default:
 		keep(func(g model.Group) bool {
-			return g.Error != nil || len(g.Shortcuts().Keys) > 0 || approval.Load(g) != nil
+			return g.Error != nil || len(g.Shortcuts().Keys) > 0 || approval.Load(c, g) != nil
 		})
-		keep(func(g model.Group) bool { return g.Error != nil || approval.State(g) != "ok" })
+		keep(func(g model.Group) bool { return g.Error != nil || approval.State(c, g) != "ok" })
 		if len(groups) == 0 {
 			s.Out.WriteString("Nothing to approve here.\n")
 			return nil
@@ -60,7 +60,7 @@ func cmdUpdate(s *textio.Streams, args []string) error {
 	code := 0
 	named := ns.Str("group") != ""
 	for _, g := range groups {
-		rc, err := approveGroup(s, g, ns.Bool("yes"), globalNames, named)
+		rc, err := approveGroup(c, s, g, ns.Bool("yes"), globalNames, named)
 		if err != nil {
 			return err
 		}
@@ -76,7 +76,7 @@ func cmdUpdate(s *textio.Streams, args []string) error {
 // hashed. globalNames are your global shortcuts and namespaces, which a project's names hide inside it. It returns
 // the exit code; an error is a die (no terminal to ask on, or the record can't be written). A broken group
 // is skipped with a warning (exit 0) unless the group was named, then it is an error (exit 1).
-func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames map[string]bool, named bool) (int, error) {
+func approveGroup(c *model.Context, s *textio.Streams, g model.Group, assumeYes bool, globalNames map[string]bool, named bool) (int, error) {
 	prefix, rc := "warning: skipped ", 0
 	if named {
 		prefix, rc = "error: cannot approve ", 1
@@ -85,7 +85,7 @@ func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames 
 		s.Err.WriteString(prefix + g.Label() + ": " + *g.Error + "\n")
 		return rc, nil
 	}
-	if err := approval.Check(g); err != nil {
+	if err := approval.Check(c, g); err != nil {
 		s.Err.WriteString("error: " + err.Error() + "\n")
 		return 1, nil
 	}
@@ -107,12 +107,12 @@ func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames 
 	}
 	files := maps.Clone(shared)
 	maps.Copy(files, local)
-	if approval.State(g) == "ok" {
+	if approval.State(c, g) == "ok" {
 		s.Out.WriteString(g.Label() + ": already approved, nothing has changed.\n")
 		return 0, nil
 	}
 	old := map[string]string{}
-	if record := approval.Load(g); record != nil {
+	if record := approval.Load(c, g); record != nil {
 		maps.Copy(old, record.Snapshot)
 		maps.Copy(old, record.Local)
 	}
@@ -146,7 +146,7 @@ func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames 
 		}
 	}
 	shortcuts := g.Shortcuts()
-	if g.IsProject() {
+	if g.IsProject(c) {
 		hidden := shortcuts.Keys
 		if g.Name != "" {
 			hidden = []string{g.Name}
@@ -164,7 +164,7 @@ func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames 
 	if !granted {
 		return 1, nil
 	}
-	if err := approval.Save(g, shared, local); err != nil {
+	if err := approval.Save(c, g, shared, local); err != nil {
 		return 0, err
 	}
 	covers := "its definitions"

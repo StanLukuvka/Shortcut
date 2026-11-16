@@ -3,10 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
-	"slices"
-	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 	"github.com/StanLukuvka/Shortcut/internal/osutil"
@@ -123,96 +120,4 @@ func LoadProjectGroup(root string) Group {
 		}
 	}
 	return g
-}
-
-// LoadStore reads a store and its namespaces. It never fails on bad content: that is reported on the Group or the
-// Store, so list, show and rm still work on a broken store.
-// lazy: a folder that can't be listed counts as empty; no test reaches it.
-func LoadStore(storeDir string) Store {
-	isGlobal := IsGlobalStore(storeDir)
-	var main Group
-	if isGlobal {
-		main = LoadGroup(osutil.Join(storeDir, "shortcuts.json"), storeDir, "")
-	} else {
-		main = LoadProjectGroup(storeDir)
-	}
-	var problems []string
-	sources := map[string]string{}
-	importsDir := osutil.Join(storeDir, "imports")
-	if isGlobal && osutil.IsDir(importsDir) {
-		entries, _ := os.ReadDir(importsDir)
-		var names []string
-		for _, e := range entries {
-			names = append(names, e.Name())
-		}
-		for _, filename := range slices.Sorted(slices.Values(names)) {
-			if strings.HasSuffix(filename, ImportSuffix) {
-				sources[strings.TrimSuffix(filename, ImportSuffix)] = osutil.Join(importsDir, filename)
-			}
-		}
-	}
-	if imports, ok := main.Data.Vals["imports"].(*ordjson.Object); ok {
-		for _, name := range imports.Keys {
-			path, isStr := imports.Vals[name].(string)
-			_, taken := sources[name]
-			switch {
-			case !isStr:
-				problems = append(problems, fmt.Sprintf("import '%s' in %s must be a path", name, main.File))
-			case !strings.HasSuffix(path, ImportSuffix):
-				problems = append(problems, fmt.Sprintf("import '%s' in %s must be a %s file", name, main.File, ImportSuffix))
-			case filepath.Base(path) == ImportSuffix:
-				problems = append(problems, fmt.Sprintf("import '%s' in %s: %s", name, main.File, bareImport))
-			case taken:
-				problems = append(problems, fmt.Sprintf("namespace '%s' is imported twice in %s", name, storeDir))
-			default:
-				sources[name] = filepath.Clean(osutil.Join(main.Folder(), osutil.ExpandUser(path)))
-			}
-		}
-	}
-	names := make([]string, 0, len(sources))
-	for n := range sources {
-		names = append(names, n)
-	}
-	var namespaces []NamedGroup
-	mainShortcuts := main.Shortcuts()
-	for _, name := range slices.Sorted(slices.Values(names)) {
-		path := sources[name]
-		g := LoadGroup(path, storeDir, name)
-		if err := ValidateName(name); err != nil {
-			msg := err.Error()
-			if name == "" {
-				msg = fmt.Sprintf("%s: %s", path, bareImport)
-			}
-			g.Error = &msg
-		}
-		namespaces = append(namespaces, NamedGroup{name, g})
-		if _, clash := mainShortcuts.Get(name); clash {
-			problems = append(problems, fmt.Sprintf("'%s' is both a shortcut and a namespace in %s; rename one", name, storeDir))
-		}
-	}
-	return Store{Main: main, Namespaces: namespaces, Problems: problems}
-}
-
-// VisibleStores are the stores a name is looked up in, nearest first.
-func VisibleStores(callerCwd string, skipLocal bool) []Store {
-	var dirs []string
-	if !skipLocal {
-		if root := FindProjectRoot(callerCwd); root != "" {
-			dirs = append(dirs, root)
-		}
-	}
-	dirs = append(dirs, GlobalStoreDir())
-	stores := make([]Store, len(dirs))
-	for i, d := range dirs {
-		stores[i] = LoadStore(d)
-	}
-	return stores
-}
-
-// ReloadGroup reads a group's file(s) again.
-func ReloadGroup(g Group) Group {
-	if g.LocalFile != "" {
-		return LoadProjectGroup(g.StoreDir)
-	}
-	return LoadGroup(g.File, g.StoreDir, g.Name)
 }

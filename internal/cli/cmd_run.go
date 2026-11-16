@@ -17,7 +17,7 @@ import (
 
 // cmdRun runs a shortcut. --global, -y and --yes are the only options it reads, and only before the name; everything
 // after that, -h included, is the shortcut's.
-func cmdRun(s *textio.Streams, args []string) error {
+func cmdRun(c *model.Context, s *textio.Streams, args []string) error {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
 		_, err := s.Out.WriteString(runUsage + "\n")
 		return err
@@ -31,23 +31,22 @@ func cmdRun(s *textio.Streams, args []string) error {
 	if len(args) == 0 {
 		return &ExitError{Code: 2, Stderr: "error: missing shortcut name\n" + runUsage + "\n"}
 	}
-	return runShortcut(s, args, skipLocal, assumeYes)
+	return runShortcut(c, s, args, skipLocal, assumeYes)
 }
 
 func oneLine(text string) string { return strings.ReplaceAll(text, "\n", "\\n") }
 
 // runShortcut handles approval, the confirmation and the child process, which replaces this one.
 // It returns only when something stops the run.
-func runShortcut(s *textio.Streams, words []string, skipLocal, assumeYes bool) error {
-	callerCwd, err := osutil.Getwd()
+func runShortcut(c *model.Context, s *textio.Streams, words []string, skipLocal, assumeYes bool) error {
+	if c.CwdErr != nil {
+		return c.CwdErr
+	}
+	resolved, args, err := model.ResolveShortcut(c, words, skipLocal, true)
 	if err != nil {
 		return err
 	}
-	resolved, args, err := model.ResolveShortcut(words, callerCwd, skipLocal, true)
-	if err != nil {
-		return err
-	}
-	if err := approval.Require(resolved.Group); err != nil {
+	if err := approval.Require(c, resolved.Group); err != nil {
 		return err
 	}
 	entry, name := resolved.Entry, resolved.Display()
@@ -85,7 +84,7 @@ func runShortcut(s *textio.Streams, words []string, skipLocal, assumeYes bool) e
 			return err
 		}
 		// again: the files could change while the question waited
-		if err := approval.Require(resolved.Group); err != nil {
+		if err := approval.Require(c, resolved.Group); err != nil {
 			return err
 		}
 	}
@@ -108,7 +107,7 @@ func runShortcut(s *textio.Streams, words []string, skipLocal, assumeYes bool) e
 		k, _, hasEq := strings.Cut(kv, "=")
 		return !hasEq || k == "SHORTCUT_NAME" || k == "SHORTCUT_NAMESPACE" || k == "SHORTCUT_CALLER_CWD"
 	})
-	env = append(env, "SHORTCUT_NAME="+name, "SHORTCUT_NAMESPACE="+resolved.Group.Name, "SHORTCUT_CALLER_CWD="+callerCwd)
+	env = append(env, "SHORTCUT_NAME="+name, "SHORTCUT_NAMESPACE="+resolved.Group.Name, "SHORTCUT_CALLER_CWD="+c.Cwd)
 	err = osutil.ExecChild(plan.argv, resolved.RunCwd, env)
 	if plan.direct && errors.Is(err, syscall.ENOEXEC) && !bytes.Contains(plan.header, []byte{0}) {
 		// An executable text file with no #!: exec says "exec format error", a shell would run it with itself.
