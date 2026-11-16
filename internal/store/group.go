@@ -4,8 +4,6 @@ import (
 	"maps"
 	"path/filepath"
 	"slices"
-	"strconv"
-	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 )
@@ -95,7 +93,6 @@ type Group struct {
 	Shared    Items        // the entries of Doc
 	Error     *string      // why the file can't be used
 	LocalFile string       // only a project's own group has one
-	LocalDoc  platform.Doc
 	Local     Items
 }
 
@@ -148,7 +145,7 @@ func (g Group) ScriptBase() string {
 	return g.StoreDir
 }
 
-// ScriptsDir is a group's own scripts folder, one per namespace: what rm --namespace deletes and approval covers.
+// ScriptsDir is a group's own scripts folder, one per namespace: what rm --namespace deletes.
 func (g Group) ScriptsDir() string {
 	if g.Kind == KindNamespace {
 		return platform.Join(g.ScriptBase(), "scripts", g.Name)
@@ -163,30 +160,9 @@ func (g Group) Display(name string) string {
 	return name
 }
 
-// Key is what the approval is recorded against: the project's path, or for a namespace the store it's in, its name
-// there and its file. Pointing a name at another file, even one approved elsewhere, is new.
-func (g Group) Key() string {
-	store := platform.Realpath(g.StoreDir)
-	if g.Kind != KindNamespace {
-		return store
-	}
-	return keyText(store, g.Name, platform.Realpath(g.File))
-}
-
 func (g Group) Label() string {
 	if g.Kind == KindNamespace {
 		return g.Name
 	}
-	return g.Key()
-}
-
-// keyText is the text a namespace's approval record is named after: the parts, each strconv.QuoteToASCII-quoted,
-// in brackets. The quoting is injective for any bytes (an invalid byte becomes \xNN, a backslash is escaped) and
-// ASCII only, so two different paths never share a key and a Go upgrade cannot change it.
-func keyText(parts ...string) string {
-	q := make([]string, len(parts))
-	for i, p := range parts {
-		q[i] = strconv.QuoteToASCII(p)
-	}
-	return "[" + strings.Join(q, ", ") + "]"
+	return platform.Realpath(g.StoreDir)
 }

@@ -96,8 +96,8 @@ func Realpath(filename string) string {
 }
 
 // Getwd is the physical cwd from getcwd(2); os.Getwd prefers $PWD, which can name a different folder. Relative
-// paths are resolved against the real folder so store keys and approval hashes do not depend on how the user
-// got there. Nothing outside _test.go may call os.Getwd.
+// paths are resolved against the real folder so a store key does not depend on how the user got
+// there. Nothing outside _test.go may call os.Getwd.
 func Getwd() (string, error) { return syscall.Getwd() }
 
 // Abs joins a relative path to the physical cwd, then cleans it.

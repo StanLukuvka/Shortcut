@@ -113,7 +113,7 @@ func LoadProjectGroup(root string) Group {
 	local := LoadGroup(localPath, root, "")
 	g := shared
 	g.Kind, g.InProject = KindProject, true
-	g.LocalFile, g.LocalDoc, g.Local = localPath, local.Doc, local.Shared
+	g.LocalFile, g.Local = localPath, local.Shared
 	switch {
 	case shared.Error != nil:
 	case local.Error != nil:

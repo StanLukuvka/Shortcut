@@ -4,7 +4,7 @@
 
 Names shell commands and scripts, and runs them from any directory. One binary, no dependencies.
 
-Unlike an alias or a file in `~/bin`, a shortcut can belong to a project and be committed with it, runs only after you've reviewed it, and can set the folder it runs in and a confirm prompt.
+Unlike an alias or a file in `~/bin`, a shortcut can belong to a project and be committed with it, runs only with the dot (`shortcut r . <name>`), and can set the folder it runs in and a confirm prompt.
 
 ## Install
 

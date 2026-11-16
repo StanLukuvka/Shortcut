@@ -4,16 +4,15 @@ Shortcuts for podman containers, run as `shortcut r podman <name>`. `docker` wor
 
 ## Install
 
-Copy `podman.shortcut` and the `scripts/podman/` folder into `~/.shortcuts/imports/`, then approve it:
+Copy `podman.shortcut` and the `scripts/podman/` folder into `~/.shortcuts/imports/`:
 
 ```bash
 mkdir -p ~/.shortcuts/imports/scripts
 cp examples/podman/podman.shortcut ~/.shortcuts/imports/
 cp -r examples/podman/scripts/podman ~/.shortcuts/imports/scripts/
-shortcut update podman
 ```
 
-After changing either there, run `shortcut update podman` again. `shortcut rm --namespace podman` removes it.
+`shortcut rm --namespace podman` removes it.
 
 ## Picking a container
 

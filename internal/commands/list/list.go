@@ -122,7 +122,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	for _, st := range stores {
 		if st.Main.Kind == store.KindProject {
 			if len(st.Main.Shortcuts()) > 0 {
-				section("Project shortcuts ("+st.Main.Key()+"), run with: shortcut r . <name>", st.Main, "")
+				section("Project shortcuts ("+st.Main.Label()+"), run with: shortcut r . <name>", st.Main, "")
 			}
 		} else if len(st.Main.Shortcuts()) > 0 {
 			section("Global shortcuts", st.Main, "")

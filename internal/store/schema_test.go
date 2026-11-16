@@ -113,7 +113,7 @@ func TestSchema_EveryFieldIsAccepted(t *testing.T) {
 	delete(entry, "script")
 	e.WriteImport(e.Store, "ns", map[string]any{"version": 1, "description": "x", "shortcuts": map[string]any{"go": entry}})
 
-	// what `update ns -y` checks before it approves: the file is usable and every entry can run
+	// the file is usable and every entry can run
 	group, ok := NewContext(e.Home, nil).Store(e.Store).Namespace("ns")
 	if !ok {
 		t.Fatal("no namespace ns")

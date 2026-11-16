@@ -121,7 +121,7 @@ func TestRunning_ClosedStdFDsDoNotStopACommand(t *testing.T) {
 }
 
 // The caller's cwd is the physical one, whatever PWD says: SHORTCUT_CALLER_CWD, show --json's run_cwd and the
-// project a run belongs to (the approval is recorded against the real path).
+// project a run belongs to.
 func TestCwd_ASymlinkedCwdIsThePhysicalOne(t *testing.T) {
 	e := testkit.New(t)
 	real := e.Folder("real")

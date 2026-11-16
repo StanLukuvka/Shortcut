@@ -213,7 +213,7 @@ func TestShow_TheDotSelectsTheScope(t *testing.T) {
 	e.RunWith(in, "show", ".").WantCode(t, 2)
 }
 
-// TestShow_ReadsPastABrokenProject: show still works in a broken project; run, rm and update refuse it
+// TestShow_ReadsPastABrokenProject: show still works in a broken project; run and rm refuse it
 // (their own tests).
 func TestShow_ReadsPastABrokenProject(t *testing.T) {
 	e := testkit.New(t)

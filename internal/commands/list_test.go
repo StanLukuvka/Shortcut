@@ -44,7 +44,7 @@ func TestStores_ListNamesOfANamespace(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteImport(e.Store, "docker", testkit.NS(map[string]any{"b": testkit.Inline("true"), "a": testkit.Inline("true")}))
 	if out := e.Run("list", "--names", "docker").Stdout; out != "a\nb\n" {
-		t.Errorf("approved: %q", out)
+		t.Errorf("docker: %q", out)
 	}
 	if out := e.Run("list", "--names", "nothing").Stdout; out != "" {
 		t.Errorf("nothing: %q", out)
