@@ -34,9 +34,9 @@
           "name": "",
           "error": null,
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"files\": {\n    \".shortcuts\": \"b8c0a5733fa7e8d02b3b56879c4c28dba6840a102b61dcb0129e0d0eb0433103\",\n    \"scripts/hi.sh\": \"ea3bf4b4b4b312e437b5e01a3056d9dcc8d7a4d98669f265f6e73d4548618720\",\n    \".shortcuts.local\": \"7e471c946e75ec539ab5c09aaa7d49cd8ca896c9f66b1e6cb308e6c2ebd4479b\"\n  }\n}\n",
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"files\": {\n    \".shortcuts\": \"efe8f760e8e83c80b80a18872036e0c3294ec34d3d6c5b3b3501382e6a201bc9\",\n    \"scripts/hi.sh\": \"ea3bf4b4b4b312e437b5e01a3056d9dcc8d7a4d98669f265f6e73d4548618720\",\n    \".shortcuts.local\": \"7e471c946e75ec539ab5c09aaa7d49cd8ca896c9f66b1e6cb308e6c2ebd4479b\"\n  }\n}\n",
           "files": {
-            ".shortcuts": "b8c0a5733fa7e8d02b3b56879c4c28dba6840a102b61dcb0129e0d0eb0433103",
+            ".shortcuts": "efe8f760e8e83c80b80a18872036e0c3294ec34d3d6c5b3b3501382e6a201bc9",
             "scripts/hi.sh": "ea3bf4b4b4b312e437b5e01a3056d9dcc8d7a4d98669f265f6e73d4548618720",
             ".shortcuts.local": "7e471c946e75ec539ab5c09aaa7d49cd8ca896c9f66b1e6cb308e6c2ebd4479b"
           }
@@ -155,9 +155,9 @@
           "name": "",
           "error": null,
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"files\": {\n    \".shortcuts\": \"cdad4c440b23a56dbdfeb5eb05b6fd58edf158e65aa096a88db3dfa57f302c82\",\n    \"bad.sh\": \"dd1284d090313958484127c39a687db402f3a7a8017f2616d9048ece12b6d516\",\n    \"crlf.sh\": \"e1c9dfdebf943ec05e4e4e7d16b14840806c84890478b5f173da0999224384b3\",\n    \"bin/prog\": \"2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\",\n    \"empty.sh\": \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\n    \"marked.sh\": \"c8e36cf1d96ddb4263536f924a0ac802350e56d0137c306103e01af45496415f\",\n    \"caf\u00e9.sh\": \"0b6eb29672b53f43e87dc11fe2324de21680b606170eceff5136f880cd4892de\"\n  }\n}\n",
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"files\": {\n    \".shortcuts\": \"1d69e8f5b8696777c9757f87404a8b6dede9c0d7b1531bee1c2d8336ab43d8de\",\n    \"bad.sh\": \"dd1284d090313958484127c39a687db402f3a7a8017f2616d9048ece12b6d516\",\n    \"crlf.sh\": \"e1c9dfdebf943ec05e4e4e7d16b14840806c84890478b5f173da0999224384b3\",\n    \"bin/prog\": \"2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d\",\n    \"empty.sh\": \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\n    \"marked.sh\": \"c8e36cf1d96ddb4263536f924a0ac802350e56d0137c306103e01af45496415f\",\n    \"caf\u00e9.sh\": \"0b6eb29672b53f43e87dc11fe2324de21680b606170eceff5136f880cd4892de\"\n  }\n}\n",
           "files": {
-            ".shortcuts": "cdad4c440b23a56dbdfeb5eb05b6fd58edf158e65aa096a88db3dfa57f302c82",
+            ".shortcuts": "1d69e8f5b8696777c9757f87404a8b6dede9c0d7b1531bee1c2d8336ab43d8de",
             "bad.sh": "dd1284d090313958484127c39a687db402f3a7a8017f2616d9048ece12b6d516",
             "crlf.sh": "e1c9dfdebf943ec05e4e4e7d16b14840806c84890478b5f173da0999224384b3",
             "bin/prog": "2c6e9024ce9dd8289d7b6b94729f02bdc4a4330dab2dfc8bb057b69b66b88e4d",
@@ -184,9 +184,9 @@
           "name": "",
           "error": "/tmp/golden/trees/t04/.shortcuts has an unknown field: extra",
           "key_template": "@ROOT@",
-          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"files\": {\n    \".shortcuts\": \"39c59986fa97de1609b19aa8b24c895660041d5c29eb60a8dd6e96a8f5d63506\"\n  }\n}\n",
+          "record_template": "{\n  \"key\": \"@ROOT@\",\n  \"files\": {\n    \".shortcuts\": \"6020582ebd85c3c268127effc0a0ba5e6381c458d4dd66aac1c80ef607467688\"\n  }\n}\n",
           "files": {
-            ".shortcuts": "39c59986fa97de1609b19aa8b24c895660041d5c29eb60a8dd6e96a8f5d63506"
+            ".shortcuts": "6020582ebd85c3c268127effc0a0ba5e6381c458d4dd66aac1c80ef607467688"
           }
         }
       ]

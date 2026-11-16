@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -172,7 +173,7 @@ func (c *Context) loadStore(storeDir string) Store {
 		}
 	}
 	if imports, ok := main.Doc.Object("imports"); ok {
-		for _, name := range imports.Keys {
+		for _, name := range slices.Sorted(maps.Keys(imports)) {
 			path, isStr := imports.String(name)
 			_, taken := sources[name]
 			switch {

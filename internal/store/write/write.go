@@ -26,16 +26,16 @@ func NoteNeedsApproval(s *term.Streams, g store.Group) {
 
 // LoadForEdit is the registry at path, or a fresh one when isNew, with its "shortcuts" object. A "shortcuts" that is
 // not an object is refused.
-func LoadForEdit(path string, isNew bool) (reg, shortcuts *platform.Doc, err error) {
+func LoadForEdit(path string, isNew bool) (reg, shortcuts platform.Doc, err error) {
 	if isNew {
-		reg = &platform.Doc{}
-		reg.Set("version", []byte(strconv.Itoa(store.RegistryVersion)))
-		reg.Set("shortcuts", []byte("{}"))
+		reg = platform.Doc{}
+		reg["version"] = []byte(strconv.Itoa(store.RegistryVersion))
+		reg["shortcuts"] = []byte("{}")
 	} else if reg, err = store.LoadRegistryFile(path); err != nil {
 		return nil, nil, err
 	}
 	if !reg.Has("shortcuts") {
-		return reg, &platform.Doc{}, nil
+		return reg, platform.Doc{}, nil
 	}
 	shortcuts, ok := reg.Object("shortcuts")
 	if !ok {
@@ -45,12 +45,12 @@ func LoadForEdit(path string, isNew bool) (reg, shortcuts *platform.Doc, err err
 }
 
 // SaveEdited writes reg with shortcuts, the copy LoadForEdit gave, put back in it.
-func SaveEdited(path string, reg, shortcuts *platform.Doc) error {
+func SaveEdited(path string, reg, shortcuts platform.Doc) error {
 	raw, err := shortcuts.Bytes()
 	if err != nil {
 		return err
 	}
-	reg.Set("shortcuts", raw)
+	reg["shortcuts"] = raw
 	return store.SaveRegistryFile(path, reg)
 }
 
@@ -58,7 +58,7 @@ func SaveEdited(path string, reg, shortcuts *platform.Doc) error {
 func Register(c *store.Context, s *term.Streams, group store.Group, entry *store.Entry) error {
 	storeDir := group.StoreDir
 	if group.Kind == store.KindProject {
-		change := func(shortcuts *platform.Doc) error {
+		change := func(shortcuts platform.Doc) error {
 			if shortcuts.Has(entry.Name) {
 				return term.Die("shortcut '" + entry.Name + "' already exists in " + group.LocalFile)
 			}
@@ -69,7 +69,7 @@ func Register(c *store.Context, s *term.Streams, group store.Group, entry *store
 			if err != nil {
 				return err
 			}
-			shortcuts.Set(entry.Name, raw)
+			shortcuts[entry.Name] = raw
 			return nil
 		}
 		if err := WriteLocal(c, storeDir, change); err != nil {
@@ -103,7 +103,7 @@ func Register(c *store.Context, s *term.Streams, group store.Group, entry *store
 		if err != nil {
 			return err
 		}
-		shortcuts.Set(entry.Name, raw)
+		shortcuts[entry.Name] = raw
 		if err := os.MkdirAll(filepath.Dir(group.File), 0o777); err != nil {
 			return err
 		}
@@ -117,7 +117,7 @@ func Register(c *store.Context, s *term.Streams, group store.Group, entry *store
 }
 
 // WriteLocal changes .shortcuts.local through change(shortcuts), the only way shortcut writes to a project.
-func WriteLocal(c *store.Context, root string, change func(*platform.Doc) error) error {
+func WriteLocal(c *store.Context, root string, change func(platform.Doc) error) error {
 	return c.WithLock(func() error {
 		path := store.LoadProjectGroup(root).LocalFile
 		isNewFile := !platform.Exists(path)

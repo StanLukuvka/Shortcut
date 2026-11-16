@@ -3,6 +3,7 @@ package store
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -44,7 +45,7 @@ type Item struct {
 	Name  string
 	Entry *Entry // nil unless the value is an object; fields of the right type are set even when Err is not nil
 	Err   error  // why the entry cannot run, nil for a valid entry
-	Raw   []byte // the value as written, compact: show --json prints it
+	Raw   []byte // the value as written: show --json prints it
 }
 
 // Items are the entries of one file, in file order.
@@ -68,12 +69,12 @@ func (is Items) Names() []string {
 }
 
 // ItemsOf decodes d["shortcuts"] when it is an object; otherwise there are none.
-func ItemsOf(d *platform.Doc) Items {
+func ItemsOf(d platform.Doc) Items {
 	shortcuts, _ := d.Object("shortcuts")
 	var items Items
-	for _, k := range shortcuts.Keys {
-		e, err := DecodeEntry(k, shortcuts.Raw[k])
-		items = append(items, Item{Name: k, Entry: e, Err: err, Raw: shortcuts.Raw[k]})
+	for _, k := range slices.Sorted(maps.Keys(shortcuts)) {
+		e, err := DecodeEntry(k, shortcuts[k])
+		items = append(items, Item{Name: k, Entry: e, Err: err, Raw: shortcuts[k]})
 	}
 	return items
 }
@@ -88,7 +89,7 @@ func (it Item) Text(field string) string {
 	if s, ok := d.String(field); ok {
 		return s
 	}
-	if raw := string(d.Raw[field]); raw != "null" {
+	if raw := string(d[field]); raw != "null" {
 		return raw
 	}
 	return ""
@@ -102,11 +103,11 @@ type Group struct {
 	Name      string // namespace name; "" otherwise
 	File      string
 	StoreDir  string
-	Doc       *platform.Doc // empty when the file is missing or unreadable
-	Shared    Items         // the entries of Doc
-	Error     *string       // why the file can't be used
-	LocalFile string        // only a project's own group has one
-	LocalDoc  *platform.Doc
+	Doc       platform.Doc // empty when the file is missing or unreadable
+	Shared    Items        // the entries of Doc
+	Error     *string      // why the file can't be used
+	LocalFile string       // only a project's own group has one
+	LocalDoc  platform.Doc
 	Local     Items
 }
 

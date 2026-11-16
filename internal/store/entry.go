@@ -57,7 +57,7 @@ func DecodeEntry(name string, raw []byte) (*Entry, error) {
 	// An ignored field could be a safety setting from a newer version, so never ignore one
 	fields := Fields()
 	var unknown []string
-	for _, k := range data.Keys {
+	for k := range data {
 		if !slices.ContainsFunc(fields, func(f Field) bool { return f.Name == k }) {
 			unknown = append(unknown, k)
 		}
@@ -72,10 +72,10 @@ func DecodeEntry(name string, raw []byte) (*Entry, error) {
 			continue
 		}
 		s, isString := data.String(f.Name)
-		isTrue := string(data.Raw[f.Name]) == "true"
+		isTrue := string(data[f.Name]) == "true"
 		typed := isString
 		if f.Type == "boolean" {
-			typed = isTrue || string(data.Raw[f.Name]) == "false"
+			typed = isTrue || string(data[f.Name]) == "false"
 		}
 		switch {
 		case !typed:
@@ -106,7 +106,7 @@ func DecodeEntry(name string, raw []byte) (*Entry, error) {
 // Raw is the entry as an object's text, its fields in table order: description always, the others when set.
 func (e *Entry) Raw() ([]byte, error) {
 	text := map[string]*string{"inline": e.Inline, "script": e.Script, "cwd": e.Cwd}
-	d := &platform.Doc{}
+	d := platform.Doc{}
 	for _, f := range Fields() {
 		switch {
 		case f.Name == "description":
@@ -115,7 +115,7 @@ func (e *Entry) Raw() ([]byte, error) {
 			}
 		case f.Name == "confirm":
 			if e.Confirm {
-				d.Set(f.Name, []byte("true"))
+				d[f.Name] = []byte("true")
 			}
 		case text[f.Name] != nil:
 			if err := d.SetString(f.Name, *text[f.Name]); err != nil {

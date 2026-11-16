@@ -555,7 +555,7 @@ const recordWithExtraField = `{
 `
 
 func extraFieldRecord(root string) string {
-	r := strings.NewReplacer("@ROOT@", root, "@SHORTCUTS@", sum("{\n  \"shortcuts\": {\n    \"t\": {\n      \"script\": \"bin/t\"\n    }\n  },\n  \"version\": 1\n}\n"), "@BINT@", sum("echo one\n"))
+	r := strings.NewReplacer("@ROOT@", root, "@SHORTCUTS@", sum(string(must(os.ReadFile(filepath.Join(root, ".shortcuts"))))), "@BINT@", sum("echo one\n"))
 	return r.Replace(recordWithExtraField)
 }
 

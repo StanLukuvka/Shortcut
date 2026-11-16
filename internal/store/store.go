@@ -52,7 +52,7 @@ func LoadGroup(path, storeDir, name string) Group {
 	if name != "" {
 		kind = KindNamespace
 	}
-	g := Group{Kind: kind, Name: name, File: path, StoreDir: storeDir, Doc: &platform.Doc{}}
+	g := Group{Kind: kind, Name: name, File: path, StoreDir: storeDir, Doc: platform.Doc{}}
 	data, err := LoadRegistryFile(path)
 	var missing *RegistryNotFoundError
 	switch {

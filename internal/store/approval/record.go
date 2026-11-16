@@ -31,13 +31,13 @@ func isDigest(s string) bool {
 }
 
 // digests reads an object whose values are all digests.
-func digests(d *platform.Doc, key string) (map[string]string, bool) {
+func digests(d platform.Doc, key string) (map[string]string, bool) {
 	o, ok := d.Object(key)
 	if !ok {
 		return nil, false
 	}
-	m := make(map[string]string, len(o.Keys))
-	for _, k := range o.Keys {
+	m := make(map[string]string, len(o))
+	for k := range o {
 		s, ok := o.String(k)
 		if !ok || !isDigest(s) {
 			return nil, false
@@ -68,7 +68,7 @@ func Load(c *store.Context, g store.Group) *Record {
 
 // mapDoc is m as an object's text, its keys sorted: readers sort, so the order is free, and sorted is stable.
 func mapDoc(m map[string]string) ([]byte, error) {
-	d := &platform.Doc{}
+	d := platform.Doc{}
 	for _, k := range slices.Sorted(maps.Keys(m)) {
 		if err := d.SetString(k, m[k]); err != nil {
 			return nil, err
@@ -93,7 +93,7 @@ func Save(c *store.Context, g store.Group, files map[string]string) error {
 		if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 			return err
 		}
-		rec := &platform.Doc{}
+		rec := platform.Doc{}
 		if err := rec.SetString("key", g.Key()); err != nil {
 			return err
 		}
@@ -101,7 +101,7 @@ func Save(c *store.Context, g store.Group, files map[string]string) error {
 		if err != nil {
 			return err
 		}
-		rec.Set("files", doc)
+		rec["files"] = doc
 		if err := platform.WriteJSONAtomic(path, rec); err != nil {
 			return err
 		}

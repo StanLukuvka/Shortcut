@@ -56,7 +56,7 @@ CI also checks `gofmt` and runs `go vet ./...`.
 - `internal/commands/`: `commands.go` is the command table, from which `dispatch.go`, each command's parser and the usage and help text (`help.go`, `term`) are read. Each command is a package below it: `run/`, `new/`, `list/`, `show/`, `rm/`, `update/` and `completion/` (which holds the bash, zsh and fish scripts). No command imports another command.
 - `internal/store/`: store files, entries, groups, lookup and the run's context. It never prints. `approval/` is what a project or namespace is approved for, and the approval records, which hold one SHA-256 per file. `write/` is everything that changes a store: adding an entry and the registry lock.
 - `internal/term/`: printed text and questions, the exit error and `Die` that commands share, and the description of a command that its parser, usage line and help are read from. `argparse/` is the argument parser; it imports nothing of this repository.
-- `internal/platform/`: the parts of the standard library's file, process, lock and JSON behaviour that shortcut's output depends on, including ordered JSON that refuses text that is not valid UTF-8. It imports nothing of this repository.
+- `internal/platform/`: the parts of the standard library's file, process, lock and JSON behaviour that shortcut's output depends on, including JSON read as `map[string]json.RawMessage` and written with sorted keys, which refuses text that is not valid UTF-8. It imports nothing of this repository.
 - `internal/testkit/`: the test sandbox and helpers. A package's frozen golden data is in its own `testdata/` folder.
 - `installer/`: `install.sh` and its tests.
 - `examples/`: namespaces to copy from.

@@ -30,20 +30,20 @@ func RegistryExists(storeDir string) bool {
 	return platform.IsFile(platform.Join(storeDir, "shortcuts.json"))
 }
 
-func emptyRegistry() *platform.Doc {
-	d := &platform.Doc{}
-	d.Set("version", []byte(strconv.Itoa(RegistryVersion)))
-	d.Set("shortcuts", []byte("{}"))
+func emptyRegistry() platform.Doc {
+	d := platform.Doc{}
+	d["version"] = []byte(strconv.Itoa(RegistryVersion))
+	d["shortcuts"] = []byte("{}")
 	return d
 }
 
 // LoadRegistryFile reads a registry file, with fixed messages.
-func LoadRegistryFile(path string) (*platform.Doc, error) {
+func LoadRegistryFile(path string) (platform.Doc, error) {
 	if !platform.IsFile(path) {
 		return nil, &RegistryNotFoundError{path}
 	}
 	text, err := platform.ReadJSONFile(path)
-	var data *platform.Doc
+	var data platform.Doc
 	if err == nil {
 		data, err = platform.ParseDoc(text)
 	}
@@ -53,7 +53,7 @@ func LoadRegistryFile(path string) (*platform.Doc, error) {
 		}
 		return nil, err
 	}
-	version, present := data.Raw["version"]
+	version, present := data["version"]
 	if !present {
 		return nil, fmt.Errorf("%s needs \"version\": %d", path, RegistryVersion)
 	}
@@ -70,12 +70,12 @@ func LoadRegistryFile(path string) (*platform.Doc, error) {
 	return data, nil
 }
 
-func LoadRegistry(storeDir string) (*platform.Doc, error) {
+func LoadRegistry(storeDir string) (platform.Doc, error) {
 	return LoadRegistryFile(platform.Join(storeDir, "shortcuts.json"))
 }
 
 // SaveRegistryFile refuses to write over a file it can't read.
-func SaveRegistryFile(path string, data *platform.Doc) error {
+func SaveRegistryFile(path string, data platform.Doc) error {
 	if platform.IsFile(path) {
 		if _, err := platform.ReadJSONFile(path); err != nil {
 			return fmt.Errorf("cannot overwrite corrupt registry %s: %s", path, err)
@@ -84,7 +84,7 @@ func SaveRegistryFile(path string, data *platform.Doc) error {
 	return platform.WriteJSONAtomic(path, data)
 }
 
-func SaveRegistryAtomic(storeDir string, data *platform.Doc) error {
+func SaveRegistryAtomic(storeDir string, data platform.Doc) error {
 	if err := os.MkdirAll(storeDir, 0o777); err != nil {
 		return err
 	}
@@ -117,7 +117,7 @@ func ResolveScriptPath(baseDir, scriptField string) (string, error) {
 
 // fileError returns what's wrong with a file as a whole ("" = nothing); EntryErrors checks what's inside
 // 'shortcuts'. name is the namespace's, or "" for a main file.
-func fileError(path string, data *platform.Doc, name string) string {
+func fileError(path string, data platform.Doc, name string) string {
 	known := map[string]bool{"version": true, "description": true, "shortcuts": true}
 	if name != "" {
 		if data.Has("imports") {
@@ -136,7 +136,7 @@ func fileError(path string, data *platform.Doc, name string) string {
 		return fmt.Sprintf("corrupt registry %s: 'description' must be a string", path)
 	}
 	var unknown []string
-	for _, k := range data.Keys {
+	for k := range data {
 		if !known[k] {
 			unknown = append(unknown, k)
 		}
