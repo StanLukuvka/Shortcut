@@ -2,7 +2,7 @@
 
 _shortcut() {
     local -a subcommands
-    subcommands=(run r new list show rm promote update completion help)
+    subcommands=(run r new list show rm update completion help)
 
     if (( CURRENT == 2 )); then
         compadd -- $subcommands
@@ -10,7 +10,7 @@ _shortcut() {
     fi
 
     case $words[2] in
-        run|r|show|rm|promote)
+        run|r|show|rm)
             local -a typed
             typed=(${words[3,CURRENT-1]:#-*})
             if (( $#typed == 0 )) && [[ $PREFIX == -* ]]; then
@@ -18,7 +18,6 @@ _shortcut() {
                     run|r) compadd -- --global -y ;;
                     rm) compadd -- --global --local --namespace -y ;;
                     show) compadd -- --global --json --field ;;
-                    promote) compadd -- --as -y --force ;;
                     *) compadd -- --global ;;
                 esac
             elif (( $#typed <= 1 )); then

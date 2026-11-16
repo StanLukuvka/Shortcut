@@ -6,7 +6,6 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
@@ -143,16 +142,6 @@ func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames 
 			if globalNames[name] {
 				s.Out.WriteString("Inside this project, '" + name + "' hides your global '" + name + "'.\n")
 			}
-		}
-	}
-	for _, name := range slices.Sorted(slices.Values(shortcuts.Keys)) {
-		data, ok := shortcuts.Vals[name].(*ordjson.Object)
-		if !ok {
-			continue
-		}
-		cwd, isStr := data.Vals["cwd"].(string)
-		if exported, _ := data.Vals["export"].(bool); exported && isStr && model.IsRelativeCwd(&cwd) {
-			s.Err.WriteString("warning: '" + name + "' is exported, but its cwd '" + cwd + "' only exists in this checkout\n")
 		}
 	}
 	granted, err := approval.ConfirmReview("approve", old, files, "approve "+g.Label()+" in a terminal, or pass -y").Granted(s, assumeYes)

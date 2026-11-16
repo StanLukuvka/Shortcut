@@ -22,9 +22,6 @@ const (
 	approvalsDir    = "approvals"
 )
 
-// Origin is "from" in JSON: the project promote took an entry from. Global shortcuts.json only.
-type Origin struct{ Source, Name string }
-
 // Entry is one shortcut's definition.
 type Entry struct {
 	Name                          string
@@ -32,14 +29,13 @@ type Entry struct {
 	Inline                        *string // exactly one of Inline and Script is non-nil
 	Script                        *string
 	Cwd, Icon, CreatedBy, Created *string
-	Confirm, Export               bool
+	Confirm                       bool
 	Args                          []*ordjson.Object // nil = field absent; kept raw so key order round-trips
-	Origin                        *Origin
 }
 
 var knownFields = map[string]bool{
 	"description": true, "inline": true, "script": true, "cwd": true, "icon": true, "created_by": true,
-	"created": true, "confirm": true, "export": true, "args": true, "from": true,
+	"created": true, "confirm": true, "args": true,
 }
 
 var textFields = []string{"inline", "script", "cwd", "icon", "created_by", "created"}
@@ -81,15 +77,13 @@ func EntryFromValue(name string, v ordjson.Value) (*Entry, error) {
 		}
 		texts[f] = &s
 	}
-	flags := map[string]bool{}
-	for _, f := range []string{"confirm", "export"} {
-		if val, present := data.Get(f); present {
-			b, isBool := val.(bool)
-			if !isBool {
-				return nil, bad(fmt.Sprintf("'%s' must be a boolean", f))
-			}
-			flags[f] = b
+	confirm := false
+	if val, present := data.Get("confirm"); present {
+		b, isBool := val.(bool)
+		if !isBool {
+			return nil, bad("'confirm' must be a boolean")
 		}
+		confirm = b
 	}
 	if (texts["inline"] == nil) == (texts["script"] == nil) {
 		return nil, bad("it needs exactly one of 'inline' and 'script'")
@@ -104,27 +98,13 @@ func EntryFromValue(name string, v ordjson.Value) (*Entry, error) {
 			e.Args[i] = a.(*ordjson.Object)
 		}
 	}
-	if o, present := data.Get("from"); present {
-		obj, isObj := o.(*ordjson.Object)
-		var src, nm string
-		okFrom := isObj && len(obj.Keys) == 2
-		if okFrom {
-			s, ok1 := obj.Vals["source"].(string)
-			n, ok2 := obj.Vals["name"].(string)
-			src, nm, okFrom = s, n, ok1 && ok2
-		}
-		if !okFrom {
-			return nil, bad("'from' must be an object with a string 'source' and 'name'")
-		}
-		e.Origin = &Origin{Source: src, Name: nm}
-	}
 	e.Inline, e.Script, e.Cwd, e.Icon, e.CreatedBy, e.Created =
 		texts["inline"], texts["script"], texts["cwd"], texts["icon"], texts["created_by"], texts["created"]
-	e.Confirm, e.Export = flags["confirm"], flags["export"]
+	e.Confirm = confirm
 	return e, nil
 }
 
-// ToObject returns the entry as an object: description, then the text fields that are set, confirm, export, args, from.
+// ToObject returns the entry as an object: description, then the text fields that are set, confirm, args.
 func (e *Entry) ToObject() *ordjson.Object {
 	o := &ordjson.Object{}
 	o.Set("description", e.Description)
@@ -136,21 +116,12 @@ func (e *Entry) ToObject() *ordjson.Object {
 	if e.Confirm {
 		o.Set("confirm", true)
 	}
-	if e.Export {
-		o.Set("export", true)
-	}
 	if e.Args != nil {
 		list := make([]ordjson.Value, len(e.Args))
 		for i, a := range e.Args {
 			list[i] = a
 		}
 		o.Set("args", list)
-	}
-	if e.Origin != nil {
-		from := &ordjson.Object{}
-		from.Set("source", e.Origin.Source)
-		from.Set("name", e.Origin.Name)
-		o.Set("from", from)
 	}
 	return o
 }
@@ -232,16 +203,4 @@ func ValidateArgs(name string, args ordjson.Value) error {
 // IsRelativeCwd: a cwd that means a folder next to the file defining it, so it's only right in that checkout.
 func IsRelativeCwd(cwd *string) bool {
 	return cwd != nil && *cwd != "" && *cwd != Caller && !strings.HasPrefix(osutil.ExpandUser(*cwd), "/")
-}
-
-// PlacementError reports fields only some files can have ('export' a project's own, 'from' the global
-// store's shortcuts.json). "" = none.
-func PlacementError(e *Entry, inProject, inGlobal bool) string {
-	if e.Export && !inProject {
-		return fmt.Sprintf("'%s' is not a valid entry: 'export' is only for %s and %s", e.Name, ProjectFile, LocalFile)
-	}
-	if e.Origin != nil && !inGlobal {
-		return fmt.Sprintf("'%s' is not a valid entry: 'from' is only for the global store's shortcuts.json", e.Name)
-	}
-	return ""
 }

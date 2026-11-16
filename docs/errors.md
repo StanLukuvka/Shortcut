@@ -73,9 +73,8 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `unknown field: <fields>` | |
 | `'description' must be a string` | |
 | `'<field>' must be a string` | `inline`, `script`, `cwd`, `icon`, `created_by` or `created`. A `null` counts as the wrong type |
-| `'<field>' must be a boolean` | `confirm` or `export` |
+| `'confirm' must be a boolean` | |
 | `it needs exactly one of 'inline' and 'script'` | |
-| `'from' must be an object with a string 'source' and 'name'` | A `null` counts as the wrong type |
 | `script not found: <script>` | The entry's script file is missing |
 | `'args' must be a list` | A `null` counts as the wrong type |
 | `every entry in 'args' needs a 'name' (letters, digits, _ and -)` | |
@@ -175,18 +174,6 @@ A new local shortcut needs a project folder:
 | `no namespace named '<ns>' in your global store (<store>/imports)` | `rm --namespace` removes only global namespaces |
 | `remove namespace '<ns>' in a terminal, or pass -y` | |
 | `remove '<name>' in a terminal, or pass -y` | No terminal to ask in. `rm --local` says `<verb> '<name>' ...` with what it would do |
-
-## promote
-
-| Message | Meaning |
-|---|---|
-| `promote runs inside a project: there's no .shortcuts or .shortcuts.local here or above` | |
-| `'<name>' isn't a project shortcut here` | |
-| `'<name>' is marked project-only; promote anyway with --force` | The entry has no `"export": true` |
-| `you already have a global '<name>'; give this one another name: shortcut promote <name> --as NEW` | |
-| `you already have a global '<new>'` | The name given to `--as` is taken |
-| `--as can't be empty` | |
-| `promote '<name>' in a terminal, or pass -y` | |
 
 ## update
 

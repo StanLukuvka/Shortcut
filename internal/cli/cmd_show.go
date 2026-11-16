@@ -74,12 +74,6 @@ func cmdShow(s *textio.Streams, args []string) error {
 	if entry.Confirm {
 		out("Confirm:     yes")
 	}
-	if entry.Export {
-		out("Export:      yes")
-	}
-	if entry.Origin != nil {
-		out("From:        '" + entry.Origin.Name + "' in " + entry.Origin.Source)
-	}
 	optLine := func(label string, p *string) {
 		if p != nil && *p != "" {
 			out(label + *p)
@@ -204,7 +198,7 @@ func showObject(words []string, skipLocal bool) (*ordjson.Object, error) {
 		out.Set(k, nil)
 	}
 	out.Set("entry", f.Raw)
-	entry, err := model.LoadEntry(g, name, f.Raw)
+	entry, err := model.EntryFromValue(name, f.Raw)
 	if err == nil {
 		if entry.Cwd != nil {
 			out.Set("cwd", *entry.Cwd)

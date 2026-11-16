@@ -101,10 +101,6 @@ shortcut rm --local <name>            undo your override, or hide a shared entry
 shortcut rm --namespace <ns> [-y]     remove a global namespace and its scripts/<ns>/ folder; one imported
                                       from elsewhere is only no longer imported
 
-shortcut promote <name> [-y]          make an approved, exported project shortcut one of your global ones
-shortcut promote <name> --as NEW      the same, under another global name
-shortcut promote <name> --force       one that isn't exported
-
 shortcut update [ns|.] [-y]           review and approve
 shortcut completion bash|zsh|fish
 shortcut help [command]
@@ -131,8 +127,6 @@ Flags for `new`:
 
 `show --field KEY` prints one field of that object bare, or of the entry (`description`, `icon`, `created_by`, `created`, `inline`, `script`); `true` and `false` print as words, and a null or absent field prints nothing. It only reads: it never approves. `show --json` prints one object: `name`, `namespace`, `scope`, `defined_in`, `source`, `hides_global`, `approval`, `cwd`, `run_cwd`, `script_path`, `error`, and `entry` as written. A field that can't be worked out is null.
 
-`promote` copies the entry, not its script. A relative `script` or `cwd` becomes its absolute path in this checkout, and `from` records the project and the original name. It runs the checkout's files as they are now. If the checkout moves or is deleted, it fails with script not found or run directory does not exist.
-
 ## Projects and approval
 
 - The project is the nearest folder, walking up, with `.shortcuts` or `.shortcuts.local`. Only that one is read, also inside another project.
@@ -140,7 +134,6 @@ Flags for `new`:
 - Inside a project, its shortcuts and namespaces hide your global ones of the same name. `update`, `list`, `show` and `run` say so, and `shortcut r --global <name>` runs yours.
 - Relative `script` and `cwd` paths resolve from the folder holding the file.
 - A namespace file is `<name>.shortcut`, such as `docker.shortcut`. A bare `.shortcut` is an error.
-- `"export": true` on a project entry marks it as made to work outside the repo. `shortcut update` warns if its `cwd` is relative. Only `.shortcuts` and `.shortcuts.local` can export.
 - Projects and namespaces run only after `shortcut update`. A namespace name pointed at another file needs approving again. Global shortcuts need no approval.
 - What the CLI writes keeps an approval that held before. So `new --local` in a folder with no `.shortcuts`, or with an approved one, runs at once. A namespace made with `new --namespace` needs `shortcut update <ns>` once, and after that `new` and `rm` keep it approved. A change made by hand needs `shortcut update`.
 - If a project's file can't be read, nothing runs inside the project until it's fixed, and `rm` there only takes `--local`. `--global` reaches your own shortcuts.
@@ -192,7 +185,6 @@ PAGER                 pages long update diffs
 > 3. Approval covers definitions and the scripts they name, not the programs those call.
 > 4. Global shortcuts have no approval step, so a global link target can change freely.
 > 5. Anyone who can write to your shortcut store can already run code as you; that's out of scope.
-> 6. A promoted shortcut runs the project's files as they are now. If you want something immutable, don't take it from a repo.
 
 ## More
 

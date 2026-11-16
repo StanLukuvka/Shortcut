@@ -114,7 +114,6 @@ func argFields(t *testing.T) []string {
 
 func TestSchema_FieldsMatchTheCode(t *testing.T) {
 	s := loadSchema(t)
-	// origin is written "from" in JSON, and Entry's own fields are knownFields
 	if got, want := sortedKeys(s.Defs.Entry.Properties), sortedKeys(knownFields); !slices.Equal(got, want) {
 		t.Errorf("entry: schema %v, code %v", got, want)
 	}
@@ -139,19 +138,12 @@ func TestSchema_FormatMatchesTheCode(t *testing.T) {
 
 var schemaSamples = map[string]any{"string": "x", "boolean": true, "array": []any{}}
 
-var restricted = map[string]string{
-	"export": "Only allowed in .shortcuts and .shortcuts.local",
-	"from":   "Only allowed in the global store's shortcuts.json",
-}
-
 func TestSchema_EveryFieldIsAccepted(t *testing.T) {
 	e := testkit.New(t)
 	s := loadSchema(t)
 	entry := map[string]any{}
 	for k, v := range s.Defs.Entry.Properties {
-		if _, no := restricted[k]; !no {
-			entry[k] = schemaSamples[v.Type]
-		}
+		entry[k] = schemaSamples[v.Type]
 	}
 	delete(entry, "script")
 	arg := map[string]any{}
@@ -173,36 +165,5 @@ func TestSchema_EveryFieldIsAccepted(t *testing.T) {
 	}
 	if errs := EntryErrors(group); len(errs) > 0 {
 		t.Errorf("entry errors: %v", errs)
-	}
-}
-
-func TestSchema_RestrictedFieldsAreAcceptedWhereTheSchemaAllowsThem(t *testing.T) {
-	e := testkit.New(t)
-	s := loadSchema(t)
-	for field, text := range restricted {
-		if !strings.Contains(s.Defs.Entry.Properties[field].Description, text) {
-			t.Errorf("%s: description %q lacks %q", field, s.Defs.Entry.Properties[field].Description, text)
-		}
-	}
-	from := s.Defs.Entry.Properties["from"]
-	source := map[string]any{}
-	for k, v := range from.Properties {
-		source[k] = schemaSamples[v.Type]
-	}
-	if !slices.Equal(from.Required, []string{"source", "name"}) {
-		t.Errorf("from requires %v", from.Required)
-	}
-
-	// what run starts with is checked: the name resolves to a
-	// usable entry, with the field in it
-	proj := e.Project(map[string]any{"go": map[string]any{"inline": "echo go", "export": true}})
-	res, _, err := ResolveShortcut([]string{"go"}, proj, false, false)
-	if err != nil || !res.Entry.Export {
-		t.Errorf("export in a project: %v", err)
-	}
-	e.WriteStore(e.Store, map[string]any{"go": map[string]any{"inline": "echo go", "from": source}})
-	res, _, err = ResolveShortcut([]string{"go"}, e.Home, false, false)
-	if err != nil || res.Entry.Origin == nil {
-		t.Errorf("from in the global store: %v", err)
 	}
 }

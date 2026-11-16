@@ -48,7 +48,6 @@ func TestDispatch_ParserErrorsEndToEnd(t *testing.T) {
 		{[]string{"show"}, "error: missing name\n" + try("show")},
 		{[]string{"rm", "-yh"}, "error: unrecognized option '-yh'\n" + try("rm")},
 		{[]string{"rm"}, "error: missing name\n" + try("rm")},
-		{[]string{"promote", "a", "--as"}, "error: option '--as' needs a value\n" + try("promote")},
 		{[]string{"update", "a", "b"}, "error: unexpected argument 'b'\n" + try("update")},
 		{[]string{"completion", "sh"}, "error: invalid choice 'sh' (choose from bash, fish, zsh)\n" + try("completion")},
 	} {
@@ -112,7 +111,7 @@ func TestRunning_HelpNamesACommand(t *testing.T) {
 // Every command's `help <cmd>` and `<cmd> -h` print its file in help/ (run and r print RUN_USAGE), and nothing else.
 func TestHelp_LiveOutputIsTheFile(t *testing.T) {
 	e := testkit.New(t)
-	for _, cmd := range []string{"run", "new", "list", "show", "rm", "promote", "update", "completion"} {
+	for _, cmd := range []string{"run", "new", "list", "show", "rm", "update", "completion"} {
 		file, err := os.ReadFile("help/" + cmd + ".txt")
 		if cmd == "run" {
 			file, err = []byte(runUsage+"\n"), nil
