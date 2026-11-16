@@ -132,7 +132,7 @@ echo hi
   "cwd": null,
   "run_cwd": null,
   "script_path": null,
-  "error": "'nul' is not a valid entry: expected a dictionary",
+  "error": "'nul' is not a valid entry: expected a JSON object",
   "entry": null
 }
 `, ""},
@@ -147,7 +147,7 @@ Script (TMP/home/.shortcuts/scripts/none.sh):
   [file missing: TMP/home/.shortcuts/scripts/none.sh]
 `, ""},
 		{[]string{"show", "bad"}, 1, "", "error: 'bad' is not a valid entry: 'cwd' must be a string\n"},
-		{[]string{"show", "nul"}, 1, "", "error: 'nul' is not a valid entry: expected a dictionary\n"},
+		{[]string{"show", "nul"}, 1, "", "error: 'nul' is not a valid entry: expected a JSON object\n"},
 		{[]string{"show", "a", "b"}, 1, "", "error: shortcut or namespace 'a' not found. A global namespace is the file TMP/home/.shortcuts/imports/a.shortcut.\n"},
 		{[]string{"show", "--json", "build", "x"}, 1, "", "error: too many names: build x\n"},
 		{[]string{"show", "--json", "x"}, 1, "", "error: shortcut 'x' not found.\n"},

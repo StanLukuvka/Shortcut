@@ -52,7 +52,7 @@ func DecodeEntry(name string, raw []byte) (*Entry, error) {
 	bad := func(problem string) error { return fmt.Errorf("'%s' is not a valid entry: %s", name, problem) }
 	data, ok := platform.ObjectOf(raw)
 	if !ok {
-		return nil, bad("expected a dictionary")
+		return nil, bad("expected a JSON object")
 	}
 	// An ignored field could be a safety setting from a newer version, so never ignore one
 	fields := Fields()

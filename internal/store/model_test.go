@@ -24,7 +24,7 @@ func doc(t *testing.T, s string) *platform.Doc {
 
 func TestEntry_FromValueMessages(t *testing.T) {
 	cases := []struct{ in, want string }{
-		{`[]`, "'x' is not a valid entry: expected a dictionary"},
+		{`[]`, "'x' is not a valid entry: expected a JSON object"},
 		{`{"inline": "a", "zed": 1, "bar": 2}`, "'x' is not a valid entry: unknown field: bar, zed"},
 		{`{"inline": "a", "export": true, "from": {}}`, "'x' is not a valid entry: unknown field: export, from"},
 		{`{"inline": "a", "description": null}`, "'x' is not a valid entry: 'description' must be a string"},

@@ -68,7 +68,7 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 
 | Message | Meaning |
 |---|---|
-| `expected a dictionary` | The entry is a string, list or `null`, not `{...}` |
+| `expected a JSON object` | The entry is a string, list or `null`, not `{...}` |
 | `unknown field: <fields>` | |
 | `'description' must be a string` | |
 | `'<field>' must be a string` | `inline`, `script` or `cwd`. A `null` counts as the wrong type |

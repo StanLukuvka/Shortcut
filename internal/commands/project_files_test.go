@@ -321,6 +321,6 @@ func TestProjectFiles_ANullLocalEntryIsAnInvalidEntry(t *testing.T) {
 	for _, cmd := range []string{"show", "r"} {
 		res := e.RunWith(in(proj), cmd, "keep")
 		testkit.Eq(t, cmd, res.Code, 1)
-		testkit.Contains(t, cmd, res.Stderr+res.Stdout, "'keep' is not a valid entry: expected a dictionary")
+		testkit.Contains(t, cmd, res.Stderr+res.Stdout, "'keep' is not a valid entry: expected a JSON object")
 	}
 }
