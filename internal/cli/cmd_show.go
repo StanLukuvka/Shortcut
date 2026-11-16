@@ -21,7 +21,7 @@ func orCaller(s *string) string {
 
 // cmdShow prints a shortcut's definition and where it resolves.
 func cmdShow(c *model.Context, s *textio.Streams, args []string) error {
-	ns, err := parsers["show"].Parse(args)
+	ns, err := parse("show", args)
 	if err != nil {
 		return err
 	}
@@ -105,17 +105,21 @@ func showJSON(c *model.Context, s *textio.Streams, words []string, lk model.Look
 	return nil
 }
 
-// showObjectFields are the top-level keys of `show --json`, showEntryFields the entry's own fields `--field` also reads.
-var (
-	showObjectFields = []string{"name", "namespace", "scope", "defined_in", "source", "hides_global", "approval", "cwd", "run_cwd", "script_path", "error"}
-	showEntryFields  = []string{"description", "inline", "script"}
-	showFields       = slices.Concat(showObjectFields, showEntryFields)
-)
+// showFields are the keys `--field` reads: the top-level keys of `show --json`, then the entry's fields marked Show.
+func showFields() []string {
+	keys := []string{"name", "namespace", "scope", "defined_in", "source", "hides_global", "approval", "cwd", "run_cwd", "script_path", "error"}
+	for _, f := range model.Fields() {
+		if f.Show {
+			keys = append(keys, f.Name)
+		}
+	}
+	return keys
+}
 
 // showField prints one field of what `show --json` describes, bare. It only reads: nothing is written or approved.
 func showField(c *model.Context, s *textio.Streams, words []string, lk model.Lookup, key string) error {
-	if !slices.Contains(showFields, key) {
-		return Die("unknown field '" + key + "' (one of: " + strings.Join(showFields, ", ") + ")")
+	if keys := showFields(); !slices.Contains(keys, key) {
+		return Die("unknown field '" + key + "' (one of: " + strings.Join(keys, ", ") + ")")
 	}
 	obj, err := showObject(c, words, lk)
 	if err != nil {

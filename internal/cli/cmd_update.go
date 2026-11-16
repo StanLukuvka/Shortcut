@@ -12,7 +12,7 @@ import (
 
 // cmdUpdate reviews changes to project shortcuts and namespaces, and approve them.
 func cmdUpdate(c *model.Context, s *textio.Streams, args []string) error {
-	ns, err := parsers["update"].Parse(args)
+	ns, err := parse("update", args)
 	if err != nil {
 		return err
 	}

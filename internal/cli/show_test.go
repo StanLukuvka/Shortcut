@@ -30,7 +30,7 @@ func TestStores_Show(t *testing.T) {
 func TestEntries_CommandsThatTakeANameShowHowMany(t *testing.T) {
 	e := testkit.New(t)
 	for _, cmd := range []string{"show", "rm"} {
-		testkit.Contains(t, cmd+" --help", e.Run(cmd, "--help").Stdout, "[namespace] name\n")
+		testkit.Contains(t, cmd+" --help", e.Run(cmd, "--help").Stdout, "namespace and name")
 	}
 }
 

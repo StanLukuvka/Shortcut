@@ -19,7 +19,7 @@ import (
 // after that, -h included, is the shortcut's.
 func cmdRun(c *model.Context, s *textio.Streams, args []string) error {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
-		_, err := s.Out.WriteString(runUsage + "\n")
+		_, err := s.Out.WriteString(helpText("run"))
 		return err
 	}
 	skipLocal, assumeYes := false, false
@@ -29,7 +29,7 @@ func cmdRun(c *model.Context, s *textio.Streams, args []string) error {
 		args = args[1:]
 	}
 	if len(args) == 0 {
-		return &ExitError{Code: 2, Stderr: "error: missing shortcut name\n" + runUsage + "\n"}
+		return &ExitError{Code: 2, Stderr: "error: missing shortcut name\n" + find("run").usageLine() + "\n"}
 	}
 	return runShortcut(c, s, args, model.Lookup{GlobalOnly: skipLocal}, assumeYes)
 }

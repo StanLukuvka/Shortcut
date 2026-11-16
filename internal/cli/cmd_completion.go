@@ -11,7 +11,7 @@ import (
 var completionFiles embed.FS
 
 func cmdCompletion(_ *model.Context, s *textio.Streams, args []string) error {
-	ns, err := parsers["completion"].Parse(args)
+	ns, err := parse("completion", args)
 	if err != nil {
 		return err
 	}
