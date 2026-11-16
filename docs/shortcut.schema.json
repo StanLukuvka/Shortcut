@@ -61,18 +61,6 @@
           "items": {
             "$ref": "#/$defs/arg"
           }
-        },
-        "icon": {
-          "description": "Freedesktop icon name for a desktop launcher. Default 'utilities-terminal'.",
-          "type": "string"
-        },
-        "created": {
-          "description": "Date created, YYYY-MM-DD.",
-          "type": "string"
-        },
-        "created_by": {
-          "description": "Who created it, from --by.",
-          "type": "string"
         }
       }
     },

@@ -43,7 +43,7 @@ Version=1.0
 Type=Application
 Name=$(field description | grep . || echo "$name")
 Exec=bash -c "$exec_line"
-Icon=$(field icon | grep . || echo utilities-terminal)
+Icon=utilities-terminal
 Terminal=true
 Categories=Utility;
 $marker

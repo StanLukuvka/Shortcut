@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/ordjson"
@@ -186,12 +185,6 @@ func entryFields(name string, ns Namespace, g model.Group) (*model.Entry, error)
 		}
 	}
 	e := &model.Entry{Name: name, Cwd: cwd, Confirm: ns.Bool("confirm"), Args: args}
-	if ns.Set("by") {
-		by := ns.Str("by")
-		e.CreatedBy = &by
-	}
-	today := time.Now().Format("2006-01-02")
-	e.Created = &today
 	return e, nil
 }
 

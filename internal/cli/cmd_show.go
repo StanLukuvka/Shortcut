@@ -74,14 +74,6 @@ func cmdShow(s *textio.Streams, args []string) error {
 	if entry.Confirm {
 		out("Confirm:     yes")
 	}
-	optLine := func(label string, p *string) {
-		if p != nil && *p != "" {
-			out(label + *p)
-		}
-	}
-	optLine("Created:     ", entry.Created)
-	optLine("Created by:  ", entry.CreatedBy)
-	optLine("Icon:        ", entry.Icon)
 	if state := approval.State(group); state != "ok" {
 		what := "changed"
 		if state == "new" {
@@ -131,7 +123,7 @@ func showJSON(s *textio.Streams, words []string, skipLocal bool) error {
 // showObjectFields are the top-level keys of `show --json`, showEntryFields the entry's own fields `--field` also reads.
 var (
 	showObjectFields = []string{"name", "namespace", "scope", "defined_in", "source", "hides_global", "approval", "cwd", "run_cwd", "script_path", "error"}
-	showEntryFields  = []string{"description", "icon", "created_by", "created", "inline", "script"}
+	showEntryFields  = []string{"description", "inline", "script"}
 	showFields       = slices.Concat(showObjectFields, showEntryFields)
 )
 
