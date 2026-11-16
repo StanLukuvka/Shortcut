@@ -1,5 +1,5 @@
-// Package approval decides what a project or namespace has been approved for: the files that are compared, the
-// SHA-256 of each that the record in the global store keeps, and the list of what is new, changed or removed.
+// Package approval decides what a project or namespace has been approved for: the files that are compared and the
+// SHA-256 of each that the record in the global store keeps.
 package approval
 
 import (

@@ -10,8 +10,8 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-// The test binary doubles as the program under test for what only a process can show: TEXTIO_HELPER names the job.
-func TestMain(m *testing.M) { testkit.HelperMain(m, "TEXTIO_HELPER", helper) }
+// The test binary doubles as the program under test for what only a process can show: TERM_HELPER names the job.
+func TestMain(m *testing.M) { testkit.HelperMain(m, "TERM_HELPER", helper) }
 
 func helper(job string) {
 	s := NewStreams(os.Stdin, os.Stdout, os.Stderr)
@@ -77,7 +77,7 @@ func TestStreams_OutIsSafeAndStyled(t *testing.T) {
 // A process started with fds 0, 1 and 2 closed finds them open on /dev/null.
 func TestStreams_ClosedStdFdsAreReopenedByTheRuntime(t *testing.T) {
 	e := testkit.New(t)
-	res := e.RunCmd(testkit.Opts{Env: map[string]string{"TEXTIO_HELPER": "closed"}},
+	res := e.RunCmd(testkit.Opts{Env: map[string]string{"TERM_HELPER": "closed"}},
 		"sh", "-c", `exec "$0" -test.run='^$' <&- >&- 2>&-`, os.Args[0])
 	res.WantCode(t, 0) // else the code's bits 0-2 say which of fd 0-2 was found closed, bit 3 that the write failed
 }

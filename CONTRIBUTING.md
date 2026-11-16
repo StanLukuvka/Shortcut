@@ -64,7 +64,7 @@ CI also checks `gofmt` and runs `go vet ./...`.
 
 ## Imports
 
-Imports point down this tree and never up: `cmd/shortcut`, `internal/commands`, one command, `internal/store/write`, `internal/store/approval`, `internal/store`, `internal/term`, `internal/platform`. A command may import the store, term and platform packages and nothing beside it, so one command cannot import another and none imports `internal/commands`. `internal/store` imports only `internal/platform`; `internal/store/write` also imports `internal/term`. `internal/platform` imports nothing of this repository. The table is in [internal/testkit/layers_test.go](internal/testkit/layers_test.go). The test fails on an import the table doesn't list and on a package that isn't in it, so a new package or import is a row there.
+Imports point down this tree and never up: `cmd/shortcut`, `internal/commands`, one command, `internal/store/write`, `internal/store/approval`, `internal/store`, `internal/term`, `internal/platform`. A command may import `internal/store`, `internal/store/approval`, `internal/store/write`, `internal/term`, `internal/term/argparse` and `internal/platform`; it imports no other command and not `internal/commands`. `internal/store` imports only `internal/platform`; `internal/store/write` also imports `internal/term`. `internal/platform` imports nothing of this repository. The table is in [internal/testkit/layers_test.go](internal/testkit/layers_test.go). The test fails on an import the table doesn't list and on a package that isn't in it, so a new package or import is a row there.
 
 ## Docs and commits
 

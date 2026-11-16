@@ -58,7 +58,7 @@ func TestConfirm_WithoutATerminalAndWithYes(t *testing.T) {
 func TestAsk_ATerminalSession(t *testing.T) {
 	e := testkit.New(t)
 	run := func(keys []testkit.Key) string {
-		code, out := e.InTerminalCmd(testkit.Opts{Env: map[string]string{"TEXTIO_HELPER": "confirm"}}, keys, testkit.SelfArgs()...)
+		code, out := e.InTerminalCmd(testkit.Opts{Env: map[string]string{"TERM_HELPER": "confirm"}}, keys, testkit.SelfArgs()...)
 		if code != 0 {
 			t.Fatalf("exit %d: %q", code, out)
 		}

@@ -29,7 +29,7 @@ type Found struct {
 // the entry. words must not be empty. lk.Strict (for run) refuses every name inside a project whose file can't be used,
 // and a store's load errors for the name it has. Without it (show, rm) a broken file is looked in as far as
 // it reads, so you can still see and fix what's there. both lookup failures are just errors here:
-// main prints either as "error: <text>".
+// the caller prints either as "error: <text>".
 func FindEntry(c *Context, words []string, lk Lookup) (Found, error) {
 	stores := c.Visible(lk)
 	first, rest := words[0], words[1:]

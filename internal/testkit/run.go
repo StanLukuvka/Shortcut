@@ -75,7 +75,7 @@ func (e *Env) timeout(o Opts, def time.Duration) time.Duration {
 	return def
 }
 
-// Run starts the built binary (= run_cli).
+// Run starts the built binary.
 func (e *Env) Run(args ...string) Result { e.T.Helper(); return e.RunWith(Opts{}, args...) }
 
 func (e *Env) RunWith(o Opts, args ...string) Result {
@@ -83,7 +83,7 @@ func (e *Env) RunWith(o Opts, args ...string) Result {
 	return e.RunCmd(o, append([]string{Binary(e.T)}, args...)...)
 }
 
-// RunCmd starts any program: bash, git, sh, tar (= run_cmd).
+// RunCmd starts any program: bash, git, sh, tar.
 func (e *Env) RunCmd(o Opts, argv ...string) Result {
 	e.T.Helper()
 	cwd, env := e.launch(o)
