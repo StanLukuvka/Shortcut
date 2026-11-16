@@ -126,8 +126,8 @@ func TestHelp_LiveOutputIsTheTable(t *testing.T) {
 	}
 }
 
-// The words that show the whole usage, the version, and the commands that are still to be ported.
-func TestDispatch_UsageVersionAndStubs(t *testing.T) {
+// The words that show the whole usage and the version.
+func TestDispatch_UsageAndVersion(t *testing.T) {
 	e := testkit.New(t)
 	for _, argv := range [][]string{{}, {"-h"}, {"--help"}, {"help"}, {"help", "nosuch"}} {
 		res := e.Run(argv...)
@@ -136,7 +136,7 @@ func TestDispatch_UsageVersionAndStubs(t *testing.T) {
 		}
 	}
 	if !strings.HasPrefix(usageText(), "shortcut - run and manage quick scripts and commands\n\nUsage:\n") || !strings.HasSuffix(usageText(), "line.\n") {
-		t.Errorf("usageText is not print_usage's text: %q", usageText())
+		t.Errorf("usageText is not the usage text: %q", usageText())
 	}
 	if res := e.Run("--version"); res.Code != 0 || res.Stdout != "shortcut 0.1.0-dev\n" || Version != "0.1.0-dev" {
 		t.Errorf("--version: exit %d stdout %q", res.Code, res.Stdout)

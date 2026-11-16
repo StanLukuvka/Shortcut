@@ -174,8 +174,8 @@ func TestShow_AScriptThatIsNotUTF8(t *testing.T) {
 	}
 }
 
-// The show and --json lines of test_global_flag_reaches_a_hidden_shortcut; the whole test is ported in
-// rm_test.go (TestStores_GlobalFlagReachesAHiddenShortcut).
+// The show and --json lines of the global-flag case; the whole case is
+// TestStores_GlobalFlagReachesAHiddenShortcut in rm_test.go.
 func TestShow_GlobalFlagReachesAHiddenShortcut(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"build": testkit.Inline("echo global"), "tool": map[string]any{"script": "scripts/tool.sh", "description": "d"}})

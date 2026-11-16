@@ -22,7 +22,7 @@ var (
 
 const brokenJSON = "{not json"
 
-// jsonText is json.dumps with a Go twist: keys come out sorted (use WriteRegistryRaw where order is the point),
+// jsonText is the JSON text of v: keys come out sorted (use WriteRegistryRaw where order is the point),
 // and non-ASCII and <>& stay as they are.
 func (e *Env) jsonText(v any) string {
 	e.T.Helper()

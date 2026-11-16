@@ -81,7 +81,7 @@ func cmdShow(c *model.Context, s *textio.Streams, args []string) error {
 		if err != nil {
 			return err
 		}
-		// errors="replace" and universal newlines
+		// invalid UTF-8 becomes U+FFFD; \r\n and \r become \n
 		text := strings.ReplaceAll(strings.ReplaceAll(strings.ToValidUTF8(string(raw), "\uFFFD"), "\r\n", "\n"), "\r", "\n")
 		out(strings.TrimRight(text, " \t\n"))
 	} else {
@@ -91,7 +91,9 @@ func cmdShow(c *model.Context, s *textio.Streams, args []string) error {
 }
 
 // showTop are the top-level keys of `show --json`, in order.
-var showTop = []string{"name", "namespace", "scope", "defined_in", "source", "hides_global", "approval", "cwd", "run_cwd", "script_path", "error"}
+func showTop() []string {
+	return []string{"name", "namespace", "scope", "defined_in", "source", "hides_global", "approval", "cwd", "run_cwd", "script_path", "error"}
+}
 
 // setOpt writes null for nil, else the string. A string that is not valid UTF-8 is refused (model.ErrNotUTF8).
 func setOpt(d *model.Doc, key string, val *string) error {
@@ -109,7 +111,7 @@ func showJSON(c *model.Context, s *textio.Streams, words []string, lk model.Look
 		return err
 	}
 	d := &model.Doc{}
-	for _, k := range showTop {
+	for _, k := range showTop() {
 		if k == "hides_global" {
 			d.Set(k, []byte(*vals[k])) // true or false
 		} else if err := setOpt(d, k, vals[k]); err != nil {
@@ -127,7 +129,7 @@ func showJSON(c *model.Context, s *textio.Streams, words []string, lk model.Look
 
 // showFields are the keys `--field` reads: the top-level keys of `show --json`, then the entry's fields marked Show.
 func showFields() []string {
-	keys := slices.Clone(showTop)
+	keys := showTop() // already a fresh slice
 	for _, f := range model.Fields() {
 		if f.Show {
 			keys = append(keys, f.Name)

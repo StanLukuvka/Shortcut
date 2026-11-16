@@ -91,7 +91,7 @@ func SaveRegistryAtomic(storeDir string, data *Doc) error {
 	return SaveRegistryFile(osutil.Join(storeDir, "shortcuts.json"), data)
 }
 
-var namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`) // Go's $ is end of text: no trailing newline, as fullmatch
+var namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`) // $ matches only at the very end of the text (no multiline flag), so a trailing newline fails
 
 // ValidateName checks a shortcut name, with a fixed message.
 func ValidateName(name string) error {

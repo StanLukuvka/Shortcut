@@ -155,7 +155,7 @@ func buildTree(t *testing.T, env *testkit.Env, root string, tree []any) {
 	}
 }
 
-// afterShortcut cuts a file error back to the part after the file's name, since the golden root belongs to the frozen data (recorded once from the first version).
+// afterShortcut cuts a file error back to the part after the file's name, since the golden root belongs to the frozen data (recorded once and kept as is).
 func afterShortcut(s string) string {
 	if i := strings.Index(s, ".short"); i >= 0 {
 		return s[i:]

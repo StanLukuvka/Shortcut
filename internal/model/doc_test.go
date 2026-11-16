@@ -46,7 +46,7 @@ func TestDoc_RefusesWhatIsNotValidUTF8(t *testing.T) {
 		t.Errorf("raw byte: %v", err)
 	}
 	for src, want := range map[string]string{
-		`"\ud83d\ude00"`:   "\U0001F600", // a proper pair, as ensure_ascii wrote an emoji
+		`"\ud83d\ude00"`:   "\U0001F600", // a surrogate pair is one emoji
 		`"\uD83D\uDE00"`:   "\U0001F600",
 		"\"\U0001F600\"":   "\U0001F600",
 		"\"\\ufffd\"":      "\uFFFD", // an escaped U+FFFD is a real character, not a lost byte
@@ -160,7 +160,7 @@ func TestDoc_Normal(t *testing.T) {
 	}
 }
 
-// The next three literals are what the writer produced before Doc, for a hostile file: a key repeated at the top
+// The next three literals are a hostile file and what writing and approval make of it: a key repeated at the top
 // and inside an entry, escapes, HTML characters, U+2028, number text, empty containers and a surrogate pair.
 const hostileSrc = "{\"zed\": 1.0, \"version\": 1, \"shortcuts\": {\"a\": {\"inline\": \"x<>&é\\u00e9 \\u2028\\u0007\\ud83d\\ude00😀\\t\\n\\\"\\\\/\", \"future\": {\"b\": [1e400, -0, {\"z\": 1, \"a\": 2, \"z\": 3}, true, false, null, {}, [], [{\"k\":1,\"k\":2}]]}}, \"a2\": {\"description\": \"d\", \"inline\": \"y\"}}, \"n\": [1.0, \"é \"], \"zed\": 2}"
 
