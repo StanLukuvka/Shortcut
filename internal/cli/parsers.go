@@ -5,7 +5,7 @@ import "github.com/StanLukuvka/Shortcut/internal/cli/argparse"
 // parsers is the parser of each command that has one, as its cmd_* builds it.
 var parsers = map[string]*argparse.Parser{
 	"new": argparse.New("new", helpText, argparse.Positional("name", 0), argparse.Value("desc", "--desc"), argparse.Value("script", "--script"), argparse.Value("copy", "--copy"),
-		argparse.Value("cwd", "--cwd"), argparse.Flag("local", "--local"), argparse.Value("namespace", "--namespace"), argparse.Value("by", "--by"),
+		argparse.Value("cwd", "--cwd"), argparse.Flag("local", "--local"), argparse.Value("namespace", "--namespace"),
 		argparse.Repeated("arg", "--arg"), argparse.Repeated("argDesc", "--arg-desc"), argparse.Flag("confirm", "--confirm")).Exclusive("script", "copy"),
 	"list": argparse.New("list", helpText, argparse.Optional("names", "--names")),
 	"show": argparse.New("show", helpText, argparse.Positional("name", '+'), argparse.Flag("json", "--json"), argparse.Value("field", "--field"), argparse.Flag("skipLocal", "--global")),

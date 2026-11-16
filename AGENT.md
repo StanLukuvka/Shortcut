@@ -4,7 +4,7 @@
 
 Agents use the same commands as people. In a project, `--local` writes to `.shortcuts.local` in the project root, and refuses from a subfolder. `.shortcuts` is shared and edited by hand: `shortcut` doesn't write it. Its `entry` field in `shortcut show --json <name>` is what to paste there. `--cwd .` records the current directory. To set up a shortcut for a user:
 
-1. **Always pass `--desc`.** `--by <your name>` records who made it.
+1. **Always pass `--desc`.**
 
    ```bash
    shortcut new test --local --desc "Run full integration test suite" --cwd . -- 'pytest tests/ "$@"'

@@ -1,5 +1,5 @@
 usage: shortcut new [-h] [--desc DESC] [--script PATH | --copy FILE]
-                    [--cwd CWD] [--local] [--namespace NAME] [--by BY]
+                    [--cwd CWD] [--local] [--namespace NAME]
                     [--arg NAME[=DEFAULT]] [--arg-desc NAME=TEXT] [--confirm]
                     name
 
@@ -18,7 +18,6 @@ options:
                         globally
   --namespace NAME      Put it in this namespace, creating
                         imports/NAME.shortcut if needed
-  --by BY               Creator identifier
   --arg NAME[=DEFAULT]  Declare an argument: required, or optional with a
                         default. NAME... takes the rest of the arguments;
                         NAME...= makes that optional. Repeatable

@@ -35,7 +35,7 @@ func TestEntries_CommandsThatTakeANameShowHowMany(t *testing.T) {
 }
 
 const toolRegistry = `{"version": 1, "shortcuts": {
- "tool": {"description": "A tool: é", "script": "scripts/tool.sh", "args": [{"name":"a","required":true,"desc":"first\nline"},{"name":"b","default":"x y"},{"name":"r","rest":true}], "confirm": true, "created": "2026-01-02", "created_by": "me", "icon": "wrench"},
+ "tool": {"description": "A tool: é", "script": "scripts/tool.sh", "args": [{"name":"a","required":true,"desc":"first\nline"},{"name":"b","default":"x y"},{"name":"r","rest":true}], "confirm": true },
  "bad": {"inline": "x", "cwd": 5, "description": "bd"},
  "gone": {"script": "scripts/none.sh"},
  "trav": {"script": "../../etc/passwd"},
@@ -65,9 +65,6 @@ Arguments:
   b     default: 'x y'
   r...  optional
 Confirm:     yes
-Created:     2026-01-02
-Created by:  me
-Icon:        wrench
 
 Script (TMP/home/.shortcuts/scripts/tool.sh):
 #!/bin/sh
@@ -103,10 +100,7 @@ echo hi
         "rest": true
       }
     ],
-    "confirm": true,
-    "created": "2026-01-02",
-    "created_by": "me",
-    "icon": "wrench"
+    "confirm": true
   }
 }
 `, ""},
@@ -268,11 +262,11 @@ func TestShow_Field(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{
 		"line": map[string]any{"description": "A line", "inline": "echo hi", "confirm": true},
-		"tool": map[string]any{"description": "A tool", "script": "scripts/tool.sh", "icon": "wrench"},
+		"tool": map[string]any{"description": "A tool", "script": "scripts/tool.sh"},
 	})
 	e.WriteFile(filepath.Join(e.Store, "scripts", "tool.sh"), "#!/bin/sh\n", 0)
 	store := filepath.Join(e.Store, "shortcuts.json")
-	list := "name, namespace, scope, defined_in, source, hides_global, approval, cwd, run_cwd, script_path, error, description, icon, created_by, created, inline, script"
+	list := "name, namespace, scope, defined_in, source, hides_global, approval, cwd, run_cwd, script_path, error, description, inline, script"
 	cases := []struct {
 		args   []string
 		code   int
@@ -288,8 +282,6 @@ func TestShow_Field(t *testing.T) {
 		{[]string{"show", "--field", "description", "line"}, 0, "A line\n", ""},
 		{[]string{"show", "--field", "inline", "line"}, 0, "echo hi\n", ""},
 		{[]string{"show", "--field", "script", "tool"}, 0, "scripts/tool.sh\n", ""},
-		{[]string{"show", "--field", "icon", "tool"}, 0, "wrench\n", ""},
-		{[]string{"show", "--field", "icon", "line"}, 0, "", ""},
 		{[]string{"show", "--field", "error", "line"}, 0, "", ""},
 		{[]string{"show", "--field", "confirm", "line"}, 1, "", "error: unknown field 'confirm' (one of: " + list + ")\n"},
 		{[]string{"show", "--field", "name", "--json", "line"}, 1, "", "error: --field and --json can't be used together\n"},

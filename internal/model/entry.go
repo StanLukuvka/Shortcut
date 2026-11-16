@@ -24,21 +24,20 @@ const (
 
 // Entry is one shortcut's definition.
 type Entry struct {
-	Name                          string
-	Description                   string  // "" allowed; always written
-	Inline                        *string // exactly one of Inline and Script is non-nil
-	Script                        *string
-	Cwd, Icon, CreatedBy, Created *string
-	Confirm                       bool
-	Args                          []*ordjson.Object // nil = field absent; kept raw so key order round-trips
+	Name        string
+	Description string  // "" allowed; always written
+	Inline      *string // exactly one of Inline and Script is non-nil
+	Script      *string
+	Cwd         *string
+	Confirm     bool
+	Args        []*ordjson.Object // nil = field absent; kept raw so key order round-trips
 }
 
 var knownFields = map[string]bool{
-	"description": true, "inline": true, "script": true, "cwd": true, "icon": true, "created_by": true,
-	"created": true, "confirm": true, "args": true,
+	"description": true, "inline": true, "script": true, "cwd": true, "confirm": true, "args": true,
 }
 
-var textFields = []string{"inline", "script", "cwd", "icon", "created_by", "created"}
+var textFields = []string{"inline", "script", "cwd"}
 
 // EntryFromValue builds an Entry from a decoded value, with fixed messages and check order.
 func EntryFromValue(name string, v ordjson.Value) (*Entry, error) {
@@ -98,8 +97,7 @@ func EntryFromValue(name string, v ordjson.Value) (*Entry, error) {
 			e.Args[i] = a.(*ordjson.Object)
 		}
 	}
-	e.Inline, e.Script, e.Cwd, e.Icon, e.CreatedBy, e.Created =
-		texts["inline"], texts["script"], texts["cwd"], texts["icon"], texts["created_by"], texts["created"]
+	e.Inline, e.Script, e.Cwd = texts["inline"], texts["script"], texts["cwd"]
 	e.Confirm = confirm
 	return e, nil
 }
@@ -108,7 +106,7 @@ func EntryFromValue(name string, v ordjson.Value) (*Entry, error) {
 func (e *Entry) ToObject() *ordjson.Object {
 	o := &ordjson.Object{}
 	o.Set("description", e.Description)
-	for i, p := range []*string{e.Inline, e.Script, e.Cwd, e.Icon, e.CreatedBy, e.Created} {
+	for i, p := range []*string{e.Inline, e.Script, e.Cwd} {
 		if p != nil {
 			o.Set(textFields[i], *p)
 		}

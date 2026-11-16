@@ -72,7 +72,7 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `expected a dictionary` | The entry is a string or list, not `{...}` |
 | `unknown field: <fields>` | |
 | `'description' must be a string` | |
-| `'<field>' must be a string` | `inline`, `script`, `cwd`, `icon`, `created_by` or `created`. A `null` counts as the wrong type |
+| `'<field>' must be a string` | `inline`, `script` or `cwd`. A `null` counts as the wrong type |
 | `'confirm' must be a boolean` | |
 | `it needs exactly one of 'inline' and 'script'` | |
 | `script not found: <script>` | The entry's script file is missing |
@@ -157,7 +157,7 @@ A new local shortcut needs a project folder:
 
 | Message | Meaning |
 |---|---|
-| `unknown field '<key>' (one of: <list>)` | `show --field` takes a top-level key of `show --json`, or `description`, `icon`, `created_by`, `created`, `inline`, `script` |
+| `unknown field '<key>' (one of: <list>)` | `show --field` takes a top-level key of `show --json`, or `description`, `inline`, `script` |
 | `--field and --json can't be used together` | |
 
 ## rm

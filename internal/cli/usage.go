@@ -32,7 +32,6 @@ FLAGS for new:
   --confirm                 Ask before running it
   --local                   Store it in .shortcuts.local in this directory (default: the global store)
   --namespace NAME          Put it in namespace NAME in the global store, creating it if needed
-  --by C                    Creator identifier
 
 Project shortcuts and namespaces don't run until approved with ` + "`" + `shortcut update` + "`" + `,
 and must be approved again after any change to their definitions. Approval covers
