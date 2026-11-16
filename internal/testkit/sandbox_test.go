@@ -257,18 +257,6 @@ func TestFixtures_ProjectWithoutShortcutsHasNoStore(t *testing.T) {
 	}
 }
 
-func TestFixtures_ApprovedProjectRunsAtOnce(t *testing.T) {
-	e := New(t)
-	useBinary(t, e, `pwd -P > "$HOME/approve-cwd"; echo "$@" > "$HOME/approve-args"`+"\n")
-	proj := e.Project(GO, Approved()) // the real `r go` check
-	if got, _ := os.ReadFile(filepath.Join(e.Home, "approve-args")); string(got) != "update -y\n" {
-		t.Errorf("approve ran %q", got)
-	}
-	if got, _ := os.ReadFile(filepath.Join(e.Home, "approve-cwd")); strings.TrimSpace(string(got)) != proj {
-		t.Errorf("approve ran in %q, want %q", got, proj)
-	}
-}
-
 func TestFixtures_BrokenProjectReadsAsCorrupt(t *testing.T) {
 	e := New(t) // the "corrupt registry" message itself
 	if b, _ := os.ReadFile(filepath.Join(e.BrokenProject(), ".shortcuts")); string(b) != brokenJSON {
@@ -280,7 +268,7 @@ func TestFixtures_SharedFixturesAreLeftAsTheyWere(t *testing.T) {
 	e := New(t)
 	useBinary(t, e, "exit 0\n")
 	before := fmt.Sprint(GO, HI)
-	e.Project(GO, Approved())
+	e.Project(GO)
 	if after := fmt.Sprint(GO, HI); after != before {
 		t.Errorf("fixtures changed: %s -> %s", before, after)
 	}

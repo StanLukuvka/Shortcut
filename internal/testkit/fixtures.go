@@ -187,23 +187,14 @@ func (e *Env) LoadGlobal() map[string]any {
 	return reg.Shortcuts
 }
 
-// Approve approves everything in a project, as `shortcut update -y` there does.
-func (e *Env) Approve(storeFile string) {
-	e.T.Helper()
-	if r := e.RunWith(Opts{Cwd: filepath.Dir(storeFile)}, "update", "-y"); r.Code != 0 {
-		e.dief("update -y exited %d: %s", r.Code, r.Stderr)
-	}
-}
-
 // Projects and collections.
 
 type projectCfg struct {
-	name     string
-	dirs     []string
-	files    map[string]any
-	approved bool
-	extra    map[string]any
-	mode     os.FileMode
+	name  string
+	dirs  []string
+	files map[string]any
+	extra map[string]any
+	mode  os.FileMode
 }
 
 type ProjectOpt func(*projectCfg)
@@ -211,7 +202,6 @@ type ProjectOpt func(*projectCfg)
 func Name(n string) ProjectOpt          { return func(c *projectCfg) { c.name = n } }
 func Dirs(d ...string) ProjectOpt       { return func(c *projectCfg) { c.dirs = d } }
 func Files(f map[string]any) ProjectOpt { return func(c *projectCfg) { c.files = f } }
-func Approved() ProjectOpt              { return func(c *projectCfg) { c.approved = true } }
 func Extra(x map[string]any) ProjectOpt { return func(c *projectCfg) { c.extra = x } }
 func Mode(m os.FileMode) ProjectOpt     { return func(c *projectCfg) { c.mode = m } } // mode of the Files
 
@@ -240,9 +230,6 @@ func (e *Env) Project(shortcuts map[string]any, opts ...ProjectOpt) string {
 	e.writeFiles(proj, c.files, c.mode)
 	if shortcuts != nil {
 		e.WriteStore(filepath.Join(proj, ".shortcuts"), shortcuts, c.extra)
-	}
-	if c.approved {
-		e.Approve(filepath.Join(proj, ".shortcuts"))
 	}
 	return proj
 }

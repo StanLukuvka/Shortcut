@@ -10,7 +10,7 @@ _shortcut() {
         prev="${COMP_WORDS[COMP_CWORD-1]}"
     fi
 
-    local subcommands="run r new list show rm update completion help"
+    local subcommands="run r new list show rm completion help"
     local name_commands="run r show rm"
 
     if [ "${COMP_CWORD:-1}" -eq 1 ]; then

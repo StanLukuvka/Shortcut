@@ -7,7 +7,6 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
-	"github.com/StanLukuvka/Shortcut/internal/store/approval"
 	"github.com/StanLukuvka/Shortcut/internal/term"
 	"github.com/StanLukuvka/Shortcut/internal/term/argparse"
 )
@@ -59,13 +58,6 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	if entry.Confirm {
 		out("Confirm:     yes")
 	}
-	if state := approval.State(c, group); state != store.StateOK {
-		what := "changed"
-		if state == store.StateNew {
-			what = "not approved"
-		}
-		out("Approval:    " + what + " (run: " + group.UpdateCmd() + ")")
-	}
 
 	if entry.Inline != nil {
 		out("\nInline command:\n  " + *entry.Inline)
@@ -92,7 +84,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 
 // showTop are the top-level keys of `show --json`.
 func showTop() []string {
-	return []string{"name", "namespace", "scope", "defined_in", "source", "approval", "cwd", "run_cwd", "script_path", "error"}
+	return []string{"name", "namespace", "scope", "defined_in", "source", "cwd", "run_cwd", "script_path", "error"}
 }
 
 // setOpt writes null for nil, else the string.
@@ -139,7 +131,7 @@ func showFields() []string {
 	return keys
 }
 
-// showField prints one field of what `show --json` describes, bare. It only reads: nothing is written or approved.
+// showField prints one field of what `show --json` describes, bare.
 // A field is printed as it is, so a name that is not valid UTF-8 prints; only `show --json` refuses it.
 func showField(c *store.Context, s *term.Streams, words []string, lk store.Lookup, key string) error {
 	if keys := showFields(); !slices.Contains(keys, key) {
@@ -177,8 +169,7 @@ func showObject(c *store.Context, words []string, lk store.Lookup) (vals map[str
 	}
 	g, name := f.Group, f.Name
 	str := func(s string) *string { return &s }
-	vals = map[string]*string{"name": &name, "scope": str(string(g.Kind)), "defined_in": str(g.DefiningFile(name)),
-		"approval": str(string(approval.State(c, g)))}
+	vals = map[string]*string{"name": &name, "scope": str(string(g.Kind)), "defined_in": str(g.DefiningFile(name))}
 	for _, k := range []string{"namespace", "source", "cwd", "run_cwd", "script_path", "error"} {
 		vals[k] = nil
 	}

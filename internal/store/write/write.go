@@ -16,14 +16,6 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/term"
 )
 
-// NoteNeedsApproval says so, after a change made through shortcut, if the group needs approving before it
-// runs: every change to a project's or namespace's files does.
-func NoteNeedsApproval(s *term.Streams, g store.Group) {
-	if g.NeedsApproval() {
-		s.Err.WriteString("note: " + g.Label() + " needs approving before it runs: " + g.UpdateCmd() + "\n")
-	}
-}
-
 // LoadForEdit is the registry at path, or a fresh one when isNew, with its "shortcuts" object. A "shortcuts" that is
 // not an object is refused.
 func LoadForEdit(path string, isNew bool) (reg, shortcuts platform.Doc, err error) {
@@ -75,7 +67,6 @@ func Register(c *store.Context, s *term.Streams, group store.Group, entry *store
 		if err := WriteLocal(c, storeDir, change); err != nil {
 			return err
 		}
-		NoteNeedsApproval(s, group)
 		if _, shared := group.Shared.Get(entry.Name); shared {
 			s.Err.WriteString("note: this overrides '" + entry.Name + "' from " + store.ProjectFile + " for you\n")
 		}
@@ -112,7 +103,6 @@ func Register(c *store.Context, s *term.Streams, group store.Group, entry *store
 	if err != nil {
 		return err
 	}
-	NoteNeedsApproval(s, group)
 	return nil
 }
 

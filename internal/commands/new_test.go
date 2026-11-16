@@ -78,11 +78,8 @@ func TestStores_CreationScopeRules(t *testing.T) {
 	}
 	testkit.NotExist(t, filepath.Join(proj, ".shortcuts"))
 
-	// 2. --local creates .shortcuts.local on demand, and what it adds runs once `update` has approved it
-	res := runOK(t, e, in(proj), "new", "local_cmd", "--local", "--", "echo local")
-	testkit.Contains(t, "stderr", res.Stderr, "needs approving before it runs: shortcut update")
-	testkit.Contains(t, "run before update", e.RunWith(in(proj), "run", ".", "local_cmd").Stderr, "isn't approved yet")
-	runOK(t, e, in(proj), "update", ".", "-y")
+	// 2. --local creates .shortcuts.local on demand
+	runOK(t, e, in(proj), "new", "local_cmd", "--local", "--", "echo local")
 	if _, err := os.Stat(filepath.Join(proj, ".shortcuts.local")); err != nil {
 		t.Errorf("no .shortcuts.local: %v", err)
 	}
@@ -97,7 +94,7 @@ func TestStores_CreationScopeRules(t *testing.T) {
 	e.Run("new", "explicit", "--cwd", "caller", "--", "pwd")
 	testkit.Eq(t, "explicit cwd", e.LoadGlobal()["explicit"].(map[string]any)["cwd"], "caller")
 
-	res = e.Run("new", "nowhere", "--cwd", "/nonexistent/path/xyz", "--", "echo 1")
+	res := e.Run("new", "nowhere", "--cwd", "/nonexistent/path/xyz", "--", "echo 1")
 	if res.Code == 0 {
 		t.Errorf("nowhere: exit 0")
 	}
@@ -196,14 +193,12 @@ func TestStores_NewScriptInsideTheStoreIsKeptRelative(t *testing.T) {
 	testkit.Eq(t, "out", dk["out"].(map[string]any)["script"], realpath(t, outside))
 	testkit.Eq(t, "mine", e.LoadGlobal()["mine"].(map[string]any)["script"], "tools/mine.sh")
 	testkit.Eq(t, "run mine", e.Run("r", "mine").Stdout, "mine\n")
-	e.Run("update", "-y", "dk")
 	testkit.Eq(t, "run dk ps", e.Run("r", "dk", "ps").Stdout, "ps\n")
 }
 
 func TestStores_NamespaceFlagCreatesANamespace(t *testing.T) {
 	e := testkit.New(t)
-	res := runOK(t, e, testkit.Opts{}, "new", "delete", "--namespace", "docker", "--desc", "Remove one", "--", `echo "rm $1"`)
-	testkit.Contains(t, "stderr", res.Stderr, "needs approving before it runs: shortcut update docker")
+	runOK(t, e, testkit.Opts{}, "new", "delete", "--namespace", "docker", "--desc", "Remove one", "--", `echo "rm $1"`)
 	doc := decodeObject(t, testkit.ReadFile(t, filepath.Join(e.Store, "imports", "docker.shortcut")))
 	testkit.Eq(t, "version", doc["version"], float64(1))
 	testkit.Eq(t, "inline", doc["shortcuts"].(map[string]any)["delete"].(map[string]any)["inline"], `echo "rm $1"`)
@@ -211,12 +206,10 @@ func TestStores_NamespaceFlagCreatesANamespace(t *testing.T) {
 		t.Errorf("delete is global")
 	}
 
-	testkit.Contains(t, "run", e.Run("r", "docker", "delete", "x").Stderr, "isn't approved yet")
-	testkit.Eq(t, "update", e.Run("update", "docker", "-y").Code, 0)
-	testkit.Eq(t, "run approved", e.Run("r", "docker", "delete", "x").Stdout, "rm x\n")
+	testkit.Eq(t, "run", e.Run("r", "docker", "delete", "x").Stdout, "rm x\n")
 
 	testkit.Eq(t, "second", e.Run("new", "ps", "--namespace", "docker", "--", "echo ps").Code, 0)
-	res = e.Run("new", "ps", "--namespace", "docker", "--", "echo again")
+	res := e.Run("new", "ps", "--namespace", "docker", "--", "echo again")
 	testkit.Eq(t, "again exit", res.Code, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "already exists")
 }
@@ -306,37 +299,7 @@ func TestStores_UnknownFieldsAreErrors(t *testing.T) {
 			"a": map[string]any{"inline": "true", "args": []any{map[string]any{"name": "x"}}}})},
 	} {
 		e.WriteImport(e.Store, c.name, c.data)
-		res := e.Run("update", c.name, "-y")
-		testkit.Eq(t, c.name, res.Code, 1)
-		testkit.Contains(t, c.name, res.Stderr, c.message)
 		testkit.Contains(t, c.name+" list", e.Run("list").Stderr, c.message)
-	}
-}
-
-func TestStores_UpdateRefusesEntriesThatCannotRun(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, nil) // an empty store
-	for _, c := range []struct {
-		name, shortcut, message string
-		entry                   map[string]any
-	}{
-		{"neither", "a", "exactly one of 'inline' and 'script'", map[string]any{"description": "x"}},
-		{"both", "a", "exactly one of 'inline' and 'script'", map[string]any{"inline": "true", "script": "a.sh"}},
-		{"missing", "a", "script not found: scripts/a.sh", map[string]any{"script": "scripts/a.sh"}},
-		{"escape", "a", "path traversal", map[string]any{"script": "../../outside.sh"}},
-		{"badname", "a!", "invalid shortcut name", map[string]any{"inline": "true"}},
-	} {
-		e.WriteImport(e.Store, c.name, testkit.NS(map[string]any{c.shortcut: c.entry}))
-		res := e.Run("update", c.name, "-y")
-		testkit.Eq(t, c.name, res.Code, 1)
-		testkit.Contains(t, c.name, res.Stderr, c.message)
-		refused := e.Run("r", c.name, c.shortcut)
-		testkit.Eq(t, c.name+" run", refused.Code, 1)
-		want := "isn't approved yet"
-		if strings.Contains(c.message, "exactly one") {
-			want = c.message
-		}
-		testkit.Contains(t, c.name+" run", refused.Stderr, want)
 	}
 }
 

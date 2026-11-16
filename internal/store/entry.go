@@ -17,7 +17,6 @@ const (
 	bareImport      = "a namespace file needs a name, e.g. docker.shortcut"
 	ProjectFile     = ".shortcuts"       // shared and committed; shortcut never writes it
 	LocalFile       = ".shortcuts.local" // personal; overlays ProjectFile entry by entry
-	approvalsDir    = "approvals"
 )
 
 // Entry is one shortcut's definition.

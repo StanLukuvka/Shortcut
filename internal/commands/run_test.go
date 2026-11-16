@@ -40,7 +40,6 @@ func TestRunning_TheEnvironmentSaysWhatRunsAndFromWhere(t *testing.T) {
 	e.WriteImport(e.Store, "dk", testkit.NS(map[string]any{
 		"env": testkit.Inline(show)}))
 	e.WriteStore(e.Store, map[string]any{"env": testkit.Inline(show)})
-	runOK(t, e, testkit.Opts{}, "update", "-y", "dk")
 	caller := e.Folder("caller")
 	outer := map[string]string{"SHORTCUT_NAMESPACE": "outer"}
 	res := e.RunWith(testkit.Opts{Cwd: caller, Env: outer}, "r", "dk", "env")
@@ -151,7 +150,7 @@ func TestRunning_RunCwdModes(t *testing.T) {
 		"sibling": map[string]any{"inline": "pwd", "cwd": "frontend"},
 		"fixed":   map[string]any{"inline": "pwd", "cwd": fixed},
 		"gone":    map[string]any{"inline": "pwd", "cwd": "nope"},
-	}, testkit.Dirs("frontend", "src"), testkit.Approved())
+	}, testkit.Dirs("frontend", "src"))
 	here := filepath.Join(proj, "src")
 	for _, c := range [][2]string{{"default", here}, {"caller", here}, {"root", proj}, {"sibling", filepath.Join(proj, "frontend")}, {"fixed", fixed}} {
 		res := e.RunWith(in(here), "r", ".", c[0])
@@ -231,7 +230,7 @@ func TestRunning_ShowJSONIsOneObjectWithWhereItResolves(t *testing.T) {
 	e.WriteStore(e.Store, map[string]any{"s": map[string]any{"script": "scripts/s.sh", "cwd": "/tmp"}, "c": testkit.Inline("true")})
 	info := decodeObject(t, e.Run("show", "--json", "s").Stdout)
 	for k, want := range map[string]any{"name": "s", "namespace": nil, "scope": "global", "defined_in": filepath.Join(e.Store, "shortcuts.json"),
-		"source": nil, "script_path": filepath.Join(e.Store, "scripts", "s.sh"), "cwd": "/tmp", "run_cwd": "/tmp", "approval": "ok",
+		"source": nil, "script_path": filepath.Join(e.Store, "scripts", "s.sh"), "cwd": "/tmp", "run_cwd": "/tmp",
 		"error": nil, "entry": map[string]any{"script": "scripts/s.sh", "cwd": "/tmp"}} {
 		testkit.Eq(t, k, info[k], want)
 	}
@@ -245,7 +244,7 @@ func TestRunning_ShowJSONNamesANamespaceEntryBare(t *testing.T) {
 	e.WriteImport(e.Store, "dk", testkit.NS(map[string]any{"ps": map[string]any{"inline": "true", "cwd": "."}}))
 	info := decodeObject(t, e.Run("show", "--json", "dk", "ps").Stdout)
 	for k, want := range map[string]any{"name": "ps", "namespace": "dk", "scope": "namespace",
-		"defined_in": filepath.Join(e.Store, "imports", "dk.shortcut"), "cwd": ".", "run_cwd": filepath.Join(e.Store, "imports"), "approval": "new"} {
+		"defined_in": filepath.Join(e.Store, "imports", "dk.shortcut"), "cwd": ".", "run_cwd": filepath.Join(e.Store, "imports")} {
 		testkit.Eq(t, k, info[k], want)
 	}
 }
@@ -322,10 +321,6 @@ func TestRunning_TheDotSelectsTheScope(t *testing.T) {
 	proj := e.Project(map[string]any{"build": testkit.Inline("echo project-build"), "ponly": testkit.Inline("echo ponly")})
 	e.WriteImport(filepath.Join(proj, ".shortcuts"), "terraform", testkit.NS(map[string]any{"plan": testkit.Inline("echo plan")}))
 	e.WriteImport(filepath.Join(proj, ".shortcuts"), "docker", testkit.NS(map[string]any{"delete": testkit.Inline("echo project-delete")}))
-	e.Approve(filepath.Join(proj, ".shortcuts"))
-	for _, ns := range []string{"terraform", "docker"} {
-		runOK(t, e, in(proj), "update", ns, "-y")
-	}
 	o := testkit.Opts{Cwd: proj, Env: map[string]string{"SHORTCUT_SHOW_DIR": "0"}}
 
 	for _, c := range []struct {

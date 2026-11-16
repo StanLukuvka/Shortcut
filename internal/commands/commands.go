@@ -9,7 +9,6 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/commands/rm"
 	"github.com/StanLukuvka/Shortcut/internal/commands/run"
 	"github.com/StanLukuvka/Shortcut/internal/commands/show"
-	"github.com/StanLukuvka/Shortcut/internal/commands/update"
 
 	"github.com/StanLukuvka/Shortcut/internal/store"
 	"github.com/StanLukuvka/Shortcut/internal/term"
@@ -62,8 +61,6 @@ func commands() []entry {
 				{Dest: "namespace", Flags: []string{"--namespace"}, Takes: term.OneValue, Meta: "NS", Help: "Remove this namespace from the global store, with its scripts folder"},
 				yes,
 				{Dest: "name", Nargs: '*', Help: "Shortcut name, or namespace and name"}}}},
-		{Run: update.Run, Command: term.Command{Name: "update", Summary: "Review changes to project shortcuts and namespaces, and approve them",
-			Args: []term.Arg{yes, {Dest: "group", Nargs: '?', Help: "A namespace, or . for this project's own shortcuts (default: all here)"}}}},
 		{Run: completion.Run, Command: term.Command{Name: "completion", Summary: "Print a shell completion script",
 			Args: []term.Arg{{Dest: "shell", Choices: []string{"bash", "fish", "zsh"}, Help: "bash, fish or zsh"}}}},
 		{Run: cmdHelp, Command: term.Command{Name: "help", Summary: "Show this help, or a command's",

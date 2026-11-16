@@ -30,7 +30,6 @@ func TestStores_NamespaceDispatch(t *testing.T) {
 		"delete": map[string]any{"script": "scripts/del.sh"},
 		"where":  map[string]any{"inline": "pwd", "cwd": "."},
 	}))
-	runOK(t, e, testkit.Opts{}, "update", "docker", "-y")
 
 	res := e.Run("r", "docker", "delete", "XYZ")
 	testkit.Eq(t, "delete", res.Stdout, "deleting XYZ\n")
@@ -57,7 +56,7 @@ func TestStores_NamespaceDispatch(t *testing.T) {
 func TestStores_NamespaceFromImportsKey(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteFile(filepath.Join(e.Tmp, "shared", "tools.shortcut"), `{"version": 1, "shortcuts": {"hi": {"inline": "echo hi from tools"}}}`, 0)
-	proj := e.Project(testkit.OWN, testkit.Extra(map[string]any{"imports": map[string]any{"tools": "../shared/tools.shortcut"}}), testkit.Approved())
+	proj := e.Project(testkit.OWN, testkit.Extra(map[string]any{"imports": map[string]any{"tools": "../shared/tools.shortcut"}}))
 	testkit.Eq(t, "tools hi", e.RunWith(in(proj), "r", ".", "tools", "hi").Stdout, "hi from tools\n")
 	testkit.Eq(t, "own", e.RunWith(in(proj), "r", ".", "own").Stdout, "own\n")
 }
@@ -68,7 +67,6 @@ func TestStores_NamespaceCollisionAndNestingErrors(t *testing.T) {
 	reg := filepath.Join(proj, ".shortcuts")
 	e.WriteImport(reg, "docker", testkit.DockerPS)
 	e.WriteStore(e.Store, map[string]any{"outside": testkit.Inline("echo outside")})
-	e.RunWith(in(proj), "update", "-y") // approves what it can; the store itself can't run
 
 	for _, words := range [][]string{{"docker"}, {"docker", "ps"}, {"ok"}} {
 		res := e.RunWith(in(proj), append([]string{"r", "."}, words...)...)
@@ -92,7 +90,6 @@ func TestStores_ImportsMustBeShortcutFiles(t *testing.T) {
 	testkit.Contains(t, "docker.json", e.Run("r", "docker", "ps").Stderr, "'docker' not found")
 
 	proj := e.Project(testkit.OWN, testkit.Extra(map[string]any{"imports": map[string]any{"tools": "tools.json"}}))
-	e.RunWith(in(proj), "update", "-y")
 	res := e.RunWith(in(proj), "r", ".", "own")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "import 'tools'")
@@ -113,7 +110,6 @@ func TestStores_ABareShortcutFileIsRefusedWithWhy(t *testing.T) {
 
 	proj := e.Project(testkit.OWN, testkit.Extra(map[string]any{"imports": map[string]any{"x": ".shortcut"}}),
 		testkit.Files(map[string]any{".shortcut": docText(t, testkit.DockerPS)}))
-	e.RunWith(in(proj), "update", "-y")
 	for _, cmd := range [][]string{{"r", ".", "x", "ps"}, {"r", ".", "own"}} {
 		res := e.RunWith(in(proj), cmd...)
 		res.WantCode(t, 1)
@@ -156,15 +152,12 @@ func TestStores_BrokenProjectStopsEveryRunInsideIt(t *testing.T) {
 		t.Error("rm left it")
 	}
 	testkit.Contains(t, "list", e.RunWith(in(proj), "list").Stderr, "corrupt registry")
-	if code := e.RunWith(in(proj), "update", ".").Code; code != 1 {
-		t.Errorf("update: exit %d", code)
-	}
 }
 
 func TestStores_ARepairedProjectRunsAgain(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"build": testkit.Inline("echo global")})
-	proj := e.Project(map[string]any{"build": testkit.Inline("echo project")}, testkit.Approved())
+	proj := e.Project(map[string]any{"build": testkit.Inline("echo project")})
 	registry := filepath.Join(proj, ".shortcuts")
 	good := testkit.ReadFile(t, registry)
 	e.WriteFile(registry, "<<<<<<< HEAD\n"+good, 0)
@@ -182,7 +175,6 @@ func TestStores_BrokenProjectRefusesANamespaceItImported(t *testing.T) {
 	proj := e.Project(map[string]any{},
 		testkit.Extra(map[string]any{"imports": map[string]any{"docker": "../tools/docker.shortcut"}}),
 		testkit.Files(map[string]any{"tools/docker.shortcut": `{"version": 1, "shortcuts": {"ps": {"inline": "true"}}}`}))
-	runOK(t, e, in(proj), "update", ".", "-y")
 	e.CorruptStore(filepath.Join(proj, ".shortcuts"))
 
 	res := e.RunWith(in(proj), "r", ".", "docker", "ps")
@@ -195,7 +187,7 @@ func TestStores_BrokenProjectRefusesANamespaceItImported(t *testing.T) {
 func TestStores_AnUnknownTopLevelFieldStopsTheProjectToo(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"outside": testkit.Inline("echo outside")})
-	proj := e.Project(map[string]any{"inside": testkit.Inline("true"), "mine": testkit.Inline("true")}, testkit.Approved())
+	proj := e.Project(map[string]any{"inside": testkit.Inline("true"), "mine": testkit.Inline("true")})
 	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"mine": {"inline": "echo mine"}}}`, 0)
 	registry := filepath.Join(proj, ".shortcuts")
 	e.WriteStore(registry, map[string]any{"inside": testkit.Inline("true"), "mine": testkit.Inline("true")}, map[string]any{"bogus": 1})
@@ -210,7 +202,6 @@ func TestStores_AnUnknownTopLevelFieldStopsTheProjectToo(t *testing.T) {
 	res := e.RunWith(in(proj), "show", ".", "inside")
 	res.WantCode(t, 0)
 	testkit.Contains(t, "show", res.Stdout, "Scope:       project")
-	testkit.Contains(t, "show", res.Stdout, "Approval:    changed")
 	// show and rm --local find its entries
 	testkit.Eq(t, "rm inside", e.RunWith(in(proj), "rm", "inside", "-y").Code, 1) // rm never reaches a project entry
 	res = e.RunWith(in(proj), "rm", "--local", "mine", "-y")
@@ -238,14 +229,13 @@ func TestStores_BrokenGlobalStoreStillReports(t *testing.T) {
 func TestStores_AFifoScriptNeverBlocks(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(map[string]any{"p": map[string]any{"script": "pipe"}, "q": testkit.Inline("true")}, testkit.Files(map[string]any{"pipe": "#!/bin/sh\n"}), testkit.Mode(0o755))
-	runOK(t, e, in(proj), "update", ".", "-y")
 	os.Remove(filepath.Join(proj, "pipe"))
 	if err := syscall.Mkfifo(filepath.Join(proj, "pipe"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	o := in(proj)
 	o.Timeout = 10 * time.Second
-	for _, cmd := range [][]string{{"list"}, {"list", "--names"}, {"r", ".", "q"}, {"update", ".", "-y"}} {
+	for _, cmd := range [][]string{{"list"}, {"list", "--names"}, {"r", ".", "q"}} {
 		res := e.RunWith(o, cmd...)
 		if strings.Contains(res.Stderr, "panic") || strings.Contains(res.Stderr, "goroutine") {
 			t.Errorf("%v: %s", cmd, res.Stderr)

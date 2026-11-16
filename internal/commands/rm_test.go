@@ -100,17 +100,13 @@ func TestStores_RmSaysWhatItRemovesAndWhatHappensToTheScript(t *testing.T) {
 	}
 }
 
-func TestStores_RmNamespaceRemovesItWithItsScriptsFolderAndApproval(t *testing.T) {
+func TestStores_RmNamespaceRemovesItWithItsScriptsFolder(t *testing.T) {
 	e := testkit.New(t)
 	imports := filepath.Join(e.Store, "imports")
 	e.WriteImport(e.Store, "dk", testkit.NS(map[string]any{"ps": map[string]any{"script": "scripts/dk/ps.sh"}}))
 	e.WriteFile(filepath.Join(imports, "scripts", "dk", "ps.sh"), bashShebang+"echo ps\n", 0o755)
 	e.WriteFile(filepath.Join(imports, "scripts", "dk", "lib", "helper"), "x\n", 0)
 	e.WriteImport(e.Store, "keep", testkit.NS(testkit.HI))
-	runOK(t, e, testkit.Opts{}, "update", "-y", "dk")
-	approvals := filepath.Join(e.Store, "approvals")
-	count := func() int { l, _ := os.ReadDir(approvals); return len(l) }
-	testkit.Eq(t, "approvals", count(), 1)
 
 	rc, out := e.InTerminal(testkit.Opts{}, []testkit.Key{{Wait: "[y/N]", Send: y("n\n")}}, "rm", "--namespace", "dk")
 	testkit.Eq(t, "decline", rc, 1)
@@ -125,7 +121,6 @@ func TestStores_RmNamespaceRemovesItWithItsScriptsFolderAndApproval(t *testing.T
 	testkit.Contains(t, "rm -y", res.Stdout, "Removed namespace 'dk'.")
 	testkit.NotExist(t, filepath.Join(imports, "dk.shortcut"))
 	testkit.NotExist(t, filepath.Join(imports, "scripts", "dk"))
-	testkit.Eq(t, "approvals after", count(), 0)
 	if !fileExists(filepath.Join(imports, "keep.shortcut")) {
 		t.Error("keep.shortcut is gone")
 	}
@@ -218,7 +213,6 @@ func TestStores_NamespaceFlagKeepsEachGroupsScriptsApart(t *testing.T) {
 	for _, p := range [][2]string{{"docker", "dock"}, {"kube", "kub"}} {
 		source := e.WriteFile(filepath.Join(e.Store, "imports", "scripts", p[0], "delete.sh"), bashShebang+"echo "+p[1]+"\n", 0o755)
 		runOK(t, e, testkit.Opts{}, "new", "delete", "--script", source, "--namespace", p[0], "--desc", "d")
-		runOK(t, e, testkit.Opts{}, "update", p[0], "-y")
 	}
 	testkit.Eq(t, "docker", e.Run("r", "docker", "delete").Stdout, "dock\n")
 	testkit.Eq(t, "kube", e.Run("r", "kube", "delete").Stdout, "kub\n")
@@ -229,25 +223,6 @@ func TestStores_NamespaceFlagKeepsEachGroupsScriptsApart(t *testing.T) {
 	if !fileExists(cp) || !fileExists(filepath.Join(e.Store, "imports", "scripts", "kube", "delete.sh")) {
 		t.Error("rm deleted a script file")
 	}
-}
-
-func TestStores_CliWritesNeedUpdateOnANamespace(t *testing.T) {
-	e := testkit.New(t)
-	runOK(t, e, testkit.Opts{}, "new", "a", "--namespace", "dk", "--", "echo a")
-	runOK(t, e, testkit.Opts{}, "update", "dk", "-y")
-	testkit.Eq(t, "a", e.Run("r", "dk", "a").Stdout, "a\n")
-
-	res := runOK(t, e, testkit.Opts{}, "new", "ps", "--namespace", "dk", "--", "echo ps")
-	testkit.Contains(t, "new", res.Stderr, "needs approving before it runs: shortcut update dk")
-	testkit.Contains(t, "run ps", e.Run("r", "dk", "ps").Stderr, "changed since you approved it")
-	runOK(t, e, testkit.Opts{}, "update", "dk", "-y")
-	testkit.Eq(t, "ps", e.Run("r", "dk", "ps").Stdout, "ps\n")
-
-	res = runOK(t, e, testkit.Opts{}, "rm", "dk", "ps", "-y")
-	testkit.Contains(t, "rm", res.Stderr, "needs approving before it runs: shortcut update dk")
-	testkit.Contains(t, "run a", e.Run("r", "dk", "a").Stderr, "changed since you approved it")
-	runOK(t, e, testkit.Opts{}, "update", "dk", "-y")
-	testkit.Eq(t, "a", e.Run("r", "dk", "a").Stdout, "a\n")
 }
 
 func TestStores_LocalRefusesAnywhereInTheGlobalStore(t *testing.T) {

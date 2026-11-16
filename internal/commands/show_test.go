@@ -3,7 +3,6 @@ package commands
 import (
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -67,7 +66,6 @@ Script (TMP/home/.shortcuts/scripts/tool.sh):
 echo hi
 `, ""},
 		{[]string{"show", "--json", "tool"}, 0, `{
-  "approval": "ok",
   "cwd": null,
   "defined_in": "TMP/home/.shortcuts/shortcuts.json",
   "entry": {
@@ -85,7 +83,6 @@ echo hi
 }
 `, ""},
 		{[]string{"show", "--json", "bad"}, 0, `{
-  "approval": "ok",
   "cwd": null,
   "defined_in": "TMP/home/.shortcuts/shortcuts.json",
   "entry": {
@@ -103,7 +100,6 @@ echo hi
 }
 `, ""},
 		{[]string{"show", "--json", "trav"}, 0, `{
-  "approval": "ok",
   "cwd": null,
   "defined_in": "TMP/home/.shortcuts/shortcuts.json",
   "entry": {
@@ -119,7 +115,6 @@ echo hi
 }
 `, ""},
 		{[]string{"show", "--json", "nul"}, 0, `{
-  "approval": "ok",
   "cwd": null,
   "defined_in": "TMP/home/.shortcuts/shortcuts.json",
   "entry": null,
@@ -238,12 +233,11 @@ func TestShow_ReadsPastABrokenProject(t *testing.T) {
 	testkit.Contains(t, "show nothing", e.RunWith(in, "show", "nothing").Stderr, "'nothing' not found")
 	testkit.Contains(t, "show docker", e.RunWith(in, "show", "docker").Stdout, "Scope:       global")
 
-	// an unknown top-level field: the file still parses, so show finds its entries; they are not approved
+	// an unknown top-level field: the file still parses, so show finds its entries
 	proj := e.Project(map[string]any{"inside": testkit.Inline("true")}, testkit.Name("p2"), testkit.Extra(map[string]any{"bogus": 1}))
 	res := e.RunWith(testkit.Opts{Cwd: proj}, "show", ".", "inside")
 	res.WantCode(t, 0)
 	testkit.Contains(t, "show inside", res.Stdout, "Scope:       project")
-	testkit.Contains(t, "show inside", res.Stdout, "Approval:    not approved (run: shortcut update)")
 }
 
 // show --field prints one field bare, reads only, and says which fields exist.
@@ -255,7 +249,7 @@ func TestShow_Field(t *testing.T) {
 	})
 	e.WriteFile(filepath.Join(e.Store, "scripts", "tool.sh"), "#!/bin/sh\n", 0)
 	store := filepath.Join(e.Store, "shortcuts.json")
-	list := "name, namespace, scope, defined_in, source, approval, cwd, run_cwd, script_path, error, description, inline, script"
+	list := "name, namespace, scope, defined_in, source, cwd, run_cwd, script_path, error, description, inline, script"
 	cases := []struct {
 		args   []string
 		code   int
@@ -287,20 +281,6 @@ func TestShow_Field(t *testing.T) {
 		if res.Code != c.code || res.Stdout != c.stdout || res.Stderr != c.stderr {
 			t.Errorf("%v: exit %d stdout %q stderr %q; want exit %d stdout %q stderr %q", c.args, res.Code, res.Stdout, res.Stderr, c.code, c.stdout, c.stderr)
 		}
-	}
-}
-
-// show --field never approves and writes nothing, even for a project entry that was never approved.
-func TestShow_FieldIsReadOnly(t *testing.T) {
-	e := testkit.New(t)
-	proj := e.Project(map[string]any{"x": testkit.Inline("echo x")})
-	before := treeOf(t, e.Tmp)
-	res := e.RunWith(in(proj), "show", "--field", "approval", ".", "x")
-	if res.Code != 0 || res.Stdout != "new\n" || res.Stderr != "" {
-		t.Errorf("exit %d stdout %q stderr %q", res.Code, res.Stdout, res.Stderr)
-	}
-	if after := treeOf(t, e.Tmp); !reflect.DeepEqual(after, before) {
-		t.Errorf("show --field changed the tree:\n%v\n--- now\n%v", before, after)
 	}
 }
 

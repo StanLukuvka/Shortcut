@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -390,18 +389,17 @@ func TestGroup_ShortcutsOverlayAndSource(t *testing.T) {
 func TestGroup_Names(t *testing.T) {
 	env := testkit.New(t)
 	ns := Group{Kind: KindNamespace, Name: "docker", File: filepath.Join(env.Store, "imports", "docker.shortcut"), StoreDir: env.Store}
-	if ns.Display("ps") != "docker ps" || ns.Label() != "docker" || ns.UpdateCmd() != "shortcut update docker" ||
-		ns.ScriptBase() != filepath.Join(env.Store, "imports") || ns.ScriptsDir() != filepath.Join(env.Store, "imports", "scripts", "docker") ||
-		!ns.NeedsApproval() {
+	if ns.Display("ps") != "docker ps" || ns.Label() != "docker" ||
+		ns.ScriptBase() != filepath.Join(env.Store, "imports") || ns.ScriptsDir() != filepath.Join(env.Store, "imports", "scripts", "docker") {
 		t.Errorf("%+v", ns)
 	}
 	global := Group{Kind: KindGlobal, File: filepath.Join(env.Store, "shortcuts.json"), StoreDir: env.Store}
-	if global.NeedsApproval() || global.InProject || global.Display("x") != "x" || global.ScriptBase() != env.Store ||
-		global.ScriptsDir() != filepath.Join(env.Store, "scripts") || global.UpdateCmd() != "shortcut update" {
+	if global.InProject || global.Display("x") != "x" || global.ScriptBase() != env.Store ||
+		global.ScriptsDir() != filepath.Join(env.Store, "scripts") {
 		t.Errorf("%+v", global)
 	}
 	proj := Group{Kind: KindProject, InProject: true, File: filepath.Join(env.Tmp, "p", ".shortcuts"), StoreDir: filepath.Join(env.Tmp, "p")}
-	if !proj.InProject || !proj.NeedsApproval() || proj.Label() != proj.Key() || proj.Key() != proj.StoreDir {
+	if !proj.InProject || proj.Label() != proj.Key() || proj.Key() != proj.StoreDir {
 		t.Errorf("%+v", proj)
 	}
 }
@@ -545,43 +543,6 @@ func TestStores_EntryErrors(t *testing.T) {
 	}
 	if strings.Contains(joined, "'ok'") {
 		t.Errorf("a valid entry was reported:\n%s", joined)
-	}
-}
-
-func TestKey_TellsNonUTF8NamesApart(t *testing.T) {
-	store := testkit.New(t).Tmp
-	keys := map[string]string{}
-	for _, file := range []string{"caf\xe9", "caf\xea", "café", `caf\udce9`, "\xed\xa0\x80", "\xed\xb2\x80", "\xed\x80\x80", "\xed\xc0\x80", "\xed\xff\xbf", "\xed\xbf\xbf", "\xed\xa0"} {
-		g := Group{Kind: KindNamespace, Name: "ns", StoreDir: store, File: filepath.Join(store, file)}
-		k := g.Key()
-		if prev, dup := keys[k]; dup {
-			t.Errorf("%q and %q share the key %s", prev, file, k)
-		}
-		keys[k] = file
-		if RecordName(k) == "" {
-			t.Fatal("no record name")
-		}
-	}
-	names := map[string]bool{}
-	for k := range keys {
-		names[RecordName(k)] = true
-	}
-	if len(names) != len(keys) {
-		t.Errorf("%d record names for %d keys", len(names), len(keys))
-	}
-	if got, want := keyText("a", "é😀\xff"), "["+strconv.QuoteToASCII("a")+", "+strconv.QuoteToASCII("é😀\xff")+"]"; got != want {
-		t.Errorf("got %s want %s", got, want)
-	}
-	if got, want := keyText("a", "x"), `["a", "x"]`; got != want {
-		t.Errorf("got %s want %s", got, want)
-	}
-	if got, want := keyText("é😀\xff"), `["\u00e9\U0001f600\xff"]`; got != want {
-		t.Errorf("got %s want %s", got, want)
-	}
-	// U+FFFD written out is not the raw byte it replaces
-	a, b := Group{Kind: KindNamespace, Name: "ns", StoreDir: store, File: filepath.Join(store, "caf\xe9.shortcut")}, Group{Kind: KindNamespace, Name: "ns", StoreDir: store, File: filepath.Join(store, "caf\xef\xbf\xbd.shortcut")}
-	if a.Key() == b.Key() || RecordName(a.Key()) == RecordName(b.Key()) {
-		t.Errorf("%s and %s share a record", a.Key(), b.Key())
 	}
 }
 
