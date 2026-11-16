@@ -9,23 +9,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-func parse(t *testing.T, s string) ordjson.Value {
+func doc(t *testing.T, s string) *Doc {
 	t.Helper()
-	v, err := ordjson.Parse(s)
+	d, err := ParseDoc([]byte(s))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return v
-}
-
-func obj(t *testing.T, s string) *ordjson.Object {
-	t.Helper()
-	return parse(t, s).(*ordjson.Object)
+	return d
 }
 
 func TestEntry_FromValueMessages(t *testing.T) {
@@ -46,17 +40,17 @@ func TestEntry_FromValueMessages(t *testing.T) {
 		{`{"inline": "a", "script": "b"}`, "'x' is not a valid entry: it needs exactly one of 'inline' and 'script'"},
 	}
 	for _, c := range cases {
-		_, err := EntryFromValue("x", parse(t, c.in))
+		_, err := DecodeEntry("x", []byte(c.in))
 		if err == nil || err.Error() != c.want {
 			t.Errorf("%s: got %v, want %q", c.in, err, c.want)
 		}
 	}
 }
 
-// compact is v on one line, as the JSON encoder writes it.
-func compact(t *testing.T, v ordjson.Value) string {
+// compactOf is d on one line, as the JSON encoder writes it.
+func compactOf(t *testing.T, d *Doc) string {
 	t.Helper()
-	b, err := ordjson.Marshal(v)
+	b, err := d.Bytes()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,23 +59,23 @@ func compact(t *testing.T, v ordjson.Value) string {
 
 func TestEntry_RoundTripKeepsOrder(t *testing.T) {
 	src := `{"description": "d", "script": "s.sh", "cwd": "c", "confirm": true}`
-	e, err := EntryFromValue("x", parse(t, src))
+	e, err := DecodeEntry("x", []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := compact(t, e.ToObject()), compact(t, parse(t, src)); got != want {
-		t.Errorf("got  %s\nwant %s", got, want)
+	if raw, err := e.Raw(); err != nil || string(raw) != compactOf(t, doc(t, src)) {
+		t.Errorf("got  %s, %v\nwant %s", raw, err, compactOf(t, doc(t, src)))
 	}
 	if e.Inline != nil || *e.Script != "s.sh" || !e.Confirm {
 		t.Errorf("fields: %+v", e)
 	}
 	// An empty inline is still set.
-	e, err = EntryFromValue("y", parse(t, `{"inline": ""}`))
+	e, err = DecodeEntry("y", []byte(`{"inline": ""}`))
 	if err != nil || e.Inline == nil {
 		t.Fatalf("%+v %v", e, err)
 	}
-	if got := compact(t, e.ToObject()); got != `{"description":"","inline":""}` {
-		t.Error(got)
+	if got, _ := e.Raw(); string(got) != `{"description":"","inline":""}` {
+		t.Error(string(got))
 	}
 }
 
@@ -169,7 +163,7 @@ func TestRegistry_FileError(t *testing.T) {
 		{`{"version": 1}`, "ns", "P needs 'shortcuts'"},
 	}
 	for _, c := range cases {
-		got := fileError("P", obj(t, c.file), c.name)
+		got := fileError("P", doc(t, c.file), c.name)
 		if got != c.want {
 			t.Errorf("%s (%q): got %q want %q", c.file, c.name, got, c.want)
 		}
@@ -198,7 +192,7 @@ func TestRegistry_ResolveScriptPath(t *testing.T) {
 
 func TestStores_AtomicRegistrySaveAndCorruptProtection(t *testing.T) {
 	env := testkit.New(t)
-	data := obj(t, `{"version": 1, "shortcuts": {"test": {"description": "test", "inline": "echo 1"}}}`)
+	data := doc(t, `{"version": 1, "shortcuts": {"test": {"description": "test", "inline": "echo 1"}}}`)
 	if err := SaveRegistryAtomic(env.Store, data); err != nil {
 		t.Fatal(err)
 	}
@@ -206,8 +200,8 @@ func TestStores_AtomicRegistrySaveAndCorruptProtection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if compact(t, loaded) != compact(t, data) {
-		t.Errorf("loaded %s", compact(t, loaded))
+	if compactOf(t, loaded) != compactOf(t, data) {
+		t.Errorf("loaded %s", compactOf(t, loaded))
 	}
 
 	// Corrupt JSON file protection
@@ -226,7 +220,7 @@ func TestStores_AtomicRegistrySaveAndCorruptProtection(t *testing.T) {
 
 func TestStores_StoreDiscoverySkipsGlobalRoot(t *testing.T) {
 	env := testkit.New(t)
-	if err := SaveRegistryAtomic(env.Store, obj(t, `{"version": 1, "shortcuts": {}}`)); err != nil {
+	if err := SaveRegistryAtomic(env.Store, doc(t, `{"version": 1, "shortcuts": {}}`)); err != nil {
 		t.Fatal(err)
 	}
 	// Walking up from home or subdirectory must skip ~/.shortcuts
@@ -307,7 +301,7 @@ func TestStores_WriteJSONAtomic(t *testing.T) {
 	target := env.WriteFile(filepath.Join(dotfiles, "shortcuts.json"), `{"version": 1, "shortcuts": {}}`, 0o644)
 	link := filepath.Join(env.Store, "shortcuts.json")
 	env.Symlink(target, link)
-	v := obj(t, `{"version": 1, "shortcuts": {"hi": {"description": "é", "n": 1.0}}}`)
+	v := doc(t, `{"version": 1, "shortcuts": {"hi": {"description": "é", "n": 1.0}}}`)
 	if err := WriteJSONAtomic(link, v); err != nil {
 		t.Fatal(err)
 	}
@@ -341,7 +335,7 @@ func TestStores_WriteJSONAtomicLeavesNoTempFileOnError(t *testing.T) {
 	dir := env.Folder("d")
 	target := filepath.Join(dir, "x.json")
 	os.Mkdir(target, 0o755) // a rename of a file over a folder fails
-	if err := WriteJSONAtomic(target, &ordjson.Object{}); err == nil {
+	if err := WriteJSONAtomic(target, &Doc{}); err == nil {
 		t.Fatal("want an error")
 	}
 	entries, _ := os.ReadDir(dir)
@@ -401,15 +395,16 @@ func TestStores_InitStoreCreatesOnlyAMissingRegistry(t *testing.T) {
 }
 
 func TestGroup_ShortcutsOverlayAndSource(t *testing.T) {
+	shared := doc(t, `{"shortcuts": {"a": {"inline": "1"}, "b": {"inline": "2"}, "c": {"inline": "3"}}}`)
+	local := doc(t, `{"shortcuts": {"b": {"inline": "B"}, "d": {"inline": "4"}}}`)
 	g := Group{
 		Kind: KindProject, InProject: true, File: "/p/.shortcuts", StoreDir: "/p", LocalFile: "/p/.shortcuts.local",
-		Data:      obj(t, `{"shortcuts": {"a": {"inline": "1"}, "b": {"inline": "2"}, "c": {"inline": "3"}}}`),
-		LocalData: obj(t, `{"shortcuts": {"b": {"inline": "B"}, "d": {"inline": "4"}}}`),
+		Doc: shared, Shared: ItemsOf(shared), LocalDoc: local, Local: ItemsOf(local),
 	}
-	if got := strings.Join(g.Shortcuts().Keys, ","); got != "a,b,c,d" {
+	if got := strings.Join(g.Shortcuts().Names(), ","); got != "a,b,c,d" {
 		t.Errorf("keys %s", got)
 	}
-	if v, _ := g.Shortcuts().Get("b"); compact(t, v) != `{"inline":"B"}` {
+	if it, _ := g.Shortcuts().Get("b"); string(it.Raw) != `{"inline":"B"}` {
 		t.Error("b not overridden")
 	}
 	for name, want := range map[string]string{"a": "shared", "b": "overridden", "c": "shared", "d": "local"} {
@@ -420,12 +415,12 @@ func TestGroup_ShortcutsOverlayAndSource(t *testing.T) {
 	if g.DefiningFile("b") != "/p/.shortcuts.local" || g.DefiningFile("a") != "/p/.shortcuts" {
 		t.Error("DefiningFile")
 	}
-	if len(newGroup().Shortcuts().Keys) != 0 { // no LocalData (a namespace) and an empty file read as empty
+	if len(newGroup().Shortcuts()) != 0 { // no local file (a namespace) and an empty file read as empty
 		t.Error("empty group")
 	}
 	// a non-object "shortcuts" is empty, not a crash
-	if n := len((Group{Data: obj(t, `{"shortcuts": []}`)}).Shortcuts().Keys); n != 0 {
-		t.Error(n)
+	if d := doc(t, `{"shortcuts": []}`); len((Group{Doc: d, Shared: ItemsOf(d)}).Shortcuts()) != 0 {
+		t.Error("shortcuts that is not an object")
 	}
 }
 
@@ -550,7 +545,7 @@ func TestStores_LoadProjectGroupErrors(t *testing.T) {
 	// an absent .shortcuts is just empty
 	only := env.Project(nil, testkit.Name("only"))
 	env.WriteFile(filepath.Join(only, ".shortcuts.local"), `{"version": 1, "shortcuts": {"m": {"inline": "x"}}}`, 0)
-	if g = LoadProjectGroup(only); g.Error != nil || len(g.Shortcuts().Keys) != 1 {
+	if g = LoadProjectGroup(only); g.Error != nil || len(g.Shortcuts()) != 1 {
 		t.Errorf("%+v", g)
 	}
 	if g = NewContext(env.Home, nil).ReloadGroup(g); g.LocalFile == "" {
@@ -650,9 +645,9 @@ func TestWriteJSONAtomic_RefusesInvalidUTF8AndKeepsTheOldFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	o := &ordjson.Object{}
-	o.Set("name", "caf\xe9")
-	if err := WriteJSONAtomic(path, o); !errors.Is(err, ordjson.ErrNotUTF8) {
+	d := &Doc{}
+	d.Set("name", []byte("\"caf\xe9\""))
+	if err := WriteJSONAtomic(path, d); !errors.Is(err, ErrNotUTF8) {
 		t.Fatalf("got %v", err)
 	}
 	if got, _ := os.ReadFile(path); string(got) != old {
@@ -718,7 +713,7 @@ func TestStores_VersionRequiredInEveryFile(t *testing.T) {
 }
 
 // newGroup is a Group with an empty file, as LoadGroup gives for a missing one.
-func newGroup() Group { return Group{Data: &ordjson.Object{}} }
+func newGroup() Group { return Group{Doc: &Doc{}} }
 
 func TestGroup_KindFromLoaders(t *testing.T) {
 	e := testkit.New(t)

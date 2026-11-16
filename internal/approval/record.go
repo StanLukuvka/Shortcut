@@ -9,7 +9,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 )
 
 // Record is approvals/<sha256(key)>.json: the snapshot last approved, and Local for .shortcuts.local on its own
@@ -31,14 +30,15 @@ func isDigest(s string) bool {
 	return true
 }
 
-func stringMap(v ordjson.Value) (map[string]string, bool) {
-	o, ok := v.(*ordjson.Object)
+// digests reads an object whose values are all digests.
+func digests(d *model.Doc, key string) (map[string]string, bool) {
+	o, ok := d.Object(key)
 	if !ok {
 		return nil, false
 	}
 	m := make(map[string]string, len(o.Keys))
 	for _, k := range o.Keys {
-		s, ok := o.Vals[k].(string)
+		s, ok := o.String(k)
 		if !ok || !isDigest(s) {
 			return nil, false
 		}
@@ -49,32 +49,36 @@ func stringMap(v ordjson.Value) (map[string]string, bool) {
 
 // Load returns the record, or nil when there is none, it can't be read, or it isn't shaped as one (a
 // JSON object with a "snapshot" and a "local" object, each holding only 64-character lowercase hex strings).
+// Keys are matched exactly, not case-insensitively.
 func Load(c *model.Context, g model.Group) *Record {
-	v, err := model.ReadJSONFile(c.ApprovalPath(g))
+	text, err := model.ReadJSONFile(c.ApprovalPath(g))
 	if err != nil {
 		return nil
 	}
-	o, ok := v.(*ordjson.Object)
+	d, err := model.ParseDoc(text)
+	if err != nil {
+		return nil
+	}
+	snap, ok := digests(d, "snapshot")
 	if !ok {
 		return nil
 	}
-	snap, ok := stringMap(o.Vals["snapshot"])
-	if !ok {
-		return nil
-	}
-	local, ok := stringMap(o.Vals["local"])
+	local, ok := digests(d, "local")
 	if !ok {
 		return nil
 	}
 	return &Record{Snapshot: snap, Local: local}
 }
 
-func sortedObject(m map[string]string) *ordjson.Object {
-	o := &ordjson.Object{}
-	for _, k := range slices.Sorted(maps.Keys(m)) { // readers sort, so the order is free; sorted is stable
-		o.Set(k, m[k])
+// mapDoc is m as an object's text, its keys sorted: readers sort, so the order is free, and sorted is stable.
+func mapDoc(m map[string]string) ([]byte, error) {
+	d := &model.Doc{}
+	for _, k := range slices.Sorted(maps.Keys(m)) {
+		if err := d.SetString(k, m[k]); err != nil {
+			return nil, err
+		}
 	}
-	return o
+	return d.Bytes()
 }
 
 // Save records what was shown and approved, under the global store's lock.
@@ -96,10 +100,20 @@ func Save(c *model.Context, g model.Group, shared, local map[string]string) erro
 		if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 			return err
 		}
-		rec := &ordjson.Object{}
-		rec.Set("key", g.Key())
-		rec.Set("snapshot", sortedObject(shared))
-		rec.Set("local", sortedObject(local))
+		rec := &model.Doc{}
+		if err := rec.SetString("key", g.Key()); err != nil {
+			return err
+		}
+		snap, err := mapDoc(shared)
+		if err != nil {
+			return err
+		}
+		loc, err := mapDoc(local)
+		if err != nil {
+			return err
+		}
+		rec.Set("snapshot", snap)
+		rec.Set("local", loc)
 		if err := model.WriteJSONAtomic(path, rec); err != nil {
 			return err
 		}

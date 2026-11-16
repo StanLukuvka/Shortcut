@@ -3,47 +3,43 @@ package approval
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
 // golden reads ../testdata/approval.json.
-func golden(t *testing.T, set string) []*ordjson.Object {
+func golden(t *testing.T, set string) []map[string]any {
 	t.Helper()
-	raw := testkit.Golden(t, "approval.json")
-	v, err := ordjson.Decode(raw)
-	if err != nil {
+	var file map[string]json.RawMessage
+	if err := json.Unmarshal(testkit.Golden(t, "approval.json"), &file); err != nil {
 		t.Fatal(err)
 	}
-	cases, ok := v.(*ordjson.Object).Get(set)
-	if !ok {
-		t.Fatalf("approval.json has no %s", set)
+	var cases []map[string]any
+	if err := json.Unmarshal(file[set], &cases); err != nil {
+		t.Fatalf("approval.json %s: %v", set, err)
 	}
-	var out []*ordjson.Object
-	for _, c := range cases.([]ordjson.Value) {
-		out = append(out, c.(*ordjson.Object))
-	}
-	return out
+	return cases
 }
 
-func str(o *ordjson.Object, k string) string {
-	s, _ := o.Vals[k].(string)
+func str(o map[string]any, k string) string {
+	s, _ := o[k].(string)
 	return s
 }
 
 // text is the field k, or the bytes of k+"_hex" when the name is not valid UTF-8 and so is given as hex.
-func text(t *testing.T, o *ordjson.Object, k string) string {
+func text(t *testing.T, o map[string]any, k string) string {
 	t.Helper()
-	if h, ok := o.Get(k + "_hex"); ok {
+	if h, ok := o[k+"_hex"]; ok {
 		b, err := hex.DecodeString(h.(string))
 		if err != nil {
 			t.Fatal(err)
@@ -53,44 +49,21 @@ func text(t *testing.T, o *ordjson.Object, k string) string {
 	return str(o, k)
 }
 
-func strMap(t *testing.T, v ordjson.Value) map[string]string {
+func strMap(t *testing.T, v any) map[string]string {
 	t.Helper()
-	m, ok := stringMap(v)
-	if !ok {
-		t.Fatalf("not a map of strings: %v", v)
+	o, _ := v.(map[string]any)
+	m := make(map[string]string, len(o))
+	for k, x := range o {
+		s, ok := x.(string)
+		if !ok || !isDigest(s) {
+			t.Fatalf("not a map of digests: %v", v)
+		}
+		m[k] = s
+	}
+	if o == nil {
+		t.Fatalf("not a map of digests: %v", v)
 	}
 	return m
-}
-
-func sameJSON(a, b ordjson.Value) bool {
-	switch x := a.(type) {
-	case *ordjson.Object:
-		y, ok := b.(*ordjson.Object)
-		if !ok || len(x.Keys) != len(y.Keys) {
-			return false
-		}
-		for _, k := range x.Keys {
-			yv, has := y.Vals[k]
-			if !has || !sameJSON(x.Vals[k], yv) {
-				return false
-			}
-		}
-		return true
-	case []ordjson.Value:
-		y, ok := b.([]ordjson.Value)
-		if !ok || len(x) != len(y) {
-			return false
-		}
-		for i := range x {
-			if !sameJSON(x[i], y[i]) {
-				return false
-			}
-		}
-		return true
-	}
-	x, err1 := ordjson.Marshal(a)
-	y, err2 := ordjson.Marshal(b)
-	return err1 == nil && err2 == nil && string(x) == string(y)
 }
 
 func TestApproval_KeysAndRecordNames(t *testing.T) {
@@ -143,10 +116,10 @@ func TestApproval_ApprovalPathIsInTheGlobalStore(t *testing.T) {
 }
 
 // buildTree writes a golden tree under root. It skips the test on a filesystem that refuses non-UTF-8 names.
-func buildTree(t *testing.T, env *testkit.Env, root string, tree []ordjson.Value) {
+func buildTree(t *testing.T, env *testkit.Env, root string, tree []any) {
 	t.Helper()
 	for _, item := range tree {
-		e := item.(*ordjson.Object)
+		e := item.(map[string]any)
 		if p := text(t, e, "path"); !utf8.ValidString(p) {
 			probe := filepath.Join(env.Tmp, "probe\xff")
 			if err := os.WriteFile(probe, nil, 0o644); err != nil {
@@ -158,7 +131,7 @@ func buildTree(t *testing.T, env *testkit.Env, root string, tree []ordjson.Value
 		switch typ := str(e, "type"); typ {
 		case "file":
 			var content any = str(e, "content")
-			if h, ok := e.Get("content_hex"); ok {
+			if h, ok := e["content_hex"]; ok {
 				b, err := hex.DecodeString(h.(string))
 				if err != nil {
 					t.Fatal(err)
@@ -198,23 +171,23 @@ func TestApproval_GoldenTrees(t *testing.T) {
 			env := testkit.New(t)
 			ctx := model.NewContext(env.Home, nil)
 			root := env.Folder("tree")
-			buildTree(t, env, root, c.Vals["tree"].([]ordjson.Value))
+			buildTree(t, env, root, c["tree"].([]any))
 			store := model.NewContext(env.Home, nil).Store(root)
-			want := c.Vals["groups"].([]ordjson.Value)
+			want := c["groups"].([]any)
 			got := store.Groups()
 			if len(got) != len(want) {
 				t.Fatalf("%d groups, want %d", len(got), len(want))
 			}
-			if wp := c.Vals["problems"].([]ordjson.Value); len(store.Problems) != len(wp) {
+			if wp := c["problems"].([]any); len(store.Problems) != len(wp) {
 				t.Errorf("problems %q, want %v", store.Problems, wp)
 			}
 			for i, g := range got {
-				w := want[i].(*ordjson.Object)
+				w := want[i].(map[string]any)
 				groups++
 				if g.Name != str(w, "name") {
 					t.Fatalf("group %d is %q, want %q", i, g.Name, str(w, "name"))
 				}
-				if contains, ok := w.Get("error_contains"); ok {
+				if contains, ok := w["error_contains"]; ok {
 					msg := ""
 					if g.Error != nil {
 						msg = *g.Error
@@ -223,8 +196,8 @@ func TestApproval_GoldenTrees(t *testing.T) {
 						if State(ctx, g) != "invalid" || Require(ctx, g) == nil {
 							t.Errorf("state %s, require %v", State(ctx, g), Require(ctx, g))
 						}
-						for _, e := range c.Vals["tree"].([]ordjson.Value) { // the message shows the offending path
-							if _, bad := e.(*ordjson.Object).Get("path_hex"); bad && !strings.Contains(msg, strconv.Quote(text(t, e.(*ordjson.Object), "path"))) {
+						for _, e := range c["tree"].([]any) { // the message shows the offending path
+							if _, bad := e.(map[string]any)["path_hex"]; bad && !strings.Contains(msg, strconv.Quote(text(t, e.(map[string]any), "path"))) {
 								t.Errorf("%q does not name the path", msg)
 							}
 						}
@@ -234,15 +207,15 @@ func TestApproval_GoldenTrees(t *testing.T) {
 					}
 					continue
 				}
-				if wantErr := w.Vals["error"]; (g.Error == nil) != (wantErr == nil) ||
+				if wantErr := w["error"]; (g.Error == nil) != (wantErr == nil) ||
 					(g.Error != nil && afterShortcut(*g.Error) != afterShortcut(wantErr.(string))) {
 					t.Errorf("error %v, want %v", g.Error, wantErr)
 				}
 				shared, local := must(SharedFiles(g)), must(LocalFiles(g))
-				if wantShared := strMap(t, w.Vals["shared_files"]); !equalMaps(shared, wantShared) {
+				if wantShared := strMap(t, w["shared_files"]); !equalMaps(shared, wantShared) {
 					t.Errorf("shared files\n got %q\nwant %q", shared, wantShared)
 				}
-				if wantLocal := strMap(t, w.Vals["local_files"]); !equalMaps(local, wantLocal) {
+				if wantLocal := strMap(t, w["local_files"]); !equalMaps(local, wantLocal) {
 					t.Errorf("local files\n got %q\nwant %q", local, wantLocal)
 				}
 				if got, want := g.Key(), strings.ReplaceAll(str(w, "key_template"), "@ROOT@", root); got != want {
@@ -273,8 +246,8 @@ func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template s
 	t.Helper()
 	ctx := model.NewContext(env.Home, nil)
 	text := strings.ReplaceAll(template, "@ROOT@", root)
-	want, err := ordjson.Parse(text)
-	if err != nil {
+	var want any
+	if err := json.Unmarshal([]byte(text), &want); err != nil {
 		t.Fatal(err)
 	}
 	path := ctx.ApprovalPath(g)
@@ -298,11 +271,11 @@ func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template s
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := ordjson.Decode(raw)
-	if err != nil {
+	var got any
+	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatal(err)
 	}
-	if !sameJSON(got, want) {
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("written record\n%s\ndiffers from the template\n%s", raw, text)
 	}
 	if State(ctx, g) != "ok" {
@@ -400,7 +373,8 @@ func TestApproval_LoadRefusesWhatIsNotARecord(t *testing.T) {
 	proj := env.Project(map[string]any{})
 	g := model.NewContext(env.Home, nil).Store(proj).Main
 	path := ctx.ApprovalPath(g)
-	for _, bad := range []string{`{not json`, `[]`, `{"hash": "x"}`, `{"snapshot": []}`, `{"snapshot": {"a": 1}}`, `{"snapshot": {}, "local": []}`, `{"snapshot": {}}`} {
+	for _, bad := range []string{`{not json`, `[]`, `{"hash": "x"}`, `{"snapshot": []}`, `{"snapshot": {"a": 1}}`, `{"snapshot": {}, "local": []}`, `{"snapshot": {}}`,
+		`{"Snapshot": {}, "local": {}}`, `{"snapshot": {}, "Local": {}}`, `{"SNAPSHOT": {}, "LOCAL": {}}`} { // keys match exactly
 		env.WriteFile(path, bad, 0)
 		if r := Load(ctx, g); r != nil {
 			t.Errorf("%s loaded as %+v", bad, r)
@@ -449,6 +423,20 @@ func TestApproval_EntryFilesEdges(t *testing.T) {
 	}
 	if len(files) != 4 { // .shortcuts, the absolute script, the two cwds
 		t.Errorf("%d files: %q", len(files), files)
+	}
+}
+
+func TestEntryFiles_BrokenEntryStillCountsItsScriptAndCwd(t *testing.T) {
+	env := testkit.New(t)
+	proj := env.Project(map[string]any{"b": map[string]any{"script": "bin/b", "cwd": "work", "future": 1}},
+		testkit.Files(map[string]any{"bin/b": "echo b\n"}), testkit.Dirs("work"))
+	g := model.NewContext(env.Home, nil).Store(proj).Main
+	if len(model.EntryErrors(g)) != 1 {
+		t.Fatalf("the entry should be broken: %q", model.EntryErrors(g))
+	}
+	files := must(SharedFiles(g))
+	if files["bin/b"] != sum("echo b\n") || files["./cwd of b"] != sum(filepath.Join(proj, "work")+"\n") {
+		t.Errorf("files %q", files)
 	}
 }
 

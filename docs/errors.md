@@ -42,12 +42,12 @@ A word that starts with `-` is an option. To pass one as a name or a value, put 
 | Message | Meaning |
 |---|---|
 | `registry not found: <path>` | A namespace file that's imported doesn't exist |
-| `corrupt registry <path>: <json error>` | The file isn't valid JSON. The text after the path is Go's, and names the byte where it went wrong |
+| `corrupt registry <path>: <json error>` | The file isn't valid JSON. The text after the path is Go's; for a syntax error it ends with `(at byte N)`, the byte where it went wrong |
 | `corrupt registry <path>: contains text that is not valid UTF-8 (invalid bytes or a lone surrogate escape)` | A string in the file is not valid UTF-8: a bad byte, or a `\udNNN` escape for a lone surrogate. Shortcut won't guess which name it meant; rename the file and edit the entry |
 | `corrupt registry <path>: root must be a JSON object` | The file is JSON, but not `{...}` |
 | `corrupt registry <path>: 'shortcuts' must be an object` | |
 | `corrupt registry <path>: 'description' must be a string` | |
-| `cannot overwrite corrupt registry <path>: <json error>` | shortcut won't write over a file it can't read, including one that isn't valid UTF-8. Fix or move it |
+| `cannot overwrite corrupt registry <path>: <json error>` | shortcut won't write over a file it can't read, including one that isn't valid UTF-8. The text after the path is as in the row above, ending `(at byte N)` for a syntax error. Fix or move it |
 | `<path> is format version <n>, newer than this shortcut reads; upgrade shortcut` | |
 | `corrupt registry <path>: 'version' must be a whole number, such as 1` | `"version"` is a string, a fraction (`1.0`), `null` or `true` |
 | `<path> needs "version": 1` | No `version`, or one below 1, in any store, project or namespace file |

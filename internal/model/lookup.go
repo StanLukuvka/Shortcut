@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
@@ -21,9 +20,9 @@ type Lookup struct {
 type Found struct {
 	Group Group
 	Name  string
-	Raw   ordjson.Value // the entry as written; EntryFromValue judges it
-	Rest  []string      // the words left over, a run's arguments
-	Hides bool          // a project's name hides a global one of either kind
+	Item  Item     // the entry as loaded; Item.Err says whether it can run
+	Rest  []string // the words left over, a run's arguments
+	Hides bool     // a project's name hides a global one of either kind
 }
 
 // FindEntry finds `name` or `namespace name` in the project, then the global store, without judging
@@ -51,7 +50,7 @@ func FindEntry(c *Context, words []string, lk Lookup) (Found, error) {
 		if _, ns := store.Namespace(first); ns {
 			named = true
 		}
-		if imports, ok := store.Main.Data.Vals["imports"].(*ordjson.Object); ok && has(imports, first) {
+		if imports, ok := store.Main.Doc.Object("imports"); ok && imports.Has(first) {
 			named = true
 		}
 		if lk.Strict && len(problems) > 0 && named {
@@ -62,22 +61,23 @@ func FindEntry(c *Context, words []string, lk Lookup) (Found, error) {
 		hides := i != homeIdx && (has(home.Main.Shortcuts(), first) || homeNS)
 		shortcuts := store.Main.Shortcuts()
 		_, isNS := store.Namespace(first)
-		if has(shortcuts, first) && (len(rest) == 0 || !isNS) {
-			return Found{store.Main, first, shortcuts.Vals[first], rest, hides}, nil
+		if it, ok := shortcuts.Get(first); ok && (len(rest) == 0 || !isNS) {
+			return Found{store.Main, first, it, rest, hides}, nil
 		}
 		if group, ok := store.Namespace(first); ok {
 			if group.Error != nil {
 				return Found{}, errors.New(*group.Error)
 			}
 			gs := group.Shortcuts()
-			members := strings.Join(slices.Sorted(slices.Values(gs.Keys)), ", ")
+			members := strings.Join(slices.Sorted(slices.Values(gs.Names())), ", ")
 			if members == "" {
 				members = "(none)"
 			}
 			if len(rest) == 0 {
 				return Found{}, fmt.Errorf("'%s' is a namespace; run one of its shortcuts: %s", first, members)
 			}
-			if !has(gs, rest[0]) {
+			it, ok := gs.Get(rest[0])
+			if !ok {
 				note := ""
 				if hides {
 					if yours, ok := home.Namespace(first); ok && has(yours.Shortcuts(), rest[0]) {
@@ -86,7 +86,7 @@ func FindEntry(c *Context, words []string, lk Lookup) (Found, error) {
 				}
 				return Found{}, fmt.Errorf("'%s' not found in namespace '%s'. It has: %s%s", rest[0], first, members, note)
 			}
-			return Found{group, rest[0], gs.Vals[rest[0]], rest[1:], hides}, nil
+			return Found{group, rest[0], it, rest[1:], hides}, nil
 		}
 	}
 	var missing string
@@ -114,7 +114,7 @@ func FindEntry(c *Context, words []string, lk Lookup) (Found, error) {
 	return Found{}, errors.New(strings.Join(notes, " "))
 }
 
-func has(o *ordjson.Object, k string) bool { _, ok := o.Get(k); return ok }
+func has(is Items, name string) bool { _, ok := is.Get(name); return ok }
 
 func hasName(s Store, name string) bool {
 	_, ns := s.Namespace(name)
@@ -128,10 +128,10 @@ func ResolveShortcut(c *Context, words []string, lk Lookup) (*ResolvedShortcut, 
 	if err != nil {
 		return nil, nil, err
 	}
-	entry, err := EntryFromValue(f.Name, f.Raw)
-	if err != nil {
-		return nil, nil, err
+	if f.Item.Err != nil {
+		return nil, nil, f.Item.Err
 	}
+	entry := f.Item.Entry
 	return &ResolvedShortcut{Entry: entry, Group: f.Group, RunCwd: ResolveRunDir(entry.Cwd, f.Group, c.Cwd), HidesGlobal: f.Hides}, f.Rest, nil
 }
 

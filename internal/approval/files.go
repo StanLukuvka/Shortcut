@@ -9,7 +9,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
@@ -26,21 +25,20 @@ func displayPath(g model.Group, path string) string {
 // entryFiles returns what entries point at, as {path: sha256}. A relative cwd adds where it really leads, so
 // a symlink moved under it needs approving; the leading ./ keeps that key apart from any script, whose path is
 // normalised. origin keeps two entries of the same name apart.
-func entryFiles(g model.Group, shortcuts *ordjson.Object, origin string) map[string]string {
+func entryFiles(g model.Group, items model.Items, origin string) map[string]string {
 	files := map[string]string{}
-	for _, name := range shortcuts.Keys {
-		data, ok := shortcuts.Vals[name].(*ordjson.Object)
-		if !ok {
+	for _, it := range items {
+		e := it.Entry // set for a broken entry too, with the fields that are well typed
+		if e == nil {
 			continue
 		}
-		if cwd, ok := data.Vals["cwd"].(string); ok && model.IsRelativeCwd(&cwd) {
-			files["./cwd of "+name+origin] = digest([]byte(osutil.Realpath(model.ResolveRunDir(&cwd, g, "")) + "\n"))
+		if model.IsRelativeCwd(e.Cwd) {
+			files["./cwd of "+it.Name+origin] = digest([]byte(osutil.Realpath(model.ResolveRunDir(e.Cwd, g, "")) + "\n"))
 		}
-		script, ok := data.Vals["script"].(string)
-		if !ok {
+		if e.Script == nil {
 			continue
 		}
-		path, err := model.ResolveScriptPath(g.ScriptBase(), script)
+		path, err := model.ResolveScriptPath(g.ScriptBase(), *e.Script)
 		if err != nil {
 			continue
 		}
@@ -85,12 +83,12 @@ func folderFiles(g model.Group) map[string]string {
 	return files
 }
 
-func jsonFile(g model.Group, path string, data *ordjson.Object) (map[string]string, error) {
-	text, err := ordjson.MarshalIndent(data.Sorted())
+func jsonFile(g model.Group, path string, d *model.Doc) (map[string]string, error) {
+	text, err := d.Normal()
 	if err != nil {
 		return nil, fmt.Errorf("cannot approve: %q: %w", displayPath(g, path), err)
 	}
-	return map[string]string{displayPath(g, path): digest(append(text, '\n'))}, nil
+	return map[string]string{displayPath(g, path): digest(text)}, nil
 }
 
 func merge(maps ...map[string]string) map[string]string {
@@ -109,11 +107,11 @@ func SharedFiles(g model.Group) (map[string]string, error) {
 	if g.Kind == model.KindProject && !osutil.Exists(g.File) {
 		return map[string]string{}, nil
 	}
-	own, err := jsonFile(g, g.File, g.Data)
+	own, err := jsonFile(g, g.File, g.Doc)
 	if err != nil {
 		return nil, err
 	}
-	return merge(own, folderFiles(g), entryFiles(g, g.SharedShortcuts(), "")), nil
+	return merge(own, folderFiles(g), entryFiles(g, g.Shared, "")), nil
 }
 
 // LocalFiles is the same for .shortcuts.local.
@@ -121,11 +119,11 @@ func LocalFiles(g model.Group) (map[string]string, error) {
 	if g.Kind != model.KindProject || !osutil.Exists(g.LocalFile) {
 		return map[string]string{}, nil
 	}
-	own, err := jsonFile(g, g.LocalFile, g.LocalData)
+	own, err := jsonFile(g, g.LocalFile, g.LocalDoc)
 	if err != nil {
 		return nil, err
 	}
-	return merge(own, entryFiles(g, g.LocalShortcuts(), " in "+model.LocalFile)), nil
+	return merge(own, entryFiles(g, g.Local, " in "+model.LocalFile)), nil
 }
 
 // checkPaths refuses a snapshot with a path that is not valid UTF-8: the record is JSON, and JSON cannot hold it

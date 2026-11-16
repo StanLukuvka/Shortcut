@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
@@ -38,7 +37,7 @@ type Field struct {
 	Show bool   // `show --field` reads it by its name
 }
 
-// Fields are the entry's fields, in the order they are checked and written. Validation, ToObject and
+// Fields are the entry's fields, in the order they are checked and written. Validation, Raw and
 // `show --field` read them, and a test checks docs/shortcut.schema.json against them.
 func Fields() []Field {
 	return []Field{
@@ -47,10 +46,11 @@ func Fields() []Field {
 	}
 }
 
-// EntryFromValue builds an Entry from a decoded value, with fixed messages and check order.
-func EntryFromValue(name string, v ordjson.Value) (*Entry, error) {
+// DecodeEntry reads an entry's text, with fixed messages and check order. For an object it returns the entry
+// with every well-typed field set, even beside an error, so approval still sees a broken entry's script and cwd.
+func DecodeEntry(name string, raw []byte) (*Entry, error) {
 	bad := func(problem string) error { return fmt.Errorf("'%s' is not a valid entry: %s", name, problem) }
-	data, ok := v.(*ordjson.Object)
+	data, ok := objectOf(raw)
 	if !ok {
 		return nil, bad("expected a dictionary")
 	}
@@ -62,58 +62,68 @@ func EntryFromValue(name string, v ordjson.Value) (*Entry, error) {
 			unknown = append(unknown, k)
 		}
 	}
+	problem := ""
 	if len(unknown) > 0 {
-		return nil, bad("unknown field: " + strings.Join(slices.Sorted(slices.Values(unknown)), ", "))
+		problem = "unknown field: " + strings.Join(slices.Sorted(slices.Values(unknown)), ", ")
 	}
-	vals := map[string]any{}
+	e := &Entry{Name: name}
 	for _, f := range fields {
-		val, present := data.Get(f.Name)
-		if !present {
+		if !data.Has(f.Name) {
 			continue
 		}
-		var typed bool
-		switch f.Type {
-		case "string":
-			vals[f.Name], typed = val.(string)
-		case "boolean":
-			vals[f.Name], typed = val.(bool)
+		s, isString := data.String(f.Name)
+		isTrue := string(data.Raw[f.Name]) == "true"
+		typed := isString
+		if f.Type == "boolean" {
+			typed = isTrue || string(data.Raw[f.Name]) == "false"
 		}
-		if !typed {
-			return nil, bad("'" + f.Name + "' must be a " + f.Type)
+		switch {
+		case !typed:
+			if problem == "" {
+				problem = "'" + f.Name + "' must be a " + f.Type
+			}
+		case f.Name == "description":
+			e.Description = s
+		case f.Name == "inline":
+			e.Inline = &s
+		case f.Name == "script":
+			e.Script = &s
+		case f.Name == "cwd":
+			e.Cwd = &s
+		case f.Name == "confirm":
+			e.Confirm = isTrue
 		}
 	}
-	if (vals["inline"] == nil) == (vals["script"] == nil) {
-		return nil, bad("it needs exactly one of 'inline' and 'script'")
+	if problem == "" && (e.Inline == nil) == (e.Script == nil) {
+		problem = "it needs exactly one of 'inline' and 'script'"
 	}
-	text := func(k string) *string {
-		if s, ok := vals[k].(string); ok {
-			return &s
-		}
-		return nil
+	if problem != "" {
+		return e, bad(problem)
 	}
-	description, _ := vals["description"].(string)
-	confirm, _ := vals["confirm"].(bool)
-	return &Entry{Name: name, Description: description, Inline: text("inline"), Script: text("script"),
-		Cwd: text("cwd"), Confirm: confirm}, nil
+	return e, nil
 }
 
-// ToObject returns the entry as an object, its fields in table order: description always, the others when set.
-func (e *Entry) ToObject() *ordjson.Object {
+// Raw is the entry as an object's text, its fields in table order: description always, the others when set.
+func (e *Entry) Raw() ([]byte, error) {
 	text := map[string]*string{"inline": e.Inline, "script": e.Script, "cwd": e.Cwd}
-	o := &ordjson.Object{}
+	d := &Doc{}
 	for _, f := range Fields() {
 		switch {
 		case f.Name == "description":
-			o.Set(f.Name, e.Description)
+			if err := d.SetString(f.Name, e.Description); err != nil {
+				return nil, err
+			}
 		case f.Name == "confirm":
 			if e.Confirm {
-				o.Set(f.Name, true)
+				d.Set(f.Name, []byte("true"))
 			}
 		case text[f.Name] != nil:
-			o.Set(f.Name, *text[f.Name])
+			if err := d.SetString(f.Name, *text[f.Name]); err != nil {
+				return nil, err
+			}
 		}
 	}
-	return o
+	return d.Bytes()
 }
 
 // IsRelativeCwd: a cwd that means a folder next to the file defining it, so it's only right in that checkout.

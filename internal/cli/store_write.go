@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
@@ -60,7 +58,7 @@ func targetGroup(c *model.Context, ns Namespace) (model.Group, error) {
 		var ok bool
 		if group, ok = store.Namespace(namespace); !ok {
 			group = model.Group{Kind: model.KindNamespace, InProject: !c.IsGlobal(storeDir), Name: namespace, File: osutil.Join(storeDir, "imports", namespace+model.ImportSuffix),
-				StoreDir: storeDir, Data: &ordjson.Object{}}
+				StoreDir: storeDir, Doc: &model.Doc{}}
 		}
 	}
 	if group.Error != nil {
@@ -71,28 +69,32 @@ func targetGroup(c *model.Context, ns Namespace) (model.Group, error) {
 
 // loadForEdit is the registry at path, or a fresh one when isNew, with its "shortcuts" object. A "shortcuts" that is
 // not an object is refused.
-func loadForEdit(path string, isNew bool) (*ordjson.Object, *ordjson.Object, error) {
-	reg := &ordjson.Object{}
+func loadForEdit(path string, isNew bool) (reg, shortcuts *model.Doc, err error) {
 	if isNew {
-		reg.Set("version", json.Number(strconv.Itoa(model.RegistryVersion)))
-		reg.Set("shortcuts", &ordjson.Object{})
-	} else {
-		var err error
-		if reg, err = model.LoadRegistryFile(path); err != nil {
-			return nil, nil, err
-		}
+		reg = &model.Doc{}
+		reg.Set("version", []byte(strconv.Itoa(model.RegistryVersion)))
+		reg.Set("shortcuts", []byte("{}"))
+	} else if reg, err = model.LoadRegistryFile(path); err != nil {
+		return nil, nil, err
 	}
-	v, has := reg.Get("shortcuts")
-	if !has {
-		o := &ordjson.Object{}
-		reg.Set("shortcuts", o)
-		return reg, o, nil
+	if !reg.Has("shortcuts") {
+		return reg, &model.Doc{}, nil
 	}
-	o, ok := v.(*ordjson.Object)
+	shortcuts, ok := reg.Object("shortcuts")
 	if !ok {
 		return nil, nil, fmt.Errorf("corrupt registry %s: 'shortcuts' must be an object", path)
 	}
-	return reg, o, nil
+	return reg, shortcuts, nil
+}
+
+// saveEdited writes reg with shortcuts, the copy loadForEdit gave, put back in it.
+func saveEdited(path string, reg, shortcuts *model.Doc) error {
+	raw, err := shortcuts.Bytes()
+	if err != nil {
+		return err
+	}
+	reg.Set("shortcuts", raw)
+	return model.SaveRegistryFile(path, reg)
 }
 
 // confirmed asks c and turns a "no" into exit 1; nil means go ahead.
@@ -134,14 +136,18 @@ func lockedGroupWrite(c *model.Context, group model.Group, mutate func() error) 
 func register(c *model.Context, s *textio.Streams, group model.Group, entry *model.Entry) error {
 	storeDir := group.StoreDir
 	if group.Kind == model.KindProject {
-		change := func(shortcuts *ordjson.Object) error {
-			if _, has := shortcuts.Get(entry.Name); has {
+		change := func(shortcuts *model.Doc) error {
+			if shortcuts.Has(entry.Name) {
 				return Die("shortcut '" + entry.Name + "' already exists in " + group.LocalFile)
 			}
 			if _, clash := c.ReadStore(storeDir).Namespace(entry.Name); clash {
 				return Die("'" + entry.Name + "' is a namespace in " + storeDir)
 			}
-			shortcuts.Set(entry.Name, entry.ToObject())
+			raw, err := entry.Raw()
+			if err != nil {
+				return err
+			}
+			shortcuts.Set(entry.Name, raw)
 			return nil
 		}
 		after, err := writeLocal(c, storeDir, change)
@@ -164,7 +170,7 @@ func register(c *model.Context, s *textio.Streams, group model.Group, entry *mod
 		if err != nil {
 			return err
 		}
-		if _, dup := shortcuts.Get(entry.Name); dup {
+		if shortcuts.Has(entry.Name) {
 			return Die("shortcut '" + entry.Name + "' already exists in " + group.File)
 		}
 		if group.Kind != model.KindNamespace {
@@ -172,11 +178,15 @@ func register(c *model.Context, s *textio.Streams, group model.Group, entry *mod
 				return Die("'" + entry.Name + "' is a namespace in store " + storeDir)
 			}
 		}
-		shortcuts.Set(entry.Name, entry.ToObject())
+		raw, err := entry.Raw()
+		if err != nil {
+			return err
+		}
+		shortcuts.Set(entry.Name, raw)
 		if err := os.MkdirAll(filepath.Dir(group.File), 0o777); err != nil {
 			return err
 		}
-		return model.SaveRegistryFile(group.File, reg)
+		return saveEdited(group.File, reg, shortcuts)
 	})
 	if err != nil {
 		return err
@@ -195,7 +205,7 @@ func namespaceIsApproved(c *model.Context, g model.Group) bool {
 // writeLocal changes .shortcuts.local through change(shortcuts), the only way shortcut writes to a
 // project. The approval record follows, but only if .local matched it first: a hand edit, or anything in .shortcuts,
 // must not get approved by the way.
-func writeLocal(c *model.Context, root string, change func(*ordjson.Object) error) (model.Group, error) {
+func writeLocal(c *model.Context, root string, change func(*model.Doc) error) (model.Group, error) {
 	var after model.Group
 	err := c.WithRegistryLock(root, func() error {
 		before := model.LoadProjectGroup(root)
@@ -213,7 +223,7 @@ func writeLocal(c *model.Context, root string, change func(*ordjson.Object) erro
 		if err := change(shortcuts); err != nil {
 			return err
 		}
-		if err := model.SaveRegistryFile(path, reg); err != nil {
+		if err := saveEdited(path, reg, shortcuts); err != nil {
 			return err
 		}
 		if isNewFile {
@@ -318,10 +328,6 @@ func removeNamespaceFiles(group model.Group) error {
 // isListedImport reports whether a namespace comes from the store file's "imports" rather than its
 // imports/ folder.
 func isListedImport(store model.Store, name string) bool {
-	imports, ok := store.Main.Data.Vals["imports"].(*ordjson.Object)
-	if !ok {
-		return false
-	}
-	_, has := imports.Get(name)
-	return has
+	imports, ok := store.Main.Doc.Object("imports")
+	return ok && imports.Has(name)
 }

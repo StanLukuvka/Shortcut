@@ -48,7 +48,7 @@ func cmdUpdate(c *model.Context, s *textio.Streams, args []string) error {
 		groups = groups[:1]
 	default:
 		keep(func(g model.Group) bool {
-			return g.Error != nil || len(g.Shortcuts().Keys) > 0 || approval.Load(c, g) != nil
+			return g.Error != nil || len(g.Shortcuts()) > 0 || approval.Load(c, g) != nil
 		})
 		keep(func(g model.Group) bool { return g.Error != nil || approval.State(c, g) != model.StateOK })
 		if len(groups) == 0 {
@@ -143,14 +143,14 @@ func approveGroup(c *model.Context, s *textio.Streams, g model.Group, globalName
 		}
 	}
 	local2 := g.LocalShortcuts()
-	for _, name := range slices.Sorted(slices.Values(g.SharedShortcuts().Keys)) {
+	for _, name := range slices.Sorted(slices.Values(g.SharedShortcuts().Names())) {
 		if _, both := local2.Get(name); both {
 			s.Out.WriteString("'" + name + "' in " + model.ProjectFile + " is " + string(g.Source(name)) + " by " + model.LocalFile + " for you.\n")
 		}
 	}
 	shortcuts := g.Shortcuts()
 	if g.InProject {
-		hidden := shortcuts.Keys
+		hidden := shortcuts.Names()
 		if g.Kind == model.KindNamespace {
 			hidden = []string{g.Name}
 		}

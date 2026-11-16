@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
@@ -53,7 +52,7 @@ func LoadGroup(path, storeDir, name string) Group {
 	if name != "" {
 		kind = KindNamespace
 	}
-	g := Group{Kind: kind, Name: name, File: path, StoreDir: storeDir, Data: &ordjson.Object{}}
+	g := Group{Kind: kind, Name: name, File: path, StoreDir: storeDir, Doc: &Doc{}}
 	data, err := LoadRegistryFile(path)
 	var missing *RegistryNotFoundError
 	switch {
@@ -66,7 +65,7 @@ func LoadGroup(path, storeDir, name string) Group {
 		msg := err.Error()
 		g.Error = &msg
 	default:
-		g.Data = data
+		g.Doc, g.Shared = data, ItemsOf(data)
 		if msg := fileError(path, data, name); msg != "" {
 			g.Error = &msg
 		}
@@ -77,30 +76,28 @@ func LoadGroup(path, storeDir, name string) Group {
 // EntryErrors finds every entry that couldn't run, without running anything.
 func EntryErrors(g Group) []string {
 	var errs []string
-	shortcuts := g.Shortcuts()
-	for _, name := range shortcuts.Keys {
-		if err := entryError(g, name, shortcuts.Vals[name]); err != nil {
+	for _, it := range g.Shortcuts() {
+		if err := entryError(g, it); err != nil {
 			errs = append(errs, err.Error())
 		}
 	}
 	return errs
 }
 
-func entryError(g Group, name string, data ordjson.Value) error {
-	if err := ValidateName(name); err != nil {
+func entryError(g Group, it Item) error {
+	if err := ValidateName(it.Name); err != nil {
 		return err
 	}
-	e, err := EntryFromValue(name, data)
-	if err != nil {
-		return err
+	if it.Err != nil {
+		return it.Err
 	}
-	if e.Script != nil {
+	if e := it.Entry; e.Script != nil {
 		path, err := ResolveScriptPath(g.ScriptBase(), *e.Script)
 		if err != nil {
 			return err
 		}
 		if !osutil.IsFile(path) {
-			return fmt.Errorf("'%s' is not a valid entry: script not found: %s", name, *e.Script)
+			return fmt.Errorf("'%s' is not a valid entry: script not found: %s", it.Name, *e.Script)
 		}
 	}
 	return nil
@@ -113,13 +110,13 @@ func LoadProjectGroup(root string) Group {
 	local := LoadGroup(localPath, root, "")
 	g := shared
 	g.Kind, g.InProject = KindProject, true
-	g.LocalFile, g.LocalData = localPath, local.Data
+	g.LocalFile, g.LocalDoc, g.Local = localPath, local.Doc, local.Shared
 	switch {
 	case shared.Error != nil:
 	case local.Error != nil:
 		g.Error = local.Error
 	default:
-		if _, has := local.Data.Get("imports"); has {
+		if local.Doc.Has("imports") {
 			msg := fmt.Sprintf("%s can't have 'imports': namespaces belong in %s", localPath, ProjectFile)
 			g.Error = &msg
 		}

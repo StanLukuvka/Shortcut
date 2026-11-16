@@ -3,11 +3,11 @@ package cli
 import (
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
@@ -90,19 +90,87 @@ func cmdShow(c *model.Context, s *textio.Streams, args []string) error {
 	return nil
 }
 
-// showJSON prints one JSON object, the entry as written plus where it resolves. A broken entry still prints,
-// with its error and null for what can't be worked out.
+// showView is what `show` describes: the entry as written and where it resolves. A broken entry still has one,
+// with its error and nil for what can't be worked out.
+type showView struct {
+	name, scope, definedIn, approval string
+	namespace, source                *string
+	hidesGlobal                      bool
+	cwd, runCwd, scriptPath, errText *string
+	entry                            []byte // the entry as written
+}
+
+// viewField is one top-level key of `show --json`, in order. val is nil for null; isBool says val is true or false.
+type viewField struct {
+	key    string
+	val    *string
+	isBool bool
+}
+
+func (v showView) fields() []viewField {
+	return []viewField{{"name", &v.name, false}, {"namespace", v.namespace, false}, {"scope", &v.scope, false},
+		{"defined_in", &v.definedIn, false}, {"source", v.source, false},
+		{"hides_global", ptr(strconv.FormatBool(v.hidesGlobal)), true}, {"approval", &v.approval, false},
+		{"cwd", v.cwd, false}, {"run_cwd", v.runCwd, false}, {"script_path", v.scriptPath, false}, {"error", v.errText, false}}
+}
+
+func ptr(s string) *string { return &s }
+
+// doc is the view as one object. A string that is not valid UTF-8 is refused (model.ErrNotUTF8).
+func (v showView) doc() (*model.Doc, error) {
+	d := &model.Doc{}
+	for _, f := range v.fields() {
+		switch {
+		case f.val == nil:
+			d.Set(f.key, []byte("null"))
+		case f.isBool:
+			d.Set(f.key, []byte(*f.val))
+		default:
+			if err := d.SetString(f.key, *f.val); err != nil {
+				return nil, err
+			}
+		}
+	}
+	d.Set("entry", v.entry)
+	return d, nil
+}
+
+// field is the text `--field key` prints, nil for nothing: a top-level key, else a field of the entry as written.
+func (v showView) field(key string) *string {
+	for _, f := range v.fields() {
+		if f.key == key {
+			return f.val
+		}
+	}
+	entry, err := model.ParseDoc(v.entry)
+	if err != nil { // a broken entry that isn't an object
+		return nil
+	}
+	if s, ok := entry.String(key); ok {
+		return &s
+	}
+	if raw := string(entry.Raw[key]); raw != "" && raw != "null" {
+		return &raw
+	}
+	return nil
+}
+
+// showJSON prints one JSON object, the entry as written plus where it resolves.
 func showJSON(c *model.Context, s *textio.Streams, words []string, lk model.Lookup) error {
-	out, err := showObject(c, words, lk)
+	v, err := showObject(c, words, lk)
 	if err != nil {
 		return err
 	}
-	text, jerr := ordjson.MarshalIndent(out)
-	if jerr != nil {
-		return jerr
+	d, err := v.doc()
+	if err != nil {
+		return err
 	}
-	s.Out.WriteString(string(text) + "\n")
-	return nil
+	text, err := d.Pretty()
+	if err != nil {
+		return err
+	}
+	_, err = s.Out.WriteString(string(text) + "\n")
+	return err
 }
 
 // showFields are the keys `--field` reads: the top-level keys of `show --json`, then the entry's fields marked Show.
@@ -117,83 +185,55 @@ func showFields() []string {
 }
 
 // showField prints one field of what `show --json` describes, bare. It only reads: nothing is written or approved.
+// A field is printed as it is, so a name that is not valid UTF-8 prints; only `show --json` refuses it.
 func showField(c *model.Context, s *textio.Streams, words []string, lk model.Lookup, key string) error {
 	if keys := showFields(); !slices.Contains(keys, key) {
 		return Die("unknown field '" + key + "' (one of: " + strings.Join(keys, ", ") + ")")
 	}
-	obj, err := showObject(c, words, lk)
+	v, err := showObject(c, words, lk)
 	if err != nil {
 		return err
 	}
-	v, ok := obj.Get(key)
-	if !ok { // an entry field; absent, or a broken entry that isn't an object, prints nothing
-		if entry, isObj := obj.Vals["entry"].(*ordjson.Object); isObj {
-			v, _ = entry.Get(key)
-		}
-	}
-	switch t := v.(type) {
-	case nil:
-		return nil
-	case string:
-		_, err = s.Out.WriteString(t + "\n")
-	default:
-		b, merr := ordjson.Marshal(t)
-		if merr != nil {
-			return merr
-		}
-		_, err = s.Out.WriteString(string(b) + "\n")
+	if text := v.field(key); text != nil {
+		_, err = s.Out.WriteString(*text + "\n")
 	}
 	return err
 }
 
-// showObject is the entry as written plus where it resolves. A broken entry still gives an object,
-// with its error and null for what can't be worked out.
-func showObject(c *model.Context, words []string, lk model.Lookup) (*ordjson.Object, error) {
+func showObject(c *model.Context, words []string, lk model.Lookup) (showView, error) {
 	f, err := model.FindEntry(c, words, lk)
 	if err != nil {
-		return nil, err
+		return showView{}, err
 	}
 	if len(f.Rest) > 0 {
-		return nil, model.TooManyNames(words)
+		return showView{}, model.TooManyNames(words)
 	}
 	g, name := f.Group, f.Name
-	nullable := func(s string) ordjson.Value {
+	nullable := func(s string) *string {
 		if s == "" {
 			return nil
 		}
-		return s
+		return &s
 	}
-	out := &ordjson.Object{}
-	out.Set("name", name)
-	out.Set("namespace", nullable(g.Name))
-	out.Set("scope", string(g.Kind))
-	out.Set("defined_in", g.DefiningFile(name))
+	v := showView{name: name, namespace: nullable(g.Name), scope: string(g.Kind), definedIn: g.DefiningFile(name),
+		hidesGlobal: f.Hides, approval: string(approval.State(c, g)), entry: f.Item.Raw}
 	if g.Kind == model.KindProject {
-		out.Set("source", string(g.Source(name)))
-	} else {
-		out.Set("source", nil)
+		v.source = ptr(string(g.Source(name)))
 	}
-	out.Set("hides_global", f.Hides)
-	out.Set("approval", string(approval.State(c, g)))
-	for _, k := range []string{"cwd", "run_cwd", "script_path", "error"} {
-		out.Set(k, nil)
-	}
-	out.Set("entry", f.Raw)
-	entry, err := model.EntryFromValue(name, f.Raw)
+	err = f.Item.Err
 	if err == nil {
-		if entry.Cwd != nil {
-			out.Set("cwd", *entry.Cwd)
-		}
-		out.Set("run_cwd", model.ResolveRunDir(entry.Cwd, g, c.Cwd))
+		entry := f.Item.Entry
+		v.cwd = entry.Cwd
+		v.runCwd = ptr(model.ResolveRunDir(entry.Cwd, g, c.Cwd))
 		if entry.Script != nil {
 			var path string
 			if path, err = model.ResolveScriptPath(g.ScriptBase(), *entry.Script); err == nil {
-				out.Set("script_path", path)
+				v.scriptPath = &path
 			}
 		}
 	}
 	if err != nil {
-		out.Set("error", err.Error())
+		v.errText = ptr(err.Error())
 	}
-	return out, nil
+	return v, nil
 }

@@ -4,10 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
@@ -39,6 +39,68 @@ const (
 	SourceOverridden Source = "overridden"
 )
 
+// Item is one entry of a file, decoded once at load.
+type Item struct {
+	Name  string
+	Entry *Entry // nil unless the value is an object; fields of the right type are set even when Err is not nil
+	Err   error  // why the entry cannot run, nil for a valid entry
+	Raw   []byte // the value as written, compact: show --json prints it
+}
+
+// Items are the entries of one file, in file order.
+type Items []Item
+
+func (is Items) Get(name string) (Item, bool) {
+	for _, it := range is {
+		if it.Name == name {
+			return it, true
+		}
+	}
+	return Item{}, false
+}
+
+func (is Items) Names() []string {
+	names := make([]string, len(is))
+	for i, it := range is {
+		names[i] = it.Name
+	}
+	return names
+}
+
+// ItemsOf decodes d["shortcuts"] when it is an object; otherwise there are none.
+func ItemsOf(d *Doc) Items {
+	shortcuts, _ := d.Object("shortcuts")
+	var items Items
+	for _, k := range shortcuts.keys() {
+		e, err := DecodeEntry(k, shortcuts.Raw[k])
+		items = append(items, Item{Name: k, Entry: e, Err: err, Raw: shortcuts.Raw[k]})
+	}
+	return items
+}
+
+func (d *Doc) keys() []string {
+	if d == nil {
+		return nil
+	}
+	return d.Keys
+}
+
+// Text is a field of the entry for display: a string as itself, an absent or null field as "", anything else as
+// written (5, true, an array), so a wrongly typed field still shows.
+func (it Item) Text(field string) string {
+	d, ok := objectOf(it.Raw)
+	if !ok {
+		return ""
+	}
+	if s, ok := d.String(field); ok {
+		return s
+	}
+	if raw := string(d.Raw[field]); raw != "null" {
+		return raw
+	}
+	return ""
+}
+
 // Group is one set of shortcuts: the global store's shortcuts.json, a project's .shortcuts with
 // .shortcuts.local over it, or an imported namespace. StoreDir is the global store or the project's root.
 type Group struct {
@@ -47,57 +109,52 @@ type Group struct {
 	Name      string // namespace name; "" otherwise
 	File      string
 	StoreDir  string
-	Data      *ordjson.Object // empty object when the file is missing or unreadable
-	Error     *string         // why the file can't be used
-	LocalFile string          // only a project's own group has one
-	LocalData *ordjson.Object
+	Doc       *Doc    // empty when the file is missing or unreadable
+	Shared    Items   // the entries of Doc
+	Error     *string // why the file can't be used
+	LocalFile string  // only a project's own group has one
+	LocalDoc  *Doc
+	Local     Items
 }
 
-// shortcutsIn is data["shortcuts"] when it is an object, else an empty one.
-func shortcutsIn(data *ordjson.Object) *ordjson.Object {
-	if o, ok := data.Vals["shortcuts"].(*ordjson.Object); ok {
-		return o
-	}
-	return &ordjson.Object{}
-}
+func (g Group) SharedShortcuts() Items { return g.Shared }
 
-func (g Group) SharedShortcuts() *ordjson.Object { return shortcutsIn(g.Data) }
-
-// A namespace or the global store has no LocalData, so nil is empty here.
-func (g Group) LocalShortcuts() *ordjson.Object {
-	if g.LocalData == nil {
-		return &ordjson.Object{}
-	}
-	return shortcutsIn(g.LocalData)
-}
+// A namespace or the global store has no .shortcuts.local, so it has no local entries.
+func (g Group) LocalShortcuts() Items { return g.Local }
 
 // Shortcuts is what can run: the shared entries, each replaced by the same name in .shortcuts.local, and the local-only ones.
-func (g Group) Shortcuts() *ordjson.Object {
-	shared, local := g.SharedShortcuts(), g.LocalShortcuts()
-	out := &ordjson.Object{}
-	for _, k := range shared.Keys {
-		out.Set(k, shared.Vals[k])
+func (g Group) Shortcuts() Items {
+	if len(g.Local) == 0 {
+		return g.Shared
 	}
-	for _, k := range local.Keys {
-		out.Set(k, local.Vals[k])
+	out := slices.Clone(g.Shared)
+	at := map[string]int{}
+	for i, it := range out {
+		at[it.Name] = i
+	}
+	for _, it := range g.Local {
+		if i, ok := at[it.Name]; ok {
+			out[i] = it
+		} else {
+			out = append(out, it)
+		}
 	}
 	return out
 }
 
 // Source is where a project entry comes from: shared, local or overridden.
 func (g Group) Source(name string) Source {
-	local := g.LocalShortcuts()
-	if _, inLocal := local.Get(name); !inLocal {
+	if _, inLocal := g.Local.Get(name); !inLocal {
 		return SourceShared
 	}
-	if _, inShared := g.SharedShortcuts().Get(name); inShared {
+	if _, inShared := g.Shared.Get(name); inShared {
 		return SourceOverridden
 	}
 	return SourceLocal
 }
 
 func (g Group) DefiningFile(name string) string {
-	if _, in := g.LocalShortcuts().Get(name); in {
+	if _, in := g.Local.Get(name); in {
 		return g.LocalFile
 	}
 	return g.File
