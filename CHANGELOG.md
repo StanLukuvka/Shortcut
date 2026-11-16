@@ -17,7 +17,7 @@
 - Options are spelled in full; `-yh` is not `-y -h`. A usage error reads `error: <message>` and a `Try 'shortcut <command> -h'` line, and exits 2.
 - Diffs split lines on `\n` only, so a `\r`, form feed or U+2028 stays inside its line.
 - `~` and `~/...` are expanded in paths, using $HOME; `~name` is not.
-- An empty `--desc` or `--namespace` is an error. A `null` for a text field, `args` or an arg's `default` or `desc` is an error; a `null` entry in `.shortcuts.local` hides a shared entry.
+- An empty `--desc` or `--namespace` is an error. A `null` for a text field, `args` or an arg's `default` or `desc` is an error.
 - An executable script with no `#!` is run directly; only an executable text file the kernel refuses is run with bash.
 - A shortcut's environment lists `SHORTCUT_NAME`, `SHORTCUT_NAMESPACE`, `SHORTCUT_CALLER_CWD` and its `SC_ARG_` variables after the caller's own variables.
 - `$PAGER` is split on blanks; quotes in it are not interpreted. If the pager ran, the diff is not printed again, whatever its exit status. The row count comes from the terminal (24 if unknown).

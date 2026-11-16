@@ -15,7 +15,6 @@ func sharedEntries() map[string]any {
 	return map[string]any{
 		"keep": map[string]any{"description": "shared keep", "inline": "echo shared keep"},
 		"swap": map[string]any{"description": "shared swap", "inline": "echo shared swap", "confirm": true},
-		"gone": map[string]any{"description": "shared gone", "inline": "echo shared gone"},
 	}
 }
 
@@ -33,28 +32,18 @@ func localData(t *testing.T, proj string) map[string]any {
 func overlaid(t *testing.T, e *testkit.Env) string {
 	t.Helper()
 	proj := e.Project(sharedEntries(), testkit.Dirs("src"))
-	writeLocalFile(t, e, proj, map[string]any{"mine": testkit.Inline("echo mine"), "swap": testkit.Inline("echo local swap"), "gone": nil})
+	writeLocalFile(t, e, proj, map[string]any{"mine": testkit.Inline("echo mine"), "swap": testkit.Inline("echo local swap")})
 	e.Approve(filepath.Join(proj, ".shortcuts"))
 	return proj
 }
 
-func TestProjectFiles_LocalAddsReplacesAWholeEntryAndHides(t *testing.T) {
+func TestProjectFiles_LocalAddsAndReplacesAWholeEntry(t *testing.T) {
 	e := testkit.New(t)
 	proj := overlaid(t, e)
 	testkit.Eq(t, "keep", e.RunWith(in(proj), "r", "keep").Stdout, "shared keep\n")
 	testkit.Eq(t, "mine", e.RunWith(in(proj), "r", "mine").Stdout, "mine\n")
 	// The whole entry: the shared one's confirm doesn't carry over, so this needs no -y
 	testkit.Eq(t, "swap", e.RunWith(in(proj), "r", "swap").Stdout, "local swap\n")
-	res := e.RunWith(in(proj), "r", "gone")
-	testkit.Eq(t, "gone exit", res.Code, 1)
-	testkit.Contains(t, "stderr", res.Stderr, "not found")
-}
-
-func TestProjectFiles_ANullLetsAGlobalShortcutOfThatNameThrough(t *testing.T) {
-	e := testkit.New(t)
-	e.Run("new", "gone", "--", "echo global gone")
-	proj := overlaid(t, e)
-	testkit.Eq(t, "gone", e.RunWith(in(proj), "r", "gone").Stdout, "global gone\n")
 }
 
 func TestProjectFiles_RelativePathsResolveFromTheProjectRootInBothFiles(t *testing.T) {
@@ -226,13 +215,12 @@ func TestProjectFiles_AScriptNamedInLocalIsCovered(t *testing.T) {
 	testkit.Eq(t, "changed", e.RunWith(in(proj), "r", "go").Code, 1)
 }
 
-func TestProjectFiles_ADiffMarksWhatLocalOverridesOrHides(t *testing.T) {
+func TestProjectFiles_ADiffMarksWhatLocalOverrides(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(sharedEntries())
-	writeLocalFile(t, e, proj, map[string]any{"swap": testkit.Inline("echo local swap"), "gone": nil})
+	writeLocalFile(t, e, proj, map[string]any{"swap": testkit.Inline("echo local swap")})
 	res := e.RunWith(in(proj), "update", "-y")
 	testkit.Contains(t, "diff", res.Stdout, "'swap' in .shortcuts is overridden by .shortcuts.local for you.")
-	testkit.Contains(t, "diff", res.Stdout, "'gone' in .shortcuts is hidden by .shortcuts.local for you.")
 }
 
 func TestProjectFiles_ListShowsEachEntrysSource(t *testing.T) {
@@ -241,15 +229,6 @@ func TestProjectFiles_ListShowsEachEntrysSource(t *testing.T) {
 	testkit.Matches(t, out, `keep +caller +shared `)
 	testkit.Matches(t, out, `mine +caller +local `)
 	testkit.Matches(t, out, `swap +caller +overridden `)
-	testkit.Matches(t, out, `gone +caller +hidden `)
-}
-
-func TestProjectFiles_AHiddenNameIsNotOffered(t *testing.T) {
-	e := testkit.New(t)
-	names := strings.Fields(e.RunWith(in(overlaid(t, e)), "list", "--names").Stdout)
-	if !slices.Contains(names, "keep") || slices.Contains(names, "gone") {
-		t.Errorf("names: %v", names)
-	}
 }
 
 func TestProjectFiles_ShowNamesTheFileThatDefinesIt(t *testing.T) {
@@ -268,7 +247,6 @@ func TestProjectFiles_TheCliNeverWritesTheSharedFile(t *testing.T) {
 	for _, args := range [][]string{
 		{"new", "a", "--local", "--", "echo a"},
 		{"new", "b", "--script", source, "--desc", "d", "--local"},
-		{"rm", "--local", "keep", "-y"},
 		{"rm", "--local", "swap", "-y"},
 	} {
 		testkit.Eq(t, strings.Join(args, " "), e.RunWith(in(proj), args...).Code, 0)
@@ -286,18 +264,6 @@ func TestProjectFiles_AWriteWithoutLocalIsRefusedForAProjectEntry(t *testing.T) 
 	}
 }
 
-func TestProjectFiles_RmLocalHidesASharedEntryAndUndoesItself(t *testing.T) {
-	e := testkit.New(t)
-	proj := overlaid(t, e)
-	testkit.Contains(t, "hide", e.RunWith(in(proj), "rm", "--local", "keep", "-y").Stdout, "Hid shortcut")
-	if v, has := localData(t, proj)["keep"]; !has || v != nil {
-		t.Errorf("keep = %v, want null", v)
-	}
-	testkit.Eq(t, "hidden", e.RunWith(in(proj), "r", "keep").Code, 1)
-	testkit.Contains(t, "undo", e.RunWith(in(proj), "rm", "--local", "keep", "-y").Stdout, "Removed 'keep'")
-	testkit.Eq(t, "back", e.RunWith(in(proj), "r", "keep").Stdout, "shared keep\n")
-}
-
 func TestProjectFiles_RmLocalOfAnOverrideBringsTheSharedEntryBack(t *testing.T) {
 	e := testkit.New(t)
 	proj := overlaid(t, e)
@@ -312,8 +278,6 @@ func TestProjectFiles_RmLocalSaysTheSharedEntryAppliesAgain(t *testing.T) {
 	testkit.Eq(t, "exit", rc, 1)
 	testkit.Contains(t, "removes", out, "Removes your 'swap' from "+filepath.Join(proj, ".shortcuts.local")+".")
 	testkit.Contains(t, "again", out, "The 'swap' in .shortcuts applies again.")
-	_, out = e.InTerminal(in(proj), []testkit.Key{{Wait: "[y/N]", Send: y("n\n")}}, "rm", "--local", "gone")
-	testkit.Contains(t, "gone", out, "Stops hiding 'gone'")
 }
 
 func TestProjectFiles_ACliWriteKeepsTheApproval(t *testing.T) {
@@ -340,4 +304,24 @@ func TestProjectFiles_ExcludeWithoutTrailingNewline(t *testing.T) {
 	}
 	e.RunWith(in(proj), "new", "a", "--local", "--", "true")
 	testkit.Eq(t, "exclude", testkit.ReadFile(t, path), "build/\n.shortcuts.local\n")
+}
+
+func TestProjectFiles_RmLocalOfANameOnlyInTheSharedFileFails(t *testing.T) {
+	e := testkit.New(t)
+	proj := overlaid(t, e)
+	res := e.RunWith(in(proj), "rm", "--local", "keep", "-y")
+	testkit.Eq(t, "exit", res.Code, 1)
+	testkit.Contains(t, "err", res.Stderr, "'keep' isn't in .shortcuts.local, and shortcut doesn't change .shortcuts")
+	testkit.Eq(t, "still shared", e.RunWith(in(proj), "r", "keep").Stdout, "shared keep\n")
+}
+
+func TestProjectFiles_ANullLocalEntryIsAnInvalidEntry(t *testing.T) {
+	e := testkit.New(t)
+	proj := e.Project(sharedEntries(), testkit.Approved())
+	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"keep": null}}`, 0)
+	for _, cmd := range []string{"show", "r"} {
+		res := e.RunWith(in(proj), cmd, "keep")
+		testkit.Eq(t, cmd, res.Code, 1)
+		testkit.Contains(t, cmd, res.Stderr+res.Stdout, "'keep' is not a valid entry: expected a dictionary")
+	}
 }

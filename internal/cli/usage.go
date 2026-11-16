@@ -13,7 +13,7 @@ Usage:
   shortcut show [--global] [--json] <name>  Show shortcut metadata and script contents, or the entry as JSON
   shortcut rm [--global|--local] <name> [-y]
                                             Remove a shortcut. With --local, take it out of .shortcuts.local,
-                                            or hide a shared one from you
+                                            undoing an override or removing a local one
   shortcut rm --namespace <ns> [-y]         Remove a global namespace and its scripts/<ns>/ folder
   shortcut update [group] [-y]              Review changes to project shortcuts and namespaces, and approve them
   shortcut completion bash|zsh|fish         Print a shell completion script

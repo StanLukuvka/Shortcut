@@ -33,7 +33,6 @@ func shortcutsIn(data *ordjson.Object) *ordjson.Object {
 
 func (g Group) SharedShortcuts() *ordjson.Object { return shortcutsIn(g.Data) }
 
-// LocalShortcuts is raw, so a null that hides a shared entry is still there.
 // A namespace or the global store has no LocalData, so nil is empty here.
 func (g Group) LocalShortcuts() *ordjson.Object {
 	if g.LocalData == nil {
@@ -42,7 +41,7 @@ func (g Group) LocalShortcuts() *ordjson.Object {
 	return shortcutsIn(g.LocalData)
 }
 
-// Shortcuts is what can run: the shared entries, each replaced or hidden by .shortcuts.local.
+// Shortcuts is what can run: the shared entries, each replaced by the same name in .shortcuts.local, and the local-only ones.
 func (g Group) Shortcuts() *ordjson.Object {
 	shared, local := g.SharedShortcuts(), g.LocalShortcuts()
 	out := &ordjson.Object{}
@@ -50,24 +49,16 @@ func (g Group) Shortcuts() *ordjson.Object {
 		out.Set(k, shared.Vals[k])
 	}
 	for _, k := range local.Keys {
-		if local.Vals[k] == nil {
-			out.Delete(k)
-		} else {
-			out.Set(k, local.Vals[k])
-		}
+		out.Set(k, local.Vals[k])
 	}
 	return out
 }
 
-// Source is where a project entry comes from: shared, local, overridden or hidden.
+// Source is where a project entry comes from: shared, local or overridden.
 func (g Group) Source(name string) string {
 	local := g.LocalShortcuts()
-	v, inLocal := local.Get(name)
-	if !inLocal {
+	if _, inLocal := local.Get(name); !inLocal {
 		return "shared"
-	}
-	if v == nil {
-		return "hidden"
 	}
 	if _, inShared := g.SharedShortcuts().Get(name); inShared {
 		return "overridden"

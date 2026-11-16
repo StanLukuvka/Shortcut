@@ -280,23 +280,6 @@ func TestStores_RmInABrokenProjectNeverReachesAGlobalOne(t *testing.T) {
 	}
 }
 
-func TestStores_RmLocalHidesANameWhenTheProjectFileCantBeRead(t *testing.T) {
-	e := testkit.New(t)
-	proj := e.Project(map[string]any{"build": testkit.Inline("echo project")}, testkit.Approved())
-	registry := filepath.Join(proj, ".shortcuts")
-	e.CorruptStore(registry)
-	broken := testkit.ReadFile(t, registry)
-	rc, out := e.InTerminal(in(proj), []testkit.Key{{Wait: "[y/N]", Send: y("y\n")}}, "rm", "--local", "build")
-	testkit.Eq(t, "exit", rc, 0)
-	testkit.Contains(t, "out", out, ".shortcuts stays as it is.")
-	testkit.Contains(t, "out", out, `Hides 'build' from you: writes "build": null to`)
-	local := localData(t, proj)
-	if v, has := local["build"]; !has || v != nil || len(local) != 1 {
-		t.Errorf("local = %v", local)
-	}
-	testkit.Eq(t, "shared untouched", testkit.ReadFile(t, registry), broken)
-}
-
 func TestStores_LocalRefusesAnywhereInTheGlobalStore(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{})

@@ -428,19 +428,19 @@ func TestStores_InitStoreCreatesOnlyAMissingRegistry(t *testing.T) {
 	}
 }
 
-func TestGroup_ShortcutsOverlaySourceAndHiding(t *testing.T) {
+func TestGroup_ShortcutsOverlayAndSource(t *testing.T) {
 	g := Group{
 		File: "/p/.shortcuts", StoreDir: "/p", LocalFile: "/p/.shortcuts.local",
-		Data:      obj(t, `{"shortcuts": {"a": {"inline": "1"}, "b": {"inline": "2"}, "c": {"inline": "3"}, "n": null}}`),
-		LocalData: obj(t, `{"shortcuts": {"b": {"inline": "B"}, "c": null, "d": {"inline": "4"}, "z": null}}`),
+		Data:      obj(t, `{"shortcuts": {"a": {"inline": "1"}, "b": {"inline": "2"}, "c": {"inline": "3"}}}`),
+		LocalData: obj(t, `{"shortcuts": {"b": {"inline": "B"}, "d": {"inline": "4"}}}`),
 	}
-	if got := strings.Join(g.Shortcuts().Keys, ","); got != "a,b,n,d" {
+	if got := strings.Join(g.Shortcuts().Keys, ","); got != "a,b,c,d" {
 		t.Errorf("keys %s", got)
 	}
 	if v, _ := g.Shortcuts().Get("b"); compact(t, v) != `{"inline":"B"}` {
 		t.Error("b not overridden")
 	}
-	for name, want := range map[string]string{"a": "shared", "b": "overridden", "c": "hidden", "d": "local", "z": "hidden"} {
+	for name, want := range map[string]string{"a": "shared", "b": "overridden", "c": "shared", "d": "local"} {
 		if got := g.Source(name); got != want {
 			t.Errorf("Source(%s) = %s, want %s", name, got, want)
 		}

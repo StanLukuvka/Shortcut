@@ -135,7 +135,7 @@ func register(s *textio.Streams, group model.Group, entry *model.Entry) error {
 	storeDir := group.StoreDir
 	if group.LocalFile != "" {
 		change := func(shortcuts *ordjson.Object) error {
-			if v, _ := shortcuts.Get(entry.Name); v != nil { // a null is a hidden shared entry: it is replaced
+			if _, has := shortcuts.Get(entry.Name); has {
 				return Die("shortcut '" + entry.Name + "' already exists in " + group.LocalFile)
 			}
 			if _, clash := model.LoadStore(storeDir).Namespace(entry.Name); clash {
