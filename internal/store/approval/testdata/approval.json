@@ -1,6 +1,6 @@
 {
   "header": {
-    "note": "table of cases for internal/approval tests"
+    "note": "table of cases for internal/store/approval tests"
   },
   "notes": [
     "tree_cases: build tree[] under a temp root, load each group, compare shared_files/local_files; replace @ROOT@ with the root in key_template and record_template. Modes are octal strings; symlink targets are relative. content_hex replaces content when the bytes are not UTF-8, path_hex replaces path. A group with error_contains must fail, either to load or when its snapshot is taken, with a message holding that text (@ROOT@ is replaced with the root)."

@@ -17,11 +17,11 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-// golden reads ../testdata/approval.json.
+// golden reads testdata/approval.json.
 func golden(t *testing.T, set string) []map[string]any {
 	t.Helper()
 	var file map[string]json.RawMessage
-	if err := json.Unmarshal(testkit.Golden(t, "approval.json"), &file); err != nil {
+	if err := json.Unmarshal(testkit.Golden(t, "internal/store/approval/testdata/approval.json"), &file); err != nil {
 		t.Fatal(err)
 	}
 	var cases []map[string]any

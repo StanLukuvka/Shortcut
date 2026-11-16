@@ -73,10 +73,10 @@ func NotExist(t testing.TB, path string) {
 	}
 }
 
-// Golden is a file of internal/testdata, found from the module root, whatever the test's cwd.
-func Golden(t testing.TB, name string) []byte {
+// Golden is a frozen data file, given as a path from the module root, found whatever the test's cwd.
+func Golden(t testing.TB, path string) []byte {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(moduleRoot(), "internal", "testdata", name))
+	raw, err := os.ReadFile(filepath.Join(moduleRoot(), filepath.FromSlash(path)))
 	if err != nil {
 		t.Fatal(err)
 	}
