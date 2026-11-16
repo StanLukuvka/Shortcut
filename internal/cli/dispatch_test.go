@@ -118,7 +118,7 @@ func TestHelp_LiveOutputIsTheTable(t *testing.T) {
 				argvs = append(argvs, []string{name, "-h"}, []string{name, "--help"})
 			}
 			for _, argv := range argvs {
-				if res := e.Run(argv...); res.Code != 0 || res.Stdout != helpText(c.Name) || res.Stderr != "" {
+				if res := e.Run(argv...); res.Code != 0 || res.Stdout != c.HelpText() || res.Stderr != "" {
 					t.Errorf("%v: exit %d stderr %q stdout %q", argv, res.Code, res.Stderr, res.Stdout)
 				}
 			}

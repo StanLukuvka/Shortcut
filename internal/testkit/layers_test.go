@@ -18,10 +18,10 @@ var layers = map[string][]string{
 	"cmd/shortcut":            {"internal/cli"},
 	"internal/platform":       {},
 	"internal/store":          {"internal/platform"},
-	"internal/textio":         {"internal/platform"},
+	"internal/term":           {"internal/term/argparse", "internal/platform"},
 	"internal/store/approval": {"internal/store", "internal/platform"},
-	"internal/cli/argparse":   {},
-	"internal/cli":            {"internal/cli/argparse", "internal/store/approval", "internal/store", "internal/textio", "internal/platform"},
+	"internal/term/argparse":  {},
+	"internal/cli":            {"internal/term/argparse", "internal/store/approval", "internal/store", "internal/term", "internal/platform"},
 	"internal/testkit":        {},
 }
 

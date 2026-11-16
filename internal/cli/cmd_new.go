@@ -5,38 +5,38 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
-	"github.com/StanLukuvka/Shortcut/internal/textio"
+	"github.com/StanLukuvka/Shortcut/internal/term"
+	"github.com/StanLukuvka/Shortcut/internal/term/argparse"
 )
 
 // positionalAnywhere matches $1, $@, $* or ${1} anywhere in a command.
 var positionalAnywhere = regexp.MustCompile(`\$(?:[1-9@*]|\{[1-9@*])`)
 
 // cmdNew makes a shortcut from an inline command after -- or --script.
-func cmdNew(c *store.Context, s *textio.Streams, args []string) error {
+func cmdNew(c *store.Context, s *term.Streams, cmd term.Command, args []string) error {
 	// everything after the first -- is the command, and argparse never sees it
 	pre, inline, hasInline := args, []string(nil), false
 	if i := slices.Index(args, "--"); i >= 0 {
 		pre, inline, hasInline = args[:i], args[i+1:], true
 	}
-	ns, err := parse("new", pre)
+	ns, err := cmd.Parse(pre)
 	if err != nil {
 		return err
 	}
 	script := ns.Str("script")
 	switch {
 	case hasInline && len(inline) == 0:
-		return Die("command expected after '--'")
+		return term.Die("command expected after '--'")
 	case ns.Set("script") && script == "":
-		return Die("--script needs a file name")
+		return term.Die("--script needs a file name")
 	case ns.Set("desc") && ns.Str("desc") == "":
-		return Die("--desc can't be empty")
+		return term.Die("--desc can't be empty")
 	case ns.Set("namespace") && ns.Str("namespace") == "":
-		return Die("--namespace can't be empty")
+		return term.Die("--namespace can't be empty")
 	case hasInline && script != "":
-		return Die("use one of: '-- CMD', --script")
+		return term.Die("use one of: '-- CMD', --script")
 	case !hasInline && script == "":
 		return argparse.UsageError("new", "give a command after '--', or --script PATH")
 	}
@@ -71,7 +71,7 @@ func cmdNew(c *store.Context, s *textio.Streams, args []string) error {
 }
 
 // descOr returns the --desc, or def when there is none.
-func descOr(ns Namespace, def string) string {
+func descOr(ns term.Namespace, def string) string {
 	if ns.Set("desc") {
 		return ns.Str("desc")
 	}
@@ -79,7 +79,7 @@ func descOr(ns Namespace, def string) string {
 }
 
 // entryFields returns the parts of an entry the flags of new set.
-func entryFields(c *store.Context, name string, ns Namespace, g store.Group) (*store.Entry, error) {
+func entryFields(c *store.Context, name string, ns term.Namespace, g store.Group) (*store.Entry, error) {
 	var cwd *string
 	if ns.Set("cwd") {
 		v := ns.Str("cwd")
@@ -95,11 +95,11 @@ func entryFields(c *store.Context, name string, ns Namespace, g store.Group) (*s
 // newFromScript makes an entry that names the file where it is. A file inside the folder its paths
 // resolve from (the project, the namespace file's folder, the global store) is kept relative, so the folder can
 // move.
-func newFromScript(c *store.Context, s *textio.Streams, ns Namespace, group store.Group, fields *store.Entry) error {
+func newFromScript(c *store.Context, s *term.Streams, ns term.Namespace, group store.Group, fields *store.Entry) error {
 	path := ns.Str("script")
 	abs := platform.Abs(platform.ExpandUser(path))
 	if path == "-" || !platform.IsFile(abs) {
-		return Die("script file not found: " + path)
+		return term.Die("script file not found: " + path)
 	}
 	base := platform.Realpath(group.ScriptBase())
 	real := platform.Realpath(abs)

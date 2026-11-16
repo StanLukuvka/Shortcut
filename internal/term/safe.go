@@ -1,6 +1,6 @@
-// Package textio is where shortcut's text leaves and enters: everything printed is made safe first, a question
-// cannot be forged.
-package textio
+// Package term is where shortcut's text leaves and enters: everything printed is made safe first, a question
+// cannot be forged. A command's words are described by Command and read by its parser, argparse.
+package term
 
 import (
 	"fmt"

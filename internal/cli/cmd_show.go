@@ -9,7 +9,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
 	"github.com/StanLukuvka/Shortcut/internal/store/approval"
-	"github.com/StanLukuvka/Shortcut/internal/textio"
+	"github.com/StanLukuvka/Shortcut/internal/term"
 )
 
 func orCaller(s *string) string {
@@ -20,15 +20,15 @@ func orCaller(s *string) string {
 }
 
 // cmdShow prints a shortcut's definition and where it resolves.
-func cmdShow(c *store.Context, s *textio.Streams, args []string) error {
-	ns, err := parse("show", args)
+func cmdShow(c *store.Context, s *term.Streams, cmd term.Command, args []string) error {
+	ns, err := cmd.Parse(args)
 	if err != nil {
 		return err
 	}
 	lk := store.Lookup{GlobalOnly: ns.Bool("skipLocal")}
 	if ns.Set("field") {
 		if ns.Bool("json") {
-			return Die("--field and --json can't be used together")
+			return term.Die("--field and --json can't be used together")
 		}
 		return showField(c, s, ns.List("name"), lk, ns.Str("field"))
 	}
@@ -105,7 +105,7 @@ func setOpt(d *platform.Doc, key string, val *string) error {
 }
 
 // showJSON prints one JSON object, the entry as written plus where it resolves.
-func showJSON(c *store.Context, s *textio.Streams, words []string, lk store.Lookup) error {
+func showJSON(c *store.Context, s *term.Streams, words []string, lk store.Lookup) error {
 	vals, entry, err := showObject(c, words, lk)
 	if err != nil {
 		return err
@@ -140,9 +140,9 @@ func showFields() []string {
 
 // showField prints one field of what `show --json` describes, bare. It only reads: nothing is written or approved.
 // A field is printed as it is, so a name that is not valid UTF-8 prints; only `show --json` refuses it.
-func showField(c *store.Context, s *textio.Streams, words []string, lk store.Lookup, key string) error {
+func showField(c *store.Context, s *term.Streams, words []string, lk store.Lookup, key string) error {
 	if keys := showFields(); !slices.Contains(keys, key) {
-		return Die("unknown field '" + key + "' (one of: " + strings.Join(keys, ", ") + ")")
+		return term.Die("unknown field '" + key + "' (one of: " + strings.Join(keys, ", ") + ")")
 	}
 	vals, entry, err := showObject(c, words, lk)
 	if err != nil {

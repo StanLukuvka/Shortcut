@@ -1,4 +1,4 @@
-// Package cli is shortcut's command line: dispatch, argument parsing and the commands.
+// Package cli is shortcut's command line: the command table, dispatch and the usage text.
 package cli
 
 import (
@@ -6,41 +6,25 @@ import (
 	"os"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
-	"github.com/StanLukuvka/Shortcut/internal/textio"
+	"github.com/StanLukuvka/Shortcut/internal/term"
 )
 
-// ExitError ends a command with a code and, optionally, text for stdout and stderr, which Main prints as it is
-// (so a message carries its own "error: " and newline). Code 0 is -h; 2 is a usage error; 1 is Die.
-// It is the error type of the argparse package, so a parser's exit passes through unchanged.
-type ExitError = argparse.ExitError
-
-// Namespace is what a parser returns: the value of each argument by its dest.
-type Namespace = argparse.Namespace
-
-// Die returns an error that prints "error: msg" on stderr and exits 1.
-func Die(msg string) error { return &ExitError{Code: 1, Stderr: "error: " + msg + "\n"} }
-
-// handler is a command: it gets what follows the command word, and ends with nil (exit 0), an *ExitError or any
-// other error, which dispatch prints as "error: <text>" with exit 1.
-type handler func(c *store.Context, s *textio.Streams, args []string) error
-
-// invoke builds the run's one Context and runs h.
-func invoke(s *textio.Streams, h handler, args []string) int {
+// invoke builds the run's one Context and runs the command.
+func invoke(s *term.Streams, e *entry, args []string) int {
 	cwd, err := platform.Getwd()
-	return finish(s, h(store.NewContext(cwd, err), s, args))
+	return finish(s, e.Run(store.NewContext(cwd, err), s, e.Command, args))
 }
 
 // Main runs the command and returns the process's exit code. A write to a closed stdout or stderr ends the
 // process by SIGPIPE (the Go runtime's default; this program does not Notify it).
 func Main(args []string, in, out, errw *os.File) int {
-	return dispatch(textio.NewStreams(in, out, errw), args)
+	return dispatch(term.NewStreams(in, out, errw), args)
 }
 
 // dispatch runs the command the first word picks.
-func dispatch(s *textio.Streams, args []string) int {
+func dispatch(s *term.Streams, args []string) int {
 	if len(args) == 0 {
 		s.Out.WriteString(usageText())
 		return 0
@@ -55,7 +39,7 @@ func dispatch(s *textio.Streams, args []string) int {
 		s.Out.WriteString("shortcut " + Version + "\n")
 		return 0
 	case cmd != nil:
-		return invoke(s, cmd.Run, args[1:])
+		return invoke(s, cmd, args[1:])
 	case strings.HasPrefix(first, "-"):
 		s.Err.WriteString("error: unrecognized option '" + first + "'\nTry 'shortcut --help' for more information.\n")
 		return 2
@@ -65,8 +49,8 @@ func dispatch(s *textio.Streams, args []string) int {
 }
 
 // finish turns a command's result into its exit code, printing what an *ExitError or an error carries.
-func finish(s *textio.Streams, err error) int {
-	var ee *ExitError
+func finish(s *term.Streams, err error) int {
+	var ee *term.ExitError
 	switch {
 	case err == nil:
 		return 0
@@ -77,14 +61,4 @@ func finish(s *textio.Streams, err error) int {
 	}
 	s.Err.WriteString("error: " + err.Error() + "\n")
 	return 1
-}
-
-// cmdHelp prints a command's help, or the usage text.
-func cmdHelp(_ *store.Context, s *textio.Streams, args []string) error {
-	text := usageText()
-	if len(args) > 0 && find(args[0]) != nil {
-		text = helpText(args[0])
-	}
-	_, err := s.Out.WriteString(text)
-	return err
 }

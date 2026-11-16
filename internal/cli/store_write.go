@@ -13,7 +13,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
 	"github.com/StanLukuvka/Shortcut/internal/store/approval"
-	"github.com/StanLukuvka/Shortcut/internal/textio"
+	"github.com/StanLukuvka/Shortcut/internal/term"
 )
 
 // Adding an entry to a store: which file it goes in, under that store's lock, keeping an approval that
@@ -23,20 +23,20 @@ import (
 
 // noteIfUnapproved says so, after a change made through shortcut, if the group needs approving before
 // it runs.
-func noteIfUnapproved(c *store.Context, s *textio.Streams, g store.Group) {
+func noteIfUnapproved(c *store.Context, s *term.Streams, g store.Group) {
 	if g.NeedsApproval() && approval.Refresh(c, c.ReloadGroup(g)) != store.StateOK {
 		s.Err.WriteString("note: " + g.Label() + " needs approving before it runs: " + g.UpdateCmd() + "\n")
 	}
 }
 
 // targetGroup returns the file a new shortcut goes in. It creates nothing; register does.
-func targetGroup(c *store.Context, ns Namespace) (store.Group, error) {
+func targetGroup(c *store.Context, ns term.Namespace) (store.Group, error) {
 	if err := store.ValidateName(ns.Str("name")); err != nil {
 		return store.Group{}, err
 	}
 	local, namespace := ns.Bool("local"), ns.Str("namespace")
 	if local && namespace != "" {
-		return store.Group{}, Die("--namespace can't be used with --local: " + store.LocalFile + " is one file, and " +
+		return store.Group{}, term.Die("--namespace can't be used with --local: " + store.LocalFile + " is one file, and " +
 			store.ProjectFile + " is yours to edit")
 	}
 	storeDir := c.Global
@@ -53,7 +53,7 @@ func targetGroup(c *store.Context, ns Namespace) (store.Group, error) {
 			return store.Group{}, err
 		}
 		if _, clash := st.Main.Shortcuts().Get(namespace); clash {
-			return store.Group{}, Die("'" + namespace + "' is a shortcut in store " + storeDir + ", so it can't be a namespace")
+			return store.Group{}, term.Die("'" + namespace + "' is a shortcut in store " + storeDir + ", so it can't be a namespace")
 		}
 		var ok bool
 		if group, ok = st.Namespace(namespace); !ok {
@@ -62,7 +62,7 @@ func targetGroup(c *store.Context, ns Namespace) (store.Group, error) {
 		}
 	}
 	if group.Error != nil {
-		return store.Group{}, Die(*group.Error)
+		return store.Group{}, term.Die(*group.Error)
 	}
 	return group, nil
 }
@@ -97,18 +97,6 @@ func saveEdited(path string, reg, shortcuts *platform.Doc) error {
 	return store.SaveRegistryFile(path, reg)
 }
 
-// confirmed asks c and turns a "no" into exit 1; nil means go ahead.
-func confirmed(s *textio.Streams, c textio.Confirm, assumeYes bool) error {
-	granted, err := c.Granted(s, assumeYes)
-	if err != nil {
-		return err
-	}
-	if !granted {
-		return &ExitError{Code: 1}
-	}
-	return nil
-}
-
 // lockedGroupWrite runs mutate under the group's store lock. If the group's approval held before it, the approval
 // follows the write, saved after the lock is released: Save takes the global store's lock, which a namespace's
 // registry write holds.
@@ -133,15 +121,15 @@ func lockedGroupWrite(c *store.Context, group store.Group, mutate func() error) 
 }
 
 // register adds entry to group's file under the registry lock. It creates a missing store or namespace file. A project's group means .shortcuts.local.
-func register(c *store.Context, s *textio.Streams, group store.Group, entry *store.Entry) error {
+func register(c *store.Context, s *term.Streams, group store.Group, entry *store.Entry) error {
 	storeDir := group.StoreDir
 	if group.Kind == store.KindProject {
 		change := func(shortcuts *platform.Doc) error {
 			if shortcuts.Has(entry.Name) {
-				return Die("shortcut '" + entry.Name + "' already exists in " + group.LocalFile)
+				return term.Die("shortcut '" + entry.Name + "' already exists in " + group.LocalFile)
 			}
 			if _, clash := c.ReadStore(storeDir).Namespace(entry.Name); clash {
-				return Die("'" + entry.Name + "' is a namespace in " + storeDir)
+				return term.Die("'" + entry.Name + "' is a namespace in " + storeDir)
 			}
 			raw, err := entry.Raw()
 			if err != nil {
@@ -171,11 +159,11 @@ func register(c *store.Context, s *textio.Streams, group store.Group, entry *sto
 			return err
 		}
 		if shortcuts.Has(entry.Name) {
-			return Die("shortcut '" + entry.Name + "' already exists in " + group.File)
+			return term.Die("shortcut '" + entry.Name + "' already exists in " + group.File)
 		}
 		if group.Kind != store.KindNamespace {
 			if _, clash := c.ReadStore(storeDir).Namespace(entry.Name); clash {
-				return Die("'" + entry.Name + "' is a namespace in store " + storeDir)
+				return term.Die("'" + entry.Name + "' is a namespace in store " + storeDir)
 			}
 		}
 		raw, err := entry.Raw()
@@ -290,7 +278,7 @@ func storedCwd(c *store.Context, value *string, g store.Group) (*string, error) 
 	}
 	path := platform.Realpath(platform.ExpandUser(*value))
 	if !platform.IsDir(path) {
-		return nil, Die("--cwd directory does not exist: " + path)
+		return nil, term.Die("--cwd directory does not exist: " + path)
 	}
 	if g.InProject && platform.IsRelativeTo(path, platform.Realpath(g.StoreDir)) {
 		rel := platform.Relpath(path, platform.Realpath(g.Folder()))

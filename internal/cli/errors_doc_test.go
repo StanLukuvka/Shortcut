@@ -53,8 +53,8 @@ func callName(e ast.Expr) string {
 }
 
 // raisers are the calls whose first argument is a user-facing message (plus problems.append); the
-// messages built inside internal/cli/argparse are out of scope.
-var raisers = map[string]bool{"Die": true, "fail": true, "bad": true, "errors.New": true, "fmt.Errorf": true,
+// messages built inside internal/term/argparse are out of scope.
+var raisers = map[string]bool{"Die": true, "term.Die": true, "fail": true, "bad": true, "errors.New": true, "fmt.Errorf": true,
 	"append": true}
 
 // goMessages: each message passed to a raiser, appended to problems, set as ExitError.Stderr, or returned by FileError,
@@ -66,8 +66,7 @@ func goMessages(t *testing.T) [][]string {
 			return err
 		}
 		if d.IsDir() {
-			// osutil re-creates stdlib text (shlex)
-			if d.Name() == "testkit" || d.Name() == "testdata" || d.Name() == "osutil" {
+			if d.Name() == "testkit" || d.Name() == "testdata" {
 				return filepath.SkipDir
 			}
 			return nil

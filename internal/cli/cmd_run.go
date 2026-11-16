@@ -12,14 +12,14 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
 	"github.com/StanLukuvka/Shortcut/internal/store/approval"
-	"github.com/StanLukuvka/Shortcut/internal/textio"
+	"github.com/StanLukuvka/Shortcut/internal/term"
 )
 
 // cmdRun runs a shortcut. --global, -y and --yes are the only options it reads, and only before the name; everything
 // after that, -h included, is the shortcut's.
-func cmdRun(c *store.Context, s *textio.Streams, args []string) error {
+func cmdRun(c *store.Context, s *term.Streams, cmd term.Command, args []string) error {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
-		_, err := s.Out.WriteString(helpText("run"))
+		_, err := s.Out.WriteString(cmd.HelpText())
 		return err
 	}
 	skipLocal, assumeYes := false, false
@@ -29,7 +29,7 @@ func cmdRun(c *store.Context, s *textio.Streams, args []string) error {
 		args = args[1:]
 	}
 	if len(args) == 0 {
-		return &ExitError{Code: 2, Stderr: "error: missing shortcut name\n" + find("run").usageLine() + "\n"}
+		return &term.ExitError{Code: 2, Stderr: "error: missing shortcut name\n" + cmd.UsageLine() + "\n"}
 	}
 	return runShortcut(c, s, args, store.Lookup{GlobalOnly: skipLocal}, assumeYes)
 }
@@ -38,7 +38,7 @@ func oneLine(text string) string { return strings.ReplaceAll(text, "\n", "\\n") 
 
 // runShortcut handles approval, the confirmation and the child process, which replaces this one.
 // It returns only when something stops the run.
-func runShortcut(c *store.Context, s *textio.Streams, words []string, lk store.Lookup, assumeYes bool) error {
+func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Lookup, assumeYes bool) error {
 	if c.CwdErr != nil {
 		return c.CwdErr
 	}
@@ -76,7 +76,7 @@ func runShortcut(c *store.Context, s *textio.Streams, words []string, lk store.L
 		if entry.Description == "(no description)" || (entry.Inline != nil && entry.Description == *entry.Inline) {
 			message = ""
 		}
-		if err := confirmed(s, textio.Confirm{
+		if err := term.Confirmed(s, term.Confirm{
 			Question:   "run '" + name + "'" + withArgs + " in " + realCwd + "?",
 			NoTerminal: "'" + name + "' asks for confirmation: run it in a terminal, or pass -y (" + oneLine(platform.ShellJoin(again)) + ")",
 			Message:    message,
@@ -90,7 +90,7 @@ func runShortcut(c *store.Context, s *textio.Streams, words []string, lk store.L
 		}
 	}
 	if show, ok := os.LookupEnv("SHORTCUT_SHOW_DIR"); !ok || show != "0" {
-		line := textio.Safe("\u2192 " + realCwd)
+		line := term.Safe("\u2192 " + realCwd)
 		if s.Err.IsTerminal() {
 			line = "\x1b[2m" + line + "\x1b[0m"
 		}

@@ -7,12 +7,12 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
 	"github.com/StanLukuvka/Shortcut/internal/store/approval"
-	"github.com/StanLukuvka/Shortcut/internal/textio"
+	"github.com/StanLukuvka/Shortcut/internal/term"
 )
 
 // cmdUpdate reviews changes to project shortcuts and namespaces, and approve them.
-func cmdUpdate(c *store.Context, s *textio.Streams, args []string) error {
-	ns, err := parse("update", args)
+func cmdUpdate(c *store.Context, s *term.Streams, cmd term.Command, args []string) error {
+	ns, err := cmd.Parse(args)
 	if err != nil {
 		return err
 	}
@@ -38,12 +38,12 @@ func cmdUpdate(c *store.Context, s *textio.Streams, args []string) error {
 	case group == ".":
 		keep(func(g store.Group) bool { return g.Kind == store.KindProject })
 		if len(groups) == 0 {
-			return Die("no project shortcuts here: no " + store.ProjectFile + " or " + store.LocalFile + " in this folder or its parents")
+			return term.Die("no project shortcuts here: no " + store.ProjectFile + " or " + store.LocalFile + " in this folder or its parents")
 		}
 	case group != "":
 		keep(func(g store.Group) bool { return g.Name == group })
 		if len(groups) == 0 {
-			return Die("no namespace named '" + group + "' here")
+			return term.Die("no namespace named '" + group + "' here")
 		}
 		groups = groups[:1]
 	default:
@@ -67,7 +67,7 @@ func cmdUpdate(c *store.Context, s *textio.Streams, args []string) error {
 		code = max(code, rc)
 	}
 	if code != 0 {
-		return &ExitError{Code: code}
+		return &term.ExitError{Code: code}
 	}
 	return nil
 }
@@ -79,7 +79,7 @@ type approveOpts struct{ Yes, Named bool }
 // hashed. globalNames are your global shortcuts and namespaces, which a project's names hide inside it. It returns
 // the exit code; an error is a die (no terminal to ask on, or the record can't be written). A broken group
 // is skipped with a warning (exit 0) unless the group was named, then it is an error (exit 1).
-func approveGroup(c *store.Context, s *textio.Streams, g store.Group, globalNames map[string]bool, opts approveOpts) (int, error) {
+func approveGroup(c *store.Context, s *term.Streams, g store.Group, globalNames map[string]bool, opts approveOpts) (int, error) {
 	prefix, rc := "warning: skipped ", 0
 	if opts.Named {
 		prefix, rc = "error: cannot approve ", 1
@@ -160,7 +160,7 @@ func approveGroup(c *store.Context, s *textio.Streams, g store.Group, globalName
 			}
 		}
 	}
-	granted, err := textio.Confirm{Question: "approve?", NoTerminal: "approve " + g.Label() + " in a terminal, or pass -y"}.Granted(s, opts.Yes)
+	granted, err := term.Confirm{Question: "approve?", NoTerminal: "approve " + g.Label() + " in a terminal, or pass -y"}.Granted(s, opts.Yes)
 	if err != nil {
 		return 0, err
 	}

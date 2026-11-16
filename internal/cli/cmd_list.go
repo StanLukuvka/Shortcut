@@ -7,14 +7,14 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/store"
 	"github.com/StanLukuvka/Shortcut/internal/store/approval"
-	"github.com/StanLukuvka/Shortcut/internal/textio"
+	"github.com/StanLukuvka/Shortcut/internal/term"
 )
 
 func approved(c *store.Context, g store.Group) bool { return approval.State(c, g) == store.StateOK }
 
 // cmdList lists shortcuts.
-func cmdList(c *store.Context, s *textio.Streams, args []string) error {
-	ns, err := parse("list", args)
+func cmdList(c *store.Context, s *term.Streams, cmd term.Command, args []string) error {
+	ns, err := cmd.Parse(args)
 	if err != nil {
 		return err
 	}
@@ -143,9 +143,9 @@ func cmdList(c *store.Context, s *textio.Streams, args []string) error {
 			sourceWidth = max(sourceWidth, utf8.RuneCountInString(r.source))
 		}
 		for _, r := range rows {
-			line := "  " + padRight(r.name, 20) + " " + padRight(r.mode, width) + "  "
+			line := "  " + term.PadRight(r.name, 20) + " " + term.PadRight(r.mode, width) + "  "
 			if r.source != "" {
-				line += padRight(r.source, sourceWidth) + "  "
+				line += term.PadRight(r.source, sourceWidth) + "  "
 			}
 			s.Out.WriteString(line + r.desc + "\n")
 		}

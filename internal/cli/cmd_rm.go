@@ -4,10 +4,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
-	"github.com/StanLukuvka/Shortcut/internal/textio"
+	"github.com/StanLukuvka/Shortcut/internal/term"
+	"github.com/StanLukuvka/Shortcut/internal/term/argparse"
 )
 
 // What rm deletes: the entry's line in its registry, never a script file; for rm --namespace the namespace's file
@@ -15,19 +15,19 @@ import (
 // one, and a symlinked scripts folder loses only the link.
 
 // cmdRm removes a shortcut or a namespace.
-func cmdRm(c *store.Context, s *textio.Streams, args []string) error {
-	ns, err := parse("rm", args)
+func cmdRm(c *store.Context, s *term.Streams, cmd term.Command, args []string) error {
+	ns, err := cmd.Parse(args)
 	if err != nil {
 		return err
 	}
 	names := ns.List("name")
 	if ns.Set("namespace") {
 		if len(names) > 0 {
-			return Die("--namespace takes the namespace alone: shortcut rm --namespace " + ns.Str("namespace") +
+			return term.Die("--namespace takes the namespace alone: shortcut rm --namespace " + ns.Str("namespace") +
 				". To remove one entry: shortcut rm " + ns.Str("namespace") + " " + platform.ShellJoin(names))
 		}
 		if ns.Bool("local") {
-			return Die("--namespace takes the namespace alone: shortcut rm --namespace " + ns.Str("namespace"))
+			return term.Die("--namespace takes the namespace alone: shortcut rm --namespace " + ns.Str("namespace"))
 		}
 		return rmNamespace(c, s, ns.Str("namespace"), ns.Bool("yes"))
 	}
@@ -45,7 +45,7 @@ func cmdRm(c *store.Context, s *textio.Streams, args []string) error {
 	}
 	if root != "" {
 		if broken := c.Store(root).Main.Error; broken != nil {
-			return Die(*broken + ". Inside this project rm only takes --local until it's fixed; " +
+			return term.Die(*broken + ". Inside this project rm only takes --local until it's fixed; " +
 				"for your own: shortcut rm --global " + platform.ShellJoin(names))
 		}
 	}
@@ -61,11 +61,11 @@ func cmdRm(c *store.Context, s *textio.Streams, args []string) error {
 	group, name := found.Group, found.Name
 	display := group.Display(name)
 	if group.InProject {
-		return Die("'" + display + "' is a project shortcut, and shortcut doesn't change " + store.ProjectFile + ". " +
+		return term.Die("'" + display + "' is a project shortcut, and shortcut doesn't change " + store.ProjectFile + ". " +
 			"Edit it by hand, or use: shortcut rm --local " + display)
 	}
 
-	if err := confirmed(s, textio.Confirm{Question: "remove '" + display + "'?", NoTerminal: "remove '" + display + "' in a terminal, or pass -y",
+	if err := term.Confirmed(s, term.Confirm{Question: "remove '" + display + "'?", NoTerminal: "remove '" + display + "' in a terminal, or pass -y",
 		Message: rmMessage(group, display, found.Item), TellOnYes: true}, ns.Bool("yes")); err != nil {
 		return err
 	}
@@ -92,13 +92,13 @@ func cmdRm(c *store.Context, s *textio.Streams, args []string) error {
 }
 
 // rmLocal takes a name out of .shortcuts.local, which also undoes an override.
-func rmLocal(c *store.Context, s *textio.Streams, ns Namespace) error {
+func rmLocal(c *store.Context, s *term.Streams, ns term.Namespace) error {
 	if ns.Bool("skipLocal") {
-		return Die("--local and --global can't be used together")
+		return term.Die("--local and --global can't be used together")
 	}
 	names := ns.List("name")
 	if len(names) > 1 {
-		return Die("--local takes one name: namespaces aren't in " + store.LocalFile)
+		return term.Die("--local takes one name: namespaces aren't in " + store.LocalFile)
 	}
 	name := names[0]
 	root, err := c.LocalProjectRoot()
@@ -108,11 +108,11 @@ func rmLocal(c *store.Context, s *textio.Streams, ns Namespace) error {
 	group := c.Store(root).Main
 	if _, inLocal := group.Local.Get(name); !inLocal {
 		if _, inShared := group.Shared.Get(name); inShared {
-			return Die("'" + name + "' isn't in " + store.LocalFile + ", and shortcut doesn't change " + store.ProjectFile)
+			return term.Die("'" + name + "' isn't in " + store.LocalFile + ", and shortcut doesn't change " + store.ProjectFile)
 		}
-		return Die("'" + name + "' isn't in " + store.ProjectFile + " or " + store.LocalFile + " here")
+		return term.Die("'" + name + "' isn't in " + store.ProjectFile + " or " + store.LocalFile + " here")
 	}
-	if err := confirmed(s, textio.Confirm{Question: "remove '" + name + "'?", NoTerminal: "remove '" + name + "' in a terminal, or pass -y",
+	if err := term.Confirmed(s, term.Confirm{Question: "remove '" + name + "'?", NoTerminal: "remove '" + name + "' in a terminal, or pass -y",
 		Message: rmLocalMessage(group, name), TellOnYes: true}, ns.Bool("yes")); err != nil {
 		return err
 	}
@@ -130,12 +130,12 @@ func rmLocal(c *store.Context, s *textio.Streams, ns Namespace) error {
 
 // rmNamespace removes a global namespace, whole. One in imports/ goes with its scripts folder. One that
 // shortcuts.json imports from elsewhere is only no longer imported: its files are someone's own.
-func rmNamespace(c *store.Context, s *textio.Streams, name string, assumeYes bool) error {
+func rmNamespace(c *store.Context, s *term.Streams, name string, assumeYes bool) error {
 	storeDir := c.Global
 	st := c.Store(storeDir)
 	group, found := st.Namespace(name)
 	if !found {
-		return Die("no namespace named '" + name + "' in your global store (" + platform.Join(storeDir, "imports") + ")")
+		return term.Die("no namespace named '" + name + "' in your global store (" + platform.Join(storeDir, "imports") + ")")
 	}
 	listed := isListedImport(st, name)
 	folder := group.ScriptsDir()
@@ -148,7 +148,7 @@ func rmNamespace(c *store.Context, s *textio.Streams, name string, assumeYes boo
 			lines = append(lines, "Deletes its scripts folder: "+folder)
 		}
 	}
-	if err := confirmed(s, textio.Confirm{Question: "remove namespace '" + name + "'?", NoTerminal: "remove namespace '" + name + "' in a terminal, or pass -y",
+	if err := term.Confirmed(s, term.Confirm{Question: "remove namespace '" + name + "'?", NoTerminal: "remove namespace '" + name + "' in a terminal, or pass -y",
 		Message: strings.Join(lines, "\n"), TellOnYes: true}, assumeYes); err != nil {
 		return err
 	}

@@ -4,14 +4,14 @@ import (
 	"embed"
 
 	"github.com/StanLukuvka/Shortcut/internal/store"
-	"github.com/StanLukuvka/Shortcut/internal/textio"
+	"github.com/StanLukuvka/Shortcut/internal/term"
 )
 
 //go:embed completion/*.txt
 var completionFiles embed.FS
 
-func cmdCompletion(_ *store.Context, s *textio.Streams, args []string) error {
-	ns, err := parse("completion", args)
+func cmdCompletion(_ *store.Context, s *term.Streams, cmd term.Command, args []string) error {
+	ns, err := cmd.Parse(args)
 	if err != nil {
 		return err
 	}
