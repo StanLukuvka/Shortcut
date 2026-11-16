@@ -361,7 +361,7 @@ func TestGroup_ShortcutsOverlayAndSource(t *testing.T) {
 	local := doc(t, `{"shortcuts": {"b": {"inline": "B"}, "d": {"inline": "4"}}}`)
 	g := Group{
 		Kind: KindProject, InProject: true, File: "/p/.shortcuts", StoreDir: "/p", LocalFile: "/p/.shortcuts.local",
-		Doc: shared, Shared: ItemsOf(shared), LocalDoc: local, Local: ItemsOf(local),
+		Doc: shared, Shared: ItemsOf(shared), Local: ItemsOf(local),
 	}
 	if got := strings.Join(g.Shortcuts().Names(), ","); got != "a,b,c,d" {
 		t.Errorf("keys %s", got)
@@ -399,7 +399,7 @@ func TestGroup_Names(t *testing.T) {
 		t.Errorf("%+v", global)
 	}
 	proj := Group{Kind: KindProject, InProject: true, File: filepath.Join(env.Tmp, "p", ".shortcuts"), StoreDir: filepath.Join(env.Tmp, "p")}
-	if !proj.InProject || proj.Label() != proj.Key() || proj.Key() != proj.StoreDir {
+	if !proj.InProject || proj.Label() != proj.StoreDir {
 		t.Errorf("%+v", proj)
 	}
 }

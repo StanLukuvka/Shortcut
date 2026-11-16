@@ -46,7 +46,7 @@ func Fields() []Field {
 }
 
 // DecodeEntry reads an entry's text, with fixed messages and check order. For an object it returns the entry
-// with every well-typed field set, even beside an error, so approval still sees a broken entry's script and cwd.
+// with every well-typed field set, even beside an error, so a broken entry's script and cwd can still be read.
 func DecodeEntry(name string, raw []byte) (*Entry, error) {
 	bad := func(problem string) error { return fmt.Errorf("'%s' is not a valid entry: %s", name, problem) }
 	data, ok := platform.ObjectOf(raw)
@@ -119,9 +119,4 @@ func (e *Entry) Raw() ([]byte, error) {
 		}
 	}
 	return d.Bytes()
-}
-
-// IsRelativeCwd: a cwd that means a folder next to the file defining it, so it's only right in that checkout.
-func IsRelativeCwd(cwd *string) bool {
-	return cwd != nil && *cwd != "" && *cwd != Caller && !strings.HasPrefix(platform.ExpandUser(*cwd), "/")
 }

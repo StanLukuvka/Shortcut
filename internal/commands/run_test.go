@@ -298,8 +298,8 @@ func TestRunning_AClosedPipeStopsQuietly(t *testing.T) {
 	}
 }
 
-// The "-> cwd" line goes to stderr with a bad byte escaped (as \xNN). A global shortcut needs no approval, so it
-// still runs from a folder whose name is not valid UTF-8 (a project there cannot be approved).
+// The "-> cwd" line goes to stderr with a bad byte escaped (as \xNN). A global shortcut still runs from a folder
+// whose name is not valid UTF-8.
 func TestRun_CwdLineEscapesNonUTF8(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"hello": testkit.Inline("true")})

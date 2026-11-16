@@ -8,8 +8,7 @@ import (
 	"unicode/utf8"
 )
 
-// ErrNotUTF8 is the refusal for a file that is not valid UTF-8, the one check on read. Approval hashes a file's bytes, so
-// what encoding/json makes of an escape such as \udcNN (U+FFFD) cannot hide a change.
+// ErrNotUTF8 is the refusal for a file that is not valid UTF-8, the one check on read.
 var ErrNotUTF8 = errors.New("contains text that is not valid UTF-8")
 
 var errNotObject = errors.New("root must be a JSON object")
