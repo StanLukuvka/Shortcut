@@ -94,7 +94,7 @@ func jsonFile(g store.Group, path string, d *platform.Doc) (map[string]string, e
 func merge(maps ...map[string]string) map[string]string {
 	out := map[string]string{}
 	for _, m := range maps {
-		for k, v := range m { // later wins, as {**a, **b}
+		for k, v := range m { // a later map's value wins
 			out[k] = v
 		}
 	}

@@ -18,7 +18,7 @@ type Key struct {
 	Do     func()    // or call this
 }
 
-// InTerminal runs the binary on a fresh 30x100 pseudo-terminal, as if typed into a real one (= run_in_terminal):
+// InTerminal runs the binary on a fresh 30x100 pseudo-terminal, as if typed into a real one:
 // its own session, the terminal as controlling tty, 15s. The output has the terminal's \r\n.
 // With Opts.StdoutTo, stdout goes to that file, as `> file` would; the terminal keeps stdin and stderr.
 func (e *Env) InTerminal(o Opts, keys []Key, args ...string) (code int, out string) {
