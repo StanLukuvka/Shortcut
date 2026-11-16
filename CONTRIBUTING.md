@@ -50,6 +50,27 @@ CI also checks `gofmt` and runs `go vet ./...`.
 - Text from a file is printed through `term.Safe`.
 - Every question goes through `term.Confirm`.
 
+## How it fails
+
+shortcut does what it was told, or stops with an error. It does not guess,
+repair, or carry on.
+
+- A wrong input is an error that names the thing and, where there is one,
+  the command that fixes it. Then shortcut exits.
+- No fallbacks. A file that is missing, unreadable, not executable or not
+  what was expected is refused. shortcut does not try something else in its
+  place.
+- No convenience that acts without being asked. If saving the user one
+  command means doing something they did not type, they type the command.
+- Every branch exists because of something the README promises. A branch
+  for a case nobody has had is removed, not kept in case.
+- Before adding a branch that handles a case, ask whether refusing it would
+  do. It usually would.
+- An error is not dropped. Where one is ignored on purpose, the same line
+  says why.
+- A change that adds a case says which sentence of the README needs it. A
+  change that removes more than it adds needs no such reason.
+
 ## Layout
 
 - `cmd/shortcut/`: the main package.
