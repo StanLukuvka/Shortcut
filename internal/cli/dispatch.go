@@ -13,8 +13,8 @@ import (
 )
 
 // ExitError ends a command with a code and, optionally, text for stdout and stderr, which Main prints as it is
-// (so a message carries its own "error: " and newline). Code 0 is argparse's -h; 2 is a usage error; 1 is Die.
-// It is argparse's error type, so a parser's exit passes through unchanged.
+// (so a message carries its own "error: " and newline). Code 0 is -h; 2 is a usage error; 1 is Die.
+// It is the error type of the argparse package, so a parser's exit passes through unchanged.
 type ExitError = argparse.ExitError
 
 // Namespace is what a parser returns: the value of each argument by its dest.
