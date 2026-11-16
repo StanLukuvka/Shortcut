@@ -38,9 +38,11 @@ func TestStores_RmInteractiveAndForce(t *testing.T) {
 		t.Error("a refused rm changed something")
 	}
 
-	// 2. With -y, stored copy and registry entry are deleted
+	// 2. With -y, the registry entry is deleted and its script stays
 	runOK(t, e, testkit.Opts{}, "rm", "stored", "-y")
-	testkit.NotExist(t, stored)
+	if !fileExists(stored) {
+		t.Error("rm deleted a script file")
+	}
 	if _, has := e.LoadGlobal()["stored"]; has {
 		t.Error("stored is still registered")
 	}
@@ -86,7 +88,7 @@ func TestStores_RmSaysWhatItRemovesAndWhatHappensToTheScript(t *testing.T) {
 	rc, out := e.InTerminal(testkit.Opts{}, []testkit.Key{{Wait: "[y/N]", Send: y("n\n")}}, "rm", "copied")
 	testkit.Eq(t, "decline", rc, 1)
 	testkit.Contains(t, "removes", out, "Removes 'copied' from your global shortcuts: "+filepath.Join(e.Store, "shortcuts.json"))
-	testkit.Contains(t, "copy", out, "Deletes its script copy: "+filepath.Join(e.Store, "scripts", "copied.sh"))
+	testkit.Contains(t, "keeps", out, "Keeps its script: "+filepath.Join(e.Store, "scripts", "copied.sh"))
 	rc, out = e.InTerminal(testkit.Opts{}, []testkit.Key{{Wait: "[y/N]", Send: y("y\n")}}, "rm", "linked")
 	testkit.Eq(t, "accept", rc, 0)
 	testkit.Contains(t, "keeps", out, "Keeps its script: "+source)
@@ -160,7 +162,10 @@ func TestStores_RmYStillSaysWhatItRemoved(t *testing.T) {
 	e.WriteStore(e.Store, map[string]any{"copied": map[string]any{"script": "scripts/copied.sh"}})
 	res := runOK(t, e, testkit.Opts{}, "rm", "-y", "copied")
 	testkit.Contains(t, "removes", res.Stdout, "Removes 'copied' from your global shortcuts: "+filepath.Join(e.Store, "shortcuts.json"))
-	testkit.Contains(t, "copy", res.Stdout, "Deletes its script copy: "+filepath.Join(e.Store, "scripts", "copied.sh"))
+	testkit.Contains(t, "keeps", res.Stdout, "Keeps its script: "+filepath.Join(e.Store, "scripts", "copied.sh"))
+	if !fileExists(filepath.Join(e.Store, "scripts", "copied.sh")) {
+		t.Error("rm deleted a script file")
+	}
 	if _, has := e.LoadGlobal()["copied"]; has {
 		t.Error("copied is still registered")
 	}
@@ -210,10 +215,9 @@ func TestStores_UnknownTopLevelFieldStopsAGlobalShortcut(t *testing.T) {
 
 func TestStores_NamespaceFlagKeepsEachGroupsScriptsApart(t *testing.T) {
 	e := testkit.New(t)
-	source := filepath.Join(e.Tmp, "src.sh")
 	for _, p := range [][2]string{{"docker", "dock"}, {"kube", "kub"}} {
-		e.WriteFile(source, bashShebang+"echo "+p[1]+"\n", 0)
-		runOK(t, e, testkit.Opts{}, "new", "delete", "--copy", source, "--namespace", p[0], "--desc", "d")
+		source := e.WriteFile(filepath.Join(e.Store, "imports", "scripts", p[0], "delete.sh"), bashShebang+"echo "+p[1]+"\n", 0o755)
+		runOK(t, e, testkit.Opts{}, "new", "delete", "--script", source, "--namespace", p[0], "--desc", "d")
 		runOK(t, e, testkit.Opts{}, "update", p[0], "-y")
 	}
 	testkit.Eq(t, "docker", e.Run("r", "docker", "delete").Stdout, "dock\n")
@@ -222,9 +226,8 @@ func TestStores_NamespaceFlagKeepsEachGroupsScriptsApart(t *testing.T) {
 	cp := filepath.Join(e.Store, "imports", "scripts", "docker", "delete.sh")
 	testkit.Eq(t, "script_path", e.Run("show", "--field", "script_path", "docker", "delete").Stdout, cp+"\n")
 	runOK(t, e, testkit.Opts{}, "rm", "docker", "delete", "-y")
-	testkit.NotExist(t, cp)
-	if !fileExists(filepath.Join(e.Store, "imports", "scripts", "kube", "delete.sh")) {
-		t.Error("kube's copy is gone")
+	if !fileExists(cp) || !fileExists(filepath.Join(e.Store, "imports", "scripts", "kube", "delete.sh")) {
+		t.Error("rm deleted a script file")
 	}
 }
 
@@ -243,7 +246,7 @@ func TestStores_CliWritesKeepAnApprovedNamespaceApproved(t *testing.T) {
 	testkit.Eq(t, "a", e.Run("r", "dk", "a").Stdout, "a\n")
 
 	source := e.WriteFile(filepath.Join(e.Tmp, "src.sh"), bashShebang+"echo copied\n", 0)
-	runOK(t, e, testkit.Opts{}, "new", "cp", "--copy", source, "--namespace", "dk", "--desc", "d")
+	runOK(t, e, testkit.Opts{}, "new", "cp", "--script", source, "--namespace", "dk", "--desc", "d")
 	testkit.Eq(t, "cp", e.Run("r", "dk", "cp").Stdout, "copied\n")
 
 	// A hand edit still needs update, and a later CLI write doesn't approve it on the way
@@ -317,7 +320,7 @@ func TestStores_GlobalFlagReachesAHiddenShortcut(t *testing.T) {
 	script := e.WriteFile(filepath.Join(e.Tmp, "tool.sh"), bashShebang, 0)
 	runOK(t, e, testkit.Opts{}, "new", "build", "--", "echo global")
 	runOK(t, e, in(proj), "new", "build", "--local", "--", "echo project")
-	runOK(t, e, testkit.Opts{}, "new", "tool", "--copy", script, "--desc", "d")
+	runOK(t, e, testkit.Opts{}, "new", "tool", "--script", script, "--desc", "d")
 	runOK(t, e, in(proj), "new", "tool", "--script", script, "--desc", "d", "--local")
 	e.Approve(filepath.Join(proj, ".shortcuts"))
 
@@ -325,7 +328,7 @@ func TestStores_GlobalFlagReachesAHiddenShortcut(t *testing.T) {
 	res := e.RunWith(in(proj), "show", "--global", "build")
 	testkit.Contains(t, "show --global", res.Stdout, "Scope:       global\n")
 	testkit.Contains(t, "show --global", res.Stdout, "echo global")
-	testkit.Eq(t, "script_path", e.RunWith(in(proj), "show", "--global", "--field", "script_path", "tool").Stdout, filepath.Join(e.Store, "scripts", "tool.sh")+"\n")
+	testkit.Eq(t, "script_path", e.RunWith(in(proj), "show", "--global", "--field", "script_path", "tool").Stdout, script+"\n")
 
 	runOK(t, e, in(proj), "rm", "build", "--global", "-y")
 	if _, has := e.LoadGlobal()["build"]; has {

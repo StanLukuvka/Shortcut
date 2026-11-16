@@ -130,9 +130,8 @@ func lockedGroupWrite(group model.Group, mutate func() error) error {
 	return approval.Save(group, keep, map[string]string{})
 }
 
-// register adds entry to group's file under the registry lock; writeScript runs first, once the name
-// is known free. It creates a missing store or namespace file. A project's group means .shortcuts.local.
-func register(s *textio.Streams, group model.Group, entry *model.Entry, writeScript func() error) error {
+// register adds entry to group's file under the registry lock. It creates a missing store or namespace file. A project's group means .shortcuts.local.
+func register(s *textio.Streams, group model.Group, entry *model.Entry) error {
 	storeDir := group.StoreDir
 	if group.LocalFile != "" {
 		change := func(shortcuts *ordjson.Object) error {
@@ -171,11 +170,6 @@ func register(s *textio.Streams, group model.Group, entry *model.Entry, writeScr
 		if group.Name == "" {
 			if _, clash := model.LoadStore(storeDir).Namespace(entry.Name); clash {
 				return Die("'" + entry.Name + "' is a namespace in store " + storeDir)
-			}
-		}
-		if writeScript != nil {
-			if err := writeScript(); err != nil {
-				return err
 			}
 		}
 		shortcuts.Set(entry.Name, entry.ToObject())
@@ -293,51 +287,6 @@ func storedCwd(value *string, g model.Group) (*string, error) {
 		return &rel, nil
 	}
 	return &path, nil
-}
-
-// storedScriptField returns (registry field, absolute path) for a copy kept in the group's scripts
-// folder.
-func storedScriptField(g model.Group, filename string) (string, string) {
-	abs := osutil.Join(g.ScriptsDir(), filename)
-	return osutil.Relpath(abs, g.ScriptBase()), abs
-}
-
-// refuseSymlinks refuses symlinks: a repo can commit scripts/, or one script, as a symlink to a file of yours.
-// Your own stores can do what they like.
-func refuseSymlinks(g model.Group, path string) error {
-	if !g.NeedsApproval() {
-		return nil
-	}
-	if link := firstLinkUnder(g.ScriptBase(), osutil.Relpath(path, g.ScriptBase())); link != "" {
-		return errors.New(link + " is a symlink, so this would write somewhere else")
-	}
-	return nil
-}
-
-// firstLinkUnder is the first symlink on the way from base down rel, "" if none.
-func firstLinkUnder(base, rel string) string {
-	cur := base
-	for _, part := range strings.Split(rel, "/") {
-		if part == "" || part == "." {
-			continue
-		}
-		cur = osutil.Join(cur, part)
-		if osutil.IsLink(cur) {
-			return cur
-		}
-	}
-	return ""
-}
-
-// prepareScriptDest refuses a script path that is, or sits under, a link or an existing file, and makes the folder.
-func prepareScriptDest(group model.Group, abs string) error {
-	if err := refuseSymlinks(group, abs); err != nil {
-		return err
-	}
-	if err := refuseExisting(abs); err != nil {
-		return err
-	}
-	return os.MkdirAll(group.ScriptsDir(), 0o777)
 }
 
 // unlinkFile removes a file or a link, and not one that is already gone; never a folder (os.Remove

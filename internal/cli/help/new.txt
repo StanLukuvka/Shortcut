@@ -1,4 +1,4 @@
-usage: shortcut new [-h] [--desc DESC] [--script PATH | --copy FILE]
+usage: shortcut new [-h] [--desc DESC] [--script PATH]
                     [--cwd CWD] [--local] [--namespace NAME]
                     [--arg NAME[=DEFAULT]] [--arg-desc NAME=TEXT] [--confirm]
                     name
@@ -12,7 +12,6 @@ options:
   -h, --help            show this help message and exit
   --desc DESC           Shortcut description
   --script PATH         Run this file where it is
-  --copy FILE           Copy this file, or - for stdin, into the store
   --cwd CWD             Where it runs: caller (default) or a directory
   --local               Store it in .shortcuts.local in this directory, not
                         globally

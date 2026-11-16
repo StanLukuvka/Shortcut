@@ -69,7 +69,6 @@ Each person reviews it once with `shortcut update`, and again after it changes. 
 ~/.shortcuts/
 ├── shortcuts.json          entries
 ├── imports/<ns>.shortcut   namespaces
-├── scripts/                stored script copies
 ├── approvals/              approval records
 ├── locks/                  lock files for projects
 └── .lock                   the global store's lock file
@@ -86,9 +85,7 @@ shortcut r -y <name>                  answer a confirm prompt
 shortcut r <name> -- -5               after --, a declared argument can start with -
 
 shortcut new <name> -- CMD            inline shortcut
-shortcut new <name>                   a new bash script; prints its path
-shortcut new <name> --copy FILE|-     copy a script in
-shortcut new <name> --script PATH     use a script where it is; a path inside the store (or a project or namespace folder) is kept relative, except under the store's `scripts/`, which stays absolute
+shortcut new <name> --script PATH     use a script where it is; a path inside the store (or a project or namespace folder) is kept relative
 
 shortcut list                         everything visible; warns about invalid entries and missing scripts
 shortcut list --names [ns]            bare names
@@ -164,7 +161,7 @@ A namespace is a file named `<ns>.shortcut`: `{"version": 1, "shortcuts": {...}}
 - A file anywhere else is listed in `shortcuts.json`, or in a project's `.shortcuts`: `"imports": {"<ns>": "path/to/<ns>.shortcut"}`. The path is relative to the file that lists it, and can start with `~`.
 - It runs only after `shortcut update <ns>`, and again after each change to its file, a script it names, or anything in its `scripts/<ns>/` folder.
 - `shortcut new --namespace <ns> <name> ...` adds an entry, and keeps an approved namespace approved.
-- `scripts/<ns>/`, next to the file, is the namespace's own folder: shortcut keeps its copied scripts there, and helpers its scripts run belong there too. `rm` deletes an entry's script there with the entry.
+- `scripts/<ns>/`, next to the file, is the namespace's own folder: scripts and helpers belong there. `rm <name>` removes only the entry, never a script file; `rm --namespace` deletes the folder.
 - A script runs a sibling with `shortcut r "$SHORTCUT_NAMESPACE" <name>`. `SHORTCUT_SHOW_DIR=0` keeps the `→ dir` line out when capturing it.
 
 [examples/podman](examples/podman/) and [examples/tools](examples/tools/) are two, with scripts. `tools` has `edit`, `nano`, `logged`, `desktop` and `search`.

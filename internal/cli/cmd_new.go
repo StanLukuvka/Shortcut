@@ -1,27 +1,21 @@
 package cli
 
 import (
-	"errors"
-	"fmt"
-	"io"
-	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 
+	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
 	"github.com/StanLukuvka/Shortcut/internal/model"
 	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 	"github.com/StanLukuvka/Shortcut/internal/osutil"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
-const scriptTemplate = "#!/usr/bin/env bash\nset -euo pipefail\n\n"
-
 // positionalAnywhere matches $1, $@, $* or ${1} anywhere in a command.
 var positionalAnywhere = regexp.MustCompile(`\$(?:[1-9@*]|\{[1-9@*])`)
 
-// cmdNew makes a shortcut from an inline command after --, a script template, --script or --copy.
+// cmdNew makes a shortcut from an inline command after -- or --script.
 func cmdNew(s *textio.Streams, args []string) error {
 	// everything after the first -- is the command, and argparse never sees it
 	pre, inline, hasInline := args, []string(nil), false
@@ -32,22 +26,20 @@ func cmdNew(s *textio.Streams, args []string) error {
 	if err != nil {
 		return err
 	}
-	script, copyFrom := ns.Str("script"), ns.Str("copy")
+	script := ns.Str("script")
 	switch {
 	case hasInline && len(inline) == 0:
 		return Die("command expected after '--'")
-	case (ns.Set("script") && script == "") || (ns.Set("copy") && copyFrom == ""):
-		return Die("--script and --copy need a file name")
+	case ns.Set("script") && script == "":
+		return Die("--script needs a file name")
 	case ns.Set("desc") && ns.Str("desc") == "":
 		return Die("--desc can't be empty")
 	case ns.Set("namespace") && ns.Str("namespace") == "":
 		return Die("--namespace can't be empty")
-	case hasInline && (script != "" || copyFrom != ""):
-		return Die("use one of: '-- CMD', --script, --copy")
-	case ns.Bool("local") && copyFrom != "":
-		return Die("--copy can't be used with --local: " + model.LocalFile + " is one file. Use --script")
-	case ns.Bool("local") && !hasInline && script == "":
-		return Die("a local shortcut needs a command after '--', or --script PATH")
+	case hasInline && script != "":
+		return Die("use one of: '-- CMD', --script")
+	case !hasInline && script == "":
+		return argparse.UsageError("new", "give a command after '--', or --script PATH")
 	}
 
 	cwd, err := osutil.Getwd()
@@ -63,49 +55,20 @@ func cmdNew(s *textio.Streams, args []string) error {
 	if err != nil {
 		return err
 	}
-	switch {
-	case script != "":
+	if script != "" {
 		return newFromScript(s, ns, group, fields)
-	case copyFrom != "":
-		return newFromCopy(s, ns, group, fields)
-	case hasInline:
-		text := joinCommand(inline)
-		entry := *fields
-		entry.Inline = &text
-		entry.Description = text
-		if ns.Set("desc") {
-			entry.Description = ns.Str("desc")
-		}
-		if err := register(s, group, &entry, nil); err != nil {
-			return err
-		}
-		if !positionalAnywhere.MatchString(text) && !strings.Contains(text, "SC_ARG_") {
-			s.Err.WriteString("note: '" + name + "' won't see any arguments you give it; add \"$@\" to pass them on\n")
-		}
-		_, err := s.Out.WriteString("Created inline shortcut '" + group.Display(name) + "'.\n")
-		return err
 	}
-
-	if _, dup := group.Shortcuts().Get(name); dup {
-		return Die("shortcut '" + name + "' already exists in " + group.File)
-	}
-	rel, abs := storedScriptField(group, name+".sh")
-	writeScript := func() error {
-		if err := prepareScriptDest(group, abs); err != nil {
-			return err
-		}
-		return writeExecutable(abs, scriptTemplate)
-	}
+	text := joinCommand(inline)
 	entry := *fields
-	entry.Script = &rel
-	entry.Description = "(no description)"
-	if ns.Set("desc") {
-		entry.Description = ns.Str("desc")
-	}
-	if err := register(s, group, &entry, writeScript); err != nil {
+	entry.Inline = &text
+	entry.Description = descOr(ns, text)
+	if err := register(s, group, &entry); err != nil {
 		return err
 	}
-	_, err = s.Out.WriteString("Created script shortcut '" + group.Display(name) + "'.\nEdit it at: " + abs + "\n")
+	if !positionalAnywhere.MatchString(text) && !strings.Contains(text, "SC_ARG_") {
+		s.Err.WriteString("note: '" + name + "' won't see any arguments you give it; add \"$@\" to pass them on\n")
+	}
+	_, err = s.Out.WriteString("Created inline shortcut '" + group.Display(name) + "'.\n")
 	return err
 }
 
@@ -115,22 +78,6 @@ func descOr(ns Namespace, def string) string {
 		return ns.Str("desc")
 	}
 	return def
-}
-
-// refuseExisting stops new from replacing a script file no entry registers (a link counts, dangling or not).
-func refuseExisting(path string) error {
-	if osutil.Lexists(path) {
-		return Die(path + " already exists; remove it or pick another name")
-	}
-	return nil
-}
-
-// writeExecutable writes the file with mode 0755, where it is, a link included.
-func writeExecutable(path, content string) error {
-	if err := os.WriteFile(path, []byte(content), 0o666); err != nil {
-		return err
-	}
-	return os.Chmod(path, 0o755)
 }
 
 // entryFields returns the parts of an entry the flags of new set, and the --arg/--arg-desc rules.
@@ -190,7 +137,7 @@ func entryFields(name string, ns Namespace, g model.Group) (*model.Entry, error)
 
 // newFromScript makes an entry that names the file where it is. A file inside the folder its paths
 // resolve from (the project, the namespace file's folder, the global store) is kept relative, so the folder can
-// move. One in the scripts folder stays absolute: a relative path there is a copy, which rm deletes.
+// move.
 func newFromScript(s *textio.Streams, ns Namespace, group model.Group, fields *model.Entry) error {
 	path := ns.Str("script")
 	abs := osutil.Abs(osutil.ExpandUser(path))
@@ -199,95 +146,16 @@ func newFromScript(s *textio.Streams, ns Namespace, group model.Group, fields *m
 	}
 	base := osutil.Realpath(group.ScriptBase())
 	real := osutil.Realpath(abs)
-	copies := osutil.Realpath(group.ScriptsDir())
 	field := abs
-	if osutil.IsRelativeTo(real, base) && !osutil.IsRelativeTo(real, copies) {
+	if osutil.IsRelativeTo(real, base) {
 		field = osutil.Relpath(real, base)
 	}
 	entry := *fields
 	entry.Script = &field
 	entry.Description = descOr(ns, "(no description)")
-	if err := register(s, group, &entry, nil); err != nil {
+	if err := register(s, group, &entry); err != nil {
 		return err
 	}
 	_, err := s.Out.WriteString("Created shortcut '" + group.Display(entry.Name) + "' using " + abs + ".\n")
 	return err
-}
-
-// newFromCopy keeps its own copy of the script in the store, so later changes to the source don't reach it.
-func newFromCopy(s *textio.Streams, ns Namespace, group model.Group, fields *model.Entry) error {
-	from := ns.Str("copy")
-	var content []byte
-	var src, ext string
-	if from == "-" {
-		if s.In == nil {
-			return errors.New("stdin is closed")
-		}
-		var err error
-		if content, err = io.ReadAll(s.In); err != nil {
-			return err
-		}
-		ext = ".sh"
-	} else {
-		src = osutil.Abs(osutil.ExpandUser(from))
-		if !osutil.IsFile(src) {
-			return Die("script file not found: " + src)
-		}
-		ext = orSh(filepath.Ext(src))
-	}
-	name := fields.Name
-	rel, abs := storedScriptField(group, name+ext)
-	writeScript := func() error {
-		if err := prepareScriptDest(group, abs); err != nil {
-			return err
-		}
-		if src == "" {
-			return writeExecutable(abs, string(content))
-		}
-		return copyScript(src, abs)
-	}
-	entry := *fields
-	entry.Script = &rel
-	entry.Description = descOr(ns, "(no description)")
-	if err := register(s, group, &entry, writeScript); err != nil {
-		return err
-	}
-	_, err := s.Out.WriteString("Created shortcut '" + group.Display(name) + "' with a copy at " + abs + ".\n")
-	return err
-}
-
-// copyScript copies the content and the source's permission bits, made executable (no setuid, setgid or sticky
-// bit, no modification time). The destination is written where it is, a link included.
-func copyScript(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	st, err := in.Stat()
-	if err != nil {
-		return err
-	}
-	if dstSt, err := os.Stat(dst); err == nil && os.SameFile(st, dstSt) {
-		return fmt.Errorf("'%s' and '%s' are the same file", src, dst)
-	}
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		return err
-	}
-	if err := out.Close(); err != nil {
-		return err
-	}
-	return os.Chmod(dst, st.Mode().Perm()|0o111)
-}
-
-func orSh(suffix string) string {
-	if suffix == "" {
-		return ".sh"
-	}
-	return suffix
 }

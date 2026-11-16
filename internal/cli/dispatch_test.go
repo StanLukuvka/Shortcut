@@ -43,7 +43,7 @@ func TestDispatch_ParserErrorsEndToEnd(t *testing.T) {
 		want string
 	}{
 		{[]string{"new", "x", "--des", "d", "--", "true"}, "error: unrecognized option '--des'\n" + try("new")},
-		{[]string{"new", "x", "--script", "a", "--copy", "b"}, "error: --script and --copy cannot be used together\n" + try("new")},
+		{[]string{"new", "x"}, "error: give a command after '--', or --script PATH\n" + try("new")},
 		{[]string{"list", "ns"}, "error: unexpected argument 'ns'\n" + try("list")},
 		{[]string{"show"}, "error: missing name\n" + try("show")},
 		{[]string{"rm", "-yh"}, "error: unrecognized option '-yh'\n" + try("rm")},
