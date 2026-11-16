@@ -27,27 +27,6 @@ func Die(msg string) error { return &ExitError{Code: 1, Stderr: "error: " + msg 
 // other error, which dispatch prints as "error: <text>" with exit 1.
 type handler func(c *model.Context, s *textio.Streams, args []string) error
 
-// handlerFor is the command a word names, or nil.
-func handlerFor(name string) handler {
-	switch name {
-	case "run", "r":
-		return cmdRun
-	case "completion":
-		return cmdCompletion
-	case "list":
-		return cmdList
-	case "show":
-		return cmdShow
-	case "update":
-		return cmdUpdate
-	case "new":
-		return cmdNew
-	case "rm":
-		return cmdRm
-	}
-	return nil
-}
-
 // invoke builds the run's one Context and runs h.
 func invoke(s *textio.Streams, h handler, args []string) int {
 	cwd, err := osutil.Getwd()
@@ -63,26 +42,20 @@ func Main(args []string, in, out, errw *os.File) int {
 // dispatch runs the command the first word picks.
 func dispatch(s *textio.Streams, args []string) int {
 	if len(args) == 0 {
-		s.Out.WriteString(usageText)
+		s.Out.WriteString(usageText())
 		return 0
 	}
 	first := args[0]
-	own := handlerFor(first)
-	var helped handler
-	if first == "help" && len(args) > 1 {
-		helped = handlerFor(args[1])
-	}
+	cmd := find(first)
 	switch {
-	case helped != nil:
-		return invoke(s, helped, []string{"--help"})
-	case first == "--help" || first == "-h" || first == "help":
-		s.Out.WriteString(usageText)
+	case first == "--help" || first == "-h":
+		s.Out.WriteString(usageText())
 		return 0
 	case first == "--version":
 		s.Out.WriteString("shortcut " + Version + "\n")
 		return 0
-	case own != nil:
-		return invoke(s, own, args[1:])
+	case cmd != nil:
+		return invoke(s, cmd.Run, args[1:])
 	case strings.HasPrefix(first, "-"):
 		s.Err.WriteString("error: unrecognized option '" + first + "'\nTry 'shortcut --help' for more information.\n")
 		return 2
@@ -104,4 +77,14 @@ func finish(s *textio.Streams, err error) int {
 	}
 	s.Err.WriteString("error: " + err.Error() + "\n")
 	return 1
+}
+
+// cmdHelp prints a command's help, or the usage text.
+func cmdHelp(_ *model.Context, s *textio.Streams, args []string) error {
+	text := usageText()
+	if len(args) > 0 && find(args[0]) != nil {
+		text = helpText(args[0])
+	}
+	_, err := s.Out.WriteString(text)
+	return err
 }

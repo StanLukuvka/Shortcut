@@ -1,37 +1,13 @@
 package cli
 
 import (
-	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
-
-func TestCompletion(t *testing.T) {
-	for shell, path := range map[string]string{
-		"bash": "completion/bash.txt",
-		"zsh":  "completion/zsh.txt",
-		"fish": "completion/fish.txt",
-	} {
-		want, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		got, err := completionFiles.ReadFile(path)
-		if err != nil {
-			t.Errorf("completionFiles %q missing: %v", path, err)
-			continue
-		}
-		if len(got) == 0 {
-			t.Errorf("completion %q is empty", shell)
-		}
-		if string(got) != string(want) {
-			t.Errorf("completion %q differs from %s", shell, path)
-		}
-	}
-}
 
 func TestCompletion_Bash(t *testing.T) {
 	e := testkit.New(t)
@@ -101,4 +77,47 @@ func TestCompletion_BashPastFlagsAndIntoNamespaces(t *testing.T) {
 	check([]string{"delete"}, "rm", "--global", "docker", "d")
 	check(nil, "r", "docker", "ps", "")
 	check(nil, "r", "other", "")
+}
+
+// The static completion scripts name every command and alias, the options of the commands that take names, and the
+// shells `completion` offers.
+func TestCompletion_FollowsTheTable(t *testing.T) {
+	has := func(text, word string) bool { // a whole word: "r" is not the "-r" of a fish option
+		return regexp.MustCompile(`(^|[^\w-])` + regexp.QuoteMeta(word) + `([^\w-]|$)`).MatchString(text)
+	}
+	for _, shell := range []string{"bash", "zsh", "fish"} {
+		b, err := completionFiles.ReadFile("completion/" + shell + ".txt")
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(b)
+		for _, c := range commands() {
+			for _, w := range append([]string{c.Name}, c.Aliases...) {
+				if !has(text, w) {
+					t.Errorf("%s: no command word %q", shell, w)
+				}
+			}
+			var words []string
+			for _, a := range c.Args {
+				switch {
+				case a.Choices != nil:
+					words = append(words, a.Choices...)
+				case a.Flags != nil && slices.ContainsFunc(c.Args, func(p Arg) bool { return p.Flags == nil && (p.Nargs == '+' || p.Nargs == '*') }):
+					flag := a.Flags[0]
+					if shell == "fish" { // fish spells -y as -s y and --json as -l json
+						flag = "-l " + strings.TrimPrefix(flag, "--")
+						if !strings.HasPrefix(a.Flags[0], "--") {
+							flag = "-s " + strings.TrimPrefix(a.Flags[0], "-")
+						}
+					}
+					words = append(words, flag)
+				}
+			}
+			for _, w := range words {
+				if !has(text, w) {
+					t.Errorf("%s: %s: no %q", shell, c.Name, w)
+				}
+			}
+		}
+	}
 }

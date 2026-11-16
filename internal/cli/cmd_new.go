@@ -21,7 +21,7 @@ func cmdNew(c *model.Context, s *textio.Streams, args []string) error {
 	if i := slices.Index(args, "--"); i >= 0 {
 		pre, inline, hasInline = args[:i], args[i+1:], true
 	}
-	ns, err := parsers["new"].Parse(pre)
+	ns, err := parse("new", pre)
 	if err != nil {
 		return err
 	}

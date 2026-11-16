@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -108,27 +107,21 @@ func TestRunning_HelpNamesACommand(t *testing.T) {
 	}
 }
 
-// Every command's `help <cmd>` and `<cmd> -h` print its file in help/ (run and r print RUN_USAGE), and nothing else.
-func TestHelp_LiveOutputIsTheFile(t *testing.T) {
+// Every command's `help <cmd>` and `<cmd> -h` print what the table renders, and nothing else; an alias is its command.
+// help itself is the exception: `help -h` is the usage text.
+func TestHelp_LiveOutputIsTheTable(t *testing.T) {
 	e := testkit.New(t)
-	for _, cmd := range []string{"run", "new", "list", "show", "rm", "update", "completion"} {
-		file, err := os.ReadFile("help/" + cmd + ".txt")
-		if cmd == "run" {
-			file, err = []byte(runUsage+"\n"), nil
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, argv := range [][]string{{"help", cmd}, {cmd, "-h"}, {cmd, "--help"}} {
-			res := e.Run(argv...)
-			if res.Code != 0 || res.Stdout != string(file) || res.Stderr != "" {
-				t.Errorf("%v: exit %d stderr %q stdout differs from help/%s.txt", argv, res.Code, res.Stderr, cmd)
+	for _, c := range commands() {
+		for _, name := range append([]string{c.Name}, c.Aliases...) {
+			argvs := [][]string{{"help", name}}
+			if c.Name != "help" {
+				argvs = append(argvs, []string{name, "-h"}, []string{name, "--help"})
 			}
-		}
-	}
-	for _, argv := range [][]string{{"help", "r"}, {"r", "-h"}, {"r", "--help"}} {
-		if res := e.Run(argv...); res.Code != 0 || res.Stdout != runUsage+"\n" {
-			t.Errorf("%v: exit %d stdout %q", argv, res.Code, res.Stdout)
+			for _, argv := range argvs {
+				if res := e.Run(argv...); res.Code != 0 || res.Stdout != helpText(c.Name) || res.Stderr != "" {
+					t.Errorf("%v: exit %d stderr %q stdout %q", argv, res.Code, res.Stderr, res.Stdout)
+				}
+			}
 		}
 	}
 }
@@ -138,12 +131,12 @@ func TestDispatch_UsageVersionAndStubs(t *testing.T) {
 	e := testkit.New(t)
 	for _, argv := range [][]string{{}, {"-h"}, {"--help"}, {"help"}, {"help", "nosuch"}} {
 		res := e.Run(argv...)
-		if res.Code != 0 || res.Stdout != usageText || res.Stderr != "" {
+		if res.Code != 0 || res.Stdout != usageText() || res.Stderr != "" {
 			t.Errorf("%v: exit %d stderr %q", argv, res.Code, res.Stderr)
 		}
 	}
-	if !strings.HasPrefix(usageText, "shortcut - run and manage quick scripts and commands\n\nUsage:\n") || !strings.HasSuffix(usageText, "line.\n") {
-		t.Errorf("usageText is not print_usage's text: %q", usageText)
+	if !strings.HasPrefix(usageText(), "shortcut - run and manage quick scripts and commands\n\nUsage:\n") || !strings.HasSuffix(usageText(), "line.\n") {
+		t.Errorf("usageText is not print_usage's text: %q", usageText())
 	}
 	if res := e.Run("--version"); res.Code != 0 || res.Stdout != "shortcut 0.1.0-dev\n" || Version != "0.1.0-dev" {
 		t.Errorf("--version: exit %d stdout %q", res.Code, res.Stdout)
