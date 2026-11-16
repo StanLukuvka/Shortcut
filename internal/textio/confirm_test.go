@@ -11,26 +11,24 @@ import (
 func TestAsk_Answers(t *testing.T) {
 	e := testkit.New(t)
 	for _, c := range []struct {
-		input  string
-		accept []string
-		want   bool
-		out    string
+		input string
+		want  bool
+		out   string
 	}{
-		{"y\n", nil, true, ""}, {" YES \n", nil, true, ""}, {"n\n", nil, false, ""}, {"maybe\n", nil, false, ""},
-		{"\n", nil, false, ""}, {"y", nil, true, ""}, // an unfinished last line counts, as input() returns it
-		{"", nil, false, "\n"}, // end of input: a newline on stdout, answer no
-		{"delete\n", []string{"delete"}, true, ""}, {"y\n", []string{"delete"}, false, ""},
+		{"y\n", true, ""}, {" YES \n", true, ""}, {"n\n", false, ""}, {"maybe\n", false, ""},
+		{"\n", false, ""}, {"y", true, ""}, // an unfinished last line counts
+		{"", false, "\n"}, // end of input: a newline on stdout, answer no
 	} {
 		s, out, errs := capture(t, e, c.input)
-		if got := Ask(s, "go on? \x1b[2K", c.accept); got != c.want {
-			t.Errorf("Ask(%q, %q) = %v", c.input, c.accept, got)
+		if got := Ask(s, "go on? \x1b[2K"); got != c.want {
+			t.Errorf("Ask(%q) = %v", c.input, got)
 		}
 		if errs() != "go on? ^[[2K" || out() != c.out { // the prompt cannot carry an escape
 			t.Errorf("Ask(%q): stderr %q stdout %q", c.input, errs(), out())
 		}
 	}
 	s, _, _ := capture(t, e, "y\nn\nrest")
-	if !Ask(s, "", nil) || Ask(s, "", nil) {
+	if !Ask(s, "") || Ask(s, "") {
 		t.Error("two questions on one input must read one line each")
 	}
 }

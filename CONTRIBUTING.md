@@ -37,8 +37,8 @@ CI also checks `gofmt` and runs `go vet ./...`.
 ## What a change updates
 
 - A new error or warning: a row in [docs/errors.md](docs/errors.md). `internal/cli/errors_doc_test.go` fails without one.
-- A new entry field: [docs/shortcut.schema.json](docs/shortcut.schema.json).
-- A new command or flag: the bash, zsh and fish scripts in `internal/cli/completion/`, the README command list, `internal/cli/usage.go`, and AGENT.md if agents use it.
+- A new entry field: a row in `Fields()` in `internal/model/entry.go`, and [docs/shortcut.schema.json](docs/shortcut.schema.json) (a test fails if they differ).
+- A new command or flag: its row in `commands()` in `internal/cli/commands.go` (dispatch, parsing, usage and help follow from it), the three completion scripts in `internal/cli/completion/` (a test fails if they disagree with `commands()`), the README command list, and AGENT.md if agents use it.
 - Anything a user would notice: a line under Unreleased in [CHANGELOG.md](CHANGELOG.md).
 
 ## What doesn't change
@@ -53,7 +53,7 @@ CI also checks `gofmt` and runs `go vet ./...`.
 ## Layout
 
 - `cmd/shortcut/`: the main package.
-- `internal/cli/`: dispatch and the commands. `dispatch.go` is the entry, `parsers.go` each command's arguments, `cmd_*.go` one file per command and `store_write.go` what changes the stores; `usage.go` is the usage text, `help/` the per-command help, and `completion/` the bash, zsh and fish scripts.
+- `internal/cli/`: dispatch and the commands. `commands.go` is the command table, from which `dispatch.go`, each command's parser and `help.go` (the usage and help text) are read; `cmd_*.go` is one file per command, `store_write.go` what changes the stores, and `completion/` the bash, zsh and fish scripts.
 - `internal/cli/argparse/`: the argument parser. It imports nothing of the CLI.
 - `internal/model/`: store files, entries, groups and lookup. It never prints.
 - `internal/approval/`: what a project or namespace is approved for, and the approval records, which hold one SHA-256 per file.

@@ -27,7 +27,7 @@ func helper(job string) {
 		s.Err.WriteString("err\n")
 		os.Exit(code)
 	case "ask":
-		s.Out.WriteString(fmt.Sprintf("answer=%v\n", Ask(s, "go on? ", nil)))
+		s.Out.WriteString(fmt.Sprintf("answer=%v\n", Ask(s, "go on? ")))
 	case "confirm":
 		ok, err := Confirm{Question: "run 'go'?", NoTerminal: "no terminal", Message: "will run \x1b[2Kit"}.Granted(s, false)
 		s.Out.WriteString(fmt.Sprintf("granted=%v err=%v\n", ok, err))

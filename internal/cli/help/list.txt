@@ -1,8 +1,0 @@
-usage: shortcut list [-h] [--names [NAMESPACE]]
-
-List available shortcuts
-
-options:
-  -h, --help           show this help message and exit
-  --names [NAMESPACE]  Print bare visible names only, or the names in one
-                       namespace

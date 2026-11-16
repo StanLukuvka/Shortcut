@@ -9,12 +9,12 @@ func TestParse(t *testing.T) {
 	help := func(cmd string) string { return "help of " + cmd + "\n" }
 	yes := Flag("yes", "-y", "--yes")
 	opts := func(extra ...*Action) *Parser {
-		return New("t", help, append([]*Action{yes, Value("desc", "--desc"), Repeated("arg", "--arg"), Optional("names", "--names")}, extra...)...)
+		return New("t", help, append([]*Action{yes, Value("desc", "--desc"), Optional("names", "--names")}, extra...)...)
 	}
-	choice := Choice("shell", "bash", "bash", "fish", "zsh")
+	choice := Choice("shell", "bash", "fish", "zsh")
 	// base is the namespace of opts() with nothing given, with the key/value pairs of kv set over it.
 	base := func(kv ...any) Namespace {
-		ns := Namespace{"yes": false, "desc": nil, "arg": []string{}, "names": nil}
+		ns := Namespace{"yes": false, "desc": nil, "names": nil}
 		for i := 0; i < len(kv); i += 2 {
 			ns[kv[i].(string)] = kv[i+1]
 		}
@@ -38,7 +38,6 @@ func TestParse(t *testing.T) {
 		{"short flag", opts(), []string{"-y"}, base("yes", true), ""},
 		{"long flag", opts(), []string{"--yes"}, base("yes", true), ""},
 		{"flag twice", opts(), []string{"-y", "-y"}, base("yes", true), ""},
-		{"repeated twice", opts(), []string{"--arg", "a", "--arg=b"}, base("arg", []string{"a", "b"}), ""},
 		{"optional bare", opts(), []string{"--names"}, base("names", ""), ""},
 		{"optional with value", opts(), []string{"--names", "ns"}, base("names", "ns"), ""},
 		{"optional equals", opts(), []string{"--names=ns"}, base("names", "ns"), ""},
@@ -59,11 +58,8 @@ func TestParse(t *testing.T) {
 		{"nargs + three", New("t", help, Positional("n", '+')), []string{"a", "b", "c"}, Namespace{"n": []string{"a", "b", "c"}}, ""},
 		{"no positional", opts(), []string{"x"}, nil, "error: unexpected argument 'x'" + try},
 		{"choice valid", New("t", help, choice), []string{"zsh"}, Namespace{"shell": "zsh"}, ""},
-		{"choice default", New("t", help, choice), nil, Namespace{"shell": "bash"}, ""},
 		{"choice invalid", New("t", help, choice), []string{"sh"}, nil, "error: invalid choice 'sh' (choose from bash, fish, zsh)" + try},
-		{"choice required", New("t", help, Choice("shell", "", "bash")), nil, nil, "error: missing shell" + try},
-		{"exclusive both", New("t", help, Value("a", "--a"), Value("b", "--b")).Exclusive("a", "b"), []string{"--a", "1", "--b", "2"}, nil, "error: --a and --b cannot be used together" + try},
-		{"exclusive one", New("t", help, Value("a", "--a"), Value("b", "--b")).Exclusive("a", "b"), []string{"--b", "2"}, Namespace{"a": nil, "b": "2"}, ""},
+		{"choice required", New("t", help, Choice("shell", "bash")), nil, nil, "error: missing shell" + try},
 		{"unknown option", opts(), []string{"--nope"}, nil, "error: unrecognized option '--nope'" + try},
 		{"abbreviation", opts(), []string{"--des", "x"}, nil, "error: unrecognized option '--des'" + try},
 		{"combined shorts", opts(), []string{"-yh"}, nil, "error: unrecognized option '-yh'" + try},

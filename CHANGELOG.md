@@ -11,6 +11,7 @@
 - Namespaces: `<ns>.shortcut` files, run as `shortcut r <ns> <name>`.
 - `confirm` asks before a shortcut runs, showing its description and the words given.
 - `show --field KEY <name>` prints one field, bare, and only reads. The `edit` and `desktop` in examples/tools use it.
+- `shortcut help <command>` and `<command> -h` list a command's arguments and options.
 - Every error message is listed in [docs/errors.md](docs/errors.md).
 - Every store file (`shortcuts.json`, `.shortcuts`, `.shortcuts.local`, namespace `.shortcut` files) needs `"version": 1`. A missing or lower version is an error; a higher one asks you to upgrade shortcut.
 - Text that is not valid UTF-8 in a store or project file, or in a file name in an approval tree, is refused with a message that names it. Such bytes print as `\xNN`.
