@@ -10,9 +10,9 @@ import (
 	"syscall"
 )
 
-// ExecChild runs a child as os.execvpe does: chdir, then replace this process, so the
-// exit code, signals and terminal are the child's. It returns only on failure. env is "K=V" strings; the PATH
-// search uses env's PATH (see pathOf), not this process's.
+// ExecChild runs argv in cwd by replacing this process, so the exit code, signals and terminal are the child's.
+// It returns only on failure. env is "K=V" strings and supplies the PATH used to find argv[0], not this
+// process's PATH.
 func ExecChild(argv []string, cwd string, env []string) error {
 	if err := os.Chdir(cwd); err != nil {
 		return err
@@ -31,9 +31,9 @@ func ExecChild(argv []string, cwd string, env []string) error {
 	return nil
 }
 
-// pathOf is the PATH value in env, or /bin:/usr/bin (os.defpath) when env has none.
+// pathOf is the last PATH value in env, or /bin:/usr/bin when env has none.
 func pathOf(env []string) string {
-	for i := len(env) - 1; i >= 0; i-- { // last duplicate wins, as in a dict built from the list
+	for i := len(env) - 1; i >= 0; i-- { // the last duplicate wins
 		if v, ok := strings.CutPrefix(env[i], "PATH="); ok {
 			return v
 		}

@@ -13,8 +13,8 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-// The test binary doubles as the program under test for what only a process can show: PYOS_HELPER names the job.
-func TestMain(m *testing.M) { testkit.HelperMain(m, "PYOS_HELPER", helper) }
+// The test binary doubles as the program under test for what only a process can show: OSUTIL_HELPER names the job.
+func TestMain(m *testing.M) { testkit.HelperMain(m, "OSUTIL_HELPER", helper) }
 
 func helper(job string) {
 	switch job {
@@ -23,11 +23,11 @@ func helper(job string) {
 		physical, _ := Getwd()
 		fmt.Printf("%s\n%s\n", logical, physical)
 	case "tty":
-		fmt.Println(IsTerminal(0), IsTerminal(1), TerminalRows())
+		fmt.Println(IsTerminal(0), IsTerminal(1))
 	case "exec":
-		env := append(os.Environ(), "PATH="+os.Getenv("PYOS_PATH"))
-		err := ExecChild([]string{os.Getenv("PYOS_CMD"), "-c", `pwd; exec grep -E '^Sig(Blk|Ign)' /proc/self/status`},
-			os.Getenv("PYOS_CWD"), env)
+		env := append(os.Environ(), "PATH="+os.Getenv("OSUTIL_PATH"))
+		err := ExecChild([]string{os.Getenv("OSUTIL_CMD"), "-c", `pwd; exec grep -E '^Sig(Blk|Ign)' /proc/self/status`},
+			os.Getenv("OSUTIL_CWD"), env)
 		fmt.Println("returned:", err)
 		os.Exit(7)
 	}
@@ -38,23 +38,23 @@ func TestGetwd_IsPhysical(t *testing.T) {
 	e := testkit.New(t)
 	real := e.Folder("real")
 	e.Symlink(real, filepath.Join(e.Tmp, "link"))
-	res := e.RunCmd(testkit.Opts{Cwd: filepath.Join(e.Tmp, "link"), Env: map[string]string{"PYOS_HELPER": "cwd", "PWD": filepath.Join(e.Tmp, "link")}}, testkit.SelfArgs()...)
+	res := e.RunCmd(testkit.Opts{Cwd: filepath.Join(e.Tmp, "link"), Env: map[string]string{"OSUTIL_HELPER": "cwd", "PWD": filepath.Join(e.Tmp, "link")}}, testkit.SelfArgs()...)
 	if want := filepath.Join(e.Tmp, "link") + "\n" + real + "\n"; res.Stdout != want {
 		t.Errorf("stdout %q, want %q (os.Getwd then osutil.Getwd)", res.Stdout, want)
 	}
 }
 
-func TestTTY_StdinStdoutAndRows(t *testing.T) {
+func TestTTY_StdinAndStdout(t *testing.T) {
 	e := testkit.New(t)
 	opts := func(env map[string]string) testkit.Opts {
-		env["PYOS_HELPER"] = "tty"
+		env["OSUTIL_HELPER"] = "tty"
 		return testkit.Opts{Env: env}
 	}
-	if res := e.RunCmd(opts(map[string]string{}), testkit.SelfArgs()...); res.Stdout != "false false 24\n" { // /dev/null is not a terminal
+	if res := e.RunCmd(opts(map[string]string{}), testkit.SelfArgs()...); res.Stdout != "false false\n" { // /dev/null is not a terminal
 		t.Errorf("no terminal: %q", res.Stdout)
 	}
 	code, out := e.InTerminalCmd(opts(map[string]string{}), nil, testkit.SelfArgs()...)
-	if code != 0 || out != "true true 30\r\n" { // testkit's pty is 30 rows
+	if code != 0 || out != "true true\r\n" {
 		t.Errorf("terminal: %d %q", code, out)
 	}
 }
@@ -159,7 +159,7 @@ func TestExec_TheChildStartsClean(t *testing.T) {
 	}
 	e := testkit.New(t)
 	dir := e.Folder("run")
-	res := e.RunCmd(testkit.Opts{Env: map[string]string{"PYOS_HELPER": "exec", "PYOS_CMD": "sh", "PYOS_PATH": "/bin:/usr/bin", "PYOS_CWD": dir}}, testkit.SelfArgs()...)
+	res := e.RunCmd(testkit.Opts{Env: map[string]string{"OSUTIL_HELPER": "exec", "OSUTIL_CMD": "sh", "OSUTIL_PATH": "/bin:/usr/bin", "OSUTIL_CWD": dir}}, testkit.SelfArgs()...)
 	if res.Code != 0 {
 		t.Fatalf("exit %d, stdout %q stderr %q", res.Code, res.Stdout, res.Stderr)
 	}
