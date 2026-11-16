@@ -85,7 +85,7 @@ func TestBrokenStores_ListWarnsAboutAScriptThatIsNotExecutable(t *testing.T) {
 	res := e.Run("list")
 	res.WantCode(t, 0)
 	testkit.Contains(t, "stderr", res.Stderr, "warning: ")
-	testkit.Contains(t, "stderr", res.Stderr, "'plain' is not a valid entry: "+script+" is not executable. Make it so: chmod +x "+script)
+	testkit.Contains(t, "stderr", res.Stderr, "'plain': "+script+" is not executable. Make it so: chmod +x "+script)
 }
 
 func TestBrokenStores_ListWarnsAboutEveryEntryThatCannotRun(t *testing.T) {
