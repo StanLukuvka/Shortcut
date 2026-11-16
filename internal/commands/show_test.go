@@ -76,7 +76,6 @@ echo hi
     "script": "scripts/tool.sh"
   },
   "error": null,
-  "hides_global": false,
   "name": "tool",
   "namespace": null,
   "run_cwd": "TMP/home",
@@ -95,7 +94,6 @@ echo hi
     "inline": "x"
   },
   "error": "'bad' is not a valid entry: 'cwd' must be a string",
-  "hides_global": false,
   "name": "bad",
   "namespace": null,
   "run_cwd": null,
@@ -112,7 +110,6 @@ echo hi
     "script": "../../etc/passwd"
   },
   "error": "path traversal detected: '../../etc/passwd' resolves to 'TMP/etc/passwd', outside 'TMP/home/.shortcuts'.",
-  "hides_global": false,
   "name": "trav",
   "namespace": null,
   "run_cwd": "TMP/home",
@@ -127,7 +124,6 @@ echo hi
   "defined_in": "TMP/home/.shortcuts/shortcuts.json",
   "entry": null,
   "error": "'nul' is not a valid entry: expected a JSON object",
-  "hides_global": false,
   "name": "nul",
   "namespace": null,
   "run_cwd": null,
@@ -174,40 +170,52 @@ func TestShow_AScriptThatIsNotUTF8(t *testing.T) {
 	}
 }
 
-// The show and --json lines of the global-flag case; the whole case is
-// TestStores_GlobalFlagReachesAHiddenShortcut in rm_test.go.
-func TestShow_GlobalFlagReachesAHiddenShortcut(t *testing.T) {
+// show reaches the global store without the dot and only the project with it; each says where the other has the name.
+func TestShow_TheDotSelectsTheScope(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"build": testkit.Inline("echo global"), "tool": map[string]any{"script": "scripts/tool.sh", "description": "d"}})
+	e.WriteStore(e.Store, map[string]any{"build": testkit.Inline("echo global"), "gonly": testkit.Inline("echo gonly"),
+		"tool": map[string]any{"script": "scripts/tool.sh", "description": "d"}})
+	e.WriteImport(e.Store, "docker", testkit.NS(map[string]any{"ps": testkit.Inline("echo global-ps")}))
 	e.WriteFile(filepath.Join(e.Store, "scripts", "tool.sh"), "#!/usr/bin/env bash\n", 0)
-	proj := e.Project(map[string]any{"build": testkit.Inline("echo project"), "tool": map[string]any{"script": "tool.sh", "description": "d"}},
+	proj := e.Project(map[string]any{"build": testkit.Inline("echo project"), "ponly": testkit.Inline("echo ponly"),
+		"tool": map[string]any{"script": "tool.sh", "description": "d"}},
 		testkit.Files(map[string]any{"tool.sh": "#!/usr/bin/env bash\n"}))
-	e.Approve(filepath.Join(proj, ".shortcuts"))
+	e.WriteImport(filepath.Join(proj, ".shortcuts"), "terraform", testkit.NS(map[string]any{"plan": testkit.Inline("echo plan")}))
 	in := testkit.Opts{Cwd: proj}
 
-	testkit.Contains(t, "show build", e.RunWith(in, "show", "build").Stdout, "echo project")
-	res := e.RunWith(in, "show", "--global", "build")
-	testkit.Contains(t, "show --global", res.Stdout, "Scope:       global\n")
-	testkit.Contains(t, "show --global", res.Stdout, "echo global")
-	if res = e.RunWith(in, "show", "--global", "--field", "script_path", "tool"); res.Stdout != filepath.Join(e.Store, "scripts", "tool.sh")+"\n" {
-		t.Errorf("show --global --field script_path: %q", res.Stdout)
-	}
+	res := e.RunWith(in, "show", "build")
+	testkit.Contains(t, "show build", res.Stdout, "Scope:       global\n")
+	testkit.Contains(t, "show build", res.Stdout, "echo global")
+	res = e.RunWith(in, "show", ".", "build")
+	testkit.Contains(t, "show . build", res.Stdout, "Scope:       project\n")
+	testkit.Contains(t, "show . build", res.Stdout, "echo project")
+	testkit.Eq(t, "global script_path", e.RunWith(in, "show", "--field", "script_path", "tool").Stdout, filepath.Join(e.Store, "scripts", "tool.sh")+"\n")
+	testkit.Eq(t, "project json scope", decodeObject(t, e.RunWith(in, "show", "--json", ".", "build").Stdout)["scope"], "project")
+	testkit.Eq(t, "project field", e.RunWith(in, "show", "--field", "scope", ".", "build").Stdout, "project\n")
+	testkit.Contains(t, "show . terraform plan", e.RunWith(in, "show", ".", "terraform", "plan").Stdout, "echo plan")
+	testkit.Contains(t, "show docker ps", e.RunWith(in, "show", "docker", "ps").Stdout, "echo global-ps")
 
-	// The project still has one when the global one is gone: every --global command says so
-	e.WriteStore(e.Store, map[string]any{})
-	hint := "The project in " + proj + " has its own 'build': leave out --global to use it."
-	for _, args := range [][]string{{"show", "--global", "build"}, {"show", "--json", "--global", "build"}} {
-		res := e.RunWith(in, args...)
+	// Not reached from the other side: an error that names the command, nothing else
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"show", "ponly"}, "shortcut 'ponly' not found. The project in " + proj + " has it: shortcut show . ponly"},
+		{[]string{"show", "--json", "ponly"}, "shortcut show . ponly"},
+		{[]string{"show", "terraform", "plan"}, "The project in " + proj + " has it: shortcut show . terraform plan"},
+		{[]string{"show", ".", "gonly"}, "shortcut 'gonly' not found. Your global store has it: shortcut show gonly"},
+		{[]string{"show", ".", "docker", "ps"}, "Your global store has it: shortcut show docker ps"},
+	} {
+		res := e.RunWith(in, c.args...)
 		res.WantCode(t, 1)
-		testkit.Contains(t, strings.Join(args, " "), res.Stderr, "shortcut 'build' not found.")
-		testkit.Contains(t, strings.Join(args, " "), res.Stderr, hint)
+		testkit.Eq(t, strings.Join(c.args, " ")+" stdout", res.Stdout, "")
+		testkit.Contains(t, strings.Join(c.args, " "), res.Stderr, c.want)
 	}
-	if strings.Contains(e.RunWith(in, "show", "--global", "nothing").Stderr, "has its own") {
-		t.Error("a name the project lacks gets the hint")
-	}
-	if strings.Contains(e.Run("show", "build").Stderr, "has its own") {
-		t.Error("outside a project gets the hint")
-	}
+	// Outside every project
+	res = e.Run("show", ".", "build")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "outside", res.Stderr, "error: no project here")
+	e.RunWith(in, "show", ".").WantCode(t, 2)
 }
 
 // TestShow_ReadsPastABrokenProject: show still works in a broken project; run, rm and update refuse it
@@ -232,7 +240,7 @@ func TestShow_ReadsPastABrokenProject(t *testing.T) {
 
 	// an unknown top-level field: the file still parses, so show finds its entries; they are not approved
 	proj := e.Project(map[string]any{"inside": testkit.Inline("true")}, testkit.Name("p2"), testkit.Extra(map[string]any{"bogus": 1}))
-	res := e.RunWith(testkit.Opts{Cwd: proj}, "show", "inside")
+	res := e.RunWith(testkit.Opts{Cwd: proj}, "show", ".", "inside")
 	res.WantCode(t, 0)
 	testkit.Contains(t, "show inside", res.Stdout, "Scope:       project")
 	testkit.Contains(t, "show inside", res.Stdout, "Approval:    not approved (run: shortcut update)")
@@ -247,7 +255,7 @@ func TestShow_Field(t *testing.T) {
 	})
 	e.WriteFile(filepath.Join(e.Store, "scripts", "tool.sh"), "#!/bin/sh\n", 0)
 	store := filepath.Join(e.Store, "shortcuts.json")
-	list := "name, namespace, scope, defined_in, source, hides_global, approval, cwd, run_cwd, script_path, error, description, inline, script"
+	list := "name, namespace, scope, defined_in, source, approval, cwd, run_cwd, script_path, error, description, inline, script"
 	cases := []struct {
 		args   []string
 		code   int
@@ -259,7 +267,6 @@ func TestShow_Field(t *testing.T) {
 		{[]string{"show", "--field", "defined_in", "line"}, 0, store + "\n", ""},
 		{[]string{"show", "--field", "script_path", "line"}, 0, "", ""},
 		{[]string{"show", "--field", "script_path", "tool"}, 0, filepath.Join(e.Store, "scripts", "tool.sh") + "\n", ""},
-		{[]string{"show", "--field", "hides_global", "line"}, 0, "false\n", ""},
 		{[]string{"show", "--field", "description", "line"}, 0, "A line\n", ""},
 		{[]string{"show", "--field", "inline", "line"}, 0, "echo hi\n", ""},
 		{[]string{"show", "--field", "script", "tool"}, 0, "scripts/tool.sh\n", ""},
@@ -288,7 +295,7 @@ func TestShow_FieldIsReadOnly(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(map[string]any{"x": testkit.Inline("echo x")})
 	before := treeOf(t, e.Tmp)
-	res := e.RunWith(in(proj), "show", "--field", "approval", "x")
+	res := e.RunWith(in(proj), "show", "--field", "approval", ".", "x")
 	if res.Code != 0 || res.Stdout != "new\n" || res.Stderr != "" {
 		t.Errorf("exit %d stdout %q stderr %q", res.Code, res.Stdout, res.Stderr)
 	}

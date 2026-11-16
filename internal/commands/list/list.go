@@ -18,7 +18,14 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	if err != nil {
 		return err
 	}
-	stores := c.Visible(store.Lookup{})
+	stores := c.Stores()
+	if ns.Set("names") { // one scope: the project's with ".", else the global store's
+		if ns.Str("names") == "." {
+			stores = stores[:len(stores)-1]
+		} else {
+			stores = stores[len(stores)-1:]
+		}
+	}
 	for _, st := range stores {
 		for _, p := range st.Problems {
 			s.Err.WriteString("warning: " + p + "\n")
@@ -30,14 +37,10 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 		}
 	}
 
-	if names := ns.Str("names"); names != "" {
+	if names := ns.Str("names"); names != "" && names != "." {
 		for _, st := range stores {
-			group, isNS := st.Namespace(names)
-			if isNS && usable(group) && approved(c, group) {
+			if group, isNS := st.Namespace(names); isNS && usable(group) && approved(c, group) {
 				s.Out.WriteString(strings.Join(slices.Sorted(slices.Values(group.Shortcuts().Names())), "\n") + "\n")
-			}
-			if _, inMain := st.Main.Shortcuts().Get(names); isNS || inMain {
-				break
 			}
 		}
 		return nil
@@ -68,14 +71,6 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 			s.Out.WriteString(n + "\n")
 		}
 		return nil
-	}
-
-	globalNames := store.GlobalNamesOf(stores)
-	localNames := map[string]bool{}
-	if len(stores) > 1 && approved(c, stores[0].Main) {
-		for _, k := range stores[0].Main.Shortcuts().Names() {
-			localNames[k] = true
-		}
 	}
 
 	for _, st := range stores {
@@ -122,11 +117,6 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 		for _, it := range items {
 			name := it.Name
 			desc := it.Text("description")
-			if globalNames[name] && g.Kind == store.KindProject {
-				desc += "  [hides global]"
-			} else if localNames[name] && g.Kind == store.KindGlobal {
-				desc += "  [hidden here by project]"
-			}
 			mode := store.Caller
 			if c := it.Text("cwd"); c != "" {
 				mode = c
@@ -154,18 +144,18 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	for _, st := range stores {
 		if st.Main.Kind == store.KindProject {
 			if len(st.Main.Shortcuts()) > 0 {
-				section("Project shortcuts ("+st.Main.Key()+")", st.Main, "")
+				section("Project shortcuts ("+st.Main.Key()+"), run with: shortcut r . <name>", st.Main, "")
 			}
 		} else if len(st.Main.Shortcuts()) > 0 {
 			section("Global shortcuts", st.Main, "")
 		}
 		for _, n := range st.Namespaces {
 			if usable(n.Group) {
-				hides := ""
-				if n.Group.InProject && globalNames[n.Name] {
-					hides = "  [hides global]"
+				reach := ""
+				if n.Group.InProject {
+					reach = ", run with: shortcut r . " + n.Name + " <name>"
 				}
-				section("Namespace "+n.Name+" ("+n.Group.File+")"+hides, n.Group, n.Name+" ")
+				section("Namespace "+n.Name+" ("+n.Group.File+")"+reach, n.Group, n.Name+" ")
 			}
 		}
 	}

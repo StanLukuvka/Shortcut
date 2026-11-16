@@ -11,7 +11,7 @@
     },
     "nano": {
       "description": "Edit a shortcut in nano",
-      "inline": "VISUAL= EDITOR=nano shortcut run --global tools edit \"$@\""
+      "inline": "VISUAL= EDITOR=nano shortcut run tools edit \"$@\""
     },
     "logged": {
       "description": "Run a shortcut and keep a copy of its output",

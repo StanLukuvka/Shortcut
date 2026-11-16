@@ -25,14 +25,14 @@ fi
 
 # A launcher runs outside any project, so it needs a global shortcut; show fails if there is none.
 names=("$@")
-shortcut show --global --field name "${names[@]}" >/dev/null
+shortcut show --field name "${names[@]}" >/dev/null
 field() { # one line, white space collapsed
-    shortcut show --global --field "$1" "${names[@]}" | tr -s ' \t\n' ' ' | sed 's/^ //; s/ $//'
+    shortcut show --field "$1" "${names[@]}" | tr -s ' \t\n' ' ' | sed 's/^ //; s/ $//'
 }
 
 # Desktop sessions often lack ~/.local/bin in PATH, so the launcher uses the absolute path.
 tool="$(printf '%q' "$(command -v shortcut)")"
-inner="$tool run --global $name; rc=\$?; if command -v notify-send >/dev/null 2>&1; then if [ \$rc -eq 0 ]; then notify-send \"shortcut: $name\" \"Finished\"; else notify-send -u critical \"shortcut: $name\" \"Failed (exit \$rc)\"; fi; fi; echo; read -r -p \"Press Enter to close...\""
+inner="$tool run $name; rc=\$?; if command -v notify-send >/dev/null 2>&1; then if [ \$rc -eq 0 ]; then notify-send \"shortcut: $name\" \"Finished\"; else notify-send -u critical \"shortcut: $name\" \"Failed (exit \$rc)\"; fi; fi; echo; read -r -p \"Press Enter to close...\""
 # Exec= escaping from the Desktop Entry spec: backslash-escape inside the double quotes, then double every %.
 exec_line="$(sed -e 's/[\\"`$]/\\&/g' -e 's/%/%%/g' <<<"$inner")"
 

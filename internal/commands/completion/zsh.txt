@@ -15,10 +15,9 @@ _shortcut() {
             typed=(${words[3,CURRENT-1]:#-*})
             if (( $#typed == 0 )) && [[ $PREFIX == -* ]]; then
                 case $words[2] in
-                    run|r) compadd -- --global -y ;;
-                    rm) compadd -- --global --local --namespace -y ;;
-                    show) compadd -- --global --json --field ;;
-                    *) compadd -- --global ;;
+                    run|r) compadd -- -y ;;
+                    rm) compadd -- --local --namespace -y ;;
+                    show) compadd -- --json --field ;;
                 esac
             elif (( $#typed <= 1 )); then
                 compadd -- ${(f)"$(shortcut list --names $typed[1] 2>/dev/null)"}

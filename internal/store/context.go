@@ -137,10 +137,10 @@ func (c *Context) State(key string, compute func() ApprovalState) ApprovalState 
 // Forget drops the state under key, for after a write or a prompt.
 func (c *Context) Forget(key string) { delete(c.states, key) }
 
-// Visible are the stores a name is looked up in, nearest first.
-func (c *Context) Visible(lk Lookup) []Store {
+// Stores are the project's store, if there is one, then the global one: what list shows.
+func (c *Context) Stores() []Store {
 	var stores []Store
-	if c.Project != "" && !lk.GlobalOnly {
+	if c.Project != "" {
 		stores = append(stores, c.Store(c.Project))
 	}
 	return append(stores, c.Store(c.Global))

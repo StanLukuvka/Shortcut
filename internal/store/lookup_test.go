@@ -9,48 +9,87 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-func TestStores_ScopeResolutionOrder(t *testing.T) {
+func TestLookup_EachScopeReachesOnlyItsOwnStore(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"build": map[string]any{"description": "Global build", "inline": "echo global_build"}})
 	proj := filepath.Join(e.Home, "my_project")
 	e.WriteStore(filepath.Join(proj, ".shortcuts"), map[string]any{"build": map[string]any{"description": "Local project build", "inline": "echo local_build"}})
 
-	// Inside a project: project precedence
+	// the same cwd, each scope its own store
 	res, _, err := ResolveShortcut(NewContext(proj, nil), []string{"build"}, Lookup{})
-	if err != nil {
-		t.Fatal(err)
+	if err != nil || res.Group.StoreDir != platform.Realpath(e.Store) || res.Entry.Description != "Global build" {
+		t.Errorf("global scope inside the project: %v", err)
 	}
-	if res.Group.StoreDir != platform.Realpath(proj) || res.Entry.Description != "Local project build" || !res.HidesGlobal {
-		t.Errorf("inside the project: %+v %q", res.Group.StoreDir, res.Entry.Description)
+	res, _, err = ResolveShortcut(NewContext(proj, nil), []string{"build"}, Lookup{Scope: ScopeProject})
+	if err != nil || res.Group.StoreDir != platform.Realpath(proj) || res.Entry.Description != "Local project build" {
+		t.Errorf("project scope: %v", err)
 	}
-	// --global reaches the global one from there
-	res, _, err = ResolveShortcut(NewContext(proj, nil), []string{"build"}, Lookup{GlobalOnly: true})
-	if err != nil || res.Entry.Description != "Global build" || res.HidesGlobal {
-		t.Errorf("--global: %v", err)
-	}
-
-	// Outside the project: the global one
-	res, _, err = ResolveShortcut(NewContext(e.Home, nil), []string{"build"}, Lookup{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Group.StoreDir != platform.Realpath(e.Store) || res.Entry.Description != "Global build" {
-		t.Errorf("outside: %q %q", res.Group.StoreDir, res.Entry.Description)
-	}
+	// outside any project the dot is an error
+	_, _, err = ResolveShortcut(NewContext(e.Home, nil), []string{"build"}, Lookup{Scope: ScopeProject})
+	testkit.WantErr(t, err, "no project here: no .shortcuts or .shortcuts.local in this folder or its parents")
 	_, _, err = ResolveShortcut(NewContext(e.Home, nil), []string{"check"}, Lookup{})
 	testkit.WantErr(t, err, "shortcut 'check' not found")
 }
 
-func TestHidingAndNotFound_ANameInAnOuterProjectIsPointedAt(t *testing.T) {
+func TestLookup_TheOtherScopeIsAHintNeverAFallback(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteImport(e.Store, "docker", testkit.NS(map[string]any{"ps": testkit.Inline("echo global-ps")}))
+	e.WriteStore(e.Store, map[string]any{"mine": testkit.Inline("x")})
+	proj := e.Project(map[string]any{"tool": testkit.Inline("p")})
+	e.WriteImport(filepath.Join(proj, ".shortcuts"), "terraform", testkit.NS(map[string]any{"plan": testkit.Inline("echo plan")}))
+	e.WriteImport(filepath.Join(proj, ".shortcuts"), "docker", testkit.NS(map[string]any{"delete": testkit.Inline("echo project-delete")}))
+	c := NewContext(proj, nil)
+	for _, k := range []struct {
+		words []string
+		lk    Lookup
+		want  string // "" = found
+	}{
+		{[]string{"tool"}, Lookup{Cmd: "r"}, "shortcut 'tool' not found. The project in " + proj + " has it: shortcut r . tool"},
+		{[]string{"tool"}, Lookup{Cmd: "show"}, "The project in " + proj + " has it: shortcut show . tool"},
+		{[]string{"tool", "a b"}, Lookup{Cmd: "r"}, "has it: shortcut r . tool 'a b'"},
+		{[]string{"terraform", "plan"}, Lookup{Cmd: "r"}, "has it: shortcut r . terraform plan"},
+		{[]string{"docker", "delete"}, Lookup{Cmd: "r"}, "'delete' not found in namespace 'docker'. It has: ps. The project in " + proj + " has it: shortcut r . docker delete"},
+		{[]string{"mine"}, Lookup{Scope: ScopeProject, Cmd: "r"}, "shortcut 'mine' not found. Your global store has it: shortcut r mine"},
+		{[]string{"docker", "ps"}, Lookup{Scope: ScopeProject, Cmd: "r"}, "'ps' not found in namespace 'docker'. It has: delete. Your global store has it: shortcut r docker ps"},
+		{[]string{"nothing"}, Lookup{Cmd: "r"}, ""},
+		{[]string{"tool"}, Lookup{}, ""}, // rm gives no hint
+		{[]string{"docker", "ps"}, Lookup{}, "found"},
+		{[]string{"docker", "delete"}, Lookup{Scope: ScopeProject}, "found"},
+	} {
+		f, err := FindEntry(c, k.words, k.lk)
+		switch {
+		case k.want == "found":
+			if err != nil {
+				t.Errorf("%v %+v: %v", k.words, k.lk, err)
+			}
+		case k.want == "":
+			if err == nil || strings.Contains(err.Error(), "has it") || f.Item.Entry != nil {
+				t.Errorf("%v %+v: want a plain not-found, got %v", k.words, k.lk, err)
+			}
+		default:
+			if err == nil || !strings.Contains(err.Error(), k.want) {
+				t.Errorf("%v %+v: got %v, want %q", k.words, k.lk, err, k.want)
+			}
+		}
+	}
+}
+
+func TestLookup_ANameCannotBeADot(t *testing.T) {
+	if err := ValidateName("."); err == nil {
+		t.Error("'.' is a valid name, so a shortcut or namespace could be named like the project scope")
+	}
+}
+
+func TestLookup_NotFound_ANameInAnOuterProjectIsPointedAt(t *testing.T) {
 	e := testkit.New(t)
 	outer := e.Project(map[string]any{"outer": testkit.Inline("echo outer")}, testkit.Name("outer"))
 	inner := filepath.Join(outer, "vendor")
 	e.WriteStore(filepath.Join(inner, ".shortcuts"), map[string]any{})
-	_, err := FindEntry(NewContext(inner, nil), []string{"outer"}, Lookup{})
+	_, err := FindEntry(NewContext(inner, nil), []string{"outer"}, Lookup{Scope: ScopeProject})
 	testkit.WantErr(t, err, "The project in "+outer+" has a 'outer', but only the nearest project, "+inner+", is used here.")
 }
 
-func TestHidingAndNotFound_AOneXProjectFolderGetsThePlainMessage(t *testing.T) {
+func TestLookup_NotFound_AOneXProjectFolderGetsThePlainMessage(t *testing.T) {
 	e := testkit.New(t)
 	old := e.Project(nil, testkit.Name("old"), testkit.Dirs(".shortcuts"))
 	_, err := FindEntry(NewContext(old, nil), []string{"x"}, Lookup{})
@@ -78,45 +117,8 @@ func TestLookup_NamespacesAndNotFound(t *testing.T) {
 		}
 	}
 	f, err := FindEntry(NewContext(e.Home, nil), []string{"docker", "where", "a", "b"}, Lookup{})
-	if err != nil || f.Name != "where" || f.Group.Name != "docker" || strings.Join(f.Rest, " ") != "a b" || f.Hides {
+	if err != nil || f.Name != "where" || f.Group.Name != "docker" || strings.Join(f.Rest, " ") != "a b" {
 		t.Errorf("docker where a b: %+v %v", f, err)
-	}
-}
-
-func TestLookup_AProjectNameHidesAGlobalOne(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteImport(e.Store, "docker", testkit.NS(map[string]any{"ps": testkit.Inline("echo global-ps"), "delete": testkit.Inline("x")}))
-	e.WriteStore(e.Store, map[string]any{"tool": testkit.Inline("x")})
-	proj := e.Project(map[string]any{"tool": testkit.Inline("p")})
-	e.WriteImport(filepath.Join(proj, ".shortcuts"), "docker", testkit.NS(map[string]any{"delete": testkit.Inline("echo project-delete")}))
-
-	f, err := FindEntry(NewContext(proj, nil), []string{"docker", "delete"}, Lookup{})
-	if err != nil || !f.Hides || f.Group.Name != "docker" || !f.Group.InProject {
-		t.Errorf("project namespace over a global one: %+v %v", f, err)
-	}
-	_, err = FindEntry(NewContext(proj, nil), []string{"docker", "ps"}, Lookup{})
-	testkit.WantErr(t, err, "'ps' not found in namespace 'docker'. It has: delete. Your global 'docker' has it: shortcut r --global docker ps")
-	if f, err = FindEntry(NewContext(proj, nil), []string{"tool"}, Lookup{}); err != nil || !f.Hides {
-		t.Errorf("project shortcut over a global one: %+v %v", f, err)
-	}
-	if f, err = FindEntry(NewContext(proj, nil), []string{"tool"}, Lookup{GlobalOnly: true}); err != nil || f.Hides || f.Group.InProject {
-		t.Errorf("--global: %+v %v", f, err)
-	}
-}
-
-func TestLookup_GlobalFlagPointsAtTheProjectsOwnName(t *testing.T) {
-	e := testkit.New(t)
-	proj := e.Project(map[string]any{"build": testkit.Inline("p")})
-	_, err := FindEntry(NewContext(proj, nil), []string{"build"}, Lookup{GlobalOnly: true})
-	testkit.WantErr(t, err, "shortcut 'build' not found.")
-	testkit.WantErr(t, err, "The project in "+proj+" has its own 'build': leave out --global to use it.")
-	_, err = FindEntry(NewContext(proj, nil), []string{"nothing"}, Lookup{GlobalOnly: true})
-	if err == nil || strings.Contains(err.Error(), "has its own") {
-		t.Errorf("a name the project lacks: %v", err)
-	}
-	_, err = FindEntry(NewContext(e.Home, nil), []string{"build"}, Lookup{})
-	if err == nil || strings.Contains(err.Error(), "has its own") {
-		t.Errorf("outside the project: %v", err)
 	}
 }
 
@@ -127,24 +129,21 @@ func TestLookup_StrictAndBrokenStores(t *testing.T) {
 	broken := e.BrokenProject()
 	registry := filepath.Join(broken, ".shortcuts")
 	for _, name := range []string{"outside", "nothing"} {
-		_, err := FindEntry(NewContext(broken, nil), []string{name}, Lookup{Strict: true})
+		_, err := FindEntry(NewContext(broken, nil), []string{name}, Lookup{Scope: ScopeProject, Strict: true})
 		testkit.WantErr(t, err, "corrupt registry "+registry)
-		testkit.WantErr(t, err, ". Nothing runs inside this project until it's fixed; for your own: shortcut r --global "+name)
+		testkit.WantErr(t, err, ". Nothing runs inside this project until it's fixed.")
 	}
-	if f, err := FindEntry(NewContext(broken, nil), []string{"outside"}, Lookup{GlobalOnly: true, Strict: true}); err != nil || f.Group.InProject {
-		t.Errorf("--global past a broken project: %+v %v", f, err)
+	if f, err := FindEntry(NewContext(broken, nil), []string{"outside"}, Lookup{Strict: true}); err != nil || f.Group.InProject {
+		t.Errorf("a global lookup past a broken project: %+v %v", f, err)
 	}
-	if f, err := FindEntry(NewContext(broken, nil), []string{"outside"}, Lookup{}); err != nil || f.Name != "outside" {
-		t.Errorf("show reads past a broken project: %+v %v", f, err)
-	}
-	_, err := FindEntry(NewContext(broken, nil), []string{"nothing"}, Lookup{})
+	_, err := FindEntry(NewContext(broken, nil), []string{"nothing"}, Lookup{Scope: ScopeProject})
 	testkit.WantErr(t, err, "shortcut 'nothing' not found.")
 
 	// an unknown top-level field stops every name of the project, strictly; the file still reads
 	proj := e.Project(map[string]any{"inside": testkit.Inline("true")}, testkit.Name("p2"), testkit.Extra(map[string]any{"bogus": 1}))
-	_, err = FindEntry(NewContext(proj, nil), []string{"inside"}, Lookup{Strict: true})
+	_, err = FindEntry(NewContext(proj, nil), []string{"inside"}, Lookup{Scope: ScopeProject, Strict: true})
 	testkit.WantErr(t, err, filepath.Join(proj, ".shortcuts")+" has an unknown field: bogus. Nothing runs inside this project")
-	if f, err := FindEntry(NewContext(proj, nil), []string{"inside"}, Lookup{}); err != nil || f.Name != "inside" {
+	if f, err := FindEntry(NewContext(proj, nil), []string{"inside"}, Lookup{Scope: ScopeProject}); err != nil || f.Name != "inside" {
 		t.Errorf("non-strict: %+v %v", f, err)
 	}
 
@@ -152,7 +151,7 @@ func TestLookup_StrictAndBrokenStores(t *testing.T) {
 	clash := e.Project(map[string]any{"docker": testkit.Inline("echo shortcut"), "ok": testkit.Inline("echo ok")}, testkit.Name("p3"))
 	e.WriteImport(filepath.Join(clash, ".shortcuts"), "docker", testkit.NS(map[string]any{"ps": testkit.Inline("x")}))
 	for _, words := range [][]string{{"docker"}, {"docker", "ps"}, {"ok"}} {
-		_, err := FindEntry(NewContext(clash, nil), words, Lookup{Strict: true})
+		_, err := FindEntry(NewContext(clash, nil), words, Lookup{Scope: ScopeProject, Strict: true})
 		testkit.WantErr(t, err, "'docker' is both a shortcut and a namespace")
 	}
 	if _, err := FindEntry(NewContext(clash, nil), []string{"outside"}, Lookup{Strict: true}); err != nil {

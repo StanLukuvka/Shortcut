@@ -31,6 +31,9 @@ func TestStores_ListAndNames(t *testing.T) {
 	if got := strings.Fields(e.RunWith(testkit.Opts{Cwd: proj}, "list", "--names").Stdout); !slices.Equal(got, []string{"glob", "penpot"}) {
 		t.Errorf("names: %v", got)
 	}
+	if got := e.RunWith(testkit.Opts{Cwd: proj}, "list", "--names", ".").Stdout; got != "" {
+		t.Errorf("project names before approval: %q", got)
+	}
 
 	e.Approve(filepath.Join(proj, ".shortcuts"))
 	res = e.RunWith(testkit.Opts{Cwd: proj}, "list")
@@ -40,8 +43,14 @@ func TestStores_ListAndNames(t *testing.T) {
 	testkit.Contains(t, "list", res.Stdout, "Global shortcuts")
 	testkit.Matches(t, res.Stdout, `glob +caller +Global desc`)
 	testkit.Matches(t, res.Stdout, `penpot +`+regexp.QuoteMeta(e.Tmp)+` +Fixed desc`)
-	if got := strings.Fields(e.RunWith(testkit.Opts{Cwd: proj}, "list", "--names").Stdout); !slices.Equal(got, []string{"local_cmd", "glob", "penpot"}) {
-		t.Errorf("names: %v", got)
+	if got := strings.Fields(e.RunWith(testkit.Opts{Cwd: proj}, "list", "--names").Stdout); !slices.Equal(got, []string{"glob", "penpot"}) {
+		t.Errorf("global names: %v", got)
+	}
+	if got := strings.Fields(e.RunWith(testkit.Opts{Cwd: proj}, "list", "--names", ".").Stdout); !slices.Equal(got, []string{"local_cmd"}) {
+		t.Errorf("project names: %v", got)
+	}
+	if got := e.Run("list", "--names", ".").Stdout; got != "" {
+		t.Errorf("project names outside a project: %q", got)
 	}
 }
 
@@ -70,11 +79,14 @@ func TestStores_ListNamesOfANamespace(t *testing.T) {
 	if out := e.Run("list", "--names", "nothing").Stdout; out != "" {
 		t.Errorf("nothing: %q", out)
 	}
-	// A project shortcut of that name is what `r docker` runs, so its arguments aren't names
+	// A project shortcut of that name is reached with the dot, so it changes nothing here
 	proj := e.Project(map[string]any{"docker": testkit.Inline("true")})
 	e.Approve(filepath.Join(proj, ".shortcuts"))
-	if out := e.RunWith(testkit.Opts{Cwd: proj}, "list", "--names", "docker").Stdout; out != "" {
+	if out := e.RunWith(testkit.Opts{Cwd: proj}, "list", "--names", "docker").Stdout; out != "a\nb\n" {
 		t.Errorf("in the project: %q", out)
+	}
+	if out := e.RunWith(testkit.Opts{Cwd: proj}, "list", "--names", ".").Stdout; out != "docker\n" {
+		t.Errorf("project names: %q", out)
 	}
 }
 
@@ -116,19 +128,20 @@ func TestStoreChecks_AnEmptyListSaysHowToStart(t *testing.T) {
 	testkit.Contains(t, "stderr", res.Stderr, "No shortcuts yet. Make one with: shortcut new hi")
 }
 
-// A project's entry over a global one is marked in both lists; the namespace form too.
-func TestList_HidingIsMarked(t *testing.T) {
+// A project's shortcuts and namespaces are listed with the command that reaches them: the dot.
+func TestList_ProjectSectionsSayTheyAreReachedWithTheDot(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"penpot": testkit.Inline("echo global")})
-	e.WriteImport(e.Store, "docker", testkit.NS(map[string]any{"ps": testkit.Inline("x"), "delete": testkit.Inline("x")}))
-	runOK(t, e, testkit.Opts{}, "update", "docker", "-y")
 	proj := e.Project(map[string]any{"penpot": map[string]any{"inline": "echo local", "cwd": "."}})
 	nsFile := e.WriteImport(filepath.Join(proj, ".shortcuts"), "docker", testkit.NS(map[string]any{"delete": testkit.Inline("y")}))
 	e.Approve(filepath.Join(proj, ".shortcuts"))
 	out := e.RunWith(testkit.Opts{Cwd: proj}, "list").Stdout
-	testkit.Contains(t, "list", out, "[hides global]")
-	testkit.Contains(t, "list", out, "[hidden here by project]")
-	testkit.Contains(t, "list", out, "Namespace docker ("+nsFile+")  [hides global]")
+	testkit.Contains(t, "list", out, "Project shortcuts ("+proj+"), run with: shortcut r . <name>:\n")
+	testkit.Contains(t, "list", out, "Namespace docker ("+nsFile+"), run with: shortcut r . docker <name>:\n")
+	testkit.Contains(t, "list", out, "Global shortcuts:\n")
+	if strings.Contains(out, "hides") || strings.Contains(out, "hidden") {
+		t.Errorf("list marks hiding:\n%s", out)
+	}
 }
 
 // The exact text of a list with a project, its .shortcuts.local, a namespace and a global store. The local entry replaces the shared one,
@@ -147,16 +160,16 @@ func TestList_FullListing(t *testing.T) {
 	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"shared": {"inline": "echo local"}, "loc": {"inline": "l", "description": "mine"}}}`, 0)
 	e.Approve(filepath.Join(proj, ".shortcuts"))
 	res := e.RunWith(testkit.Opts{Cwd: proj}, "list")
-	want := "Project shortcuts (" + proj + "):\n" +
+	want := "Project shortcuts (" + proj + "), run with: shortcut r . <name>:\n" +
 		"  p\n" +
-		"  build                .       shared      Proj build  [hides global]\n" +
+		"  build                .       shared      Proj build\n" +
 		"  loc                  caller  local       mine\n" +
 		"  shared               caller  overridden  \n" +
 		"\n" +
 		"Global shortcuts:\n" +
 		"  mine\n" +
 		"  bad                  5       bd\n" +
-		"  build                /tmp    Global build  [hidden here by project]\n" +
+		"  build                /tmp    Global build\n" +
 		"  é                    caller  d\n" +
 		"\n" +
 		"Namespace docker (" + filepath.Join(e.Store, "imports", "docker.shortcut") + "):\n" +

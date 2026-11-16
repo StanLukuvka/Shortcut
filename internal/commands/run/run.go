@@ -15,23 +15,23 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/term"
 )
 
-// Run runs a shortcut. --global, -y and --yes are the only options it reads, and only before the name; everything
-// after that, -h included, is the shortcut's.
+// Run runs a shortcut. -y and --yes are the only options it reads, and only before the name, and a . after them
+// selects the project; everything after that, -h included, is the shortcut's.
 func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) error {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
 		_, err := s.Out.WriteString(cmd.HelpText())
 		return err
 	}
-	skipLocal, assumeYes := false, false
-	for len(args) > 0 && (args[0] == "--global" || args[0] == "-y" || args[0] == "--yes") {
-		skipLocal = skipLocal || args[0] == "--global"
-		assumeYes = assumeYes || args[0] != "--global"
+	assumeYes := false
+	for len(args) > 0 && (args[0] == "-y" || args[0] == "--yes") {
+		assumeYes = true
 		args = args[1:]
 	}
+	scope, args := store.SplitScope(args)
 	if len(args) == 0 {
 		return &term.ExitError{Code: 2, Stderr: "error: missing shortcut name\n" + cmd.UsageLine() + "\n"}
 	}
-	return runShortcut(c, s, args, store.Lookup{GlobalOnly: skipLocal}, assumeYes)
+	return runShortcut(c, s, args, store.Lookup{Scope: scope, Cmd: "r"}, assumeYes)
 }
 
 func oneLine(text string) string { return strings.ReplaceAll(text, "\n", "\\n") }
@@ -42,7 +42,7 @@ func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Loo
 	if c.CwdErr != nil {
 		return c.CwdErr
 	}
-	resolved, args, err := store.ResolveShortcut(c, words, store.Lookup{GlobalOnly: lk.GlobalOnly, Strict: true})
+	resolved, args, err := store.ResolveShortcut(c, words, store.Lookup{Scope: lk.Scope, Cmd: lk.Cmd, Strict: true})
 	if err != nil {
 		return err
 	}
@@ -61,15 +61,10 @@ func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Loo
 		withArgs = " with " + oneLine(platform.ShellJoin(args))
 	}
 	again := []string{"shortcut", "r", "-y"}
-	if lk.GlobalOnly {
-		again = append(again, "--global")
+	if lk.Scope == store.ScopeProject {
+		again = append(again, ".")
 	}
 	again = append(append(again, strings.Fields(name)...), args...)
-	if resolved.HidesGlobal { // before any question, and also with SHORTCUT_SHOW_DIR=0
-		first := strings.Fields(name)[0]
-		s.Err.WriteString("note: '" + first + "' here is this project's; your global '" + first + "' runs with: " +
-			"shortcut run --global " + name + "\n")
-	}
 	realCwd := platform.Realpath(resolved.RunCwd)
 	if entry.Confirm {
 		message := oneLine(entry.Description)

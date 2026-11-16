@@ -10,7 +10,6 @@ end
 complete -c shortcut -f
 complete -c shortcut -n __fish_use_subcommand -a "run r new list show rm update completion help"
 complete -c shortcut -n "__fish_seen_subcommand_from run r show rm" -a "(__shortcut_names)"
-complete -c shortcut -n "__fish_seen_subcommand_from run r show rm" -l global
 complete -c shortcut -n "__fish_seen_subcommand_from run r rm" -s y
 complete -c shortcut -n "__fish_seen_subcommand_from rm" -l local
 complete -c shortcut -n "__fish_seen_subcommand_from rm" -l namespace -r

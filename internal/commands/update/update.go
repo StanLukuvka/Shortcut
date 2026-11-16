@@ -16,7 +16,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	if err != nil {
 		return err
 	}
-	stores := c.Visible(store.Lookup{})
+	stores := c.Stores()
 	var groups []store.Group
 	for _, st := range stores {
 		for _, g := range st.Groups() {
@@ -56,11 +56,10 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 			return nil
 		}
 	}
-	globalNames := store.GlobalNamesOf(stores)
 	code := 0
 	named := ns.Str("group") != ""
 	for _, g := range groups {
-		rc, err := approveGroup(c, s, g, globalNames, approveOpts{Yes: ns.Bool("yes"), Named: named})
+		rc, err := approveGroup(c, s, g, approveOpts{Yes: ns.Bool("yes"), Named: named})
 		if err != nil {
 			return err
 		}
@@ -76,10 +75,10 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 type approveOpts struct{ Yes, Named bool }
 
 // approveGroup lists what is new, changed or removed since the last approval and asks. What is listed is what gets
-// hashed. globalNames are your global shortcuts and namespaces, which a project's names hide inside it. It returns
+// hashed. It returns
 // the exit code; an error is a die (no terminal to ask on, or the record can't be written). A broken group
 // is skipped with a warning (exit 0) unless the group was named, then it is an error (exit 1).
-func approveGroup(c *store.Context, s *term.Streams, g store.Group, globalNames map[string]bool, opts approveOpts) (int, error) {
+func approveGroup(c *store.Context, s *term.Streams, g store.Group, opts approveOpts) (int, error) {
 	prefix, rc := "warning: skipped ", 0
 	if opts.Named {
 		prefix, rc = "error: cannot approve ", 1
@@ -138,18 +137,6 @@ func approveGroup(c *store.Context, s *term.Streams, g store.Group, globalNames 
 	for _, name := range slices.Sorted(slices.Values(g.Shared.Names())) {
 		if _, both := local2.Get(name); both {
 			s.Out.WriteString("'" + name + "' in " + store.ProjectFile + " is " + string(g.Source(name)) + " by " + store.LocalFile + " for you.\n")
-		}
-	}
-	shortcuts := g.Shortcuts()
-	if g.InProject {
-		hidden := shortcuts.Names()
-		if g.Kind == store.KindNamespace {
-			hidden = []string{g.Name}
-		}
-		for _, name := range slices.Sorted(slices.Values(hidden)) {
-			if globalNames[name] {
-				s.Out.WriteString("Inside this project, '" + name + "' hides your global '" + name + "'.\n")
-			}
 		}
 	}
 	granted, err := term.Confirm{Question: "approve?", NoTerminal: "approve " + g.Label() + " in a terminal, or pass -y"}.Granted(s, opts.Yes)

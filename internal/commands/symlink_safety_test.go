@@ -14,7 +14,7 @@ func TestSymlinkSafety_ARunWritesNothingInTheProjectOrTheStore(t *testing.T) {
 	proj := e.Project(testkit.GO)
 	e.Approve(filepath.Join(proj, ".shortcuts"))
 	before1, before2 := tree(t, e.Store), tree(t, proj)
-	if got := e.RunWith(in(proj), "r", "go").Stdout; got != "ran\n" {
+	if got := e.RunWith(in(proj), "r", ".", "go").Stdout; got != "ran\n" {
 		t.Errorf("run: %q", got)
 	}
 	if after := tree(t, e.Store); !slices.Equal(before1, after) {
@@ -31,7 +31,7 @@ func TestSymlinkSafety_MovingASymlinkUnderARelativeCwdNeedsApproval(t *testing.T
 	elsewhere := e.Folder("elsewhere")
 	e.Symlink(filepath.Join(proj, "safe"), filepath.Join(proj, "work"))
 	e.Approve(filepath.Join(proj, ".shortcuts"))
-	res := e.RunWith(in(proj), "r", "go")
+	res := e.RunWith(in(proj), "r", ".", "go")
 	if res.Code != 0 {
 		t.Fatalf("exit %d %s", res.Code, res.Stderr)
 	}
@@ -39,12 +39,12 @@ func TestSymlinkSafety_MovingASymlinkUnderARelativeCwdNeedsApproval(t *testing.T
 
 	os.Remove(filepath.Join(proj, "work"))
 	e.Symlink(elsewhere, filepath.Join(proj, "work"))
-	if code := e.RunWith(in(proj), "r", "go").Code; code != 1 {
+	if code := e.RunWith(in(proj), "r", ".", "go").Code; code != 1 {
 		t.Errorf("moved symlink: exit %d", code)
 	}
 	res = e.RunWith(in(proj), "update", "-y")
 	testkit.Contains(t, "list", res.Stdout, "  changed  ./cwd of go\n")
-	if code := e.RunWith(in(proj), "r", "go").Code; code != 0 {
+	if code := e.RunWith(in(proj), "r", ".", "go").Code; code != 0 {
 		t.Errorf("after update: exit %d", code)
 	}
 }

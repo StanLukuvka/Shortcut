@@ -37,7 +37,7 @@ func TestApproval_BlocksUntilApprovedAndAfterAnyChange(t *testing.T) {
 	o := in(proj)
 
 	// First run blocked; full listing on first approval
-	res := e.RunWith(o, "r", "hi")
+	res := e.RunWith(o, "r", ".", "hi")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "first run", res.Stderr, "isn't approved yet")
 	res = e.RunWith(o, "update")
@@ -46,12 +46,12 @@ func TestApproval_BlocksUntilApprovedAndAfterAnyChange(t *testing.T) {
 	for _, want := range []string{"  new      .shortcuts\n", "  new      scripts/hi.sh\n"} {
 		testkit.Contains(t, "update", res.Stdout, want)
 	}
-	if code := e.RunWith(o, "r", "hi").Code; code != 1 {
+	if code := e.RunWith(o, "r", ".", "hi").Code; code != 1 {
 		t.Errorf("run after a refused update: exit %d", code)
 	}
 
 	runOK(t, e, o, "update", "-y")
-	if out := e.RunWith(o, "r", "hi").Stdout; out != "hi\n" {
+	if out := e.RunWith(o, "r", ".", "hi").Stdout; out != "hi\n" {
 		t.Errorf("approved run: %q", out)
 	}
 	testkit.Contains(t, "update .", e.RunWith(o, "update", ".").Stdout, "already approved")
@@ -60,14 +60,14 @@ func TestApproval_BlocksUntilApprovedAndAfterAnyChange(t *testing.T) {
 	// Reformatting the file needs `update`: approval hashes the file as it is
 	e.WriteRegistryRaw(registry, "{\n       \"shortcuts\": {\n       \"there\": {\"description\": \"There\", \"inline\": \"echo there\"},\n"+
 		"       \"hi\": {\"description\": \"Say hi\", \"script\": \"scripts/hi.sh\"}},\n       \"version\": 1}")
-	if code := e.RunWith(o, "r", "hi").Code; code == 0 {
+	if code := e.RunWith(o, "r", ".", "hi").Code; code == 0 {
 		t.Errorf("reformatted: exit %d", code)
 	}
 
 	// A change to the JSON blocks, also the shortcuts that didn't change
 	shortcuts["there"] = map[string]any{"description": "There", "inline": "echo changed"}
 	e.WriteStore(registry, shortcuts)
-	res = e.RunWith(o, "r", "hi")
+	res = e.RunWith(o, "r", ".", "hi")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "changed json", res.Stderr, proj+" changed since you approved it; run: shortcut update")
 	out := runOK(t, e, o, "update", "-y").Stdout
@@ -78,18 +78,18 @@ func TestApproval_BlocksUntilApprovedAndAfterAnyChange(t *testing.T) {
 
 	// So does a change to a script
 	e.WriteFile(script, "#!/usr/bin/env bash\necho evil\n", 0)
-	if code := e.RunWith(o, "r", "hi").Code; code != 1 {
+	if code := e.RunWith(o, "r", ".", "hi").Code; code != 1 {
 		t.Errorf("changed script: exit %d", code)
 	}
 	out = runOK(t, e, o, "update", "-y").Stdout
 	testkit.Contains(t, "list", out, "  changed  scripts/hi.sh\n")
-	if got := e.RunWith(o, "r", "hi").Stdout; got != "evil\n" {
+	if got := e.RunWith(o, "r", ".", "hi").Stdout; got != "evil\n" {
 		t.Errorf("run after approving the change: %q", got)
 	}
 
 	// The script going away is a change, and can't be approved while the entry needs it
 	os.Remove(script)
-	if code := e.RunWith(o, "r", "there").Code; code != 1 {
+	if code := e.RunWith(o, "r", ".", "there").Code; code != 1 {
 		t.Errorf("script gone: exit %d", code)
 	}
 	res = e.RunWith(o, "update", ".", "-y")
@@ -133,17 +133,17 @@ func TestApproval_OneChangedGroupLeavesTheOthersRunning(t *testing.T) {
 	e.Approve(filepath.Join(proj, ".shortcuts"))
 
 	e.WriteFile(docker, `{"version": 1, "shortcuts": {"ps": {"inline": "echo evil"}}}`, 0)
-	res := e.RunWith(in(proj), "r", "docker", "ps")
+	res := e.RunWith(in(proj), "r", ".", "docker", "ps")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "docker", res.Stderr, "docker changed since you approved it; run: shortcut update docker")
-	if out := e.RunWith(in(proj), "r", "kube", "get").Stdout; out != "get\n" {
+	if out := e.RunWith(in(proj), "r", ".", "kube", "get").Stdout; out != "get\n" {
 		t.Errorf("kube: %q", out)
 	}
-	if out := e.RunWith(in(proj), "r", "own").Stdout; out != "own\n" {
+	if out := e.RunWith(in(proj), "r", ".", "own").Stdout; out != "own\n" {
 		t.Errorf("own: %q", out)
 	}
 	runOK(t, e, in(proj), "update", "docker", "-y")
-	if out := e.RunWith(in(proj), "r", "docker", "ps").Stdout; out != "evil\n" {
+	if out := e.RunWith(in(proj), "r", ".", "docker", "ps").Stdout; out != "evil\n" {
 		t.Errorf("docker after update: %q", out)
 	}
 }
@@ -155,19 +155,19 @@ func TestApproval_SwappingTwoApprovedNamespacesNeedsApproval(t *testing.T) {
 	e.WriteImport(reg, "dev", testkit.NS(map[string]any{"deploy": testkit.Inline("echo dev")}))
 	e.WriteImport(reg, "prod", testkit.NS(map[string]any{"deploy": testkit.Inline("echo prod")}))
 	e.Approve(reg)
-	if out := e.RunWith(in(proj), "r", "dev", "deploy").Stdout; out != "dev\n" {
+	if out := e.RunWith(in(proj), "r", ".", "dev", "deploy").Stdout; out != "dev\n" {
 		t.Errorf("before: %q", out)
 	}
 
 	e.WriteStore(reg, testkit.OWN, map[string]any{"imports": map[string]any{"dev": "imports/prod.shortcut", "prod": "imports/dev.shortcut"}})
-	res := e.RunWith(in(proj), "r", "dev", "deploy")
+	res := e.RunWith(in(proj), "r", ".", "dev", "deploy")
 	if res.Code != 1 || strings.Contains(res.Stdout, "prod") {
 		t.Errorf("swapped: exit %d stdout %q", res.Code, res.Stdout)
 	}
 	testkit.Contains(t, "swapped", res.Stderr, "dev isn't approved yet; review it with: shortcut update dev")
 
 	runOK(t, e, in(proj), "update", "dev", "-y")
-	if out := e.RunWith(in(proj), "r", "dev", "deploy").Stdout; out != "prod\n" {
+	if out := e.RunWith(in(proj), "r", ".", "dev", "deploy").Stdout; out != "prod\n" {
 		t.Errorf("after: %q", out)
 	}
 }
@@ -178,10 +178,10 @@ func TestApproval_ANamespaceApprovedInOneProjectIsNewInAnother(t *testing.T) {
 	tools := e.WriteImport(filepath.Join(first, ".shortcuts"), "tools", testkit.NS(map[string]any{"go": testkit.Inline("echo go")}))
 	e.Approve(filepath.Join(first, ".shortcuts"))
 	second := e.Project(map[string]any{}, testkit.Name("second"), testkit.Extra(map[string]any{"imports": map[string]any{"tools": tools}}))
-	res := e.RunWith(in(second), "r", "tools", "go")
+	res := e.RunWith(in(second), "r", ".", "tools", "go")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "second", res.Stderr, "tools isn't approved yet")
-	if out := e.RunWith(in(first), "r", "tools", "go").Stdout; out != "go\n" {
+	if out := e.RunWith(in(first), "r", ".", "tools", "go").Stdout; out != "go\n" {
 		t.Errorf("first: %q", out)
 	}
 	testkit.Contains(t, "update", e.RunWith(in(second), "update", "-y").Stdout, "New to you: tools ("+tools+")")
@@ -192,7 +192,7 @@ func TestApproval_CoversAProjectScriptLinkedFromOutside(t *testing.T) {
 	outside := e.WriteFile(filepath.Join(e.Tmp, "outside.sh"), "echo one\n", 0o755)
 	proj := e.Project(map[string]any{"go": map[string]any{"script": outside}}, testkit.Approved())
 	e.WriteFile(outside, "echo two\n", 0)
-	res := e.RunWith(in(proj), "r", "go")
+	res := e.RunWith(in(proj), "r", ".", "go")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "changed since you approved it")
 }
@@ -259,15 +259,15 @@ func TestApproval_NonUTF8Script(t *testing.T) {
 	e := testkit.New(t)
 	tool := "bin/tool"
 	proj := e.Project(testkit.BinTool, testkit.Files(map[string]any{tool: []byte("#!/bin/sh\n# \xff\xfe\necho one\n")}), testkit.Approved(), testkit.Mode(0o755))
-	if out := e.RunWith(in(proj), "r", "tool").Stdout; out != "one\n" {
+	if out := e.RunWith(in(proj), "r", ".", "tool").Stdout; out != "one\n" {
 		t.Errorf("first run: %q", out)
 	}
 	e.WriteFile(filepath.Join(proj, tool), []byte("#!/bin/sh\n# \xff\xfd\necho two\n"), 0)
-	if code := e.RunWith(in(proj), "r", "tool").Code; code != 1 {
+	if code := e.RunWith(in(proj), "r", ".", "tool").Code; code != 1 {
 		t.Errorf("changed: exit %d", code)
 	}
 	testkit.Contains(t, "list", e.RunWith(in(proj), "update", "-y").Stdout, "  changed  bin/tool\n")
-	if code := e.RunWith(in(proj), "r", "tool").Code; code != 0 {
+	if code := e.RunWith(in(proj), "r", ".", "tool").Code; code != 0 {
 		t.Errorf("after update: exit %d", code)
 	}
 }

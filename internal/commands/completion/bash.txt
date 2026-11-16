@@ -18,7 +18,7 @@ _shortcut() {
         return 0
     fi
 
-    # What's before the cursor, leaving out flags: nothing yet, or a namespace
+    # What's before the cursor, leaving out flags: nothing yet, a namespace, or . (the project)
     local cmd="${COMP_WORDS[1]}" i
     local -a typed=()
     for (( i = 2; i < COMP_CWORD; i++ )); do
@@ -28,11 +28,11 @@ _shortcut() {
     case " ${name_commands} " in
         *" ${cmd} "*)
             if [ "${#typed[@]}" -eq 0 ] && [[ "$cur" == -* ]]; then
-                local flags="--global"
+                local flags
                 case "$cmd" in
-                    run|r) flags="--global -y" ;;
-                    rm) flags="--global --local --namespace -y" ;;
-                    show) flags="--global --json --field" ;;
+                    run|r) flags="-y" ;;
+                    rm) flags="--local --namespace -y" ;;
+                    show) flags="--json --field" ;;
                 esac
                 COMPREPLY=( $(compgen -W "${flags}" -- "$cur") )
             elif [ "${#typed[@]}" -le 1 ]; then

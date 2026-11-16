@@ -78,20 +78,20 @@ Each person reviews it once with `shortcut update`, and again after it changes. 
 ## Commands
 
 ```
-shortcut r <name> [args]              run (also: run, r <ns> <name>)
-shortcut r --global <name>            skip the project, run the global one
+shortcut r <name> [args]              run your global shortcut (also: run, r <ns> <name>)
+shortcut r . <name> [args]            run the project's shortcut (also: r . <ns> <name>)
 shortcut r -y <name>                  answer a confirm prompt
 
 shortcut new <name> -- CMD            inline shortcut
 shortcut new <name> --script PATH     use a script where it is; a path inside the store (or a project or namespace folder) is kept relative
 
-shortcut list                         everything visible; warns about invalid entries and missing scripts
-shortcut list --names [ns]            bare names
-shortcut show <name>                  details and script
-shortcut show --json <name>           entry and where it resolves, as JSON
-shortcut show --field KEY <name>      one field, bare, for scripts
+shortcut list                         your global shortcuts and the project's; warns about invalid entries and missing scripts
+shortcut list --names [ns|.]         bare global names, a global namespace's, or with . the project's
+shortcut show [.] <name>              details and script; with . the project's
+shortcut show --json [.] <name>     entry and where it resolves, as JSON
+shortcut show --field KEY [.] <name>  one field, bare, for scripts
 
-shortcut rm <name> [-y]               remove a global or namespace shortcut; says what goes, with -y too
+shortcut rm <name> [-y]               remove a global or global namespace shortcut; says what goes, with -y too
 shortcut rm --local <name>            undo your override, or remove a local entry. Never changes .shortcuts
 shortcut rm --namespace <ns> [-y]     remove a global namespace and its scripts/<ns>/ folder; one imported
                                       from elsewhere is only no longer imported
@@ -114,20 +114,21 @@ Flags for `new`:
 
 `new <name> -- CMD` stores the command as text and runs it with `bash -c`. One quoted word is kept as written: `-- 'ls "$1" | wc -l'` keeps its pipe. Several words are each quoted, so each stays one word: `-- echo '$HOME'` prints `$HOME`. In both, `$1`, `$@` and the other arguments stay live.
 
-`show` and `rm` take `--global` too. In a project, `--local` works only from the project root.
+`rm` works on your global store; `rm --local` on the project's `.shortcuts.local`. In a project, `--local` works only from the project root.
 
-`show --field KEY` prints one field of that object bare, or of the entry (`description`, `inline`, `script`); `true` and `false` print as words, and a null or absent field prints nothing. It only reads: it never approves. `show --json` prints one object: `name`, `namespace`, `scope`, `defined_in`, `source`, `hides_global`, `approval`, `cwd`, `run_cwd`, `script_path`, `error` and `entry`, with its own keys and the entry's sorted. A field that can't be worked out is null.
+`show --field KEY` prints one field of that object bare, or of the entry (`description`, `inline`, `script`); `true` and `false` print as words, and a null or absent field prints nothing. It only reads: it never approves. `show --json` prints one object: `name`, `namespace`, `scope`, `defined_in`, `source`, `approval`, `cwd`, `run_cwd`, `script_path`, `error` and `entry`, with its own keys and the entry's sorted. A field that can't be worked out is null.
 
 ## Projects and approval
 
 - The project is the nearest folder, walking up, with `.shortcuts` or `.shortcuts.local`. Only that one is read, also inside another project.
 - `.shortcuts.local` overrides `.shortcuts` per entry.
-- Inside a project, its shortcuts and namespaces hide your global ones of the same name. `update`, `list`, `show` and `run` say so, and `shortcut r --global <name>` runs yours.
+- `shortcut r <name>` and `shortcut show <name>` look only in your global store. `shortcut r . <name>` and `shortcut show . <name>` look only in the project: its `.shortcuts` with `.shortcuts.local` over it, and the namespaces it imports. The dot is the first word after the options, and a shortcut or namespace can't be named `.`.
+- Nothing falls back to the other store. A name that is only in the other one is an error that gives the command to use, and nothing runs. `r .` outside a project is an error.
 - Relative `script` and `cwd` paths resolve from the folder holding the file.
 - A namespace file is `<name>.shortcut`, such as `docker.shortcut`. A bare `.shortcut` is an error.
 - Projects and namespaces run only after `shortcut update`. A namespace name pointed at another file needs approving again. Global shortcuts need no approval.
 - Any change to a project's or namespace's files, by `new`, `rm` or by hand, needs `shortcut update` before the group runs again. `new` and `rm` print the command.
-- If a project's file can't be read, nothing runs inside the project until it's fixed, and `rm` there only takes `--local`. `--global` reaches your own shortcuts.
+- If a project's file can't be read, nothing runs with the dot until it's fixed. Your own shortcuts are not behind it.
 
 ## What a shortcut runs with
 
