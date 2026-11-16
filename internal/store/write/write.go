@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"syscall"
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
@@ -121,47 +119,8 @@ func WriteLocal(c *store.Context, root string, change func(platform.Doc) error) 
 		if err := SaveEdited(path, reg, shortcuts); err != nil {
 			return err
 		}
-		if isNewFile {
-			excludeFromGit(root)
-		}
 		return nil
 	})
-}
-
-// excludeFromGit keeps .shortcuts.local out of `git add`, without touching a file the project
-// commits. Any failure (no git, not a repository, a file that can't be written) is ignored.
-func excludeFromGit(root string) {
-	cmd := exec.Command("git", "rev-parse", "--git-path", "info/exclude")
-	cmd.Dir = root
-	out, err := cmd.Output()
-	if err != nil {
-		return
-	}
-	path := platform.Join(root, strings.TrimSpace(string(out))) // an absolute result stays as it is
-	if os.MkdirAll(filepath.Dir(path), 0o777) != nil {
-		return
-	}
-	var text string
-	if raw, err := os.ReadFile(path); err == nil {
-		text = string(raw)
-	} else if platform.Exists(path) {
-		return
-	}
-	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
-		if line == store.LocalFile {
-			return
-		}
-	}
-	sep := ""
-	if text != "" && !strings.HasSuffix(text, "\n") {
-		sep = "\n"
-	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o666)
-	if err != nil {
-		return
-	}
-	f.WriteString(sep + store.LocalFile + "\n")
-	f.Close()
 }
 
 // UnlinkFile removes a file or a link, and not one that is already gone; never a folder (os.Remove
