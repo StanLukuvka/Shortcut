@@ -86,9 +86,9 @@ shortcut new <name> -- CMD            inline shortcut
 shortcut new <name> --script PATH     use a script where it is; a path inside the store (or a project or namespace folder) is kept relative
 
 shortcut list                         your global shortcuts and the project's; warns about invalid entries and missing scripts
-shortcut list --names [ns|.]         bare global names, a global namespace's, or with . the project's
+shortcut list --names [ns|.]          bare global names, a global namespace's, or with . the project's
 shortcut show [.] <name>              details and script; with . the project's
-shortcut show --json [.] <name>     entry and where it resolves, as JSON
+shortcut show --json [.] <name>       entry and where it resolves, as JSON
 shortcut show --field KEY [.] <name>  one field, bare, for scripts
 
 shortcut rm <name> [-y]               remove a global or global namespace shortcut; says what goes, with -y too
