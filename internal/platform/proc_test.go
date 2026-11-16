@@ -1,7 +1,6 @@
 package platform
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,6 +23,9 @@ func helper(job string) {
 		fmt.Printf("%s\n%s\n", logical, physical)
 	case "tty":
 		fmt.Println(IsTerminal(0), IsTerminal(1))
+	case "bash":
+		fmt.Println("returned:", ExecChild([]string{"bash"}, ".", nil))
+		os.Exit(7)
 	case "exec":
 		env := append(os.Environ(), "PATH="+os.Getenv("PLATFORM_PATH"))
 		err := ExecChild([]string{os.Getenv("PLATFORM_CMD"), "-c", `pwd; exec grep -E '^Sig(Blk|Ign)' /proc/self/status`},
@@ -70,84 +72,17 @@ func TestExec_FailureBeforeExecReturnsAnError(t *testing.T) {
 	}
 }
 
-func TestExec_LookPath(t *testing.T) {
+// A bash in the cwd is never found through an empty, "." or relative PATH entry. A child process tries it, so a wrong
+// exec cannot replace the test: the planted bash would exit 0 without printing "returned:".
+func TestExec_CwdIsNotOnThePath(t *testing.T) {
 	e := testkit.New(t)
-	bin, other := e.Folder("bin"), e.Folder("other")
-	e.WriteFile(bin+"/tool", "#!/bin/sh\n", 0o755)
-	e.WriteFile(bin+"/plain", "x", 0o644)
-	e.WriteFile(other+"/plain", "#!/bin/sh\n", 0o755)
-	e.WriteFile(other+"/tool", "#!/bin/sh\n", 0o755)
-	e.WriteFile(filepath.Join(e.Tmp, "here"), "#!/bin/sh\n", 0o755)
-	if err := os.Mkdir(bin+"/adir", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	path := bin + ":" + other
-	t.Chdir(e.Tmp) // an empty or "." entry would mean the cwd; it no longer matches
-	for _, c := range []struct{ file, path, want string }{
-		{"tool", path, bin + "/tool"},
-		{"plain", path, other + "/plain"}, // a non-executable file earlier in PATH is passed over
-		{"adir", bin, ""},                 // a folder is not a program
-		{"none", path, ""},
-		{"here", "", ""}, // PATH= : one empty entry, no longer the cwd
-		{"here", ".", ""},
-		{"here", bin + "::" + other, ""},
-		{"here", bin + ":.:" + other, ""},
-	} {
-		got, err := lookPathIn(c.path, c.file)
-		if (err != nil) != (c.want == "") || got != c.want {
-			t.Errorf("lookPathIn(%q, %q) = %q, %v; want %q", c.path, c.file, got, err, c.want)
+	dir := e.Folder("here")
+	e.WriteFile(dir+"/bash", "#!/bin/sh\n", 0o755)
+	for _, path := range []string{"", ".", "bin", ":", "bin:."} {
+		res := e.RunCmd(testkit.Opts{Cwd: dir, Env: map[string]string{"PLATFORM_HELPER": "bash", "PATH": path}}, testkit.SelfArgs()...)
+		if res.Code != 7 || !strings.HasPrefix(res.Stdout, "returned: ") {
+			t.Errorf("PATH=%q: exit %d, stdout %q", path, res.Code, res.Stdout)
 		}
-		if err != nil && !errors.Is(err, syscall.ENOENT) {
-			t.Errorf("lookPathIn(%q, %q): %v, want ENOENT", c.path, c.file, err)
-		}
-	}
-	// a match in the cwd or a relative dir is passed over; the later absolute entry still answers
-	e.WriteFile(filepath.Join(e.Tmp, "tool"), "#!/bin/sh\n", 0o755)
-	for _, p := range []string{".:" + other, ":" + other, "bin:" + other} {
-		if got, err := lookPathIn(p, "tool"); err != nil || got != other+"/tool" {
-			t.Errorf("lookPathIn(%q, tool) = %q, %v; want %q", p, got, err, other+"/tool")
-		}
-	}
-	if _, err := lookPathIn("bin:.:", "tool"); !errors.Is(err, syscall.ENOENT) {
-		t.Errorf("only relative entries: %v", err)
-	}
-	if _, err := lookPathIn(bin, "plain"); !errors.Is(err, syscall.EACCES) {
-		t.Errorf("only a non-executable match: %v", err)
-	}
-	if _, err := lookPathIn(bin, "none"); !errors.Is(err, syscall.ENOENT) {
-		t.Errorf("no match: %v", err)
-	}
-	old := os.Getenv("PATH")
-	lookPathIn(bin, "tool")
-	if os.Getenv("PATH") != old {
-		t.Errorf("PATH not restored: %q", os.Getenv("PATH"))
-	}
-	if pathOf(nil) != "/bin:/usr/bin" {
-		t.Errorf("pathOf(nil) = %q", pathOf(nil))
-	}
-	if pathOf([]string{"A=1", "PATH=/x", "PATH=/y"}) != "/y" || pathOf([]string{"PATH="}) != "" {
-		t.Error("pathOf")
-	}
-}
-
-// The child's own PATH is searched, not this process's; an empty PATH in it does not reach the cwd.
-func TestExec_ChildPathOverrides(t *testing.T) {
-	e := testkit.New(t)
-	bin := e.Folder("bin2")
-	e.WriteFile(bin+"/tool", "#!/bin/sh\n", 0o755)
-	e.WriteFile(filepath.Join(e.Tmp, "here"), "#!/bin/sh\n", 0o755)
-	t.Chdir(e.Tmp)
-	if _, err := lookPathIn(os.Getenv("PATH"), "sh"); err != nil {
-		t.Skip("no sh on the process PATH")
-	}
-	if err := ExecChild([]string{"sh"}, e.Tmp, []string{"PATH=/nonexistent"}); !errors.Is(err, syscall.ENOENT) {
-		t.Errorf("override ignored: %v", err)
-	}
-	if err := ExecChild([]string{"here"}, e.Tmp, []string{"PATH="}); !errors.Is(err, syscall.ENOENT) {
-		t.Errorf("empty PATH found the cwd: %v", err)
-	}
-	if p, err := lookPathIn(pathOf([]string{"PATH=" + bin}), "tool"); err != nil || p != bin+"/tool" {
-		t.Errorf("child PATH: %q %v", p, err)
 	}
 }
 

@@ -22,7 +22,7 @@
 - An empty `--desc` or `--namespace` is an error. A `null` for a text field is an error.
 - A script runs as it is, never through a `#!` line `run` reads itself or through bash. One that is not executable is refused by `run`, `new --script` and `update`, and `list` warns about it, each with `chmod +x PATH`.
 - A shortcut's environment lists `SHORTCUT_NAME`, `SHORTCUT_NAMESPACE`, `SHORTCUT_CALLER_CWD` after the caller's own variables.
-- An empty or `.` PATH entry does not find commands in the current directory.
+- `bash` is found on the PATH shortcut runs with; one found only through an empty, `.` or relative PATH entry is refused, not passed over.
 - Files shortcut writes come out with keys sorted; approval hashes each file's bytes as they are, so reformatting a file by hand needs `shortcut update`.
 - `update` and `update -y` with no group named skip a broken group with `warning: skipped <group>: <reason>` and exit 0; `update <group>` exits 1 for it.
 - `list | head` ends shortcut by SIGPIPE (a shell shows 141); stdout is not buffered.
