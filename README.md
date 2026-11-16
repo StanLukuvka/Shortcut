@@ -70,7 +70,6 @@ Each person reviews it once with `shortcut update`, and again after it changes. 
 ├── shortcuts.json          entries
 ├── imports/<ns>.shortcut   namespaces
 ├── approvals/              approval records
-├── locks/                  lock files for projects
 └── .lock                   the global store's lock file
 ```
 

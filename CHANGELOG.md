@@ -3,6 +3,7 @@
 ## Unreleased
 
 - A single binary.
+- One lock file, `.lock` in the global store, serialises every write.
 - [examples/tools](examples/tools/) is a namespace to copy: `edit`, `nano`, `logged`, `desktop` and `search`.
 - Windows is not supported. Use WSL.
 - Run a shortcut with `shortcut run <name>` or `shortcut r <name>`. It runs in the caller's directory unless its `cwd` says otherwise.

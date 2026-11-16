@@ -86,7 +86,7 @@ func Register(c *store.Context, s *term.Streams, group store.Group, entry *store
 			return err
 		}
 	}
-	err := c.WithRegistryLock(group.StoreDir, func() error {
+	err := c.WithLock(func() error {
 		reg, shortcuts, err := LoadForEdit(group.File, group.Kind == store.KindNamespace && !platform.Exists(group.File))
 		if err != nil {
 			return err
@@ -118,7 +118,7 @@ func Register(c *store.Context, s *term.Streams, group store.Group, entry *store
 
 // WriteLocal changes .shortcuts.local through change(shortcuts), the only way shortcut writes to a project.
 func WriteLocal(c *store.Context, root string, change func(*platform.Doc) error) error {
-	return c.WithRegistryLock(root, func() error {
+	return c.WithLock(func() error {
 		path := store.LoadProjectGroup(root).LocalFile
 		isNewFile := !platform.Exists(path)
 		reg, shortcuts, err := LoadForEdit(path, isNewFile)

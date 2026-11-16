@@ -71,7 +71,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 		return err
 	}
 
-	err = c.WithRegistryLock(group.StoreDir, func() error {
+	err = c.WithLock(func() error {
 		reg, shortcuts, err := write.LoadForEdit(group.File, false)
 		if err != nil {
 			return err
@@ -154,7 +154,7 @@ func rmNamespace(c *store.Context, s *term.Streams, name string, assumeYes bool)
 		return err
 	}
 	approvalFile := c.ApprovalPath(group) // its key needs the file, so before it goes
-	err := c.WithRegistryLock(storeDir, func() error {
+	err := c.WithLock(func() error {
 		if listed {
 			reg, err := store.LoadRegistry(storeDir)
 			if err != nil {
