@@ -102,6 +102,9 @@ func newFromScript(c *store.Context, s *term.Streams, ns term.Namespace, group s
 	if path == "-" || !platform.IsFile(abs) {
 		return term.Die("script file not found: " + path)
 	}
+	if err := platform.CheckExecutable(abs); err != nil {
+		return term.Die(err.Error())
+	}
 	base := platform.Realpath(group.ScriptBase())
 	real := platform.Realpath(abs)
 	field := abs

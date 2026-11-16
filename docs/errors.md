@@ -75,6 +75,7 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `'confirm' must be a boolean` | |
 | `it needs exactly one of 'inline' and 'script'` | |
 | `script not found: <script>` | The entry's script file is missing |
+| `<path> is not executable. Make it so: chmod +x <path>` | The script lacks the execute bit. `list` warns, `update` refuses |
 
 | Message | Meaning |
 |---|---|
@@ -98,6 +99,7 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `cannot approve: "<path>" is not valid UTF-8; rename it` | A file name in the project or the namespace's scripts folder, or a project's own folder name, is not valid UTF-8, so it can't be recorded. `run` and `update` stop there until it's renamed |
 | `run directory does not exist: <dir>` | The entry's `cwd` is gone |
 | `script file not found: <path>` | |
+| `<path> is not executable. Make it so: chmod +x <path>` | A script runs as it is, so it needs the execute bit |
 | `<path> has Windows line endings, so its #! line can't start it. Convert it: sed -i 's/\r$//' <path>` | The script's lines end in `\r\n` |
 | `'<name>' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y <name> <args>)` | A `confirm` entry run without a terminal. The command is the one that was run, with `-y` |
 
@@ -111,6 +113,7 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `--desc can't be empty` | `new` |
 | `--namespace can't be empty` | `new` |
 | `script file not found: <path>` | The file given to `--script` |
+| `<path> is not executable. Make it so: chmod +x <path>` | The file given to `--script` |
 | `--cwd directory does not exist: <dir>` | |
 | `--namespace can't be used with --local: .shortcuts.local is one file, and .shortcuts is yours to edit` | |
 | `'<ns>' is a shortcut in store <store>, so it can't be a namespace` | |

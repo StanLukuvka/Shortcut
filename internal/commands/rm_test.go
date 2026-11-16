@@ -288,7 +288,7 @@ func TestStores_LocalRefusesAnywhereInTheGlobalStore(t *testing.T) {
 func TestStores_GlobalFlagReachesAHiddenShortcut(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(map[string]any{})
-	script := e.WriteFile(filepath.Join(e.Tmp, "tool.sh"), bashShebang, 0)
+	script := e.WriteFile(filepath.Join(e.Tmp, "tool.sh"), bashShebang, 0o755)
 	runOK(t, e, testkit.Opts{}, "new", "build", "--", "echo global")
 	runOK(t, e, in(proj), "new", "build", "--local", "--", "echo project")
 	runOK(t, e, testkit.Opts{}, "new", "tool", "--script", script, "--desc", "d")

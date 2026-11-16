@@ -1,13 +1,13 @@
 package run
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
 	"os"
 	"slices"
 	"strings"
-	"syscall"
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
@@ -99,7 +99,7 @@ func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Loo
 		}
 	}
 
-	plan, err := childCommand(resolved, entry, name, args)
+	argv, err := childCommand(resolved, entry, name, args)
 	if err != nil {
 		return err
 	}
@@ -109,70 +109,31 @@ func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Loo
 		return !hasEq || k == "SHORTCUT_NAME" || k == "SHORTCUT_NAMESPACE" || k == "SHORTCUT_CALLER_CWD"
 	})
 	env = append(env, "SHORTCUT_NAME="+name, "SHORTCUT_NAMESPACE="+resolved.Group.Name, "SHORTCUT_CALLER_CWD="+c.Cwd)
-	err = platform.ExecChild(plan.argv, resolved.RunCwd, env)
-	if plan.direct && errors.Is(err, syscall.ENOEXEC) && !bytes.Contains(plan.header, []byte{0}) {
-		// An executable text file with no #!: exec says "exec format error", a shell would run it with itself.
-		return platform.ExecChild(append([]string{"bash", plan.path}, args...), resolved.RunCwd, env)
-	}
-	return err
+	return platform.ExecChild(argv, resolved.RunCwd, env)
 }
 
-// childPlan is what childCommand decides: the argv, and for an executable with no #! (direct) also the file and its
-// first bytes, which Run needs if the kernel refuses to exec it.
-type childPlan struct {
-	argv   []string
-	direct bool
-	path   string
-	header []byte
-}
-
-// childCommand is the argv of the child: bash -c for an inline command, else the script, run through its #! line;
-// an executable with no #! is exec'd as it is, and a file that is not executable and has no #! runs through bash.
-func childCommand(resolved *store.ResolvedShortcut, entry *store.Entry, name string, args []string) (childPlan, error) {
+// childCommand is the argv of the child: bash -c for an inline command, else the script as it is, for the kernel.
+func childCommand(resolved *store.ResolvedShortcut, entry *store.Entry, name string, args []string) ([]string, error) {
 	if entry.Inline != nil {
-		return childPlan{argv: append([]string{"bash", "-c", *entry.Inline, name}, args...)}, nil
+		return append([]string{"bash", "-c", *entry.Inline, name}, args...), nil
 	}
 	path, err := store.ResolveScriptPath(resolved.Group.ScriptBase(), *entry.Script)
 	if err != nil {
-		return childPlan{}, err
+		return nil, err
 	}
 	if _, err := os.Stat(path); err != nil {
-		return childPlan{}, errors.New("script file not found: " + path)
+		return nil, errors.New("script file not found: " + path)
 	}
-	isExec := syscall.Access(path, 1) == nil
-	header := make([]byte, 1024)
-	n := 0
+	if err := platform.CheckExecutable(path); err != nil {
+		return nil, err
+	}
 	if f, err := os.Open(path); err == nil {
-		n, _ = f.Read(header) // lazy: one read; a short read on a slow file only shortens what is looked at
+		first, _ := bufio.NewReader(f).ReadSlice('\n') // lazy: a #! line longer than the 4096-byte buffer is cut, and the kernel refuses it anyway
 		f.Close()
-	}
-	header = header[:max(n, 0)]
-	hasShebang := strings.HasPrefix(string(header), "#!")
-	firstLine, _, _ := strings.Cut(string(header), "\n")
-	if hasShebang && strings.HasSuffix(firstLine, "\r") {
-		return childPlan{}, fmt.Errorf("%s has Windows line endings, so its #! line can't start it. Convert it: sed -i 's/\\r$//' %s",
-			path, platform.ShellQuote(path))
-	}
-	switch {
-	case isExec && hasShebang:
-		return childPlan{argv: append([]string{path}, args...)}, nil // the kernel runs the #! line
-	case hasShebang:
-		// the kernel splits at the first blank: the interpreter, and the rest as one argument
-		line := strings.Trim(strings.ToValidUTF8(firstLine[2:], "\uFFFD"), " \t")
-		interp, rest := line, ""
-		if i := strings.IndexAny(line, " \t"); i >= 0 {
-			interp, rest = line[:i], strings.TrimLeft(line[i:], " \t")
+		if bytes.HasPrefix(first, []byte("#!")) && bytes.HasSuffix(first, []byte("\r\n")) {
+			return nil, fmt.Errorf("%s has Windows line endings, so its #! line can't start it. Convert it: sed -i 's/\\r$//' %s",
+				path, platform.ShellQuote(path))
 		}
-		parts := []string{"bash"}
-		if interp != "" {
-			parts = []string{interp}
-			if rest != "" {
-				parts = append(parts, rest)
-			}
-		}
-		return childPlan{argv: append(append(parts, path), args...)}, nil
-	case isExec:
-		return childPlan{argv: append([]string{path}, args...), direct: true, path: path, header: header}, nil // ELF, Mach-O, anything
 	}
-	return childPlan{argv: append([]string{"bash", path}, args...)}, nil // not executable: bash runs it
+	return append([]string{path}, args...), nil
 }

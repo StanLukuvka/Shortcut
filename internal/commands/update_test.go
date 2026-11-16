@@ -32,7 +32,7 @@ func TestApproval_BlocksUntilApprovedAndAfterAnyChange(t *testing.T) {
 		"hi":    map[string]any{"description": "Say hi", "script": "scripts/hi.sh"},
 		"there": map[string]any{"description": "There", "inline": "echo there"},
 	}
-	proj := e.Project(shortcuts, testkit.Files(map[string]any{"scripts/hi.sh": "#!/usr/bin/env bash\necho hi\n"}))
+	proj := e.Project(shortcuts, testkit.Files(map[string]any{"scripts/hi.sh": "#!/usr/bin/env bash\necho hi\n"}), testkit.Mode(0o755))
 	script, registry := filepath.Join(proj, "scripts", "hi.sh"), filepath.Join(proj, ".shortcuts")
 	o := in(proj)
 
@@ -189,7 +189,7 @@ func TestApproval_ANamespaceApprovedInOneProjectIsNewInAnother(t *testing.T) {
 
 func TestApproval_CoversAProjectScriptLinkedFromOutside(t *testing.T) {
 	e := testkit.New(t)
-	outside := e.WriteFile(filepath.Join(e.Tmp, "outside.sh"), "echo one\n", 0)
+	outside := e.WriteFile(filepath.Join(e.Tmp, "outside.sh"), "echo one\n", 0o755)
 	proj := e.Project(map[string]any{"go": map[string]any{"script": outside}}, testkit.Approved())
 	e.WriteFile(outside, "echo two\n", 0)
 	res := e.RunWith(in(proj), "r", "go")
@@ -258,7 +258,7 @@ func TestApproval_ACwdWithANulDoesNotStopTheToolsThatFindIt(t *testing.T) {
 func TestApproval_NonUTF8Script(t *testing.T) {
 	e := testkit.New(t)
 	tool := "bin/tool"
-	proj := e.Project(testkit.BinTool, testkit.Files(map[string]any{tool: []byte("#!/bin/sh\n# \xff\xfe\necho one\n")}), testkit.Approved())
+	proj := e.Project(testkit.BinTool, testkit.Files(map[string]any{tool: []byte("#!/bin/sh\n# \xff\xfe\necho one\n")}), testkit.Approved(), testkit.Mode(0o755))
 	if out := e.RunWith(in(proj), "r", "tool").Stdout; out != "one\n" {
 		t.Errorf("first run: %q", out)
 	}
@@ -274,7 +274,7 @@ func TestApproval_NonUTF8Script(t *testing.T) {
 
 func TestApproval_ANulCannotHideAScriptBashWouldRun(t *testing.T) {
 	e := testkit.New(t)
-	proj := e.Project(testkit.BinTool, testkit.Files(map[string]any{"bin/tool": []byte("#!/bin/bash\necho PWNED\n\x00")}))
+	proj := e.Project(testkit.BinTool, testkit.Files(map[string]any{"bin/tool": []byte("#!/bin/bash\necho PWNED\n\x00")}), testkit.Mode(0o755))
 	testkit.Contains(t, "list", e.RunWith(in(proj), "update", "-y").Stdout, "  new      bin/tool\n")
 }
 
@@ -396,10 +396,10 @@ func TestUpdate_ListsNewChangedAndRemovedPaths(t *testing.T) {
 	e := testkit.New(t)
 	script := func(name string) any { return map[string]any{"script": name} }
 	proj := e.Project(map[string]any{"a": script("a.sh"), "b": script("b.sh"), "c": script("c.sh")}, testkit.Approved(),
-		testkit.Files(map[string]any{"a.sh": "echo a\n", "b.sh": "echo b\n", "c.sh": "echo c\n"}))
+		testkit.Files(map[string]any{"a.sh": "echo a\n", "b.sh": "echo b\n", "c.sh": "echo c\n"}), testkit.Mode(0o755))
 	o := in(proj)
 	e.WriteFile(filepath.Join(proj, "b.sh"), "echo B\n", 0)
-	e.WriteFile(filepath.Join(proj, "d.sh"), "echo d\n", 0)
+	e.WriteFile(filepath.Join(proj, "d.sh"), "echo d\n", 0o755)
 	if err := os.Remove(filepath.Join(proj, "c.sh")); err != nil {
 		t.Fatal(err)
 	}

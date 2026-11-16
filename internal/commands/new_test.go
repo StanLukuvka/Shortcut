@@ -123,6 +123,14 @@ func TestStores_NewInHomeRefusesLocalStore(t *testing.T) {
 	}
 }
 
+func TestStores_NewRefusesAScriptThatIsNotExecutable(t *testing.T) {
+	e := testkit.New(t)
+	script := e.WriteFile(filepath.Join(e.Tmp, "plain.sh"), "#!/bin/sh\n", 0o644)
+	res := e.Run("new", "x", "--script", script)
+	res.WantCode(t, 1)
+	testkit.Contains(t, "stderr", res.Stderr, "error: "+script+" is not executable. Make it so: chmod +x "+script)
+}
+
 func TestStores_NewTakesOneSource(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(map[string]any{})

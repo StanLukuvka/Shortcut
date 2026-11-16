@@ -78,6 +78,16 @@ func TestStores_ListNamesOfANamespace(t *testing.T) {
 	}
 }
 
+func TestBrokenStores_ListWarnsAboutAScriptThatIsNotExecutable(t *testing.T) {
+	e := testkit.New(t)
+	script := e.WriteFile(filepath.Join(e.Tmp, "plain.sh"), "#!/bin/sh\n", 0o644)
+	e.WriteStore(e.Store, map[string]any{"plain": map[string]any{"script": script}})
+	res := e.Run("list")
+	res.WantCode(t, 0)
+	testkit.Contains(t, "stderr", res.Stderr, "warning: ")
+	testkit.Contains(t, "stderr", res.Stderr, "'plain' is not a valid entry: "+script+" is not executable. Make it so: chmod +x "+script)
+}
+
 func TestBrokenStores_ListWarnsAboutEveryEntryThatCannotRun(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{
