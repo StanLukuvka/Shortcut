@@ -67,17 +67,22 @@ func dispatch(s *textio.Streams, args []string) int {
 		return 0
 	}
 	first := args[0]
+	own := handlerFor(first)
+	var helped handler
+	if first == "help" && len(args) > 1 {
+		helped = handlerFor(args[1])
+	}
 	switch {
-	case first == "help" && len(args) > 1 && handlerFor(args[1]) != nil:
-		return invoke(s, handlerFor(args[1]), []string{"--help"})
+	case helped != nil:
+		return invoke(s, helped, []string{"--help"})
 	case first == "--help" || first == "-h" || first == "help":
 		s.Out.WriteString(usageText)
 		return 0
 	case first == "--version":
 		s.Out.WriteString("shortcut " + Version + "\n")
 		return 0
-	case handlerFor(first) != nil:
-		return invoke(s, handlerFor(first), args[1:])
+	case own != nil:
+		return invoke(s, own, args[1:])
 	case strings.HasPrefix(first, "-"):
 		s.Err.WriteString("error: unrecognized option '" + first + "'\nTry 'shortcut --help' for more information.\n")
 		return 2

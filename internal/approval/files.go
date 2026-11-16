@@ -60,7 +60,7 @@ func entryFiles(g model.Group, shortcuts *ordjson.Object, origin string) map[str
 // a file beside it, so a change to any of them needs approving. A symlinked folder in it is recorded as where it leads.
 func folderFiles(g model.Group) map[string]string {
 	files := map[string]string{}
-	if g.Name == "" {
+	if g.Kind != model.KindNamespace {
 		return files
 	}
 	osutil.Walk(g.ScriptsDir(), func(dir string, dirs, names []string) {
@@ -106,7 +106,7 @@ func merge(maps ...map[string]string) map[string]string {
 // SharedFiles is the group's own file and what it names, the JSON normalised, and for a namespace its scripts
 // folder: exactly what is compared and snapshotted, each as its SHA-256. A project may have no .shortcuts; then this is empty.
 func SharedFiles(g model.Group) (map[string]string, error) {
-	if g.LocalFile != "" && !osutil.Exists(g.File) {
+	if g.Kind == model.KindProject && !osutil.Exists(g.File) {
 		return map[string]string{}, nil
 	}
 	own, err := jsonFile(g, g.File, g.Data)
@@ -118,7 +118,7 @@ func SharedFiles(g model.Group) (map[string]string, error) {
 
 // LocalFiles is the same for .shortcuts.local.
 func LocalFiles(g model.Group) (map[string]string, error) {
-	if g.LocalFile == "" || !osutil.Exists(g.LocalFile) {
+	if g.Kind != model.KindProject || !osutil.Exists(g.LocalFile) {
 		return map[string]string{}, nil
 	}
 	own, err := jsonFile(g, g.LocalFile, g.LocalData)
@@ -160,11 +160,11 @@ func snapshot(c *model.Context, g model.Group) (shared, local map[string]string,
 // CheckKey refuses a group whose approval key would be built from a path that is not valid UTF-8: the store
 // folder, and for a namespace its file. Before any listing or prompt, so nothing is shown for a record that cannot be kept.
 func CheckKey(c *model.Context, g model.Group) error {
-	if !g.NeedsApproval(c) {
+	if !g.NeedsApproval() {
 		return nil
 	}
 	parts := []string{osutil.Realpath(g.StoreDir)}
-	if g.Name != "" {
+	if g.Kind == model.KindNamespace {
 		parts = append(parts, osutil.Realpath(g.File))
 	}
 	for _, p := range parts {

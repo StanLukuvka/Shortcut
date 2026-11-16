@@ -402,7 +402,7 @@ func TestStores_InitStoreCreatesOnlyAMissingRegistry(t *testing.T) {
 
 func TestGroup_ShortcutsOverlayAndSource(t *testing.T) {
 	g := Group{
-		File: "/p/.shortcuts", StoreDir: "/p", LocalFile: "/p/.shortcuts.local",
+		Kind: KindProject, InProject: true, File: "/p/.shortcuts", StoreDir: "/p", LocalFile: "/p/.shortcuts.local",
 		Data:      obj(t, `{"shortcuts": {"a": {"inline": "1"}, "b": {"inline": "2"}, "c": {"inline": "3"}}}`),
 		LocalData: obj(t, `{"shortcuts": {"b": {"inline": "B"}, "d": {"inline": "4"}}}`),
 	}
@@ -413,7 +413,7 @@ func TestGroup_ShortcutsOverlayAndSource(t *testing.T) {
 		t.Error("b not overridden")
 	}
 	for name, want := range map[string]string{"a": "shared", "b": "overridden", "c": "shared", "d": "local"} {
-		if got := g.Source(name); got != want {
+		if got := string(g.Source(name)); got != want {
 			t.Errorf("Source(%s) = %s, want %s", name, got, want)
 		}
 	}
@@ -431,20 +431,19 @@ func TestGroup_ShortcutsOverlayAndSource(t *testing.T) {
 
 func TestGroup_Names(t *testing.T) {
 	env := testkit.New(t)
-	c := NewContext(env.Home, nil)
-	ns := Group{Name: "docker", File: filepath.Join(env.Store, "imports", "docker.shortcut"), StoreDir: env.Store}
+	ns := Group{Kind: KindNamespace, Name: "docker", File: filepath.Join(env.Store, "imports", "docker.shortcut"), StoreDir: env.Store}
 	if ns.Display("ps") != "docker ps" || ns.Label() != "docker" || ns.UpdateCmd() != "shortcut update docker" ||
 		ns.ScriptBase() != filepath.Join(env.Store, "imports") || ns.ScriptsDir() != filepath.Join(env.Store, "imports", "scripts", "docker") ||
-		!ns.NeedsApproval(c) {
+		!ns.NeedsApproval() {
 		t.Errorf("%+v", ns)
 	}
-	global := Group{File: filepath.Join(env.Store, "shortcuts.json"), StoreDir: env.Store}
-	if global.NeedsApproval(c) || global.IsProject(c) || global.Display("x") != "x" || global.ScriptBase() != env.Store ||
+	global := Group{Kind: KindGlobal, File: filepath.Join(env.Store, "shortcuts.json"), StoreDir: env.Store}
+	if global.NeedsApproval() || global.InProject || global.Display("x") != "x" || global.ScriptBase() != env.Store ||
 		global.ScriptsDir() != filepath.Join(env.Store, "scripts") || global.UpdateCmd() != "shortcut update" {
 		t.Errorf("%+v", global)
 	}
-	proj := Group{File: filepath.Join(env.Tmp, "p", ".shortcuts"), StoreDir: filepath.Join(env.Tmp, "p")}
-	if !proj.IsProject(c) || !proj.NeedsApproval(c) || proj.Label() != proj.Key() || proj.Key() != proj.StoreDir {
+	proj := Group{Kind: KindProject, InProject: true, File: filepath.Join(env.Tmp, "p", ".shortcuts"), StoreDir: filepath.Join(env.Tmp, "p")}
+	if !proj.InProject || !proj.NeedsApproval() || proj.Label() != proj.Key() || proj.Key() != proj.StoreDir {
 		t.Errorf("%+v", proj)
 	}
 }
@@ -598,7 +597,7 @@ func TestKey_TellsNonUTF8NamesApart(t *testing.T) {
 	store := testkit.New(t).Tmp
 	keys := map[string]string{}
 	for _, file := range []string{"caf\xe9", "caf\xea", "café", `caf\udce9`, "\xed\xa0\x80", "\xed\xb2\x80", "\xed\x80\x80", "\xed\xc0\x80", "\xed\xff\xbf", "\xed\xbf\xbf", "\xed\xa0"} {
-		g := Group{Name: "ns", StoreDir: store, File: filepath.Join(store, file)}
+		g := Group{Kind: KindNamespace, Name: "ns", StoreDir: store, File: filepath.Join(store, file)}
 		k := g.Key()
 		if prev, dup := keys[k]; dup {
 			t.Errorf("%q and %q share the key %s", prev, file, k)
@@ -625,7 +624,7 @@ func TestKey_TellsNonUTF8NamesApart(t *testing.T) {
 		t.Errorf("got %s want %s", got, want)
 	}
 	// U+FFFD written out is not the raw byte it replaces
-	a, b := Group{Name: "ns", StoreDir: store, File: filepath.Join(store, "caf\xe9.shortcut")}, Group{Name: "ns", StoreDir: store, File: filepath.Join(store, "caf\xef\xbf\xbd.shortcut")}
+	a, b := Group{Kind: KindNamespace, Name: "ns", StoreDir: store, File: filepath.Join(store, "caf\xe9.shortcut")}, Group{Kind: KindNamespace, Name: "ns", StoreDir: store, File: filepath.Join(store, "caf\xef\xbf\xbd.shortcut")}
 	if a.Key() == b.Key() || RecordName(a.Key()) == RecordName(b.Key()) {
 		t.Errorf("%s and %s share a record", a.Key(), b.Key())
 	}
@@ -720,3 +719,26 @@ func TestStores_VersionRequiredInEveryFile(t *testing.T) {
 
 // newGroup is a Group with an empty file, as LoadGroup gives for a missing one.
 func newGroup() Group { return Group{Data: &ordjson.Object{}} }
+
+func TestGroup_KindFromLoaders(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{})
+	if g := LoadGroup(filepath.Join(e.Store, "shortcuts.json"), e.Store, ""); g.Kind != KindGlobal || g.InProject {
+		t.Errorf("global: %+v", g)
+	}
+	proj := e.Project(map[string]any{"x": testkit.Inline("x")})
+	if g := LoadProjectGroup(proj); g.Kind != KindProject || !g.InProject {
+		t.Errorf("project: %+v", g)
+	}
+	ns := filepath.Join(e.Home, "n.shortcut")
+	e.WriteFile(ns, `{"version": 1, "shortcuts": {}}`, 0)
+	e.WriteFile(filepath.Join(proj, ".shortcuts"), `{"version": 1, "shortcuts": {}, "imports": {"n": "`+ns+`"}}`, 0)
+	e.WriteFile(filepath.Join(e.Store, "shortcuts.json"), `{"version": 1, "shortcuts": {}, "imports": {"n": "`+ns+`"}}`, 0)
+	c := NewContext(proj, nil)
+	if g, ok := c.Store(c.Project).Namespace("n"); !ok || g.Kind != KindNamespace || !g.InProject || !c.ReloadGroup(g).InProject {
+		t.Errorf("project namespace: %+v", g)
+	}
+	if g, ok := c.Store(e.Store).Namespace("n"); !ok || g.Kind != KindNamespace || g.InProject || c.ReloadGroup(g).InProject {
+		t.Errorf("global namespace: %+v", g)
+	}
+}

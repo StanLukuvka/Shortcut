@@ -31,18 +31,18 @@ func cmdRun(c *model.Context, s *textio.Streams, args []string) error {
 	if len(args) == 0 {
 		return &ExitError{Code: 2, Stderr: "error: missing shortcut name\n" + runUsage + "\n"}
 	}
-	return runShortcut(c, s, args, skipLocal, assumeYes)
+	return runShortcut(c, s, args, model.Lookup{GlobalOnly: skipLocal}, assumeYes)
 }
 
 func oneLine(text string) string { return strings.ReplaceAll(text, "\n", "\\n") }
 
 // runShortcut handles approval, the confirmation and the child process, which replaces this one.
 // It returns only when something stops the run.
-func runShortcut(c *model.Context, s *textio.Streams, words []string, skipLocal, assumeYes bool) error {
+func runShortcut(c *model.Context, s *textio.Streams, words []string, lk model.Lookup, assumeYes bool) error {
 	if c.CwdErr != nil {
 		return c.CwdErr
 	}
-	resolved, args, err := model.ResolveShortcut(c, words, skipLocal, true)
+	resolved, args, err := model.ResolveShortcut(c, words, model.Lookup{GlobalOnly: lk.GlobalOnly, Strict: true})
 	if err != nil {
 		return err
 	}
@@ -61,7 +61,7 @@ func runShortcut(c *model.Context, s *textio.Streams, words []string, skipLocal,
 		withArgs = " with " + oneLine(osutil.ShellJoin(args))
 	}
 	again := []string{"shortcut", "r", "-y"}
-	if skipLocal {
+	if lk.GlobalOnly {
 		again = append(again, "--global")
 	}
 	again = append(append(again, strings.Fields(name)...), args...)
@@ -83,7 +83,8 @@ func runShortcut(c *model.Context, s *textio.Streams, words []string, skipLocal,
 		}, assumeYes); err != nil {
 			return err
 		}
-		// again: the files could change while the question waited
+		// again, from disk: the files could change while the question waited
+		c.Forget(resolved.Group.Key())
 		if err := approval.Require(c, resolved.Group); err != nil {
 			return err
 		}

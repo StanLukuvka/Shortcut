@@ -11,10 +11,40 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
-// Group is one set of shortcuts: the global store's shortcuts.json (Name ""), a project's .shortcuts with
+// Kind is which of three things a Group is.
+type Kind string
+
+const (
+	KindGlobal    Kind = "global"    // the global store's shortcuts.json
+	KindProject   Kind = "project"   // a project's .shortcuts with .shortcuts.local over it
+	KindNamespace Kind = "namespace" // an imported file, in a global or a project store
+)
+
+// ApprovalState is where a group stands against its recorded approval.
+type ApprovalState string
+
+const (
+	StateOK      ApprovalState = "ok"
+	StateNew     ApprovalState = "new"
+	StateChanged ApprovalState = "changed"
+	StateInvalid ApprovalState = "invalid" // a path or registry text that is not valid UTF-8 cannot be recorded; script contents are hashed as bytes
+)
+
+// Source is where a project entry comes from.
+type Source string
+
+const (
+	SourceShared     Source = "shared"
+	SourceLocal      Source = "local"
+	SourceOverridden Source = "overridden"
+)
+
+// Group is one set of shortcuts: the global store's shortcuts.json, a project's .shortcuts with
 // .shortcuts.local over it, or an imported namespace. StoreDir is the global store or the project's root.
 type Group struct {
-	Name      string // "" = main group
+	Kind      Kind
+	InProject bool   // its store is a project's: a KindProject group, or a namespace imported by a project's .shortcuts
+	Name      string // namespace name; "" otherwise
 	File      string
 	StoreDir  string
 	Data      *ordjson.Object // empty object when the file is missing or unreadable
@@ -55,15 +85,15 @@ func (g Group) Shortcuts() *ordjson.Object {
 }
 
 // Source is where a project entry comes from: shared, local or overridden.
-func (g Group) Source(name string) string {
+func (g Group) Source(name string) Source {
 	local := g.LocalShortcuts()
 	if _, inLocal := local.Get(name); !inLocal {
-		return "shared"
+		return SourceShared
 	}
 	if _, inShared := g.SharedShortcuts().Get(name); inShared {
-		return "overridden"
+		return SourceOverridden
 	}
-	return "local"
+	return SourceLocal
 }
 
 func (g Group) DefiningFile(name string) string {
@@ -73,14 +103,12 @@ func (g Group) DefiningFile(name string) string {
 	return g.File
 }
 
-func (g Group) IsProject(c *Context) bool { return !c.IsGlobal(g.StoreDir) }
-
 // Folder is where relative 'cwd' values resolve: the folder of the defining file.
 func (g Group) Folder() string { return filepath.Dir(osutil.Abs(g.File)) }
 
 // ScriptBase: relative paths resolve against a namespace's folder, a project's root, or the global store.
 func (g Group) ScriptBase() string {
-	if g.Name != "" {
+	if g.Kind == KindNamespace {
 		return g.Folder()
 	}
 	return g.StoreDir
@@ -88,40 +116,40 @@ func (g Group) ScriptBase() string {
 
 // ScriptsDir is a group's own scripts folder, one per namespace: what rm --namespace deletes and approval covers.
 func (g Group) ScriptsDir() string {
-	if g.Name != "" {
+	if g.Kind == KindNamespace {
 		return osutil.Join(g.ScriptBase(), "scripts", g.Name)
 	}
 	return osutil.Join(g.ScriptBase(), "scripts")
 }
 
 func (g Group) Display(name string) string {
-	if g.Name != "" {
+	if g.Kind == KindNamespace {
 		return g.Name + " " + name
 	}
 	return name
 }
 
-func (g Group) NeedsApproval(c *Context) bool { return g.Name != "" || !c.IsGlobal(g.StoreDir) }
+func (g Group) NeedsApproval() bool { return g.Kind != KindGlobal }
 
 // Key is what the approval is recorded against: the project's path, or for a namespace the store it's in, its name
 // there and its file. Pointing a name at another file, even one approved elsewhere, is new.
 func (g Group) Key() string {
 	store := osutil.Realpath(g.StoreDir)
-	if g.Name == "" {
+	if g.Kind != KindNamespace {
 		return store
 	}
 	return keyText(store, g.Name, osutil.Realpath(g.File))
 }
 
 func (g Group) Label() string {
-	if g.Name != "" {
+	if g.Kind == KindNamespace {
 		return g.Name
 	}
 	return g.Key()
 }
 
 func (g Group) UpdateCmd() string {
-	if g.Name != "" {
+	if g.Kind == KindNamespace {
 		return "shortcut update " + g.Name
 	}
 	return "shortcut update"

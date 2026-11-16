@@ -113,7 +113,7 @@ func TestApproval_KeysAndRecordNames(t *testing.T) {
 			t.Logf("this filesystem refuses %q: %v", d, err)
 			continue
 		}
-		g := model.Group{StoreDir: dir, File: dir + "/.shortcuts", LocalFile: dir + "/.shortcuts.local"}
+		g := model.Group{Kind: model.KindProject, InProject: true, StoreDir: dir, File: dir + "/.shortcuts", LocalFile: dir + "/.shortcuts.local"}
 		if g.Key() != osutil.Realpath(dir) {
 			t.Errorf("project key %q, want %q", g.Key(), osutil.Realpath(dir))
 		}
@@ -121,14 +121,14 @@ func TestApproval_KeysAndRecordNames(t *testing.T) {
 	}
 	store := osutil.Realpath(base)
 	for _, c := range []struct{ name, file string }{{"ns", "a.sh"}, {"ns", "b.sh"}, {"other", "a.sh"}, {"ns", "café.sh"}, {"ns", "caf\xe9.sh"}, {"ns", `caf\xe9.sh`}, {"n\"s", "a\\b"}} {
-		g := model.Group{Name: c.name, StoreDir: base, File: filepath.Join(base, c.file)}
+		g := model.Group{Kind: model.KindNamespace, Name: c.name, StoreDir: base, File: filepath.Join(base, c.file)}
 		want := "[" + strconv.QuoteToASCII(store) + ", " + strconv.QuoteToASCII(c.name) + ", " + strconv.QuoteToASCII(osutil.Realpath(g.File)) + "]"
 		if g.Key() != want {
 			t.Errorf("namespace key %s, want %s", g.Key(), want)
 		}
 		seen(g, "namespace "+c.name+" "+c.file)
 	}
-	if k := (model.Group{Name: "n", StoreDir: "/s", File: "/s/é"}).Key(); k != `["/s", "n", "/s/\u00e9"]` {
+	if k := (model.Group{Kind: model.KindNamespace, Name: "n", StoreDir: "/s", File: "/s/é"}).Key(); k != `["/s", "n", "/s/\u00e9"]` {
 		t.Errorf("example key %s", k)
 	}
 }
@@ -136,7 +136,7 @@ func TestApproval_KeysAndRecordNames(t *testing.T) {
 func TestApproval_ApprovalPathIsInTheGlobalStore(t *testing.T) {
 	env := testkit.New(t)
 	ctx := model.NewContext(env.Home, nil)
-	g := model.Group{StoreDir: env.Home, File: env.Home + "/.shortcuts", LocalFile: env.Home + "/.shortcuts.local"}
+	g := model.Group{Kind: model.KindProject, StoreDir: env.Home, File: env.Home + "/.shortcuts", LocalFile: env.Home + "/.shortcuts.local"}
 	if got, want := ctx.ApprovalPath(g), filepath.Join(env.Store, "approvals", model.RecordName(env.Home)); got != want {
 		t.Errorf("%s, want %s", got, want)
 	}
@@ -282,7 +282,7 @@ func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template s
 		t.Errorf("before any record: %s", State(ctx, g))
 	}
 	env.WriteFile(path, text, 0)
-	if got := State(ctx, g); got != "ok" {
+	if got := State(model.NewContext(env.Home, nil), g); got != "ok" {
 		t.Errorf("a stored record: state %s, want ok", got)
 	}
 	if r := Load(ctx, g); r == nil || !equalMaps(r.Snapshot, shared) || !equalMaps(r.Local, local) {
@@ -365,7 +365,7 @@ func TestApproval_StateAndRequire(t *testing.T) {
 		t.Fatal("not ok after Save")
 	}
 	env.WriteFile(filepath.Join(proj, "bin", "t"), "echo two\n", 0)
-	g = load()
+	ctx, g = model.NewContext(env.Home, nil), load()
 	if State(ctx, g) != "changed" {
 		t.Errorf("after a script change: %s", State(ctx, g))
 	}
@@ -377,7 +377,7 @@ func TestApproval_StateAndRequire(t *testing.T) {
 		t.Fatal(err)
 	}
 	env.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"m": {"inline": "x"}}}`, 0)
-	g = load()
+	ctx, g = model.NewContext(env.Home, nil), load()
 	if State(ctx, g) != "changed" || LocalIsApproved(ctx, g, Load(ctx, g)) {
 		t.Errorf("after adding .shortcuts.local: %s", State(ctx, g))
 	}
@@ -405,8 +405,8 @@ func TestApproval_LoadRefusesWhatIsNotARecord(t *testing.T) {
 		if r := Load(ctx, g); r != nil {
 			t.Errorf("%s loaded as %+v", bad, r)
 		}
-		if State(ctx, g) != "new" {
-			t.Errorf("%s: state %s", bad, State(ctx, g))
+		if got := State(model.NewContext(env.Home, nil), g); got != "new" {
+			t.Errorf("%s: state %s", bad, got)
 		}
 	}
 	env.WriteFile(path, `{"snapshot": {}, "local": {}}`, 0)
@@ -453,7 +453,7 @@ func TestApproval_EntryFilesEdges(t *testing.T) {
 }
 
 func TestApproval_DisplayPathTreatsADotDotPrefixAsOutside(t *testing.T) {
-	g := model.Group{StoreDir: "/p", File: "/p/.shortcuts"}
+	g := model.Group{Kind: model.KindProject, StoreDir: "/p", File: "/p/.shortcuts"}
 	for path, want := range map[string]string{"/p/a.sh": "a.sh", "/p/..x/a.sh": "/p/..x/a.sh", "/q/a.sh": "/q/a.sh", "/p/d/../a.sh": "a.sh"} {
 		if got := displayPath(g, path); got != want {
 			t.Errorf("%s: %s", path, got)
@@ -513,6 +513,7 @@ func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
 	if err := os.WriteFile(bad, []byte("echo bad\n"), 0o644); err != nil {
 		t.Skipf("this filesystem refuses non-UTF-8 names: %v", err)
 	}
+	ctx = model.NewContext(env.Home, nil)
 	err = Check(ctx, g)
 	if err == nil || !strings.Contains(err.Error(), `"scripts/ns/caf\xe9.sh"`) || !strings.Contains(err.Error(), "not valid UTF-8") {
 		t.Fatalf("Check: %v", err)
@@ -593,20 +594,20 @@ func TestApproval_RecordWithAnUnknownFieldStillApproves(t *testing.T) {
 	}
 	env.WriteFile(rec, extraFieldRecord(proj), 0)
 	env.WriteFile(filepath.Join(proj, "bin", "t"), "echo two\n", 0)
-	if got := State(ctx, model.NewContext(env.Home, nil).Store(proj).Main); got != "changed" {
+	if got := stateOnDisk(env, proj); got != "changed" {
 		t.Errorf("text changed: %s", got)
 	}
 	env.WriteFile(filepath.Join(proj, "bin", "t"), "echo one\n", 0)
 	env.WriteFile(filepath.Join(proj, "bin", "u"), "echo u\n", 0)
 	env.WriteFile(filepath.Join(proj, ".shortcuts"), `{"version": 1, "shortcuts": {"t": {"script": "bin/t"}, "u": {"script": "bin/u"}}}`, 0)
-	if got := State(ctx, model.NewContext(env.Home, nil).Store(proj).Main); got != "changed" {
+	if got := stateOnDisk(env, proj); got != "changed" {
 		t.Errorf("file added: %s", got)
 	}
 	env.WriteFile(filepath.Join(proj, ".shortcuts"), `{"version": 1, "shortcuts": {"t": {"script": "bin/t"}}}`, 0)
 	if err := os.Remove(filepath.Join(proj, "bin", "t")); err != nil {
 		t.Fatal(err)
 	}
-	if got := State(ctx, model.NewContext(env.Home, nil).Store(proj).Main); got != "changed" {
+	if got := stateOnDisk(env, proj); got != "changed" {
 		t.Errorf("file removed: %s", got)
 	}
 }
@@ -623,7 +624,7 @@ func TestApproval_RecordWithoutSnapshotOrLocal(t *testing.T) {
 	}
 	// no "local": not a record either (fail closed)
 	env.WriteFile(rec, `{"snapshot": {".shortcuts": "{\n  \"shortcuts\": {\n    \"t\": {\n      \"script\": \"bin/t\"\n    }\n  },\n  \"version\": 1\n}\n", "bin/t": "echo one\n"}}`, 0)
-	if got := State(ctx, g); got != "new" {
+	if got := State(model.NewContext(env.Home, nil), g); got != "new" {
 		t.Errorf("no local: %s", got)
 	}
 }
@@ -642,7 +643,7 @@ func must[T any](v T, err error) T {
 func TestApproval_ANamespaceFileWithBadBytesInItsPathIsRefusedBeforeAnythingIsSaved(t *testing.T) {
 	env := testkit.New(t)
 	ctx := model.NewContext(env.Home, nil)
-	g := model.Group{Name: "ns", StoreDir: env.Store, File: filepath.Join(env.Store, "imports", "caf\xe9.shortcut")}
+	g := model.Group{Kind: model.KindNamespace, Name: "ns", StoreDir: env.Store, File: filepath.Join(env.Store, "imports", "caf\xe9.shortcut")}
 	for name, err := range map[string]error{"Check": Check(ctx, g), "Save": Save(ctx, g, map[string]string{}, map[string]string{})} {
 		if err == nil || !strings.Contains(err.Error(), `caf\xe9.shortcut"`) || !strings.Contains(err.Error(), "not valid UTF-8") {
 			t.Errorf("%s: %v", name, err)
@@ -670,5 +671,50 @@ func TestApproval_ARecordInTheTextFormatIsNotApprovedYet(t *testing.T) {
 		if Load(ctx, g) != nil {
 			t.Errorf("%q loaded as a digest", v)
 		}
+	}
+}
+
+// stateOnDisk is the state of proj's group as a new run would read it.
+func stateOnDisk(env *testkit.Env, proj string) model.ApprovalState {
+	c := model.NewContext(env.Home, nil)
+	return State(c, c.Store(proj).Main)
+}
+
+func TestApproval_StateIsComputedOncePerRun(t *testing.T) {
+	env := testkit.New(t)
+	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
+	ctx := model.NewContext(env.Home, nil)
+	g := ctx.Store(proj).Main
+	if err := Save(ctx, g, must(SharedFiles(g)), must(LocalFiles(g))); err != nil {
+		t.Fatal(err)
+	}
+	if got := State(ctx, g); got != model.StateOK {
+		t.Fatal(got)
+	}
+	env.WriteFile(filepath.Join(proj, "bin", "t"), "echo two\n", 0)
+	if got := State(ctx, g); got != model.StateOK {
+		t.Errorf("the state was computed again: %s", got)
+	}
+	if got := Refresh(ctx, g); got != model.StateChanged {
+		t.Errorf("Refresh: %s", got)
+	}
+	if got := stateOnDisk(env, proj); got != model.StateChanged {
+		t.Errorf("a new run: %s", got)
+	}
+}
+
+func TestApproval_SaveForgetsTheCachedState(t *testing.T) {
+	env := testkit.New(t)
+	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
+	ctx := model.NewContext(env.Home, nil)
+	g := ctx.Store(proj).Main
+	if got := State(ctx, g); got != model.StateNew {
+		t.Fatal(got)
+	}
+	if err := Save(ctx, g, must(SharedFiles(g)), must(LocalFiles(g))); err != nil {
+		t.Fatal(err)
+	}
+	if got := State(ctx, g); got != model.StateOK {
+		t.Errorf("after Save: %s", got)
 	}
 }

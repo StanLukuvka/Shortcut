@@ -52,7 +52,7 @@ func cmdRm(c *model.Context, s *textio.Streams, args []string) error {
 	}
 
 	// Raw lookup: an entry that can't run must still be removable
-	found, err := model.FindEntry(c, names, ns.Bool("skipLocal"), false)
+	found, err := model.FindEntry(c, names, model.Lookup{GlobalOnly: ns.Bool("skipLocal")})
 	if err != nil {
 		return err
 	}
@@ -61,7 +61,7 @@ func cmdRm(c *model.Context, s *textio.Streams, args []string) error {
 	}
 	group, name := found.Group, found.Name
 	display := group.Display(name)
-	if group.IsProject(c) {
+	if group.InProject {
 		return Die("'" + display + "' is a project shortcut, and shortcut doesn't change " + model.ProjectFile + ". " +
 			"Edit it by hand, or use: shortcut rm --local " + display)
 	}
@@ -207,7 +207,7 @@ func keptScript(group model.Group, raw ordjson.Value) string {
 // rmMessage returns what rm is about to change, shown above its question.
 func rmMessage(group model.Group, display string, raw ordjson.Value) string {
 	where := "your global shortcuts"
-	if group.Name != "" {
+	if group.Kind == model.KindNamespace {
 		where = "namespace " + group.Name
 	}
 	lines := []string{"Removes '" + display + "' from " + where + ": " + group.File}

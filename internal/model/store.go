@@ -49,7 +49,11 @@ func ResolveRunDir(cwd *string, g Group, callerCwd string) string {
 
 // LoadGroup reads one file into a Group. It never fails: why a file can't be used is on the Group.
 func LoadGroup(path, storeDir, name string) Group {
-	g := Group{Name: name, File: path, StoreDir: storeDir, Data: &ordjson.Object{}}
+	kind := KindGlobal
+	if name != "" {
+		kind = KindNamespace
+	}
+	g := Group{Kind: kind, Name: name, File: path, StoreDir: storeDir, Data: &ordjson.Object{}}
 	data, err := LoadRegistryFile(path)
 	var missing *RegistryNotFoundError
 	switch {
@@ -108,6 +112,7 @@ func LoadProjectGroup(root string) Group {
 	localPath := osutil.Join(root, LocalFile)
 	local := LoadGroup(localPath, root, "")
 	g := shared
+	g.Kind, g.InProject = KindProject, true
 	g.LocalFile, g.LocalData = localPath, local.Data
 	switch {
 	case shared.Error != nil:
