@@ -12,13 +12,11 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/ordjson"
 )
 
-// Record is approvals/<sha256(key)>.json, written by Python today and still readable and writable: the snapshot
-// last approved, and Local for .shortcuts.local on its own (a change the CLI makes there updates that half alone).
-// Records live in the global store, never next to what they approve. Older records also hold a "hash" field; it is
-// ignored, since the snapshot is compared exactly.
+// Record is approvals/<sha256(key)>.json: the snapshot last approved, and Local for .shortcuts.local on its own
+// (a change the CLI makes there updates that half alone). Records live in the global store, never next to what they approve.
 type Record struct {
 	Snapshot map[string]string // shared files: path -> reviewable text
-	Local    map[string]string // .shortcuts.local half; absent in old records = empty
+	Local    map[string]string // .shortcuts.local half
 }
 
 func stringMap(v ordjson.Value) (map[string]string, bool) {
@@ -38,8 +36,7 @@ func stringMap(v ordjson.Value) (map[string]string, bool) {
 }
 
 // Load returns the record, or nil when there is none, it can't be read, or it isn't shaped as one (a
-// JSON object with a "snapshot" object).
-// lazy: Python would crash later on a record whose snapshot or local holds something but strings; here that is "no record".
+// JSON object with a "snapshot" and a "local" object, each holding only strings).
 func Load(g model.Group) *Record {
 	v, err := model.ReadJSONFile(model.ApprovalPath(g))
 	if err != nil {
@@ -53,13 +50,11 @@ func Load(g model.Group) *Record {
 	if !ok {
 		return nil
 	}
-	r := &Record{Snapshot: snap, Local: map[string]string{}}
-	if l, present := o.Get("local"); present {
-		if r.Local, ok = stringMap(l); !ok {
-			return nil
-		}
+	local, ok := stringMap(o.Vals["local"])
+	if !ok {
+		return nil
 	}
-	return r
+	return &Record{Snapshot: snap, Local: local}
 }
 
 func sortedObject(m map[string]string) *ordjson.Object {

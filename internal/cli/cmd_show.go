@@ -138,12 +138,13 @@ func showJSON(s *textio.Streams, words []string, skipLocal bool) error {
 var (
 	showObjectFields = []string{"name", "namespace", "scope", "defined_in", "source", "hides_global", "approval", "cwd", "run_cwd", "script_path", "error"}
 	showEntryFields  = []string{"description", "icon", "created_by", "created", "inline", "script"}
+	showFields       = slices.Concat(showObjectFields, showEntryFields)
 )
 
 // showField prints one field of what `show --json` describes, bare. It only reads: nothing is written or approved.
 func showField(s *textio.Streams, words []string, skipLocal bool, key string) error {
-	if !slices.Contains(showObjectFields, key) && !slices.Contains(showEntryFields, key) {
-		return Die("unknown field '" + key + "' (one of: " + strings.Join(slices.Concat(showObjectFields, showEntryFields), ", ") + ")")
+	if !slices.Contains(showFields, key) {
+		return Die("unknown field '" + key + "' (one of: " + strings.Join(showFields, ", ") + ")")
 	}
 	obj, err := showObject(words, skipLocal)
 	if err != nil {

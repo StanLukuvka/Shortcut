@@ -111,42 +111,44 @@ func TestApproval_GoldenReviewable(t *testing.T) {
 	t.Logf("%d reviewable cases", len(cases))
 }
 
-func TestApproval_GoldenKeysAndRecordNames(t *testing.T) {
-	if osutil.Realpath("/tmp") != "/tmp" {
-		t.Skip("/tmp is a link here; the golden keys name /tmp paths")
-	}
-	cases := golden(t, "key_cases")
-	for _, c := range cases {
-		store, name := text(t, c, "store"), text(t, c, "name")
-		g := model.Group{Name: name, File: text(t, c, "file"), StoreDir: store}
-		if str(c, "kind") == "project" {
-			g = model.Group{StoreDir: store, File: store + "/.shortcuts", LocalFile: store + "/.shortcuts.local"}
+func TestApproval_KeysAndRecordNames(t *testing.T) {
+	base := testkit.New(t).Tmp
+	names := map[string]string{}
+	seen := func(g model.Group, what string) {
+		t.Helper()
+		sum := sha256.Sum256([]byte(g.Key()))
+		if want := hex.EncodeToString(sum[:]) + ".json"; model.RecordName(g.Key()) != want {
+			t.Errorf("%s: record name %s, want %s", what, model.RecordName(g.Key()), want)
 		}
-		t.Run(str(c, "kind")+" "+strconv.QuoteToASCII(store)+" "+name, func(t *testing.T) {
-			if got := g.Key(); got != text(t, c, "key") {
-				t.Errorf("key %q, want %q", got, text(t, c, "key"))
-			}
-			want := str(c, "record_name")
-			if _, python := c.Get("python_error"); python {
-				// the old version could not name a record for this key; Go names the record after the key's raw bytes (os.fsencode).
-				if utf8.ValidString(g.Key()) {
-					t.Fatal("python_error on a valid key")
-				}
-				sum := sha256.Sum256([]byte(text(t, c, "key")))
-				want = hex.EncodeToString(sum[:]) + ".json"
-			}
-			if want == "" {
-				t.Fatal("no record name")
-			}
-			if got := model.RecordName(g.Key()); got != want {
-				t.Errorf("record name %s, want %s", got, want)
-			}
-		})
+		if prev, dup := names[model.RecordName(g.Key())]; dup {
+			t.Errorf("%s and %s share a record", prev, what)
+		}
+		names[model.RecordName(g.Key())] = what
 	}
-	if len(cases) < 12 {
-		t.Errorf("only %d cases", len(cases))
+	for _, d := range []string{"plain", "café", "😀", "a b/c", "p\xffroj"} {
+		dir := filepath.Join(base, d)
+		if err := os.MkdirAll(dir, 0o777); err != nil {
+			t.Logf("this filesystem refuses %q: %v", d, err)
+			continue
+		}
+		g := model.Group{StoreDir: dir, File: dir + "/.shortcuts", LocalFile: dir + "/.shortcuts.local"}
+		if g.Key() != osutil.Realpath(dir) {
+			t.Errorf("project key %q, want %q", g.Key(), osutil.Realpath(dir))
+		}
+		seen(g, "project "+d)
 	}
-	t.Logf("%d key cases", len(cases))
+	store := osutil.Realpath(base)
+	for _, c := range []struct{ name, file string }{{"ns", "a.sh"}, {"ns", "b.sh"}, {"other", "a.sh"}, {"ns", "café.sh"}, {"ns", "caf\xe9.sh"}, {"ns", `caf\xe9.sh`}, {"n\"s", "a\\b"}} {
+		g := model.Group{Name: c.name, StoreDir: base, File: filepath.Join(base, c.file)}
+		want := "[" + strconv.QuoteToASCII(store) + ", " + strconv.QuoteToASCII(c.name) + ", " + strconv.QuoteToASCII(osutil.Realpath(g.File)) + "]"
+		if g.Key() != want {
+			t.Errorf("namespace key %s, want %s", g.Key(), want)
+		}
+		seen(g, "namespace "+c.name+" "+c.file)
+	}
+	if k := (model.Group{Name: "n", StoreDir: "/s", File: "/s/é"}).Key(); k != `["/s", "n", "/s/\u00e9"]` {
+		t.Errorf("example key %s", k)
+	}
 }
 
 func TestApproval_ApprovalPathIsInTheGlobalStore(t *testing.T) {
@@ -282,7 +284,7 @@ func equalMaps(a, b map[string]string) bool {
 	return true
 }
 
-// checkRecord: a record from the older version reads as ok; one written now parses to the same object.
+// checkRecord: a record in the stored form reads as ok; one written now parses to the same object.
 func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template string, shared, local map[string]string) {
 	t.Helper()
 	text := strings.ReplaceAll(template, "@ROOT@", root)
@@ -296,7 +298,7 @@ func checkRecord(t *testing.T, env *testkit.Env, g model.Group, root, template s
 	}
 	env.WriteFile(path, text, 0)
 	if got := State(g); got != "ok" {
-		t.Errorf("a record from the older version: state %s, want ok", got)
+		t.Errorf("a stored record: state %s, want ok", got)
 	}
 	if r := Load(g); r == nil || !equalMaps(r.Snapshot, shared) || !equalMaps(r.Local, local) {
 		t.Errorf("Load: %+v", r)
@@ -410,7 +412,7 @@ func TestApproval_LoadRefusesWhatIsNotARecord(t *testing.T) {
 	proj := env.Project(map[string]any{})
 	g := model.LoadStore(proj).Main
 	path := model.ApprovalPath(g)
-	for _, bad := range []string{`{not json`, `[]`, `{"hash": "x"}`, `{"snapshot": []}`, `{"snapshot": {"a": 1}}`, `{"snapshot": {}, "local": []}`} {
+	for _, bad := range []string{`{not json`, `[]`, `{"hash": "x"}`, `{"snapshot": []}`, `{"snapshot": {"a": 1}}`, `{"snapshot": {}, "local": []}`, `{"snapshot": {}}`} {
 		env.WriteFile(path, bad, 0)
 		if r := Load(g); r != nil {
 			t.Errorf("%s loaded as %+v", bad, r)
@@ -419,11 +421,11 @@ func TestApproval_LoadRefusesWhatIsNotARecord(t *testing.T) {
 			t.Errorf("%s: state %s", bad, State(g))
 		}
 	}
-	env.WriteFile(path, `{"snapshot": {}}`, 0) // an old record with no "local" and no hash
+	env.WriteFile(path, `{"snapshot": {}, "local": {}}`, 0)
 	if r := Load(g); r == nil || len(r.Local) != 0 {
 		t.Errorf("%+v", r)
 	}
-	env.WriteFile(path, "{\r\n\"snapshot\": {}\r\n}", 0)
+	env.WriteFile(path, "{\r\n\"snapshot\": {},\r\n\"local\": {}\r\n}", 0)
 	if Load(g) == nil {
 		t.Error("CRLF record")
 	}
@@ -586,12 +588,12 @@ func TestApproval_InvalidUTF8AndItsEscapedTextAreDifferentFiles(t *testing.T) {
 	}
 }
 
-func TestApproval_ARecordHoldingALoneSurrogateIsNoRecord(t *testing.T) {
+func TestApproval_ARecordWithNonUTF8TextIsNoRecord(t *testing.T) {
 	env := testkit.New(t)
 	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
 	g := model.LoadStore(proj).Main
-	// what the older version wrote for a file named caf<0xe9>: a lone surrogate escape
-	env.WriteFile(model.ApprovalPath(g), `{"snapshot": {"caf\udce9.sh": "x"}, "local": {}}`, 0)
+	// a record whose file name is not valid UTF-8 is no record
+	env.WriteFile(model.ApprovalPath(g), "{\"snapshot\": {\"caf\xe9.sh\": \"x\"}, \"local\": {}}", 0)
 	if Load(g) != nil || State(g) != "new" {
 		t.Errorf("loaded as a record: %+v, state %s", Load(g), State(g))
 	}
@@ -638,10 +640,10 @@ func TestApproval_FolderFilesNamespace(t *testing.T) {
 	}
 }
 
-// An approval record as an earlier version wrote it, with its "hash" field, hand-written (ASCII only).
-const oldRecord = `{
+// An approval record with an unknown field, "extra", which is ignored. Hand-written (ASCII only).
+const recordWithExtraField = `{
   "key": "@ROOT@",
-  "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "extra": 1,
   "snapshot": {
     ".shortcuts": "{\n  \"shortcuts\": {\n    \"t\": {\n      \"script\": \"bin/t\"\n    }\n  },\n  \"version\": 1\n}\n",
     "bin/t": "echo one\n"
@@ -650,21 +652,16 @@ const oldRecord = `{
 }
 `
 
-func TestApproval_OldRecordWithAHashStillApproves(t *testing.T) {
+func TestApproval_RecordWithAnUnknownFieldStillApproves(t *testing.T) {
 	env := testkit.New(t)
 	proj := env.Project(map[string]any{"t": map[string]any{"script": "bin/t"}}, testkit.Files(map[string]any{"bin/t": "echo one\n"}))
 	g := model.LoadStore(proj).Main
 	rec := model.ApprovalPath(g)
-	env.WriteFile(rec, strings.ReplaceAll(oldRecord, "@ROOT@", proj), 0)
+	env.WriteFile(rec, strings.ReplaceAll(recordWithExtraField, "@ROOT@", proj), 0)
 	if got := State(g); got != "ok" {
 		t.Fatalf("unchanged files: %s", got)
 	}
-	// the hash is ignored: a record whose hash is not even a string is just as good
-	env.WriteFile(rec, strings.Replace(strings.ReplaceAll(oldRecord, "@ROOT@", proj), `"hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"`, `"hash": 7`, 1), 0)
-	if got := State(g); got != "ok" {
-		t.Errorf("non-string hash: %s", got)
-	}
-	env.WriteFile(rec, strings.ReplaceAll(oldRecord, "@ROOT@", proj), 0)
+	env.WriteFile(rec, strings.ReplaceAll(recordWithExtraField, "@ROOT@", proj), 0)
 	env.WriteFile(filepath.Join(proj, "bin", "t"), "echo two\n", 0)
 	if got := State(model.LoadStore(proj).Main); got != "changed" {
 		t.Errorf("text changed: %s", got)
@@ -693,14 +690,10 @@ func TestApproval_RecordWithoutSnapshotOrLocal(t *testing.T) {
 	if got := State(g); got != "new" {
 		t.Errorf("no snapshot: %s", got)
 	}
-	// no "local" (written before .shortcuts.local existed): empty, so it approves while no local file exists
+	// no "local": not a record either (fail closed)
 	env.WriteFile(rec, `{"snapshot": {".shortcuts": "{\n  \"shortcuts\": {\n    \"t\": {\n      \"script\": \"bin/t\"\n    }\n  },\n  \"version\": 1\n}\n", "bin/t": "echo one\n"}}`, 0)
-	if got := State(g); got != "ok" {
-		t.Fatalf("no local: %s", got)
-	}
-	env.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"m": {"inline": "x"}}}`, 0)
-	if got := State(model.LoadStore(proj).Main); got != "changed" {
-		t.Errorf("local file appeared: %s", got)
+	if got := State(g); got != "new" {
+		t.Errorf("no local: %s", got)
 	}
 }
 

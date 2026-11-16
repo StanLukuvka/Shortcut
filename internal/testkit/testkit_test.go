@@ -101,9 +101,9 @@ func TestInTerminal_KeysAndWindow(t *testing.T) {
 		t.Errorf("code %d, out %q", code, out)
 	}
 	// 30x100, a controlling terminal on all three std fds, and its own session.
-	code, out = e.InTerminalCmd(Opts{}, nil, "sh", "-c", `stty size; test -t 0 -a -t 1 -a -t 2 && echo tty; ps -o sid= -p $$ | tr -d ' '; echo $$`)
+	code, out = e.InTerminalCmd(Opts{}, nil, "sh", "-c", `stty size; test -t 0 -a -t 1 -a -t 2 && echo tty; ps -o stat= -p $$ | grep -q s && echo leader`)
 	lines := strings.Fields(out)
-	if code != 0 || len(lines) != 5 || lines[0] != "30" || lines[1] != "100" || lines[2] != "tty" || lines[3] != lines[4] {
+	if code != 0 || len(lines) != 4 || lines[0] != "30" || lines[1] != "100" || lines[2] != "tty" || lines[3] != "leader" {
 		t.Errorf("code %d, out %q", code, out)
 	}
 }
