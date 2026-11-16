@@ -12,7 +12,7 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -57,8 +57,8 @@ func targetGroup(c *model.Context, ns Namespace) (model.Group, error) {
 		}
 		var ok bool
 		if group, ok = store.Namespace(namespace); !ok {
-			group = model.Group{Kind: model.KindNamespace, InProject: !c.IsGlobal(storeDir), Name: namespace, File: osutil.Join(storeDir, "imports", namespace+model.ImportSuffix),
-				StoreDir: storeDir, Doc: &model.Doc{}}
+			group = model.Group{Kind: model.KindNamespace, InProject: !c.IsGlobal(storeDir), Name: namespace, File: platform.Join(storeDir, "imports", namespace+model.ImportSuffix),
+				StoreDir: storeDir, Doc: &platform.Doc{}}
 		}
 	}
 	if group.Error != nil {
@@ -69,16 +69,16 @@ func targetGroup(c *model.Context, ns Namespace) (model.Group, error) {
 
 // loadForEdit is the registry at path, or a fresh one when isNew, with its "shortcuts" object. A "shortcuts" that is
 // not an object is refused.
-func loadForEdit(path string, isNew bool) (reg, shortcuts *model.Doc, err error) {
+func loadForEdit(path string, isNew bool) (reg, shortcuts *platform.Doc, err error) {
 	if isNew {
-		reg = &model.Doc{}
+		reg = &platform.Doc{}
 		reg.Set("version", []byte(strconv.Itoa(model.RegistryVersion)))
 		reg.Set("shortcuts", []byte("{}"))
 	} else if reg, err = model.LoadRegistryFile(path); err != nil {
 		return nil, nil, err
 	}
 	if !reg.Has("shortcuts") {
-		return reg, &model.Doc{}, nil
+		return reg, &platform.Doc{}, nil
 	}
 	shortcuts, ok := reg.Object("shortcuts")
 	if !ok {
@@ -88,7 +88,7 @@ func loadForEdit(path string, isNew bool) (reg, shortcuts *model.Doc, err error)
 }
 
 // saveEdited writes reg with shortcuts, the copy loadForEdit gave, put back in it.
-func saveEdited(path string, reg, shortcuts *model.Doc) error {
+func saveEdited(path string, reg, shortcuts *platform.Doc) error {
 	raw, err := shortcuts.Bytes()
 	if err != nil {
 		return err
@@ -136,7 +136,7 @@ func lockedGroupWrite(c *model.Context, group model.Group, mutate func() error) 
 func register(c *model.Context, s *textio.Streams, group model.Group, entry *model.Entry) error {
 	storeDir := group.StoreDir
 	if group.Kind == model.KindProject {
-		change := func(shortcuts *model.Doc) error {
+		change := func(shortcuts *platform.Doc) error {
 			if shortcuts.Has(entry.Name) {
 				return Die("shortcut '" + entry.Name + "' already exists in " + group.LocalFile)
 			}
@@ -166,7 +166,7 @@ func register(c *model.Context, s *textio.Streams, group model.Group, entry *mod
 		}
 	}
 	err := lockedGroupWrite(c, group, func() error {
-		reg, shortcuts, err := loadForEdit(group.File, group.Kind == model.KindNamespace && !osutil.Exists(group.File))
+		reg, shortcuts, err := loadForEdit(group.File, group.Kind == model.KindNamespace && !platform.Exists(group.File))
 		if err != nil {
 			return err
 		}
@@ -199,13 +199,13 @@ func register(c *model.Context, s *textio.Streams, group model.Group, entry *mod
 // whether the file matches its approval. Only then does the approval follow the write, as writeLocal does, so a hand
 // edit still needs update.
 func namespaceIsApproved(c *model.Context, g model.Group) bool {
-	return g.Kind == model.KindNamespace && osutil.Exists(g.File) && approval.Refresh(c, c.ReloadGroup(g)) == model.StateOK
+	return g.Kind == model.KindNamespace && platform.Exists(g.File) && approval.Refresh(c, c.ReloadGroup(g)) == model.StateOK
 }
 
 // writeLocal changes .shortcuts.local through change(shortcuts), the only way shortcut writes to a
 // project. The approval record follows, but only if .local matched it first: a hand edit, or anything in .shortcuts,
 // must not get approved by the way.
-func writeLocal(c *model.Context, root string, change func(*model.Doc) error) (model.Group, error) {
+func writeLocal(c *model.Context, root string, change func(*platform.Doc) error) (model.Group, error) {
 	var after model.Group
 	err := c.WithRegistryLock(root, func() error {
 		before := model.LoadProjectGroup(root)
@@ -215,7 +215,7 @@ func writeLocal(c *model.Context, root string, change func(*model.Doc) error) (m
 		record := approval.Load(c, before)
 		approved := approval.LocalIsApproved(c, before, record)
 		path := before.LocalFile
-		isNewFile := !osutil.Exists(path)
+		isNewFile := !platform.Exists(path)
 		reg, shortcuts, err := loadForEdit(path, isNewFile)
 		if err != nil {
 			return err
@@ -255,14 +255,14 @@ func excludeFromGit(root string) {
 	if err != nil {
 		return
 	}
-	path := osutil.Join(root, strings.TrimSpace(string(out))) // an absolute result stays as it is
+	path := platform.Join(root, strings.TrimSpace(string(out))) // an absolute result stays as it is
 	if os.MkdirAll(filepath.Dir(path), 0o777) != nil {
 		return
 	}
 	var text string
 	if raw, err := os.ReadFile(path); err == nil {
 		text = string(raw)
-	} else if osutil.Exists(path) {
+	} else if platform.Exists(path) {
 		return
 	}
 	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
@@ -288,12 +288,12 @@ func storedCwd(c *model.Context, value *string, g model.Group) (*string, error) 
 	if value == nil || *value == model.Caller {
 		return value, nil
 	}
-	path := osutil.Realpath(osutil.ExpandUser(*value))
-	if !osutil.IsDir(path) {
+	path := platform.Realpath(platform.ExpandUser(*value))
+	if !platform.IsDir(path) {
 		return nil, Die("--cwd directory does not exist: " + path)
 	}
-	if g.InProject && osutil.IsRelativeTo(path, osutil.Realpath(g.StoreDir)) {
-		rel := osutil.Relpath(path, osutil.Realpath(g.Folder()))
+	if g.InProject && platform.IsRelativeTo(path, platform.Realpath(g.StoreDir)) {
+		rel := platform.Relpath(path, platform.Realpath(g.Folder()))
 		return &rel, nil
 	}
 	return &path, nil
@@ -317,9 +317,9 @@ func removeNamespaceFiles(group model.Group) error {
 		return err
 	}
 	switch {
-	case osutil.IsLink(folder):
+	case platform.IsLink(folder):
 		return unlinkFile(folder)
-	case osutil.IsDir(folder):
+	case platform.IsDir(folder):
 		return os.RemoveAll(folder) // does not follow a link inside it either
 	}
 	return nil

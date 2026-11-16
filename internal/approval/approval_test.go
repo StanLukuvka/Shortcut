@@ -13,7 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
@@ -87,15 +87,15 @@ func TestApproval_KeysAndRecordNames(t *testing.T) {
 			continue
 		}
 		g := model.Group{Kind: model.KindProject, InProject: true, StoreDir: dir, File: dir + "/.shortcuts", LocalFile: dir + "/.shortcuts.local"}
-		if g.Key() != osutil.Realpath(dir) {
-			t.Errorf("project key %q, want %q", g.Key(), osutil.Realpath(dir))
+		if g.Key() != platform.Realpath(dir) {
+			t.Errorf("project key %q, want %q", g.Key(), platform.Realpath(dir))
 		}
 		seen(g, "project "+d)
 	}
-	store := osutil.Realpath(base)
+	store := platform.Realpath(base)
 	for _, c := range []struct{ name, file string }{{"ns", "a.sh"}, {"ns", "b.sh"}, {"other", "a.sh"}, {"ns", "café.sh"}, {"ns", "caf\xe9.sh"}, {"ns", `caf\xe9.sh`}, {"n\"s", "a\\b"}} {
 		g := model.Group{Kind: model.KindNamespace, Name: c.name, StoreDir: base, File: filepath.Join(base, c.file)}
-		want := "[" + strconv.QuoteToASCII(store) + ", " + strconv.QuoteToASCII(c.name) + ", " + strconv.QuoteToASCII(osutil.Realpath(g.File)) + "]"
+		want := "[" + strconv.QuoteToASCII(store) + ", " + strconv.QuoteToASCII(c.name) + ", " + strconv.QuoteToASCII(platform.Realpath(g.File)) + "]"
 		if g.Key() != want {
 			t.Errorf("namespace key %s, want %s", g.Key(), want)
 		}
@@ -461,7 +461,7 @@ func TestApproval_AScriptCannotStandInForACwdRecord(t *testing.T) {
 	if files["cwd of go"] != sum("x") {
 		t.Errorf("script: %q", files["cwd of go"])
 	}
-	if want := sum(osutil.Realpath(filepath.Join(proj, "safe")) + "\n"); files["./cwd of go"] != want {
+	if want := sum(platform.Realpath(filepath.Join(proj, "safe")) + "\n"); files["./cwd of go"] != want {
 		t.Errorf("cwd record %q, want %q", files["./cwd of go"], want)
 	}
 }

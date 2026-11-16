@@ -1,8 +1,8 @@
-package osutil
+package platform
 
 import "testing"
 
-func TestShlex_Quote(t *testing.T) { // quote vectors
+func TestQuote(t *testing.T) {
 	for in, want := range map[string]string{
 		"": "''", "a": "a", "a b": "'a b'", "it's": `'it'"'"'s'`, "a/b-c_d.e": "a/b-c_d.e", "é": "'é'", "$x": "'$x'",
 		"a=b,c:d@e%f+g": "a=b,c:d@e%f+g", "a\nb": "'a\nb'",

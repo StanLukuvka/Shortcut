@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-func doc(t *testing.T, s string) *Doc {
+func doc(t *testing.T, s string) *platform.Doc {
 	t.Helper()
-	d, err := ParseDoc([]byte(s))
+	d, err := platform.ParseDoc([]byte(s))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestEntry_FromValueMessages(t *testing.T) {
 }
 
 // compactOf is d on one line, as the JSON encoder writes it.
-func compactOf(t *testing.T, d *Doc) string {
+func compactOf(t *testing.T, d *platform.Doc) string {
 	t.Helper()
 	b, err := d.Bytes()
 	if err != nil {
@@ -245,7 +245,7 @@ func TestStores_StoreDiscoverySkipsGlobalRoot(t *testing.T) {
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := NewContext(sub, nil).FindProjectRoot(sub); got != osutil.Realpath(proj) {
+	if got := NewContext(sub, nil).FindProjectRoot(sub); got != platform.Realpath(proj) {
 		t.Errorf("sub: %q", got)
 	}
 }
@@ -302,7 +302,7 @@ func TestStores_WriteJSONAtomic(t *testing.T) {
 	link := filepath.Join(env.Store, "shortcuts.json")
 	env.Symlink(target, link)
 	v := doc(t, `{"version": 1, "shortcuts": {"hi": {"description": "é", "n": 1.0}}}`)
-	if err := WriteJSONAtomic(link, v); err != nil {
+	if err := platform.WriteJSONAtomic(link, v); err != nil {
 		t.Fatal(err)
 	}
 	if st, _ := os.Lstat(link); st.Mode()&os.ModeSymlink == 0 {
@@ -322,7 +322,7 @@ func TestStores_WriteJSONAtomic(t *testing.T) {
 	}
 	// a new file is private, like any temporary file
 	fresh := filepath.Join(env.Tmp, "new.json")
-	if err := WriteJSONAtomic(fresh, v); err != nil {
+	if err := platform.WriteJSONAtomic(fresh, v); err != nil {
 		t.Fatal(err)
 	}
 	if st, _ := os.Stat(fresh); st.Mode().Perm() != 0o600 {
@@ -335,7 +335,7 @@ func TestStores_WriteJSONAtomicLeavesNoTempFileOnError(t *testing.T) {
 	dir := env.Folder("d")
 	target := filepath.Join(dir, "x.json")
 	os.Mkdir(target, 0o755) // a rename of a file over a folder fails
-	if err := WriteJSONAtomic(target, &Doc{}); err == nil {
+	if err := platform.WriteJSONAtomic(target, &platform.Doc{}); err == nil {
 		t.Fatal("want an error")
 	}
 	entries, _ := os.ReadDir(dir)
@@ -645,9 +645,9 @@ func TestWriteJSONAtomic_RefusesInvalidUTF8AndKeepsTheOldFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	d := &Doc{}
+	d := &platform.Doc{}
 	d.Set("name", []byte("\"caf\xe9\""))
-	if err := WriteJSONAtomic(path, d); !errors.Is(err, ErrNotUTF8) {
+	if err := platform.WriteJSONAtomic(path, d); !errors.Is(err, platform.ErrNotUTF8) {
 		t.Fatalf("got %v", err)
 	}
 	if got, _ := os.ReadFile(path); string(got) != old {
@@ -713,7 +713,7 @@ func TestStores_VersionRequiredInEveryFile(t *testing.T) {
 }
 
 // newGroup is a Group with an empty file, as LoadGroup gives for a missing one.
-func newGroup() Group { return Group{Doc: &Doc{}} }
+func newGroup() Group { return Group{Doc: &platform.Doc{}} }
 
 func TestGroup_KindFromLoaders(t *testing.T) {
 	e := testkit.New(t)

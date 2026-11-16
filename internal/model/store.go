@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 )
 
 // Store is a store's main group and its namespaces.
@@ -43,7 +43,7 @@ func ResolveRunDir(cwd *string, g Group, callerCwd string) string {
 	if cwd == nil || *cwd == "" || *cwd == Caller {
 		return callerCwd
 	}
-	return filepath.Clean(osutil.Join(g.Folder(), osutil.ExpandUser(*cwd)))
+	return filepath.Clean(platform.Join(g.Folder(), platform.ExpandUser(*cwd)))
 }
 
 // LoadGroup reads one file into a Group. It never fails: why a file can't be used is on the Group.
@@ -52,7 +52,7 @@ func LoadGroup(path, storeDir, name string) Group {
 	if name != "" {
 		kind = KindNamespace
 	}
-	g := Group{Kind: kind, Name: name, File: path, StoreDir: storeDir, Doc: &Doc{}}
+	g := Group{Kind: kind, Name: name, File: path, StoreDir: storeDir, Doc: &platform.Doc{}}
 	data, err := LoadRegistryFile(path)
 	var missing *RegistryNotFoundError
 	switch {
@@ -96,7 +96,7 @@ func entryError(g Group, it Item) error {
 		if err != nil {
 			return err
 		}
-		if !osutil.IsFile(path) {
+		if !platform.IsFile(path) {
 			return fmt.Errorf("'%s' is not a valid entry: script not found: %s", it.Name, *e.Script)
 		}
 	}
@@ -105,8 +105,8 @@ func entryError(g Group, it Item) error {
 
 // LoadProjectGroup is a project's .shortcuts with .shortcuts.local over it.
 func LoadProjectGroup(root string) Group {
-	shared := LoadGroup(osutil.Join(root, ProjectFile), root, "")
-	localPath := osutil.Join(root, LocalFile)
+	shared := LoadGroup(platform.Join(root, ProjectFile), root, "")
+	localPath := platform.Join(root, LocalFile)
 	local := LoadGroup(localPath, root, "")
 	g := shared
 	g.Kind, g.InProject = KindProject, true

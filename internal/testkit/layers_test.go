@@ -16,12 +16,12 @@ import (
 // packages its non-test files may import. Stdlib is always allowed. A package not listed fails, so a new one gets placed here.
 var layers = map[string][]string{
 	"cmd/shortcut":          {"internal/cli"},
-	"internal/osutil":       {},
-	"internal/model":        {"internal/osutil"},
-	"internal/textio":       {"internal/osutil"},
-	"internal/approval":     {"internal/model", "internal/osutil"},
+	"internal/platform":     {},
+	"internal/model":        {"internal/platform"},
+	"internal/textio":       {"internal/platform"},
+	"internal/approval":     {"internal/model", "internal/platform"},
 	"internal/cli/argparse": {},
-	"internal/cli":          {"internal/cli/argparse", "internal/approval", "internal/model", "internal/textio", "internal/osutil"},
+	"internal/cli":          {"internal/cli/argparse", "internal/approval", "internal/model", "internal/textio", "internal/platform"},
 	"internal/testkit":      {},
 }
 

@@ -8,7 +8,7 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -29,7 +29,7 @@ type handler func(c *model.Context, s *textio.Streams, args []string) error
 
 // invoke builds the run's one Context and runs h.
 func invoke(s *textio.Streams, h handler, args []string) int {
-	cwd, err := osutil.Getwd()
+	cwd, err := platform.Getwd()
 	return finish(s, h(model.NewContext(cwd, err), s, args))
 }
 

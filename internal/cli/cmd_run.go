@@ -11,7 +11,7 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -53,12 +53,12 @@ func runShortcut(c *model.Context, s *textio.Streams, words []string, lk model.L
 	if err := model.ValidateName(entry.Name); err != nil { // list warns about a hand-written one; run refuses it
 		return err
 	}
-	if !osutil.IsDir(resolved.RunCwd) {
+	if !platform.IsDir(resolved.RunCwd) {
 		return errors.New("run directory does not exist: " + resolved.RunCwd)
 	}
 	withArgs := ""
 	if len(args) > 0 {
-		withArgs = " with " + oneLine(osutil.ShellJoin(args))
+		withArgs = " with " + oneLine(platform.ShellJoin(args))
 	}
 	again := []string{"shortcut", "r", "-y"}
 	if lk.GlobalOnly {
@@ -70,7 +70,7 @@ func runShortcut(c *model.Context, s *textio.Streams, words []string, lk model.L
 		s.Err.WriteString("note: '" + first + "' here is this project's; your global '" + first + "' runs with: " +
 			"shortcut run --global " + name + "\n")
 	}
-	realCwd := osutil.Realpath(resolved.RunCwd)
+	realCwd := platform.Realpath(resolved.RunCwd)
 	if entry.Confirm {
 		message := oneLine(entry.Description)
 		if entry.Description == "(no description)" || (entry.Inline != nil && entry.Description == *entry.Inline) {
@@ -78,7 +78,7 @@ func runShortcut(c *model.Context, s *textio.Streams, words []string, lk model.L
 		}
 		if err := confirmed(s, textio.Confirm{
 			Question:   "run '" + name + "'" + withArgs + " in " + realCwd + "?",
-			NoTerminal: "'" + name + "' asks for confirmation: run it in a terminal, or pass -y (" + oneLine(osutil.ShellJoin(again)) + ")",
+			NoTerminal: "'" + name + "' asks for confirmation: run it in a terminal, or pass -y (" + oneLine(platform.ShellJoin(again)) + ")",
 			Message:    message,
 		}, assumeYes); err != nil {
 			return err
@@ -109,10 +109,10 @@ func runShortcut(c *model.Context, s *textio.Streams, words []string, lk model.L
 		return !hasEq || k == "SHORTCUT_NAME" || k == "SHORTCUT_NAMESPACE" || k == "SHORTCUT_CALLER_CWD"
 	})
 	env = append(env, "SHORTCUT_NAME="+name, "SHORTCUT_NAMESPACE="+resolved.Group.Name, "SHORTCUT_CALLER_CWD="+c.Cwd)
-	err = osutil.ExecChild(plan.argv, resolved.RunCwd, env)
+	err = platform.ExecChild(plan.argv, resolved.RunCwd, env)
 	if plan.direct && errors.Is(err, syscall.ENOEXEC) && !bytes.Contains(plan.header, []byte{0}) {
 		// An executable text file with no #!: exec says "exec format error", a shell would run it with itself.
-		return osutil.ExecChild(append([]string{"bash", plan.path}, args...), resolved.RunCwd, env)
+		return platform.ExecChild(append([]string{"bash", plan.path}, args...), resolved.RunCwd, env)
 	}
 	return err
 }
@@ -151,7 +151,7 @@ func childCommand(resolved *model.ResolvedShortcut, entry *model.Entry, name str
 	firstLine, _, _ := strings.Cut(string(header), "\n")
 	if hasShebang && strings.HasSuffix(firstLine, "\r") {
 		return childPlan{}, fmt.Errorf("%s has Windows line endings, so its #! line can't start it. Convert it: sed -i 's/\\r$//' %s",
-			path, osutil.ShellQuote(path))
+			path, platform.ShellQuote(path))
 	}
 	switch {
 	case isExec && hasShebang:

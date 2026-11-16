@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 )
 
 // RegistryNotFoundError is the error for a missing registry file: a store without a registry is empty,
@@ -27,25 +27,25 @@ func isJSONError(err error) bool {
 }
 
 func RegistryExists(storeDir string) bool {
-	return osutil.IsFile(osutil.Join(storeDir, "shortcuts.json"))
+	return platform.IsFile(platform.Join(storeDir, "shortcuts.json"))
 }
 
-func emptyRegistry() *Doc {
-	d := &Doc{}
+func emptyRegistry() *platform.Doc {
+	d := &platform.Doc{}
 	d.Set("version", []byte(strconv.Itoa(RegistryVersion)))
 	d.Set("shortcuts", []byte("{}"))
 	return d
 }
 
 // LoadRegistryFile reads a registry file, with fixed messages.
-func LoadRegistryFile(path string) (*Doc, error) {
-	if !osutil.IsFile(path) {
+func LoadRegistryFile(path string) (*platform.Doc, error) {
+	if !platform.IsFile(path) {
 		return nil, &RegistryNotFoundError{path}
 	}
-	text, err := ReadJSONFile(path)
-	var data *Doc
+	text, err := platform.ReadJSONFile(path)
+	var data *platform.Doc
 	if err == nil {
-		data, err = ParseDoc(text)
+		data, err = platform.ParseDoc(text)
 	}
 	if err != nil {
 		if isJSONError(err) {
@@ -70,25 +70,25 @@ func LoadRegistryFile(path string) (*Doc, error) {
 	return data, nil
 }
 
-func LoadRegistry(storeDir string) (*Doc, error) {
-	return LoadRegistryFile(osutil.Join(storeDir, "shortcuts.json"))
+func LoadRegistry(storeDir string) (*platform.Doc, error) {
+	return LoadRegistryFile(platform.Join(storeDir, "shortcuts.json"))
 }
 
 // SaveRegistryFile refuses to write over a file it can't read.
-func SaveRegistryFile(path string, data *Doc) error {
-	if osutil.IsFile(path) {
-		if _, err := ReadJSONFile(path); err != nil {
+func SaveRegistryFile(path string, data *platform.Doc) error {
+	if platform.IsFile(path) {
+		if _, err := platform.ReadJSONFile(path); err != nil {
 			return fmt.Errorf("cannot overwrite corrupt registry %s: %s", path, err)
 		}
 	}
-	return WriteJSONAtomic(path, data)
+	return platform.WriteJSONAtomic(path, data)
 }
 
-func SaveRegistryAtomic(storeDir string, data *Doc) error {
+func SaveRegistryAtomic(storeDir string, data *platform.Doc) error {
 	if err := os.MkdirAll(storeDir, 0o777); err != nil {
 		return err
 	}
-	return SaveRegistryFile(osutil.Join(storeDir, "shortcuts.json"), data)
+	return SaveRegistryFile(platform.Join(storeDir, "shortcuts.json"), data)
 }
 
 var namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`) // $ matches only at the very end of the text (no multiline flag), so a trailing newline fails
@@ -107,9 +107,9 @@ func ResolveScriptPath(baseDir, scriptField string) (string, error) {
 	if strings.HasPrefix(scriptField, "/") {
 		return scriptField, nil
 	}
-	base := osutil.Realpath(baseDir)
-	target := osutil.Realpath(osutil.Join(base, scriptField))
-	if !osutil.IsRelativeTo(target, base) {
+	base := platform.Realpath(baseDir)
+	target := platform.Realpath(platform.Join(base, scriptField))
+	if !platform.IsRelativeTo(target, base) {
 		return "", fmt.Errorf("path traversal detected: '%s' resolves to '%s', outside '%s'.", scriptField, target, base)
 	}
 	return target, nil
@@ -117,7 +117,7 @@ func ResolveScriptPath(baseDir, scriptField string) (string, error) {
 
 // fileError returns what's wrong with a file as a whole ("" = nothing); EntryErrors checks what's inside
 // 'shortcuts'. name is the namespace's, or "" for a main file.
-func fileError(path string, data *Doc, name string) string {
+func fileError(path string, data *platform.Doc, name string) string {
 	known := map[string]bool{"version": true, "description": true, "shortcuts": true}
 	if name != "" {
 		if data.Has("imports") {

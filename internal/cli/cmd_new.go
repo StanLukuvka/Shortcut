@@ -7,7 +7,7 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -97,15 +97,15 @@ func entryFields(c *model.Context, name string, ns Namespace, g model.Group) (*m
 // move.
 func newFromScript(c *model.Context, s *textio.Streams, ns Namespace, group model.Group, fields *model.Entry) error {
 	path := ns.Str("script")
-	abs := osutil.Abs(osutil.ExpandUser(path))
-	if path == "-" || !osutil.IsFile(abs) {
+	abs := platform.Abs(platform.ExpandUser(path))
+	if path == "-" || !platform.IsFile(abs) {
 		return Die("script file not found: " + path)
 	}
-	base := osutil.Realpath(group.ScriptBase())
-	real := osutil.Realpath(abs)
+	base := platform.Realpath(group.ScriptBase())
+	real := platform.Realpath(abs)
 	field := abs
-	if osutil.IsRelativeTo(real, base) {
-		field = osutil.Relpath(real, base)
+	if platform.IsRelativeTo(real, base) {
+		field = platform.Relpath(real, base)
 	}
 	entry := *fields
 	entry.Script = &field
@@ -136,7 +136,7 @@ func joinCommand(words []string) string {
 			}
 		}
 		if !live {
-			quoted[i] = osutil.ShellQuote(word)
+			quoted[i] = platform.ShellQuote(word)
 			continue
 		}
 		var b strings.Builder

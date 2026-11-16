@@ -6,7 +6,7 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -121,7 +121,7 @@ func approveGroup(c *model.Context, s *textio.Streams, g model.Group, globalName
 	}
 	where := ""
 	if g.Kind == model.KindNamespace {
-		where = " (" + osutil.Realpath(g.File) + ")" // the real place, wherever it points
+		where = " (" + platform.Realpath(g.File) + ")" // the real place, wherever it points
 	}
 	head := "New to you:"
 	if len(old) > 0 {

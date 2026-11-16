@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 )
 
 const (
@@ -50,7 +50,7 @@ func Fields() []Field {
 // with every well-typed field set, even beside an error, so approval still sees a broken entry's script and cwd.
 func DecodeEntry(name string, raw []byte) (*Entry, error) {
 	bad := func(problem string) error { return fmt.Errorf("'%s' is not a valid entry: %s", name, problem) }
-	data, ok := objectOf(raw)
+	data, ok := platform.ObjectOf(raw)
 	if !ok {
 		return nil, bad("expected a dictionary")
 	}
@@ -106,7 +106,7 @@ func DecodeEntry(name string, raw []byte) (*Entry, error) {
 // Raw is the entry as an object's text, its fields in table order: description always, the others when set.
 func (e *Entry) Raw() ([]byte, error) {
 	text := map[string]*string{"inline": e.Inline, "script": e.Script, "cwd": e.Cwd}
-	d := &Doc{}
+	d := &platform.Doc{}
 	for _, f := range Fields() {
 		switch {
 		case f.Name == "description":
@@ -128,5 +128,5 @@ func (e *Entry) Raw() ([]byte, error) {
 
 // IsRelativeCwd: a cwd that means a folder next to the file defining it, so it's only right in that checkout.
 func IsRelativeCwd(cwd *string) bool {
-	return cwd != nil && *cwd != "" && *cwd != Caller && !strings.HasPrefix(osutil.ExpandUser(*cwd), "/")
+	return cwd != nil && *cwd != "" && *cwd != Caller && !strings.HasPrefix(platform.ExpandUser(*cwd), "/")
 }

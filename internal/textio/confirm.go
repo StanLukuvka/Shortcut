@@ -8,7 +8,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 )
 
 // Ask asks a question: the prompt goes to stderr through Safe (so it reaches the terminal when stdout is redirected),
@@ -70,7 +70,7 @@ func (c Confirm) Granted(s *Streams, assumeYes bool) (bool, error) {
 		}
 		return true, nil
 	}
-	if !osutil.IsTerminal(int(s.In.Fd())) {
+	if !platform.IsTerminal(int(s.In.Fd())) {
 		return false, errors.New(c.NoTerminal)
 	}
 	if c.Message != "" {

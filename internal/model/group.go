@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 )
 
 // Kind is which of three things a Group is.
@@ -68,7 +68,7 @@ func (is Items) Names() []string {
 }
 
 // ItemsOf decodes d["shortcuts"] when it is an object; otherwise there are none.
-func ItemsOf(d *Doc) Items {
+func ItemsOf(d *platform.Doc) Items {
 	shortcuts, _ := d.Object("shortcuts")
 	var items Items
 	for _, k := range shortcuts.Keys {
@@ -81,7 +81,7 @@ func ItemsOf(d *Doc) Items {
 // Text is a field of the entry for display: a string as itself, an absent or null field as "", anything else as
 // written (5, true, an array), so a wrongly typed field still shows.
 func (it Item) Text(field string) string {
-	d, ok := objectOf(it.Raw)
+	d, ok := platform.ObjectOf(it.Raw)
 	if !ok {
 		return ""
 	}
@@ -102,11 +102,11 @@ type Group struct {
 	Name      string // namespace name; "" otherwise
 	File      string
 	StoreDir  string
-	Doc       *Doc    // empty when the file is missing or unreadable
-	Shared    Items   // the entries of Doc
-	Error     *string // why the file can't be used
-	LocalFile string  // only a project's own group has one
-	LocalDoc  *Doc
+	Doc       *platform.Doc // empty when the file is missing or unreadable
+	Shared    Items         // the entries of Doc
+	Error     *string       // why the file can't be used
+	LocalFile string        // only a project's own group has one
+	LocalDoc  *platform.Doc
 	Local     Items
 }
 
@@ -149,7 +149,7 @@ func (g Group) DefiningFile(name string) string {
 }
 
 // Folder is where relative 'cwd' values resolve: the folder of the defining file.
-func (g Group) Folder() string { return filepath.Dir(osutil.Abs(g.File)) }
+func (g Group) Folder() string { return filepath.Dir(platform.Abs(g.File)) }
 
 // ScriptBase: relative paths resolve against a namespace's folder, a project's root, or the global store.
 func (g Group) ScriptBase() string {
@@ -162,9 +162,9 @@ func (g Group) ScriptBase() string {
 // ScriptsDir is a group's own scripts folder, one per namespace: what rm --namespace deletes and approval covers.
 func (g Group) ScriptsDir() string {
 	if g.Kind == KindNamespace {
-		return osutil.Join(g.ScriptBase(), "scripts", g.Name)
+		return platform.Join(g.ScriptBase(), "scripts", g.Name)
 	}
-	return osutil.Join(g.ScriptBase(), "scripts")
+	return platform.Join(g.ScriptBase(), "scripts")
 }
 
 func (g Group) Display(name string) string {
@@ -179,11 +179,11 @@ func (g Group) NeedsApproval() bool { return g.Kind != KindGlobal }
 // Key is what the approval is recorded against: the project's path, or for a namespace the store it's in, its name
 // there and its file. Pointing a name at another file, even one approved elsewhere, is new.
 func (g Group) Key() string {
-	store := osutil.Realpath(g.StoreDir)
+	store := platform.Realpath(g.StoreDir)
 	if g.Kind != KindNamespace {
 		return store
 	}
-	return keyText(store, g.Name, osutil.Realpath(g.File))
+	return keyText(store, g.Name, platform.Realpath(g.File))
 }
 
 func (g Group) Label() string {

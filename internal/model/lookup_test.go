@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
@@ -20,7 +20,7 @@ func TestStores_ScopeResolutionOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Group.StoreDir != osutil.Realpath(proj) || res.Entry.Description != "Local project build" || !res.HidesGlobal {
+	if res.Group.StoreDir != platform.Realpath(proj) || res.Entry.Description != "Local project build" || !res.HidesGlobal {
 		t.Errorf("inside the project: %+v %q", res.Group.StoreDir, res.Entry.Description)
 	}
 	// --global reaches the global one from there
@@ -34,7 +34,7 @@ func TestStores_ScopeResolutionOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Group.StoreDir != osutil.Realpath(e.Store) || res.Entry.Description != "Global build" {
+	if res.Group.StoreDir != platform.Realpath(e.Store) || res.Entry.Description != "Global build" {
 		t.Errorf("outside: %q %q", res.Group.StoreDir, res.Entry.Description)
 	}
 	_, _, err = ResolveShortcut(NewContext(e.Home, nil), []string{"check"}, Lookup{})
@@ -164,9 +164,9 @@ func TestLookup_ResolveNameTakesOneName(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"build": testkit.Inline("echo b")})
 	t.Chdir(e.Home)
-	cwd, _ := osutil.Getwd()
+	cwd, _ := platform.Getwd()
 	c := NewContext(cwd, nil)
-	if r, err := ResolveName(c, []string{"build"}, Lookup{}); err != nil || r.Entry.Name != "build" || r.RunCwd != osutil.Realpath(e.Home) {
+	if r, err := ResolveName(c, []string{"build"}, Lookup{}); err != nil || r.Entry.Name != "build" || r.RunCwd != platform.Realpath(e.Home) {
 		t.Errorf("one name: %v", err)
 	}
 	_, err := ResolveName(c, []string{"build", "an arg"}, Lookup{})

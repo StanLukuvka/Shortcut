@@ -6,7 +6,7 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/cli/argparse"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -24,7 +24,7 @@ func cmdRm(c *model.Context, s *textio.Streams, args []string) error {
 	if ns.Set("namespace") {
 		if len(names) > 0 {
 			return Die("--namespace takes the namespace alone: shortcut rm --namespace " + ns.Str("namespace") +
-				". To remove one entry: shortcut rm " + ns.Str("namespace") + " " + osutil.ShellJoin(names))
+				". To remove one entry: shortcut rm " + ns.Str("namespace") + " " + platform.ShellJoin(names))
 		}
 		if ns.Bool("local") {
 			return Die("--namespace takes the namespace alone: shortcut rm --namespace " + ns.Str("namespace"))
@@ -46,7 +46,7 @@ func cmdRm(c *model.Context, s *textio.Streams, args []string) error {
 	if root != "" {
 		if broken := c.Store(root).Main.Error; broken != nil {
 			return Die(*broken + ". Inside this project rm only takes --local until it's fixed; " +
-				"for your own: shortcut rm --global " + osutil.ShellJoin(names))
+				"for your own: shortcut rm --global " + platform.ShellJoin(names))
 		}
 	}
 
@@ -116,7 +116,7 @@ func rmLocal(c *model.Context, s *textio.Streams, ns Namespace) error {
 		Message: rmLocalMessage(group, name), TellOnYes: true}, ns.Bool("yes")); err != nil {
 		return err
 	}
-	after, err := writeLocal(c, group.StoreDir, func(shortcuts *model.Doc) error {
+	after, err := writeLocal(c, group.StoreDir, func(shortcuts *platform.Doc) error {
 		shortcuts.Delete(name)
 		return nil
 	})
@@ -135,7 +135,7 @@ func rmNamespace(c *model.Context, s *textio.Streams, name string, assumeYes boo
 	store := c.Store(storeDir)
 	group, found := store.Namespace(name)
 	if !found {
-		return Die("no namespace named '" + name + "' in your global store (" + osutil.Join(storeDir, "imports") + ")")
+		return Die("no namespace named '" + name + "' in your global store (" + platform.Join(storeDir, "imports") + ")")
 	}
 	listed := isListedImport(store, name)
 	folder := group.ScriptsDir()
@@ -144,7 +144,7 @@ func rmNamespace(c *model.Context, s *textio.Streams, name string, assumeYes boo
 		lines = []string{"Stops importing '" + name + "' in " + store.Main.File, "Keeps its file: " + group.File}
 	} else {
 		lines = []string{"Removes namespace '" + name + "' (" + strconv.Itoa(len(group.Shortcuts())) + " shortcuts): " + group.File}
-		if osutil.Lexists(folder) {
+		if platform.Lexists(folder) {
 			lines = append(lines, "Deletes its scripts folder: "+folder)
 		}
 	}

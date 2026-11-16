@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
@@ -34,7 +34,7 @@ func TestContext_ProjectAndGlobalResolvedOnce(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(map[string]any{"x": testkit.Inline("x")})
 	c := NewContext(proj, nil)
-	if c.Project != osutil.Realpath(proj) || c.Global != e.Store || !c.IsGlobal(e.Store) || c.IsGlobal(proj) {
+	if c.Project != platform.Realpath(proj) || c.Global != e.Store || !c.IsGlobal(e.Store) || c.IsGlobal(proj) {
 		t.Errorf("project %q global %q", c.Project, c.Global)
 	}
 	if got := NewContext(filepath.Join(e.Home, "elsewhere"), nil).Project; got != "" {

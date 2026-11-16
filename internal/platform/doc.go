@@ -1,4 +1,4 @@
-package model
+package platform
 
 import (
 	"bytes"
@@ -30,15 +30,15 @@ func ParseDoc(text []byte) (*Doc, error) {
 	if err := checkJSON(text); err != nil {
 		return nil, err
 	}
-	d, ok := objectOf(bytes.TrimLeft(text, " \t\r\n"))
+	d, ok := ObjectOf(bytes.TrimLeft(text, " \t\r\n"))
 	if !ok {
 		return nil, errNotObject
 	}
 	return d, nil
 }
 
-// objectOf reads text that is already known to be valid JSON, if it is an object.
-func objectOf(text []byte) (*Doc, bool) {
+// ObjectOf reads text that is already known to be valid JSON, if it is an object.
+func ObjectOf(text []byte) (*Doc, bool) {
 	if len(text) == 0 || text[0] != '{' {
 		return nil, false
 	}
@@ -137,7 +137,7 @@ func (d *Doc) Delete(k string) {
 
 // Object is the value of k when it is an object; otherwise an empty Doc and false.
 func (d *Doc) Object(k string) (*Doc, bool) {
-	if o, ok := objectOf(d.Raw[k]); ok {
+	if o, ok := ObjectOf(d.Raw[k]); ok {
 		return o, true
 	}
 	return &Doc{}, false

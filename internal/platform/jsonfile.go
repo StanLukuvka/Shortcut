@@ -1,15 +1,13 @@
-package model
+package platform
 
 import (
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
-
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
 )
 
-// ReadJSONFile reads a JSON file and checks it. A check error is not an *fs.PathError (see isJSONError); callers
+// ReadJSONFile reads a JSON file and checks it. A check error is not an *fs.PathError (see isJSONError in store); callers
 // add the file's name. Text that is not valid UTF-8 is refused (ErrNotUTF8).
 func ReadJSONFile(path string) ([]byte, error) {
 	raw, err := os.ReadFile(path)
@@ -26,7 +24,7 @@ func WriteJSONAtomic(path string, doc *Doc) error {
 	if err != nil {
 		return err
 	}
-	path = osutil.Realpath(path) // follow a symlinked file to where it lives
+	path = Realpath(path) // follow a symlinked file to where it lives
 	dir, base := filepath.Split(path)
 	dir = filepath.Clean(dir)
 	var mode os.FileMode

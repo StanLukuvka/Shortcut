@@ -1,4 +1,4 @@
-package osutil
+package platform
 
 import (
 	"io/fs"

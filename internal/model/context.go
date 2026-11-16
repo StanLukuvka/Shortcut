@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 )
 
 // Context is what a run knows about where it is: built once per run, passed to every command and to every
@@ -21,7 +21,7 @@ type Context struct {
 	Global  string // absolute global store dir: $SHORTCUTS_HOME or ~/.shortcuts. The only read of the variable
 	Project string // nearest project root at or above Cwd, "" = none
 
-	globalReal string           // osutil.Realpath(Global), once
+	globalReal string           // platform.Realpath(Global), once
 	stores     map[string]Store // by the dir as the caller passed it: Global, or a realpath'd project root
 	states     map[string]ApprovalState
 }
@@ -32,8 +32,8 @@ func NewContext(cwd string, cwdErr error) *Context {
 	if home == "" {
 		home = "~/.shortcuts"
 	}
-	c := &Context{Cwd: cwd, CwdErr: cwdErr, Global: osutil.Abs(osutil.ExpandUser(home)), stores: map[string]Store{}, states: map[string]ApprovalState{}}
-	c.globalReal = osutil.Realpath(c.Global)
+	c := &Context{Cwd: cwd, CwdErr: cwdErr, Global: platform.Abs(platform.ExpandUser(home)), stores: map[string]Store{}, states: map[string]ApprovalState{}}
+	c.globalReal = platform.Realpath(c.Global)
 	if cwdErr == nil {
 		c.Project = c.FindProjectRoot(cwd)
 	}
@@ -41,24 +41,24 @@ func NewContext(cwd string, cwdErr error) *Context {
 }
 
 // IsGlobal reports whether dir is the global store, after resolving symlinks in both.
-func (c *Context) IsGlobal(dir string) bool { return osutil.Realpath(dir) == c.globalReal }
+func (c *Context) IsGlobal(dir string) bool { return platform.Realpath(dir) == c.globalReal }
 
 // neverAProject: ~/.shortcuts is never a project, also when SHORTCUTS_HOME points the global store elsewhere.
 func (c *Context) neverAProject(p string) bool {
-	return p == c.globalReal || p == osutil.Realpath(osutil.Join(osutil.ExpandUser("~"), ProjectFile))
+	return p == c.globalReal || p == platform.Realpath(platform.Join(platform.ExpandUser("~"), ProjectFile))
 }
 
 func (c *Context) isProjectRoot(folder string) bool {
-	if c.neverAProject(osutil.Realpath(osutil.Join(folder, ProjectFile))) {
+	if c.neverAProject(platform.Realpath(platform.Join(folder, ProjectFile))) {
 		return false
 	}
-	return osutil.IsFile(osutil.Join(folder, ProjectFile)) || osutil.IsFile(osutil.Join(folder, LocalFile))
+	return platform.IsFile(platform.Join(folder, ProjectFile)) || platform.IsFile(platform.Join(folder, LocalFile))
 }
 
 // FindProjectRoot returns the nearest folder at or above start with a .shortcuts or .shortcuts.local that is
 // not the global store. "" = none.
 func (c *Context) FindProjectRoot(start string) string {
-	for cur := osutil.Realpath(start); ; {
+	for cur := platform.Realpath(start); ; {
 		if c.isProjectRoot(cur) {
 			return cur
 		}
@@ -73,18 +73,18 @@ func (c *Context) FindProjectRoot(start string) string {
 // LocalProjectRoot returns where --local writes, the cwd and never a parent. Its errors are
 // the messages die prints.
 func (c *Context) LocalProjectRoot() (string, error) {
-	here := osutil.Realpath(c.Cwd)
+	here := platform.Realpath(c.Cwd)
 	if root := c.FindProjectRoot(here); root != "" && root != here {
 		return "", fmt.Errorf("%s is inside the project at %s. Run this from there.", here, root)
 	}
-	if c.neverAProject(osutil.Realpath(osutil.Join(here, ProjectFile))) {
+	if c.neverAProject(platform.Realpath(platform.Join(here, ProjectFile))) {
 		return "", fmt.Errorf("%s holds the global store, so it can't hold local shortcuts. Run this inside a project folder.", here)
 	}
-	if osutil.IsRelativeTo(here, c.globalReal) {
+	if platform.IsRelativeTo(here, c.globalReal) {
 		return "", fmt.Errorf("%s is inside the global store, so it can't hold local shortcuts. Run this inside a project folder.", here)
 	}
-	if st, err := os.Lstat(osutil.Join(here, LocalFile)); err == nil && st.Mode()&os.ModeSymlink != 0 {
-		return "", fmt.Errorf("%s is a symlink, so writing it would go somewhere else.", osutil.Join(here, LocalFile))
+	if st, err := os.Lstat(platform.Join(here, LocalFile)); err == nil && st.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("%s is a symlink, so writing it would go somewhere else.", platform.Join(here, LocalFile))
 	}
 	return here, nil
 }
@@ -93,16 +93,16 @@ func (c *Context) LocalProjectRoot() (string, error) {
 // <global>/locks/<sha256(realpath(store))>.lock.
 func (c *Context) lockPath(storeDir string) string {
 	if c.IsGlobal(storeDir) {
-		return osutil.Join(storeDir, ".lock")
+		return platform.Join(storeDir, ".lock")
 	}
-	sum := sha256.Sum256([]byte(osutil.Realpath(storeDir)))
-	return osutil.Join(c.Global, "locks", hex.EncodeToString(sum[:])+".lock")
+	sum := sha256.Sum256([]byte(platform.Realpath(storeDir)))
+	return platform.Join(c.Global, "locks", hex.EncodeToString(sum[:])+".lock")
 }
 
 // WithRegistryLock serializes read-modify-write of a store's registry across processes. Not reentrant: never nest
 // it, and never call InitStore inside it.
 func (c *Context) WithRegistryLock(storeDir string, fn func() error) error {
-	return osutil.WithLock(c.lockPath(storeDir), fn)
+	return platform.WithLock(c.lockPath(storeDir), fn)
 }
 
 // InitStore creates the global store's empty registry if it has none.
@@ -117,7 +117,7 @@ func (c *Context) InitStore(storeDir string) error {
 
 // ApprovalPath is <global store>/approvals/<RecordName(key)>.
 func (c *Context) ApprovalPath(g Group) string {
-	return osutil.Join(c.Global, approvalsDir, RecordName(g.Key()))
+	return platform.Join(c.Global, approvalsDir, RecordName(g.Key()))
 }
 
 // Store is the store at dir, read the first time and not again in this run.
@@ -174,14 +174,14 @@ func (c *Context) loadStore(storeDir string) Store {
 	isGlobal := c.IsGlobal(storeDir)
 	var main Group
 	if isGlobal {
-		main = LoadGroup(osutil.Join(storeDir, "shortcuts.json"), storeDir, "")
+		main = LoadGroup(platform.Join(storeDir, "shortcuts.json"), storeDir, "")
 	} else {
 		main = LoadProjectGroup(storeDir)
 	}
 	var problems []string
 	sources := map[string]string{}
-	importsDir := osutil.Join(storeDir, "imports")
-	if isGlobal && osutil.IsDir(importsDir) {
+	importsDir := platform.Join(storeDir, "imports")
+	if isGlobal && platform.IsDir(importsDir) {
 		entries, _ := os.ReadDir(importsDir)
 		var names []string
 		for _, e := range entries {
@@ -189,7 +189,7 @@ func (c *Context) loadStore(storeDir string) Store {
 		}
 		for _, filename := range slices.Sorted(slices.Values(names)) {
 			if strings.HasSuffix(filename, ImportSuffix) {
-				sources[strings.TrimSuffix(filename, ImportSuffix)] = osutil.Join(importsDir, filename)
+				sources[strings.TrimSuffix(filename, ImportSuffix)] = platform.Join(importsDir, filename)
 			}
 		}
 	}
@@ -207,7 +207,7 @@ func (c *Context) loadStore(storeDir string) Store {
 			case taken:
 				problems = append(problems, fmt.Sprintf("namespace '%s' is imported twice in %s", name, storeDir))
 			default:
-				sources[name] = filepath.Clean(osutil.Join(main.Folder(), osutil.ExpandUser(path)))
+				sources[name] = filepath.Clean(platform.Join(main.Folder(), platform.ExpandUser(path)))
 			}
 		}
 	}

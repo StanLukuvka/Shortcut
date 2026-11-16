@@ -8,7 +8,7 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/approval"
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/textio"
 )
 
@@ -76,7 +76,7 @@ func cmdShow(c *model.Context, s *textio.Streams, args []string) error {
 		return err
 	}
 	out("\nScript (" + path + "):")
-	if osutil.IsFile(path) {
+	if platform.IsFile(path) {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -95,8 +95,8 @@ func showTop() []string {
 	return []string{"name", "namespace", "scope", "defined_in", "source", "hides_global", "approval", "cwd", "run_cwd", "script_path", "error"}
 }
 
-// setOpt writes null for nil, else the string. A string that is not valid UTF-8 is refused (model.ErrNotUTF8).
-func setOpt(d *model.Doc, key string, val *string) error {
+// setOpt writes null for nil, else the string. A string that is not valid UTF-8 is refused (platform.ErrNotUTF8).
+func setOpt(d *platform.Doc, key string, val *string) error {
 	if val == nil {
 		d.Set(key, []byte("null"))
 		return nil
@@ -110,7 +110,7 @@ func showJSON(c *model.Context, s *textio.Streams, words []string, lk model.Look
 	if err != nil {
 		return err
 	}
-	d := &model.Doc{}
+	d := &platform.Doc{}
 	for _, k := range showTop() {
 		if k == "hides_global" {
 			d.Set(k, []byte(*vals[k])) // true or false
@@ -150,7 +150,7 @@ func showField(c *model.Context, s *textio.Streams, words []string, lk model.Loo
 	}
 	text, top := vals[key]
 	if !top { // a field of the entry as written; a broken entry that isn't an object has none
-		if d, err := model.ParseDoc(entry); err == nil {
+		if d, err := platform.ParseDoc(entry); err == nil {
 			if str, ok := d.String(key); ok {
 				text = &str
 			} else if raw := string(d.Raw[key]); raw != "" && raw != "null" {

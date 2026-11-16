@@ -9,13 +9,13 @@ import (
 	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 )
 
 // displayPath returns the path relative to the group's script base, or the path itself when that string
 // starts with ".." (a literal string test, so a file named "..x" counts as outside).
 func displayPath(g model.Group, path string) string {
-	rel := osutil.Relpath(path, g.ScriptBase())
+	rel := platform.Relpath(path, g.ScriptBase())
 	if strings.HasPrefix(rel, "..") {
 		return path
 	}
@@ -33,7 +33,7 @@ func entryFiles(g model.Group, items model.Items, origin string) map[string]stri
 			continue
 		}
 		if model.IsRelativeCwd(e.Cwd) {
-			files["./cwd of "+it.Name+origin] = digest([]byte(osutil.Realpath(model.ResolveRunDir(e.Cwd, g, "")) + "\n"))
+			files["./cwd of "+it.Name+origin] = digest([]byte(platform.Realpath(model.ResolveRunDir(e.Cwd, g, "")) + "\n"))
 		}
 		if e.Script == nil {
 			continue
@@ -61,18 +61,18 @@ func folderFiles(g model.Group) map[string]string {
 	if g.Kind != model.KindNamespace {
 		return files
 	}
-	osutil.Walk(g.ScriptsDir(), func(dir string, dirs, names []string) {
-		real := osutil.Realpath(dir) // as entryFiles resolves a script's path
+	platform.Walk(g.ScriptsDir(), func(dir string, dirs, names []string) {
+		real := platform.Realpath(dir) // as entryFiles resolves a script's path
 		for _, name := range dirs {
-			link := osutil.Join(dir, name)
+			link := platform.Join(dir, name)
 			if st, err := os.Lstat(link); err == nil && st.Mode()&os.ModeSymlink != 0 {
 				if target, err := os.Readlink(link); err == nil {
-					files[displayPath(g, osutil.Join(real, name))] = digest([]byte("symlink to " + target + "\n"))
+					files[displayPath(g, platform.Join(real, name))] = digest([]byte("symlink to " + target + "\n"))
 				}
 			}
 		}
 		for _, name := range names {
-			path := osutil.Join(real, name)
+			path := platform.Join(real, name)
 			if st, err := os.Stat(path); err == nil && st.Mode().IsRegular() { // a FIFO or device would block or never end
 				if raw, err := os.ReadFile(path); err == nil {
 					files[displayPath(g, path)] = digest(raw)
@@ -83,7 +83,7 @@ func folderFiles(g model.Group) map[string]string {
 	return files
 }
 
-func jsonFile(g model.Group, path string, d *model.Doc) (map[string]string, error) {
+func jsonFile(g model.Group, path string, d *platform.Doc) (map[string]string, error) {
 	text, err := d.Normal()
 	if err != nil {
 		return nil, fmt.Errorf("cannot approve: %q: %w", displayPath(g, path), err)
@@ -104,7 +104,7 @@ func merge(maps ...map[string]string) map[string]string {
 // SharedFiles is the group's own file and what it names, the JSON normalised, and for a namespace its scripts
 // folder: exactly what is compared and snapshotted, each as its SHA-256. A project may have no .shortcuts; then this is empty.
 func SharedFiles(g model.Group) (map[string]string, error) {
-	if g.Kind == model.KindProject && !osutil.Exists(g.File) {
+	if g.Kind == model.KindProject && !platform.Exists(g.File) {
 		return map[string]string{}, nil
 	}
 	own, err := jsonFile(g, g.File, g.Doc)
@@ -116,7 +116,7 @@ func SharedFiles(g model.Group) (map[string]string, error) {
 
 // LocalFiles is the same for .shortcuts.local.
 func LocalFiles(g model.Group) (map[string]string, error) {
-	if g.Kind != model.KindProject || !osutil.Exists(g.LocalFile) {
+	if g.Kind != model.KindProject || !platform.Exists(g.LocalFile) {
 		return map[string]string{}, nil
 	}
 	own, err := jsonFile(g, g.LocalFile, g.LocalDoc)
@@ -161,9 +161,9 @@ func CheckKey(c *model.Context, g model.Group) error {
 	if !g.NeedsApproval() {
 		return nil
 	}
-	parts := []string{osutil.Realpath(g.StoreDir)}
+	parts := []string{platform.Realpath(g.StoreDir)}
 	if g.Kind == model.KindNamespace {
-		parts = append(parts, osutil.Realpath(g.File))
+		parts = append(parts, platform.Realpath(g.File))
 	}
 	for _, p := range parts {
 		if !utf8.ValidString(p) {

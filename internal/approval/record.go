@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/model"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 )
 
 // Record is approvals/<sha256(key)>.json: the snapshot last approved, and Local for .shortcuts.local on its own
@@ -31,7 +32,7 @@ func isDigest(s string) bool {
 }
 
 // digests reads an object whose values are all digests.
-func digests(d *model.Doc, key string) (map[string]string, bool) {
+func digests(d *platform.Doc, key string) (map[string]string, bool) {
 	o, ok := d.Object(key)
 	if !ok {
 		return nil, false
@@ -51,11 +52,11 @@ func digests(d *model.Doc, key string) (map[string]string, bool) {
 // JSON object with a "snapshot" and a "local" object, each holding only 64-character lowercase hex strings).
 // Keys are matched exactly, not case-insensitively.
 func Load(c *model.Context, g model.Group) *Record {
-	text, err := model.ReadJSONFile(c.ApprovalPath(g))
+	text, err := platform.ReadJSONFile(c.ApprovalPath(g))
 	if err != nil {
 		return nil
 	}
-	d, err := model.ParseDoc(text)
+	d, err := platform.ParseDoc(text)
 	if err != nil {
 		return nil
 	}
@@ -72,7 +73,7 @@ func Load(c *model.Context, g model.Group) *Record {
 
 // mapDoc is m as an object's text, its keys sorted: readers sort, so the order is free, and sorted is stable.
 func mapDoc(m map[string]string) ([]byte, error) {
-	d := &model.Doc{}
+	d := &platform.Doc{}
 	for _, k := range slices.Sorted(maps.Keys(m)) {
 		if err := d.SetString(k, m[k]); err != nil {
 			return nil, err
@@ -100,7 +101,7 @@ func Save(c *model.Context, g model.Group, shared, local map[string]string) erro
 		if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 			return err
 		}
-		rec := &model.Doc{}
+		rec := &platform.Doc{}
 		if err := rec.SetString("key", g.Key()); err != nil {
 			return err
 		}
@@ -114,7 +115,7 @@ func Save(c *model.Context, g model.Group, shared, local map[string]string) erro
 		}
 		rec.Set("snapshot", snap)
 		rec.Set("local", loc)
-		if err := model.WriteJSONAtomic(path, rec); err != nil {
+		if err := platform.WriteJSONAtomic(path, rec); err != nil {
 			return err
 		}
 		c.Forget(g.Key())

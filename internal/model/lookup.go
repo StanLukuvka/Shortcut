@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/osutil"
+	"github.com/StanLukuvka/Shortcut/internal/platform"
 )
 
 // Lookup says which stores a name is looked up in, and how a broken one is treated.
@@ -92,7 +92,7 @@ func FindEntry(c *Context, words []string, lk Lookup) (Found, error) {
 	var missing string
 	if len(rest) > 0 { // `first` may be meant as a namespace
 		missing = fmt.Sprintf("shortcut or namespace '%s' not found. A global namespace is the file %s.",
-			first, osutil.Join(home.Main.StoreDir, "imports", first+ImportSuffix))
+			first, platform.Join(home.Main.StoreDir, "imports", first+ImportSuffix))
 	} else {
 		missing = fmt.Sprintf("shortcut '%s' not found.", first)
 	}
@@ -149,7 +149,7 @@ func ResolveName(c *Context, words []string, lk Lookup) (*ResolvedShortcut, erro
 
 // TooManyNames is the error of a command that was given more words than a name.
 func TooManyNames(words []string) error {
-	return fmt.Errorf("too many names: %s", osutil.ShellJoin(words))
+	return fmt.Errorf("too many names: %s", platform.ShellJoin(words))
 }
 
 // ResolvedShortcut is a name looked up: the entry, its group and where it runs.
