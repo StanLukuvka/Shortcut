@@ -202,9 +202,6 @@ func TestStores_NamespaceFlagCreatesANamespace(t *testing.T) {
 	doc := decodeObject(t, testkit.ReadFile(t, filepath.Join(e.Store, "imports", "docker.shortcut")))
 	testkit.Eq(t, "version", doc["version"], float64(1))
 	testkit.Eq(t, "inline", doc["shortcuts"].(map[string]any)["delete"].(map[string]any)["inline"], `echo "rm $1"`)
-	if _, has := e.LoadGlobal()["delete"]; has {
-		t.Errorf("delete is global")
-	}
 
 	testkit.Eq(t, "run", e.Run("r", "docker", "delete", "x").Stdout, "rm x\n")
 
@@ -212,6 +209,17 @@ func TestStores_NamespaceFlagCreatesANamespace(t *testing.T) {
 	res := e.Run("new", "ps", "--namespace", "docker", "--", "echo again")
 	testkit.Eq(t, "again exit", res.Code, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "already exists")
+}
+
+func TestStores_NamespaceFlagCreatesOnlyItsOwnFile(t *testing.T) {
+	e := testkit.New(t)
+	runOK(t, e, testkit.Opts{}, "new", "--namespace", "X", "name", "--", "true")
+	if _, err := os.Stat(filepath.Join(e.Store, "imports", "X.shortcut")); err != nil {
+		t.Error(err)
+	}
+	if _, err := os.Stat(filepath.Join(e.Store, "shortcuts.json")); !os.IsNotExist(err) {
+		t.Errorf("shortcuts.json was created: %v", err)
+	}
 }
 
 func TestStores_NamespaceFlagCollisions(t *testing.T) {

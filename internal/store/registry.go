@@ -8,7 +8,6 @@ import (
 	"os"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
@@ -24,17 +23,6 @@ func (e *RegistryNotFoundError) Error() string { return "registry not found: " +
 func isJSONError(err error) bool {
 	var pe *fs.PathError
 	return !errors.As(err, &pe)
-}
-
-func RegistryExists(storeDir string) bool {
-	return platform.IsFile(platform.Join(storeDir, "shortcuts.json"))
-}
-
-func emptyRegistry() platform.Doc {
-	d := platform.Doc{}
-	d["version"] = []byte(strconv.Itoa(RegistryVersion))
-	d["shortcuts"] = []byte("{}")
-	return d
 }
 
 // LoadRegistryFile reads a registry file, with fixed messages.

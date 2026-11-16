@@ -60,13 +60,11 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 		if err != nil {
 			return err
 		}
-		if shortcuts.Has(name) {
-			delete(shortcuts, name)
-			if err := write.SaveEdited(group.File, reg, shortcuts); err != nil {
-				return err
-			}
+		if !shortcuts.Has(name) {
+			return term.Die("'" + display + "' is no longer in " + group.File + "; nothing was removed")
 		}
-		return nil
+		delete(shortcuts, name)
+		return write.SaveEdited(group.File, reg, shortcuts)
 	})
 	if err != nil {
 		return err

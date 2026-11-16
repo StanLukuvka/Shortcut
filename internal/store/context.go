@@ -88,19 +88,9 @@ func (c *Context) LocalProjectRoot() (string, error) {
 }
 
 // WithLock runs fn holding the one lock file, <global store>/.lock, which every write takes: the registry, a
-// namespace file and .shortcuts.local. Not reentrant: never nest it, and never call InitStore inside it.
+// namespace file and .shortcuts.local. Not reentrant: never nest it.
 func (c *Context) WithLock(fn func() error) error {
 	return platform.WithLock(platform.Join(c.Global, ".lock"), fn)
-}
-
-// InitStore creates the global store's empty registry if it has none.
-func (c *Context) InitStore(storeDir string) error {
-	return c.WithLock(func() error {
-		if RegistryExists(storeDir) {
-			return nil
-		}
-		return SaveRegistryAtomic(storeDir, emptyRegistry())
-	})
 }
 
 // Store is the store at dir, read the first time and not again in this run.

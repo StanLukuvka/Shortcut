@@ -70,13 +70,8 @@ func Register(c *store.Context, s *term.Streams, group store.Group, entry *store
 		}
 		return nil
 	}
-	if !store.RegistryExists(storeDir) {
-		if err := c.InitStore(storeDir); err != nil {
-			return err
-		}
-	}
 	err := c.WithLock(func() error {
-		reg, shortcuts, err := LoadForEdit(group.File, group.Kind == store.KindNamespace && !platform.Exists(group.File))
+		reg, shortcuts, err := LoadForEdit(group.File, !platform.Exists(group.File))
 		if err != nil {
 			return err
 		}

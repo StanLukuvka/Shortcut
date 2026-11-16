@@ -332,27 +332,8 @@ func TestStores_LockIsInTheGlobalStoreAndASymlinkedLockIsRefused(t *testing.T) {
 	if b, _ := os.ReadFile(victim); string(b) != "keep\n" {
 		t.Error("victim changed")
 	}
-	if err := c.InitStore(env.Store); err == nil {
-		t.Error("InitStore through a symlinked .lock must fail")
-	}
-}
-
-func TestStores_InitStoreCreatesOnlyAMissingRegistry(t *testing.T) {
-	env := testkit.New(t)
-	c := NewContext(env.Home, nil)
-	if err := c.InitStore(env.Store); err != nil {
-		t.Fatal(err)
-	}
-	b, _ := os.ReadFile(filepath.Join(env.Store, "shortcuts.json"))
-	if string(b) != "{\n  \"shortcuts\": {},\n  \"version\": 1\n}\n" {
-		t.Errorf("got %q", b)
-	}
-	env.WriteStore(env.Store, map[string]any{"keep": map[string]any{"inline": "x"}})
-	if err := c.InitStore(env.Store); err != nil {
-		t.Fatal(err)
-	}
-	if b2, _ := os.ReadFile(filepath.Join(env.Store, "shortcuts.json")); !strings.Contains(string(b2), "keep") {
-		t.Error("an existing registry was replaced")
+	if err := c.WithLock(func() error { return nil }); err == nil {
+		t.Error("WithLock through a symlinked .lock must fail")
 	}
 }
 

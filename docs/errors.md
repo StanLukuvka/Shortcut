@@ -140,6 +140,7 @@ A new local shortcut needs a project folder:
 | Message | Meaning |
 |---|---|
 | `--local takes one name: namespaces aren't in .shortcuts.local` | |
+| `'<name>' is no longer in <file>; nothing was removed` | The entry went away between the question and the removal |
 | `'<name>' isn't in .shortcuts or .shortcuts.local here` | |
 | `'<name>' isn't in .shortcuts.local, and shortcut doesn't change .shortcuts` | `rm --local` of a name only in `.shortcuts` |
 | `--namespace takes the namespace alone: shortcut rm --namespace <ns>` | |
