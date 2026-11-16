@@ -23,8 +23,6 @@ The installer downloads the release archive for your system, checks it against `
 
 `$XDG_DATA_HOME` (default `~/.local/share`) and `$XDG_CONFIG_HOME` (default `~/.config`) move the completion files.
 
-At a terminal, the installer then offers the bundled shortcuts: you review and answer `shortcut init --global --bundled`, and the installer never answers for you. `SHORTCUT_NO_BUNDLED=1` skips the offer and prints the command instead. Without a terminal, it prints the command.
-
 To install a given version, set `SHORTCUT_VERSION`, with or without the `v`:
 
 ```bash
@@ -39,9 +37,7 @@ Requirements:
 
 - bash: inline shortcuts run with `bash -c`.
 - `curl` or `wget`, and `sha256sum` or `shasum`, for the installer.
-- git, for `init --global <git URL>`.
-- `$EDITOR` for the bundled `edit` (`$VISUAL` first if set, nano if neither).
-- The bundled `desktop` is for Linux only.
+- For [examples/tools](examples/tools/): `$EDITOR` for `edit` (`$VISUAL` first if set, nano if neither), and `desktop` is for Linux only.
 
 ## Quick start
 
@@ -110,11 +106,6 @@ shortcut promote <name> --as NEW      the same, under another global name
 shortcut promote <name> --force       one that isn't exported
 
 shortcut update [ns|.] [-y]           review and approve
-shortcut init --global <src> [-y]     copy the exported entries in a folder's or git URL's .shortcuts
-                                      or, with no .shortcuts, its <ns>.shortcut namespaces into imports/
-shortcut init --global <src> --replace
-                                      the same, in place of installed namespaces of those names
-shortcut init --global --bundled [-y] the same for the shortcuts that come with shortcut
 shortcut completion bash|zsh|fish
 shortcut help [command]
 shortcut --version
@@ -177,33 +168,21 @@ SC_ARG_<NAME>          each declared argument, upper case with - as _. A rest ar
 A namespace is a file named `<ns>.shortcut`: `{"version": 1, "shortcuts": {...}}`, with entries as in `shortcuts.json`. [docs/shortcut.schema.json](docs/shortcut.schema.json) describes them. Relative `script` and `cwd` paths resolve from the file's folder.
 
 - `~/.shortcuts/imports/<ns>.shortcut` is found by its name.
-- `shortcut init --global <dir|git URL>` copies a folder's `<ns>.shortcut` files there, each with its `scripts/<ns>/` folder, after showing them. Every script an entry names has to be in that folder. `--replace` puts a newer copy in place of the installed one, showing what changed.
+- To install one, copy its `<ns>.shortcut` and its `scripts/<ns>/` folder into `~/.shortcuts/imports/`, then run `shortcut update <ns>`. Every script an entry names has to be in that folder.
 - A file anywhere else is listed in `shortcuts.json`, or in a project's `.shortcuts`: `"imports": {"<ns>": "path/to/<ns>.shortcut"}`. The path is relative to the file that lists it, and can start with `~`.
 - It runs only after `shortcut update <ns>`, and again after each change to its file, a script it names, or anything in its `scripts/<ns>/` folder.
 - `shortcut new --namespace <ns> <name> ...` adds an entry, and keeps an approved namespace approved.
 - `scripts/<ns>/`, next to the file, is the namespace's own folder: shortcut keeps its copied scripts there, and helpers its scripts run belong there too. `rm` deletes an entry's script there with the entry.
 - A script runs a sibling with `shortcut r "$SHORTCUT_NAMESPACE" <name>`. `SHORTCUT_SHOW_DIR=0` keeps the `→ dir` line out when capturing it.
 
-[examples/podman](examples/podman/) is one, with scripts.
-
-## Bundled shortcuts
-
-`shortcut init --global --bundled` installs them from the copy inside the program, with the same review as any `init --global`. From a clone, `shortcut init --global templates` does the same. `init --global <repo URL>` doesn't reach them: they're in `templates/`, not at the repo's root.
-
-```
-shortcut r edit <name>       open its script, or the file defining an inline one
-shortcut r nano <name>       same, in nano
-shortcut r logged <name>     run through tee, keep the output
-shortcut r desktop <name>    desktop launcher for a global shortcut or namespace member; --remove deletes it
-shortcut r search <pattern>  find files by name
-```
+[examples/podman](examples/podman/) and [examples/tools](examples/tools/) are two, with scripts. `tools` has `edit`, `nano`, `logged`, `desktop` and `search`.
 
 ## Settings
 
 ```
 SHORTCUTS_HOME        global store (default ~/.shortcuts)
 SHORTCUT_SHOW_DIR=0   hide the "→ dir" line
-PAGER                 pages long update and init --global diffs
+PAGER                 pages long update diffs
 ```
 
 ## Security model
@@ -211,7 +190,7 @@ PAGER                 pages long update and init --global diffs
 > 1. shortcut runs exactly what its definitions say, without inspecting them.
 > 2. A project's or import's shortcuts don't run until you approve them with `shortcut update`, and must be re-approved after any change to their definitions.
 > 3. Approval covers definitions and the scripts they name, not the programs those call.
-> 4. Global shortcuts have no approval step, so a global link target can change freely. `init --global` shows a collection before copying it.
+> 4. Global shortcuts have no approval step, so a global link target can change freely.
 > 5. Anyone who can write to your shortcut store can already run code as you; that's out of scope.
 > 6. A promoted shortcut runs the project's files as they are now. If you want something immutable, don't take it from a repo.
 
@@ -223,7 +202,7 @@ PAGER                 pages long update and init --global diffs
 - [CHANGELOG.md](CHANGELOG.md): what changed in each version.
 - [docs/](docs/): diagrams, the JSON Schema for shortcut files, and every error message.
 - [examples/podman](examples/podman/): a namespace for podman containers.
-- Code, in Go: [cmd/shortcut](cmd/shortcut/) is the entry point. `internal/cli` has the commands, one `cmd_*.go` file each, with `usage.go` and the completion scripts in `completion/`. `internal/model` has the store files, entries and lookup; `internal/approval` the approval records and review; `internal/textio` terminal output and prompts. `internal/osutil` and `internal/difflib` reproduce the file and diff behaviour that shortcut's output depends on, and `internal/ordjson` is ordered JSON on encoding/json; `internal/testkit` is the test sandbox. [installer/](installer/) is the install script. [bundled.go](bundled.go) embeds [templates/](templates/) in the binary.
+- Code, in Go: [cmd/shortcut](cmd/shortcut/) is the entry point. `internal/cli` has the commands, one `cmd_*.go` file each, with `usage.go` and the completion scripts in `completion/`. `internal/model` has the store files, entries and lookup; `internal/approval` the approval records and review; `internal/textio` terminal output and prompts. `internal/osutil` and `internal/difflib` reproduce the file and diff behaviour that shortcut's output depends on, and `internal/ordjson` is ordered JSON on encoding/json; `internal/testkit` is the test sandbox. [installer/](installer/) is the install script.
 
 ## License
 

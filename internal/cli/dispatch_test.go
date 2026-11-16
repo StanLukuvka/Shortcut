@@ -50,7 +50,6 @@ func TestDispatch_ParserErrorsEndToEnd(t *testing.T) {
 		{[]string{"rm"}, "error: missing name\n" + try("rm")},
 		{[]string{"promote", "a", "--as"}, "error: option '--as' needs a value\n" + try("promote")},
 		{[]string{"update", "a", "b"}, "error: unexpected argument 'b'\n" + try("update")},
-		{[]string{"init", "--global=1"}, "error: option '--global' takes no value\n" + try("init")},
 		{[]string{"completion", "sh"}, "error: invalid choice 'sh' (choose from bash, fish, zsh)\n" + try("completion")},
 	} {
 		res := e.Run(c.argv...)
@@ -86,8 +85,8 @@ func TestRunning_UnknownCommandsPointToRun(t *testing.T) {
 	if res.Code != 2 || !strings.HasPrefix(res.Stderr, "error: unrecognized option '--bogus'\n") {
 		t.Errorf("--bogus: exit %d stderr %q", res.Code, res.Stderr)
 	}
-	if code := e.Run("init", "-g").Code; code != 2 {
-		t.Errorf("init -g: exit %d", code)
+	if code := e.Run("update", "-g").Code; code != 2 {
+		t.Errorf("update -g: exit %d", code)
 	}
 }
 
@@ -113,7 +112,7 @@ func TestRunning_HelpNamesACommand(t *testing.T) {
 // Every command's `help <cmd>` and `<cmd> -h` print its file in help/ (run and r print RUN_USAGE), and nothing else.
 func TestHelp_LiveOutputIsTheFile(t *testing.T) {
 	e := testkit.New(t)
-	for _, cmd := range []string{"run", "new", "list", "show", "rm", "promote", "update", "init", "completion"} {
+	for _, cmd := range []string{"run", "new", "list", "show", "rm", "promote", "update", "completion"} {
 		file, err := os.ReadFile("help/" + cmd + ".txt")
 		if cmd == "run" {
 			file, err = []byte(runUsage+"\n"), nil

@@ -198,17 +198,3 @@ A new local shortcut needs a project folder:
 | `no project shortcuts here: no .shortcuts or .shortcuts.local in this folder or its parents` | `update .` outside a project |
 | `no namespace named '<ns>' here` | |
 | `approve <group> in a terminal, or pass -y` | No terminal to show the review in |
-
-## init
-
-| Message | Meaning |
-|---|---|
-| ``a project's .shortcuts is used in place, never copied: clone the project and run `shortcut update` there. To copy its exported shortcuts into your global store, add --global.`` | `init` without `--global` |
-| `a project's .shortcuts is a file you write by hand, starting from: {"version": 1, "shortcuts": {}}. For your own shortcuts, use new --local.` | |
-| `failed to clone git repository from <url>: <git error>` | |
-| `source directory does not exist: <dir>` | |
-| `no .shortcuts or <ns>.shortcut found in <dir>` | `init --global` copies a source's `.shortcuts` exported entries, or its namespace files |
-| `import <source> in a terminal, or pass -y` | |
-| `--bundled takes no source` | `init --global --bundled <source>` |
-| `--bundled copies the bundled shortcuts into your global store: add --global.` | `init --bundled` without `--global` |
-| `--replace is for a folder of namespaces, and <dir> has a .shortcuts` | A project's entries aren't replaced |

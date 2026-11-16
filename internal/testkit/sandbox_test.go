@@ -276,25 +276,11 @@ func TestFixtures_BrokenProjectReadsAsCorrupt(t *testing.T) {
 	}
 }
 
-func TestFixtures_CollectionImports(t *testing.T) {
-	e := New(t) // the `init --global` and `r hi` halves
-	src := e.Collection(HI, Files(map[string]any{"bin/a.sh": "echo a\n"}), Mode(0o755))
-	if fi, err := os.Stat(filepath.Join(src, "bin", "a.sh")); err != nil || fi.Mode()&0o111 == 0 {
-		t.Errorf("bin/a.sh not executable: %v", err)
-	}
-	raw, _ := os.ReadFile(filepath.Join(src, ".shortcuts"))
-	want := `{"shortcuts":{"hi":{"export":true,"inline":"echo hi"}},"version":1}`
-	if strings.TrimSpace(string(raw)) != want {
-		t.Errorf("store = %s", raw)
-	}
-}
-
 func TestFixtures_SharedFixturesAreLeftAsTheyWere(t *testing.T) {
 	e := New(t)
 	useBinary(t, e, "exit 0\n")
 	before := fmt.Sprint(GO, HI)
 	e.Project(GO, Approved())
-	e.Collection(HI)
 	if after := fmt.Sprint(GO, HI); after != before {
 		t.Errorf("fixtures changed: %s -> %s", before, after)
 	}

@@ -4,8 +4,7 @@
 #
 # It downloads the archive for this system, checks it against checksums.txt, and puts `shortcut` in BIN_DIR
 # (replacing it by an atomic rename). It then writes shell completions for bash, fish and zsh. For zsh it adds
-# one marked block to ~/.zshrc, once. At a terminal it offers the bundled shortcuts (`shortcut init --global
-# --bundled`); you review and answer that, it never runs with -y.
+# one marked block to ~/.zshrc, once.
 #
 # Environment:
 #   BIN_DIR                   where the binary goes (default ~/.local/bin)
@@ -14,7 +13,6 @@
 #   SHORTCUT_VERSION          install this version (0.1.0 or v0.1.0); default is the latest release
 #   SHORTCUT_DOWNLOAD_BASE    download from here instead of GitHub (used by the tests)
 #   SHORTCUT_NO_RC            do not touch ~/.zshrc
-#   SHORTCUT_NO_BUNDLED       do not offer the bundled shortcuts
 #
 # With SHORTCUT_DOWNLOAD_BASE=file://<dir>, <dir> is flat and holds VERSION (the version number, read when
 # SHORTCUT_VERSION is not set), shortcut_<version>_<os>_<arch>.tar.gz (a tar.gz with `shortcut` at its top) and
@@ -122,13 +120,6 @@ main() {
           say "Added a marked completion block to ~/.zshrc (open a new terminal)" ;;
       esac
     fi
-  fi
-
-  # bundled shortcuts: the user reviews and answers, never -y
-  if [ -z "${SHORTCUT_NO_BUNDLED:-}" ] && ( : </dev/tty ) 2>/dev/null; then
-    "$bin_dir/shortcut" init --global --bundled </dev/tty || say "Skipped the bundled shortcuts. Add them later: shortcut init --global --bundled"
-  else
-    say "Bundled shortcuts: shortcut init --global --bundled"
   fi
 
   # PATH notice

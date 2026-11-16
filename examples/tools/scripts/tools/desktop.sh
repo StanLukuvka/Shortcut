@@ -3,7 +3,7 @@ set -euo pipefail
 
 remove=0
 if [ "${1-}" = "--remove" ]; then remove=1; shift; fi
-usage() { echo "usage: shortcut r desktop [--remove] [namespace] <shortcut>" >&2; exit 2; }
+usage() { echo "usage: shortcut r tools desktop [--remove] [namespace] <shortcut>" >&2; exit 2; }
 case $# in 1|2) ;; *) usage;; esac
 for word in "$@"; do case "$word" in ""|*[!A-Za-z0-9_-]*) usage;; esac; done
 name="$*"  # a namespace member is "<ns> <name>"

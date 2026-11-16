@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "shortcuts": {
+    "search": {
+      "description": "Search files under caller cwd matching pattern",
+      "script": "scripts/tools/search.sh"
+    },
+    "edit": {
+      "description": "Open a shortcut's script, or the file that defines an inline one",
+      "script": "scripts/tools/edit.sh"
+    },
+    "nano": {
+      "description": "Edit a shortcut in nano",
+      "inline": "VISUAL= EDITOR=nano shortcut run --global tools edit \"$@\""
+    },
+    "logged": {
+      "description": "Run a shortcut and keep a copy of its output",
+      "script": "scripts/tools/logged.sh"
+    },
+    "desktop": {
+      "description": "Create a desktop launcher for a global shortcut, or remove one with --remove",
+      "script": "scripts/tools/desktop.sh"
+    }
+  }
+}

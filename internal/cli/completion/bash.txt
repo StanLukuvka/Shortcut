@@ -10,7 +10,7 @@ _shortcut() {
         prev="${COMP_WORDS[COMP_CWORD-1]}"
     fi
 
-    local subcommands="run r new list show rm promote update init completion help"
+    local subcommands="run r new list show rm promote update completion help"
     local name_commands="run r show rm promote"
 
     if [ "${COMP_CWORD:-1}" -eq 1 ]; then
@@ -46,10 +46,6 @@ _shortcut() {
     esac
 
     case "$prev" in
-        init)
-            COMPREPLY=( $(compgen -W "--global --bundled --replace -y" -- "$cur") )
-            return 0
-            ;;
         completion)
             COMPREPLY=( $(compgen -W "bash zsh fish" -- "$cur") )
             return 0

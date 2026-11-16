@@ -75,7 +75,7 @@
           "type": "string"
         },
         "export": {
-          "description": "Made to work outside its project: 'init --global' takes only these from a project, and 'promote' takes them without --force. Only allowed in .shortcuts and .shortcuts.local. Default false.",
+          "description": "Made to work outside its project: 'promote' takes only these without --force. Only allowed in .shortcuts and .shortcuts.local. Default false.",
           "type": "boolean"
         },
         "from": {
