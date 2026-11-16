@@ -43,7 +43,7 @@ func TestApproval_BlocksUntilApprovedAndAfterAnyChange(t *testing.T) {
 	res = e.RunWith(o, "update")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "update", res.Stderr, "in a terminal, or pass -y")
-	for _, want := range []string{"+++ b/.shortcuts\n", "+++ b/scripts/hi.sh", "+echo hi"} {
+	for _, want := range []string{"  new      .shortcuts\n", "  new      scripts/hi.sh\n"} {
 		testkit.Contains(t, "update", res.Stdout, want)
 	}
 	if code := e.RunWith(o, "r", "hi").Code; code != 1 {
@@ -71,10 +71,9 @@ func TestApproval_BlocksUntilApprovedAndAfterAnyChange(t *testing.T) {
 	res.WantCode(t, 1)
 	testkit.Contains(t, "changed json", res.Stderr, proj+" changed since you approved it; run: shortcut update")
 	out := runOK(t, e, o, "update", "-y").Stdout
-	testkit.Contains(t, "diff", strings.ReplaceAll(out, "-      \"inline\": \"echo there\"", "-    \"there\": {"), "-    \"there\": {")
-	testkit.Contains(t, "diff", out, "+      \"inline\": \"echo changed\"")
-	if strings.Contains(out, "+    \"version\"") {
-		t.Errorf("version shows as changed:\n%s", out)
+	testkit.Contains(t, "list", out, "  changed  .shortcuts\n")
+	if strings.Count(out, "\n  ") != 1 {
+		t.Errorf("only .shortcuts changed:\n%s", out)
 	}
 
 	// So does a change to a script
@@ -83,9 +82,7 @@ func TestApproval_BlocksUntilApprovedAndAfterAnyChange(t *testing.T) {
 		t.Errorf("changed script: exit %d", code)
 	}
 	out = runOK(t, e, o, "update", "-y").Stdout
-	for _, want := range []string{"--- a/scripts/hi.sh", "-echo hi", "+echo evil"} {
-		testkit.Contains(t, "diff", out, want)
-	}
+	testkit.Contains(t, "list", out, "  changed  scripts/hi.sh\n")
 	if got := e.RunWith(o, "r", "hi").Stdout; got != "evil\n" {
 		t.Errorf("run after approving the change: %q", got)
 	}
@@ -269,32 +266,24 @@ func TestApproval_NonUTF8Script(t *testing.T) {
 	if code := e.RunWith(in(proj), "r", "tool").Code; code != 1 {
 		t.Errorf("changed: exit %d", code)
 	}
-	out := e.RunWith(in(proj), "update", "-y").Stdout
-	if strings.Contains(out, "Binary file") {
-		t.Errorf("a text file shown as binary:\n%s", out)
+	testkit.Contains(t, "list", e.RunWith(in(proj), "update", "-y").Stdout, "  changed  bin/tool\n")
+	if code := e.RunWith(in(proj), "r", "tool").Code; code != 0 {
+		t.Errorf("after update: exit %d", code)
 	}
-	testkit.Contains(t, "diff", out, "+echo two")
-	testkit.Contains(t, "diff", out, `+# \xff\xfd`)
 }
 
 func TestApproval_ANulCannotHideAScriptBashWouldRun(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(testkit.BinTool, testkit.Files(map[string]any{"bin/tool": []byte("#!/bin/bash\necho PWNED\n\x00")}))
-	out := e.RunWith(in(proj), "update", "-y").Stdout
-	testkit.Contains(t, "diff", out, "+echo PWNED")
-	if strings.Contains(out, "Binary file") {
-		t.Errorf("shown as binary:\n%s", out)
-	}
+	testkit.Contains(t, "list", e.RunWith(in(proj), "update", "-y").Stdout, "  new      bin/tool\n")
 }
 
-// What `update` shows besides the diff: a namespace's description is part of the file, and so of what is reviewed,
-// and a reviewed namespace names the file.
+// What `update` shows for a namespace: the file it is read from.
 func TestUpdate_ShowsAGroupDescriptionAndItsFile(t *testing.T) {
 	e := testkit.New(t)
 	path := e.WriteImport(e.Store, "docker", map[string]any{"version": 1, "description": "Docker housekeeping",
 		"shortcuts": map[string]any{"ps": testkit.Inline("echo ps")}})
 	out := runOK(t, e, testkit.Opts{}, "update", "docker", "-y").Stdout
-	testkit.Contains(t, "update docker", out, "Docker housekeeping")
 	testkit.Contains(t, "update docker", out, "New to you: docker ("+path+")\n")
 	testkit.Contains(t, "update docker", out, "Approved docker. This covers its definitions and its scripts folder, not what they call.")
 }
@@ -401,4 +390,20 @@ func TestUpdate_UnnamedSkipsABrokenNamespace(t *testing.T) {
 	if res.Code != 1 || !strings.Contains(res.Stderr, "error: cannot approve bad: ") {
 		t.Errorf("update bad -y: exit %d stderr %q", res.Code, res.Stderr)
 	}
+}
+
+func TestUpdate_ListsNewChangedAndRemovedPaths(t *testing.T) {
+	e := testkit.New(t)
+	script := func(name string) any { return map[string]any{"script": name} }
+	proj := e.Project(map[string]any{"a": script("a.sh"), "b": script("b.sh"), "c": script("c.sh")}, testkit.Approved(),
+		testkit.Files(map[string]any{"a.sh": "echo a\n", "b.sh": "echo b\n", "c.sh": "echo c\n"}))
+	o := in(proj)
+	e.WriteFile(filepath.Join(proj, "b.sh"), "echo B\n", 0)
+	e.WriteFile(filepath.Join(proj, "d.sh"), "echo d\n", 0)
+	if err := os.Remove(filepath.Join(proj, "c.sh")); err != nil {
+		t.Fatal(err)
+	}
+	e.WriteStore(filepath.Join(proj, ".shortcuts"), map[string]any{"a": script("a.sh"), "b": script("b.sh"), "d": script("d.sh")})
+	out := runOK(t, e, o, "update", "-y").Stdout
+	testkit.Contains(t, "list", out, "Changes to "+proj+"\n  changed  .shortcuts\n  changed  b.sh\n  removed  c.sh\n  new      d.sh\nApproved")
 }

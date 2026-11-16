@@ -43,8 +43,7 @@ func TestSymlinkSafety_MovingASymlinkUnderARelativeCwdNeedsApproval(t *testing.T
 		t.Errorf("moved symlink: exit %d", code)
 	}
 	res = e.RunWith(in(proj), "update", "-y")
-	testkit.Contains(t, "diff", res.Stdout, "+"+elsewhere)
-	testkit.Contains(t, "diff", res.Stdout, "--- a/cwd of go\n")
+	testkit.Contains(t, "list", res.Stdout, "  changed  ./cwd of go\n")
 	if code := e.RunWith(in(proj), "r", "go").Code; code != 0 {
 		t.Errorf("after update: exit %d", code)
 	}

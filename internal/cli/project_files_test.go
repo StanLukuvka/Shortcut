@@ -156,8 +156,7 @@ func TestProjectFiles_AHandEditToLocalNeedsApproving(t *testing.T) {
 	res.WantCode(t, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "changed since you approved it")
 	res = e.RunWith(in(proj), "update", "-y")
-	testkit.Contains(t, "diff", res.Stdout, "+++ b/.shortcuts.local")
-	testkit.Contains(t, "diff", res.Stdout, "echo evil")
+	testkit.Contains(t, "list", res.Stdout, "  changed  .shortcuts.local\n")
 	testkit.Eq(t, "mine", e.RunWith(in(proj), "r", "mine").Stdout, "evil\n")
 }
 
@@ -201,7 +200,7 @@ func TestProjectFiles_ACLIWriteToAFreshCloneDoesNotApproveShared(t *testing.T) {
 	res.WantCode(t, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "isn't approved yet")
 	res = e.RunWith(in(proj), "update", "-y")
-	testkit.Contains(t, "diff", res.Stdout, "+++ b/.shortcuts\n")
+	testkit.Contains(t, "list", res.Stdout, "  new      .shortcuts\n")
 	testkit.Eq(t, "keep", e.RunWith(in(proj), "r", "keep").Stdout, "keep\n")
 }
 

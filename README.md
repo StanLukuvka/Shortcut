@@ -97,7 +97,7 @@ shortcut rm --local <name>            undo your override, or remove a local entr
 shortcut rm --namespace <ns> [-y]     remove a global namespace and its scripts/<ns>/ folder; one imported
                                       from elsewhere is only no longer imported
 
-shortcut update [ns|.] [-y]           review and approve
+shortcut update [ns|.] [-y]           list what is new, changed or removed, and approve
 shortcut completion bash|zsh|fish
 shortcut help [command]
 shortcut --version
@@ -162,7 +162,6 @@ A namespace is a file named `<ns>.shortcut`: `{"version": 1, "shortcuts": {...}}
 ```
 SHORTCUTS_HOME        global store (default ~/.shortcuts)
 SHORTCUT_SHOW_DIR=0   hide the "→ dir" line
-PAGER                 pages long update diffs
 ```
 
 ## Security model
@@ -181,7 +180,7 @@ PAGER                 pages long update diffs
 - [CHANGELOG.md](CHANGELOG.md): what changed in each version.
 - [docs/](docs/): diagrams, the JSON Schema for shortcut files, and every error message.
 - [examples/podman](examples/podman/): a namespace for podman containers.
-- Code, in Go: [cmd/shortcut](cmd/shortcut/) is the entry point. `internal/cli` has the commands, one `cmd_*.go` file each, with `usage.go` and the completion scripts in `completion/`. `internal/model` has the store files, entries and lookup; `internal/approval` the approval records and review; `internal/textio` terminal output and prompts. `internal/osutil` and `internal/difflib` reproduce the file and diff behaviour that shortcut's output depends on, and `internal/ordjson` is ordered JSON on encoding/json; `internal/testkit` is the test sandbox. [installer/](installer/) is the install script.
+- Code, in Go: [cmd/shortcut](cmd/shortcut/) is the entry point. `internal/cli` has the commands, one `cmd_*.go` file each, with `usage.go` and the completion scripts in `completion/`. `internal/model` has the store files, entries and lookup; `internal/approval` the approval records; `internal/textio` terminal output and prompts. `internal/osutil` reproduces the file behaviour that shortcut's output depends on, and `internal/ordjson` is ordered JSON on encoding/json; `internal/testkit` is the test sandbox. [installer/](installer/) is the install script.
 
 ## License
 

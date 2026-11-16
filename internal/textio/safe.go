@@ -1,5 +1,5 @@
 // Package textio is where shortcut's text leaves and enters: everything printed is made safe first, a question
-// cannot be forged, and a diff can use the pager.
+// cannot be forged.
 package textio
 
 import (

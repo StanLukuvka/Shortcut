@@ -51,14 +51,14 @@ func TestOutputSafety_HelpStaysPlainOnATerminal(t *testing.T) {
 	}
 }
 
-func TestOutputSafety_EscapeCodesInADiffCannotTouchTheTerminal(t *testing.T) {
+func TestOutputSafety_EscapeCodesInAListedPathCannotTouchTheTerminal(t *testing.T) {
 	e := testkit.New(t)
-	proj := e.Project(testkit.BinTool, testkit.Files(map[string]any{"bin/tool": "echo \x1b[2Jhidden\r\n"}))
+	proj := e.Project(map[string]any{"tool": map[string]any{"script": "bin/t\x1b[2Jx"}}, testkit.Files(map[string]any{"bin/t\x1b[2Jx": "echo hi\n"}))
 	res := e.RunWith(in(proj), "update", "-y")
 	if strings.Contains(res.Stdout, "\x1b") {
-		t.Errorf("escape in the diff: %q", res.Stdout)
+		t.Errorf("escape in the list: %q", res.Stdout)
 	}
-	testkit.Contains(t, "diff", res.Stdout, "^[[2Jhidden")
+	testkit.Contains(t, "list", res.Stdout, "  new      bin/t^[[2Jx")
 }
 
 func TestOutputSafety_AClosedStreamChangesNothing(t *testing.T) {

@@ -15,8 +15,20 @@ import (
 // Record is approvals/<sha256(key)>.json: the snapshot last approved, and Local for .shortcuts.local on its own
 // (a change the CLI makes there updates that half alone). Records live in the global store, never next to what they approve.
 type Record struct {
-	Snapshot map[string]string // shared files: path -> reviewable text
+	Snapshot map[string]string // shared files: path -> SHA-256 (hex)
 	Local    map[string]string // .shortcuts.local half
+}
+
+func isDigest(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if !('0' <= c && c <= '9' || 'a' <= c && c <= 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func stringMap(v ordjson.Value) (map[string]string, bool) {
@@ -27,7 +39,7 @@ func stringMap(v ordjson.Value) (map[string]string, bool) {
 	m := make(map[string]string, len(o.Keys))
 	for _, k := range o.Keys {
 		s, ok := o.Vals[k].(string)
-		if !ok {
+		if !ok || !isDigest(s) {
 			return nil, false
 		}
 		m[k] = s
@@ -36,7 +48,7 @@ func stringMap(v ordjson.Value) (map[string]string, bool) {
 }
 
 // Load returns the record, or nil when there is none, it can't be read, or it isn't shaped as one (a
-// JSON object with a "snapshot" and a "local" object, each holding only strings).
+// JSON object with a "snapshot" and a "local" object, each holding only 64-character lowercase hex strings).
 func Load(g model.Group) *Record {
 	v, err := model.ReadJSONFile(model.ApprovalPath(g))
 	if err != nil {

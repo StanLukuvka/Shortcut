@@ -72,7 +72,7 @@ func cmdUpdate(s *textio.Streams, args []string) error {
 	return nil
 }
 
-// approveGroup shows what changed since the last approval and asks. What is shown is what gets
+// approveGroup lists what is new, changed or removed since the last approval and asks. What is listed is what gets
 // hashed. globalNames are your global shortcuts and namespaces, which a project's names hide inside it. It returns
 // the exit code; an error is a die (no terminal to ask on, or the record can't be written). A broken group
 // is skipped with a warning (exit 0) unless the group was named, then it is an error (exit 1).
@@ -125,7 +125,20 @@ func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames 
 		head = "Changes to"
 	}
 	s.Out.WriteString(head + " " + g.Label() + where + "\n")
-	textio.ShowDiff(s, approval.DiffFiles(old, files))
+	paths := maps.Clone(old)
+	maps.Copy(paths, files)
+	for _, path := range slices.Sorted(maps.Keys(paths)) {
+		before, inOld := old[path]
+		after, inNew := files[path]
+		switch {
+		case !inNew:
+			s.Out.WriteString("  removed  " + path + "\n")
+		case !inOld:
+			s.Out.WriteString("  new      " + path + "\n")
+		case before != after:
+			s.Out.WriteString("  changed  " + path + "\n")
+		}
+	}
 	local2 := g.LocalShortcuts()
 	for _, name := range slices.Sorted(slices.Values(g.SharedShortcuts().Keys)) {
 		if _, both := local2.Get(name); both {
@@ -144,7 +157,7 @@ func approveGroup(s *textio.Streams, g model.Group, assumeYes bool, globalNames 
 			}
 		}
 	}
-	granted, err := approval.ConfirmReview("approve", old, files, "approve "+g.Label()+" in a terminal, or pass -y").Granted(s, assumeYes)
+	granted, err := textio.Confirm{Question: "approve?", NoTerminal: "approve " + g.Label() + " in a terminal, or pass -y"}.Granted(s, assumeYes)
 	if err != nil {
 		return 0, err
 	}
