@@ -10,8 +10,8 @@ _shortcut() {
         prev="${COMP_WORDS[COMP_CWORD-1]}"
     fi
 
-    local subcommands="run r new list show location rm promote update init completion help"
-    local name_commands="run r show location rm promote"
+    local subcommands="run r new list show rm promote update init completion help"
+    local name_commands="run r show rm promote"
 
     if [ "${COMP_CWORD:-1}" -eq 1 ]; then
         COMPREPLY=( $(compgen -W "${subcommands}" -- "$cur") )

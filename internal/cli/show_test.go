@@ -9,7 +9,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-func TestStores_ShowAndLocation(t *testing.T) {
+func TestStores_Show(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{
 		"inline": map[string]any{"description": "Inline item", "inline": "echo hello"},
@@ -25,30 +25,11 @@ func TestStores_ShowAndLocation(t *testing.T) {
 	res.WantCode(t, 0)
 	testkit.Contains(t, "show stored", res.Stdout, "Name:        stored")
 	testkit.Contains(t, "show stored", res.Stdout, "echo test")
-
-	res = e.Run("location", "stored")
-	if res.Code != 0 || !strings.HasSuffix(strings.TrimSpace(res.Stdout), "scripts/stored.sh") {
-		t.Errorf("location stored: exit %d %q", res.Code, res.Stdout)
-	}
-}
-
-func TestStores_LocationPrintsABarePathOrFails(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"inline_one": testkit.Inline("echo hi"), "scripted": map[string]any{"script": "scripts/scripted.sh"}})
-	e.WriteFile(filepath.Join(e.Store, "scripts", "scripted.sh"), "#!/usr/bin/env bash\n", 0)
-	res := e.Run("location", "inline_one")
-	if res.Code != 1 || res.Stdout != "" {
-		t.Errorf("inline: exit %d stdout %q", res.Code, res.Stdout)
-	}
-	testkit.Contains(t, "inline", res.Stderr, "inline shortcut")
-	if res = e.Run("location", "scripted"); res.Stdout != filepath.Join(e.Store, "scripts", "scripted.sh")+"\n" {
-		t.Errorf("scripted: %q", res.Stdout)
-	}
 }
 
 func TestEntries_CommandsThatTakeANameShowHowMany(t *testing.T) {
 	e := testkit.New(t)
-	for _, cmd := range []string{"show", "location", "rm"} {
+	for _, cmd := range []string{"show", "rm"} {
 		testkit.Contains(t, cmd+" --help", e.Run(cmd, "--help").Stdout, "[namespace] name\n")
 	}
 }
@@ -194,9 +175,6 @@ Script (TMP/home/.shortcuts/scripts/none.sh):
 		{[]string{"show", "nul"}, 1, "", "error: 'nul' is not a valid entry: expected a dictionary\n"},
 		{[]string{"show", "a", "b"}, 1, "", "error: shortcut or namespace 'a' not found. A global namespace is the file TMP/home/.shortcuts/imports/a.shortcut.\n"},
 		{[]string{"show", "--json", "build", "x"}, 1, "", "error: too many names: build x\n"},
-		{[]string{"location", "tool"}, 0, "TMP/home/.shortcuts/scripts/tool.sh\n", ""},
-		{[]string{"location", "build"}, 1, "", "error: 'build' is an inline shortcut, so it has no file. Change it in the file `shortcut show` names.\n"},
-		{[]string{"location", "trav"}, 1, "", "error: path traversal detected: '../../etc/passwd' resolves to 'TMP/etc/passwd', outside 'TMP/home/.shortcuts'.\n"},
 		{[]string{"show", "--json", "x"}, 1, "", "error: shortcut 'x' not found.\n"},
 	}
 	for _, c := range cases {
@@ -221,7 +199,7 @@ func TestShow_AScriptThatIsNotUTF8(t *testing.T) {
 	}
 }
 
-// The show, location and --json lines of test_global_flag_reaches_a_hidden_shortcut; the whole test is ported in
+// The show and --json lines of test_global_flag_reaches_a_hidden_shortcut; the whole test is ported in
 // rm_test.go (TestStores_GlobalFlagReachesAHiddenShortcut).
 func TestShow_GlobalFlagReachesAHiddenShortcut(t *testing.T) {
 	e := testkit.New(t)
@@ -236,14 +214,14 @@ func TestShow_GlobalFlagReachesAHiddenShortcut(t *testing.T) {
 	res := e.RunWith(in, "show", "--global", "build")
 	testkit.Contains(t, "show --global", res.Stdout, "Scope:       global\n")
 	testkit.Contains(t, "show --global", res.Stdout, "echo global")
-	if res = e.RunWith(in, "location", "--global", "tool"); res.Stdout != filepath.Join(e.Store, "scripts", "tool.sh")+"\n" {
-		t.Errorf("location --global: %q", res.Stdout)
+	if res = e.RunWith(in, "show", "--global", "--field", "script_path", "tool"); res.Stdout != filepath.Join(e.Store, "scripts", "tool.sh")+"\n" {
+		t.Errorf("show --global --field script_path: %q", res.Stdout)
 	}
 
 	// The project still has one when the global one is gone: every --global command says so
 	e.WriteStore(e.Store, map[string]any{})
 	hint := "The project in " + proj + " has its own 'build': leave out --global to use it."
-	for _, args := range [][]string{{"show", "--global", "build"}, {"location", "--global", "build"}, {"show", "--json", "--global", "build"}} {
+	for _, args := range [][]string{{"show", "--global", "build"}, {"show", "--json", "--global", "build"}} {
 		res := e.RunWith(in, args...)
 		res.WantCode(t, 1)
 		testkit.Contains(t, strings.Join(args, " "), res.Stderr, "shortcut 'build' not found.")
@@ -257,15 +235,15 @@ func TestShow_GlobalFlagReachesAHiddenShortcut(t *testing.T) {
 	}
 }
 
-// TestShow_ReadsPastABrokenProject: show and location still work in a broken project; run, rm and update refuse it
+// TestShow_ReadsPastABrokenProject: show still works in a broken project; run, rm and update refuse it
 // (their own tests).
 func TestShow_ReadsPastABrokenProject(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"outside": testkit.Inline("echo outside"), "docker": testkit.Inline("echo global")})
 	broken := e.BrokenProject()
 	in := testkit.Opts{Cwd: broken}
-	// Looking is not running: show and location read past the file, quietly
-	for _, args := range [][]string{{"show", "outside"}, {"show", "--json", "outside"}, {"location", "outside"}} {
+	// Looking is not running: show reads past the file, quietly
+	for _, args := range [][]string{{"show", "outside"}, {"show", "--json", "outside"}} {
 		res := e.RunWith(in, args...)
 		for _, bad := range []string{"corrupt registry", "warning"} {
 			if strings.Contains(res.Stderr, bad) {

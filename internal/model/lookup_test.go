@@ -120,7 +120,7 @@ func TestLookup_GlobalFlagPointsAtTheProjectsOwnName(t *testing.T) {
 	}
 }
 
-// strict (run) refuses what a broken project holds; the default (show, location, rm) reads as far as it can.
+// strict (run) refuses what a broken project holds; the default (show, rm) reads as far as it can.
 func TestLookup_StrictAndBrokenStores(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"outside": testkit.Inline("echo outside")})

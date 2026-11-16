@@ -39,7 +39,7 @@ func TestCompletion_Bash(t *testing.T) {
 	if res.Code != 0 {
 		t.Fatalf("exit %d: %s", res.Code, res.Stderr)
 	}
-	for _, want := range []string{"_shortcut", "complete -F _shortcut shortcut", "list --names", "run r", "show", "location", "rm", "update"} {
+	for _, want := range []string{"_shortcut", "complete -F _shortcut shortcut", "list --names", "run r", "show", "rm", "update"} {
 		if !strings.Contains(res.Stdout, want) {
 			t.Errorf("bash script lacks %q", want)
 		}
@@ -89,7 +89,6 @@ func TestCompletion_BashPastFlagsAndIntoNamespaces(t *testing.T) {
 	// Flags: the script offers them without asking the binary.
 	check([]string{"--global", "-y"}, "r", "-")
 	check([]string{"--global", "--json", "--field"}, "show", "-")
-	check([]string{"--global"}, "location", "--")
 	check(nil, "r", "other", "--")
 	// Names: the script runs `shortcut list --names`.
 	if !slices.Contains(e.BashComplete("r", "o"), "other") {

@@ -22,7 +22,7 @@ type Found struct {
 
 // FindEntry finds `name` or `namespace name` in the project, then the global store, without judging
 // the entry. words must not be empty. strict (for run) refuses every name inside a project whose file can't be used,
-// and a store's load errors for the name it has. Without it (show, location, rm) a broken file is looked in as far as
+// and a store's load errors for the name it has. Without it (show, rm) a broken file is looked in as far as
 // it reads, so you can still see and fix what's there. both lookup failures are just errors here:
 // main prints either as "error: <text>".
 func FindEntry(words []string, callerCwd string, skipLocal, strict bool) (Found, error) {

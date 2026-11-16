@@ -182,7 +182,7 @@ func TestStores_AnEntryWithBothInlineAndScriptIsRefused(t *testing.T) {
 	e.WriteFile(filepath.Join(e.Store, "both.sh"), bashShebang+"echo script\n", 0)
 	e.WriteStore(e.Store, map[string]any{
 		"both": map[string]any{"description": "x", "inline": "echo inline", "script": "both.sh"}})
-	for _, words := range [][]string{{"r", "both"}, {"show", "both"}, {"location", "both"}} {
+	for _, words := range [][]string{{"r", "both"}, {"show", "both"}} {
 		res := e.Run(words...)
 		testkit.Eq(t, strings.Join(words, " "), res.Code, 1)
 		testkit.Contains(t, strings.Join(words, " "), res.Stderr, "exactly one of 'inline' and 'script'")
@@ -220,7 +220,7 @@ func TestStores_NamespaceFlagKeepsEachGroupsScriptsApart(t *testing.T) {
 	testkit.Eq(t, "kube", e.Run("r", "kube", "delete").Stdout, "kub\n")
 
 	cp := filepath.Join(e.Store, "imports", "scripts", "docker", "delete.sh")
-	testkit.Eq(t, "location", e.Run("location", "docker", "delete").Stdout, cp+"\n")
+	testkit.Eq(t, "script_path", e.Run("show", "--field", "script_path", "docker", "delete").Stdout, cp+"\n")
 	runOK(t, e, testkit.Opts{}, "rm", "docker", "delete", "-y")
 	testkit.NotExist(t, cp)
 	if !fileExists(filepath.Join(e.Store, "imports", "scripts", "kube", "delete.sh")) {
@@ -325,7 +325,7 @@ func TestStores_GlobalFlagReachesAHiddenShortcut(t *testing.T) {
 	res := e.RunWith(in(proj), "show", "--global", "build")
 	testkit.Contains(t, "show --global", res.Stdout, "Scope:       global\n")
 	testkit.Contains(t, "show --global", res.Stdout, "echo global")
-	testkit.Eq(t, "location", e.RunWith(in(proj), "location", "--global", "tool").Stdout, filepath.Join(e.Store, "scripts", "tool.sh")+"\n")
+	testkit.Eq(t, "script_path", e.RunWith(in(proj), "show", "--global", "--field", "script_path", "tool").Stdout, filepath.Join(e.Store, "scripts", "tool.sh")+"\n")
 
 	runOK(t, e, in(proj), "rm", "build", "--global", "-y")
 	if _, has := e.LoadGlobal()["build"]; has {
@@ -334,7 +334,7 @@ func TestStores_GlobalFlagReachesAHiddenShortcut(t *testing.T) {
 	testkit.Eq(t, "run", e.RunWith(in(proj), "r", "build").Stdout, "project\n")
 	// The project still has one: every --global command says so
 	hint := "The project in " + proj + " has its own 'build': leave out --global to use it."
-	for _, args := range [][]string{{"show", "--global", "build"}, {"r", "--global", "build"}, {"location", "--global", "build"},
+	for _, args := range [][]string{{"show", "--global", "build"}, {"r", "--global", "build"},
 		{"rm", "--global", "-y", "build"}, {"show", "--json", "--global", "build"}} {
 		res := e.RunWith(in(proj), args...)
 		testkit.Eq(t, strings.Join(args, " "), res.Code, 1)

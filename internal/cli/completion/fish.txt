@@ -8,9 +8,9 @@ function __shortcut_names
 end
 
 complete -c shortcut -f
-complete -c shortcut -n __fish_use_subcommand -a "run r new list show location rm promote update init completion help"
-complete -c shortcut -n "__fish_seen_subcommand_from run r show location rm promote" -a "(__shortcut_names)"
-complete -c shortcut -n "__fish_seen_subcommand_from run r show location rm" -l global
+complete -c shortcut -n __fish_use_subcommand -a "run r new list show rm promote update init completion help"
+complete -c shortcut -n "__fish_seen_subcommand_from run r show rm promote" -a "(__shortcut_names)"
+complete -c shortcut -n "__fish_seen_subcommand_from run r show rm" -l global
 complete -c shortcut -n "__fish_seen_subcommand_from run r rm promote" -s y
 complete -c shortcut -n "__fish_seen_subcommand_from promote" -l as -r
 complete -c shortcut -n "__fish_seen_subcommand_from promote" -l force

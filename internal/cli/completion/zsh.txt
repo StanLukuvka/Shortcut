@@ -2,7 +2,7 @@
 
 _shortcut() {
     local -a subcommands
-    subcommands=(run r new list show location rm promote update init completion help)
+    subcommands=(run r new list show rm promote update init completion help)
 
     if (( CURRENT == 2 )); then
         compadd -- $subcommands
@@ -10,7 +10,7 @@ _shortcut() {
     fi
 
     case $words[2] in
-        run|r|show|location|rm|promote)
+        run|r|show|rm|promote)
             local -a typed
             typed=(${words[3,CURRENT-1]:#-*})
             if (( $#typed == 0 )) && [[ $PREFIX == -* ]]; then
