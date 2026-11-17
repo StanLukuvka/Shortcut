@@ -99,15 +99,15 @@ Set `SHORTCUT_SHOW_DIR=0` to hide that line.
 
 ### Asking first
 
-For anything you don't want to run by accident, add `--confirm`. shortcut then shows the description and the words
-you gave, and asks before it runs:
+For anything you don't want to run by accident, add `--confirm`. shortcut then shows the description and asks before
+it runs, naming the words you gave and the directory it runs in:
 
 ```bash
 shortcut new deploy --desc "Deploy to production" --confirm -- './deploy.sh "$@"'
 ```
 
-To answer yes in advance, as in a script, put `-y` before the name: `shortcut r -y deploy`. Without a terminal to ask
-in, a `--confirm` shortcut doesn't run unless you pass `-y`.
+To answer yes in advance, as in a script, put `-y` before the name: `shortcut r -y deploy`. When there's no terminal to
+ask in, as in a cron job, a `--confirm` shortcut doesn't run unless you pass `-y`.
 
 ### Changing one
 
@@ -135,8 +135,9 @@ missing.
 `shortcut show <name>` shows one shortcut in full: where it's defined, where it runs, and its command or the text of
 its script.
 
-`shortcut rm <name>` removes one of your global shortcuts. It tells you what it's about to remove and asks first; `-y` skips the
-question but it still tells you. It removes only the entry: a script you pointed it at stays where it is.
+`shortcut rm <name>` removes one of your global shortcuts (`shortcut rm <namespace> <name>` one in a namespace). It
+tells you what it's about to remove and asks first; `-y` skips the question but it still tells you. It removes only
+the entry: a script you pointed it at stays where it is.
 
 `shortcut help` lists every command, and `shortcut help <command>` shows one command's options.
 
