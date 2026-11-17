@@ -67,8 +67,8 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	if !positionalAnywhere.MatchString(text) {
 		s.Err.WriteString("note: '" + name + "' won't see any arguments you give it; add \"$@\" to pass them on\n")
 	}
-	_, err = s.Out.WriteString("Created inline shortcut '" + group.Display(name) + "'.\n")
-	return err
+	s.Out.WriteString("Created inline shortcut '" + group.Display(name) + "'.\n")
+	return nil
 }
 
 // entryFields returns the parts of an entry the flags of new set.
@@ -113,8 +113,8 @@ func newFromScript(c *store.Context, s *term.Streams, ns term.Namespace, group s
 	if err := write.Register(c, s, group, &entry); err != nil {
 		return err
 	}
-	_, err = s.Out.WriteString("Created shortcut '" + group.Display(entry.Name) + "' using " + abs + ".\n")
-	return err
+	s.Out.WriteString("Created shortcut '" + group.Display(entry.Name) + "' using " + abs + ".\n")
+	return nil
 }
 
 var positionalAt = regexp.MustCompile(`^\$(?:[1-9@*]|\{[1-9@*])`) // $1, $@, $*, ${1}: how a shell command reads its arguments

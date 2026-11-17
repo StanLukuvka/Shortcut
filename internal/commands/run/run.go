@@ -3,6 +3,7 @@ package run
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -19,8 +20,8 @@ import (
 // selects the project; everything after that, -h included, is the shortcut's.
 func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) error {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
-		_, err := s.Out.WriteString(cmd.HelpText())
-		return err
+		s.Out.WriteString(cmd.HelpText())
+		return nil
 	}
 	assumeYes := false
 	for len(args) > 0 && (args[0] == "-y" || args[0] == "--yes") {
@@ -85,9 +86,7 @@ func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Loo
 		if s.Err.IsTerminal() {
 			line = "\x1b[2m" + line + "\x1b[0m"
 		}
-		if err := s.Err.WriteStyled(line + "\n"); err != nil {
-			return err
-		}
+		s.Err.WriteStyled(line + "\n")
 	}
 
 	argv, err := childCommand(resolved, entry, name, args)
@@ -100,6 +99,10 @@ func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Loo
 		return !hasEq || k == "SHORTCUT_NAME" || k == "SHORTCUT_NAMESPACE" || k == "SHORTCUT_CALLER_CWD"
 	})
 	env = append(env, "SHORTCUT_NAME="+name, "SHORTCUT_NAMESPACE="+resolved.Group.Name, "SHORTCUT_CALLER_CWD="+c.Cwd)
+	// The "→" line or the confirm text did not get out: report that, not a child run blind.
+	if err := cmp.Or(s.Out.Failed(), s.Err.Failed()); err != nil {
+		return err
+	}
 	return platform.ExecChild(argv, resolved.RunCwd, env)
 }
 

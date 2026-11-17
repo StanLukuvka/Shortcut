@@ -23,6 +23,6 @@ func Run(_ *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	if err != nil {
 		return err
 	}
-	_, err = s.Out.WriteString(string(script))
-	return err
+	s.Out.WriteString(string(script))
+	return nil
 }
