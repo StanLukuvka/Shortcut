@@ -56,7 +56,7 @@ func (is Items) Names() []string {
 
 // ItemsOf decodes d["shortcuts"].
 func ItemsOf(d platform.Doc) Items {
-	shortcuts, _ := d.Object("shortcuts") // the registry check already refused a "shortcuts" that is not an object; absent is none
+	shortcuts, _ := d.Object("shortcuts") // a "shortcuts" that is not an object gives no items, and fileError marks the group in error; absent is none
 	var items Items
 	for _, k := range slices.Sorted(maps.Keys(shortcuts)) {
 		e, err := DecodeEntry(k, shortcuts[k])

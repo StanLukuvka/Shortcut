@@ -70,11 +70,14 @@ type Confirm struct {
 
 // Granted reports whether the answer was yes. With no terminal on stdin it returns an error carrying NoTerminal: the caller's error
 // path prints it as "error: ..." and exits 1. After a "no" it has printed "Aborted." and
-// returns false.
+// returns false. With -y, a Message that could not be written is an error and the answer is not yes.
 func (c Confirm) Granted(s *Streams, assumeYes bool) (bool, error) {
 	if assumeYes {
 		if c.TellOnYes && c.Message != "" {
 			s.Out.WriteString(c.Message + "\n")
+			if err := s.Out.Failed(); err != nil {
+				return false, err
+			}
 		}
 		return true, nil
 	}

@@ -24,10 +24,11 @@ func invoke(s *term.Streams, e *entry, args []string) int {
 func Main(args []string, in, out, errw *os.File) int {
 	s := term.NewStreams(in, out, errw)
 	code := dispatch(s, args)
-	if err := s.Out.Failed(); err != nil {
-		s.Err.WriteString("error: writing stdout: " + err.Error() + "\n")
+	outErr := s.Out.Failed()
+	if outErr != nil {
+		s.Err.WriteString("error: writing stdout: " + outErr.Error() + "\n")
 	}
-	if code == 0 && (s.Out.Failed() != nil || s.Err.Failed() != nil) {
+	if code == 0 && (outErr != nil || s.Err.Failed() != nil) {
 		return 1
 	}
 	return code
