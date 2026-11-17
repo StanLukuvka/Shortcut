@@ -70,6 +70,10 @@ repair, or carry on.
 - shortcut never writes a project's `.shortcuts`.
 - Text from a file is printed through `term.Safe`.
 - Every question goes through `term.Confirm`.
+- The file format is `"version": 1`. Adding, removing or changing the meaning of any field, in an entry or at a
+  file's top level, bumps `"version"`; a shortcut that reads an older version keeps reading it, and one that meets a
+  newer version refuses it with the existing "upgrade shortcut" error. `internal/store/testdata/format-v1.txt` is the
+  frozen list, and a test fails when the fields differ from it.
 
 ## Layout
 

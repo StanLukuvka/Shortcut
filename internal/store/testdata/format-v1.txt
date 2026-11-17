@@ -1,0 +1,10 @@
+# The version-1 format. Changing a field means bumping RegistryVersion and writing format-v2.txt.
+file version
+file description
+file shortcuts
+file imports
+entry description string
+entry inline string
+entry script string
+entry cwd string
+entry confirm boolean

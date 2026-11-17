@@ -133,7 +133,10 @@ func ResolveScriptPath(baseDir, scriptField string) (string, error) {
 // fileError returns what's wrong with a file as a whole ("" = nothing); EntryErrors checks what's inside
 // 'shortcuts'. name is the namespace's, or "" for a main file.
 func fileError(path string, data platform.Doc, name string) string {
-	known := map[string]bool{"version": true, "description": true, "shortcuts": true}
+	known := map[string]bool{}
+	for _, k := range FileKeys() {
+		known[k] = true
+	}
 	if name != "" {
 		if data.Has("imports") {
 			return path + " has its own 'imports', but namespaces don't nest"
@@ -141,8 +144,7 @@ func fileError(path string, data platform.Doc, name string) string {
 		if !data.Has("shortcuts") {
 			return path + " needs 'shortcuts'"
 		}
-	} else {
-		known["imports"] = true
+		delete(known, "imports")
 	}
 	if _, isObj := data.Object("shortcuts"); data.Has("shortcuts") && !isObj {
 		return fmt.Sprintf("corrupt registry %s: 'shortcuts' must be an object", path)
