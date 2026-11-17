@@ -7,9 +7,21 @@ on Windows, use WSL. Inline shortcuts need bash.
 curl -fsSL https://github.com/StanLukuvka/Shortcut/releases/latest/download/install.sh | sh
 ```
 
-The installer writes the binary to `~/.local/bin/shortcut` (or `$BIN_DIR`) and completion for bash, and for fish and
-zsh where they are installed; for zsh it adds one marked block to `~/.zshrc` (`SHORTCUT_NO_RC=1` skips it).
-`SHORTCUT_VERSION=0.1.0` installs a given version.
+- The installer needs `curl` or `wget`, and `sha256sum` or `shasum`. It checks the archive against the release's
+  `checksums.txt` and stops if they differ.
+- It writes the binary to `~/.local/bin/shortcut` (or `$BIN_DIR/shortcut`), and completion for bash, and for fish and
+  zsh where they are installed. For zsh it adds one marked block to `~/.zshrc`; `SHORTCUT_NO_RC=1` skips it.
+  `$XDG_DATA_HOME` (default `~/.local/share`) and `$XDG_CONFIG_HOME` (default `~/.config`) move the completion files.
+- `SHORTCUT_VERSION=0.1.0` installs a given version. Running it again upgrades.
+- To uninstall, delete `~/.local/bin/shortcut`, `~/.local/share/bash-completion/completions/shortcut`,
+  `~/.config/fish/completions/shortcut.fish`, `~/.local/share/shortcut/`, and the lines from
+  `# >>> shortcut completion >>>` to `# <<< shortcut completion <<<` in `~/.zshrc`. `~/.shortcuts` stays.
+
+```bash
+shortcut new hi -- 'echo hello "$1"'
+shortcut r hi you
+shortcut list
+```
 
 ## Commands
 
@@ -28,7 +40,7 @@ shortcut show --json [.] <name>       entry and where it resolves, as JSON
 shortcut show --field KEY [.] <name>  one field, bare, for scripts
 
 shortcut rm <name> [-y]               remove a global or global namespace shortcut; says what goes, with -y too
-shortcut rm --local <name>            remove your entry from .shortcuts.local (from the project root)
+shortcut rm --local <name>            remove your entry from .shortcuts.local
 shortcut rm --namespace <ns> [-y]     remove a global namespace and its scripts/<ns>/ folder; one imported
                                       from elsewhere is only no longer imported
 
@@ -37,38 +49,77 @@ shortcut help [command]
 shortcut --version
 ```
 
-`new` takes `--desc D`, `--cwd caller|DIR` (where it runs; default: the caller's directory), `--confirm` (ask before
-running), `--local` (write to `.shortcuts.local`) and `--namespace NS` (write to a global namespace).
+- `new` takes `--desc D`, `--cwd caller|DIR` (where it runs; default: the caller's directory), `--confirm` (ask
+  before running, showing the description and the words given), `--local` (write to `.shortcuts.local`) and
+  `--namespace NS` (write to a global namespace).
+- `new <name> -- CMD`: one quoted word is kept as written, so `-- 'ls "$1" | wc -l'` keeps its pipe. Several words are
+  each quoted, so each stays one word: `-- echo '$HOME'` prints `$HOME`. `$1`, `$@` and the other arguments stay live.
+- `--local`, on `new` and `rm`, works only from the project root.
+- `show --json` prints one object: `name`, `namespace`, `scope`, `defined_in`, `source`, `cwd`, `run_cwd`,
+  `script_path`, `error` and `entry`, with its own keys and the entry's sorted. A field that can't be worked out is null.
+- `show --field KEY` prints one field of that object bare, or of the entry (`description`, `inline`, `script`). `true`
+  and `false` print as words, and a null or absent field prints nothing.
 
-`new <name> -- CMD`: one quoted word is kept as written (`-- 'ls "$1" | wc -l'` keeps its pipe); several words are each
-quoted. `$1`, `$@` and the other arguments stay live.
+## Files
+
+| Place | What | Written by |
+|---|---|---|
+| `~/.shortcuts/` (or `$SHORTCUTS_HOME`) | the global store | shortcut |
+| `<project>/.shortcuts` | the project's shared shortcuts, committed | you, by hand; shortcut never writes it |
+| `<project>/.shortcuts.local` | your own entries; add it to your `.gitignore` if it should stay out of git | shortcut, with `--local` |
+
+```
+~/.shortcuts/
+├── shortcuts.json          entries
+├── imports/<ns>.shortcut   namespaces
+└── .lock                   the lock every write takes
+```
+
+`shortcuts.json`, `.shortcuts`, `.shortcuts.local` and every `<ns>.shortcut` are JSON with `"version": 1`.
+[docs/shortcut.schema.json](docs/shortcut.schema.json) describes the entries:
+
+```json
+{"version": 1, "shortcuts": {"test": {"description": "Run the tests", "inline": "go test \"$@\""}}}
+```
 
 ## Scope
 
 | You type | It looks in | Never looks in |
 |---|---|---|
-| `shortcut r build` | the global store `~/.shortcuts/` (or `$SHORTCUTS_HOME`) | any project |
+| `shortcut r build` | the global store | any project |
 | `shortcut r docker run` | the global namespace `docker` | any project |
 | `shortcut r . build` | the nearest project's `.shortcuts`, with `.shortcuts.local` over it | the global store |
 | `shortcut r . terraform plan` | the namespace `terraform` that the project's `.shortcuts` imports | the global store |
 
 - The project is the nearest folder, walking up, with `.shortcuts` or `.shortcuts.local`. Only that one is read.
-- `.shortcuts` is shared and committed, and shortcut never writes it. `.shortcuts.local` is yours and overrides it per
-  entry; add it to your `.gitignore` if it should stay out of git.
+- `.shortcuts.local` overrides `.shortcuts` per entry.
 - Nothing falls back to the other scope. A name found only in the other one is an error that gives the command to use,
-  and nothing runs. `r .` outside a project is an error. A project problem never affects global lookups.
+  and nothing runs. `r .` outside a project is an error.
+- If the project's file can't be read, nothing runs with the dot until it's fixed. Global shortcuts are not affected.
 - The dot is the first word after the options; a shortcut or namespace can't be named `.`.
-- A namespace is a file `<ns>.shortcut`, with its scripts in `scripts/<ns>/` next to it. `~/.shortcuts/imports/<ns>.shortcut`
-  is found by its name; one anywhere else is listed under `"imports"` in `shortcuts.json` or `.shortcuts`.
 - Relative `script` and `cwd` paths resolve from the folder holding the file.
+
+## Namespaces
+
+- A namespace is a file `<ns>.shortcut`, with entries as in `shortcuts.json`. A bare `.shortcut` is an error.
+- `scripts/<ns>/`, next to the file, holds its scripts. `rm <name>` removes only the entry, never a script file;
+  `rm --namespace` deletes the folder.
+- `~/.shortcuts/imports/<ns>.shortcut` is found by its name. To install one, copy `<ns>.shortcut` and `scripts/<ns>/`
+  into `~/.shortcuts/imports/`.
+- A file anywhere else is listed in `shortcuts.json` or a project's `.shortcuts`:
+  `"imports": {"<ns>": "path/to/<ns>.shortcut"}`. The path is relative to the file that lists it, and can start with `~`.
+- A script runs a sibling with `shortcut r "$SHORTCUT_NAMESPACE" <name>`.
+- [examples/podman](examples/podman/) and [examples/tools](examples/tools/) are namespaces to copy.
 
 ## Running
 
 - An inline shortcut runs as `bash -c CMD <name> ARGS...`. A script runs as it is: it must be executable and start
-  with `#!`, or be a binary.
+  with `#!`, or be a binary. One that is not executable is refused with the `chmod +x` command; `new --script` and
+  `list` say so too.
+- Every word after the name reaches it as `$1`, `$2`..., flags included. A first `--` is passed on as it is.
 - It runs in its `cwd`, and gets `SHORTCUT_NAME`, `SHORTCUT_NAMESPACE` and `SHORTCUT_CALLER_CWD`. Its exit code is
   shortcut's.
-- `SHORTCUT_SHOW_DIR=0` hides the `→ dir` line; `1` or unset shows it.
+- `SHORTCUT_SHOW_DIR=0` hides the `→ dir` line; `1` or unset shows it; any other value is an error.
 - shortcut does what it was told, or stops with an error. [docs/errors.md](docs/errors.md) lists every message.
 
 ## Security model
