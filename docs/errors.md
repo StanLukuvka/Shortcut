@@ -107,6 +107,8 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `shortcut '<name>' not found.` | Not in the one store looked in: your global store, or with the dot (`r .`, `show .`) the nearest project. There is no fallback to the other |
 | `shortcut or namespace '<name>' not found. A global namespace is the file <store>/imports/<name>.shortcut.` | The same, with words after the name, so it may be meant as a namespace. The file sentence is for the global store only |
 | `... The project in <dir> has it: shortcut <r or show> . <words>` | Added to any of these when your global store lacks the name and the nearest project has it. Nothing runs |
+| `... Your .shortcuts.local in <dir> has it: shortcut rm --local <name>, from <dir>` | `rm` from inside a project, for a name only your `.shortcuts.local` there has |
+| `... The project in <dir> has it; rm changes only your global store and your .shortcuts.local` | `rm` from inside a project, for a name only the project has. `.shortcuts` is yours to edit by hand |
 | `... Your global store has it: shortcut <r or show> <words>` | The same the other way round, after a lookup with the dot |
 | `no project here: no .shortcuts or .shortcuts.local in this folder or its parents` | `run .` or `show .` outside any project |
 | `... The project in <outer> has a '<name>', but only the nearest project, <dir>, is used here.` | Added when a project holds another, and only the outer one has the name |
@@ -117,6 +119,8 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `run directory does not exist: <dir>` | The entry's `cwd` is gone |
 | `script file not found: <path>` | |
 | `SHORTCUT_SHOW_DIR must be 0 or 1, not '<value>'` | The variable is set to something else. Unset it or use `1` to show the folder, `0` to hide it |
+| `<path> can't run as it is: it needs a #! line, such as #!/bin/sh, or to be a binary for this system` | A script that is executable but the system won't start: no `#!` line and not a binary for this system |
+| `'<word>' is not a name: options go before the dot, as in shortcut r -y . <rest>` | `run .` with an option after the dot. A name can't start with `-` |
 | `<path> is not executable. Make it so: chmod +x <path>` | A script runs as it is, so it needs the execute bit. `list` warns |
 | `'<name>' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y [.] <name> <args>)` | A `confirm` entry run without a terminal. The command is the one that was run, with `-y`, and the dot if it had one |
 
@@ -130,6 +134,8 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `--desc can't be empty` | `new` |
 | `--namespace can't be empty` | `new` |
 | `script file not found: <path>` | The file given to `--script` |
+| `<path> can't run as it is: it needs a #! line, such as #!/bin/sh, or to be a binary for this system` | A script that is executable but the system won't start: no `#!` line and not a binary for this system |
+| `'<word>' is not a name: options go before the dot, as in shortcut r -y . <rest>` | `run .` with an option after the dot. A name can't start with `-` |
 | `<path> is not executable. Make it so: chmod +x <path>` | The file given to `--script` |
 | `--cwd directory does not exist: <dir>` | |
 | `--namespace can't be used with --local: .shortcuts.local is one file, and .shortcuts is yours to edit` | |

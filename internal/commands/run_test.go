@@ -121,7 +121,7 @@ func TestRunning_AScriptRunsAsItIs(t *testing.T) {
 	res = e.Run("run", "macho")
 	testkit.Eq(t, "macho exit", res.Code, 1)
 	testkit.Eq(t, "macho stdout", res.Stdout, "")
-	testkit.Contains(t, "macho stderr", res.Stderr, "exec format error")
+	testkit.Contains(t, "macho stderr", res.Stderr, "can't run as it is: it needs a #! line")
 	if strings.Contains(res.Stderr, "bash") || strings.Contains(res.Stderr, "line ") {
 		t.Errorf("macho was run by bash: %q", res.Stderr)
 	}
@@ -394,4 +394,26 @@ func TestRunning_AProjectLookupThatCantTellDoesntTouchTheGlobalScope(t *testing.
 	testkit.Contains(t, "global scope", res.Stdout, "ran\nglobal=0\n")
 	testkit.Contains(t, "list", res.Stdout, "warning: ")
 	testkit.Contains(t, "list", res.Stdout, "list=0\n")
+}
+
+func TestRunning_AScriptWithNoShebangSaysWhatItNeeds(t *testing.T) {
+	e := testkit.New(t)
+	path := e.WriteFile(filepath.Join(e.Store, "scripts", "p.sh"), "echo hi\n", 0o755)
+	e.WriteStore(e.Store, map[string]any{"p": map[string]any{"script": "scripts/p.sh"}})
+	res := e.Run("r", "p")
+	testkit.Eq(t, "exit", res.Code, 1)
+	testkit.Contains(t, "stderr", res.Stderr, "error: "+path+" can't run as it is: it needs a #! line, such as #!/bin/sh, or to be a binary for this system")
+}
+
+func TestRunning_AnOptionAfterTheDotSaysToMoveItBefore(t *testing.T) {
+	e := testkit.New(t)
+	proj := e.Project(map[string]any{"x": testkit.Inline("echo x")})
+	o := testkit.Opts{Cwd: proj}
+	res := e.RunWith(o, "r", ".", "-y", "loc")
+	testkit.Eq(t, "exit", res.Code, 1) // a wrong name is exit 1, as 'not found' is; exit 2 is the missing name
+	testkit.Contains(t, "stderr", res.Stderr, "error: '-y' is not a name: options go before the dot, as in shortcut r -y . loc")
+	res = e.RunWith(o, "r", ".", "--yes")
+	testkit.Contains(t, "alone", res.Stderr, "as in shortcut r -y .\n")
+	// show reads options anywhere, so it needs no such message
+	testkit.Eq(t, "show", e.RunWith(o, "show", ".", "x", "--json").Code, 0)
 }
