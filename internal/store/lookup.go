@@ -177,7 +177,11 @@ func ResolveShortcut(c *Context, words []string, lk Lookup) (*ResolvedShortcut, 
 		return nil, nil, f.Item.Err
 	}
 	entry := f.Item.Entry
-	return &ResolvedShortcut{Entry: entry, Group: f.Group, RunCwd: ResolveRunDir(entry.Cwd, f.Group, c.Cwd)}, f.Rest, nil
+	runCwd, err := ResolveRunDir(entry.Cwd, f.Group, c.Cwd)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &ResolvedShortcut{Entry: entry, Group: f.Group, RunCwd: runCwd}, f.Rest, nil
 }
 
 // ResolveName resolves a name for commands that name a shortcut: `name` or `namespace name`, and nothing else.

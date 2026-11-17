@@ -76,6 +76,7 @@ func TestBrokenStores_ListWarnsAboutEveryEntryThatCannotRun(t *testing.T) {
 		"gone": map[string]any{"script": "scripts/none.sh"},
 		"bad":  map[string]any{"inline": "true", "cwd": 123},
 	})
+	e.Folder("home/.shortcuts/scripts") // the folder of a script must be there; the script is what is missing
 	e.WriteImport(e.Store, "ns", testkit.NS(map[string]any{"both": map[string]any{"inline": "true", "script": "a.sh"}}))
 	res := e.Run("list")
 	res.WantCode(t, 0)

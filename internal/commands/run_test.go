@@ -195,6 +195,7 @@ func TestRunning_ShowSaysWhenTheRunDirectoryOrScriptIsGone(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"gone": map[string]any{"inline": "true", "cwd": "/no/such/folder"}})
 	testkit.Contains(t, "cwd", e.Run("show", "gone").Stdout, "/no/such/folder")
+	e.Folder("home/.shortcuts/scripts") // the folder of a script must be there; the script is what is missing
 	e.WriteStore(e.Store, map[string]any{"gone": map[string]any{"script": "scripts/none.sh"}})
 	testkit.Contains(t, "script", e.Run("show", "gone").Stdout, "[file missing:")
 }
@@ -228,6 +229,7 @@ func TestRunning_ShowJSONPrintsAnEntryShowRefuses(t *testing.T) {
 func TestRunning_ShowJSONIsOneObjectWithWhereItResolves(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"s": map[string]any{"script": "scripts/s.sh", "cwd": "/tmp"}, "c": testkit.Inline("true")})
+	e.Folder("home/.shortcuts/scripts")
 	info := decodeObject(t, e.Run("show", "--json", "s").Stdout)
 	for k, want := range map[string]any{"name": "s", "namespace": nil, "scope": "global", "defined_in": filepath.Join(e.Store, "shortcuts.json"),
 		"source": nil, "script_path": filepath.Join(e.Store, "scripts", "s.sh"), "cwd": "/tmp", "run_cwd": "/tmp",

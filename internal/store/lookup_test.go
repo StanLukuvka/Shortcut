@@ -17,11 +17,11 @@ func TestLookup_EachScopeReachesOnlyItsOwnStore(t *testing.T) {
 
 	// the same cwd, each scope its own store
 	res, _, err := ResolveShortcut(NewContext(proj, nil), []string{"build"}, Lookup{})
-	if err != nil || res.Group.StoreDir != platform.Realpath(e.Store) || res.Entry.Description != "Global build" {
+	if err != nil || res.Group.StoreDir != mustReal(t, e.Store) || res.Entry.Description != "Global build" {
 		t.Errorf("global scope inside the project: %v", err)
 	}
 	res, _, err = ResolveShortcut(NewContext(proj, nil), []string{"build"}, Lookup{Scope: ScopeProject})
-	if err != nil || res.Group.StoreDir != platform.Realpath(proj) || res.Entry.Description != "Local project build" {
+	if err != nil || res.Group.StoreDir != mustReal(t, proj) || res.Entry.Description != "Local project build" {
 		t.Errorf("project scope: %v", err)
 	}
 	// outside any project the dot is an error
@@ -165,7 +165,7 @@ func TestLookup_ResolveNameTakesOneName(t *testing.T) {
 	t.Chdir(e.Home)
 	cwd, _ := platform.Getwd()
 	c := NewContext(cwd, nil)
-	if r, err := ResolveName(c, []string{"build"}, Lookup{}); err != nil || r.Entry.Name != "build" || r.RunCwd != platform.Realpath(e.Home) {
+	if r, err := ResolveName(c, []string{"build"}, Lookup{}); err != nil || r.Entry.Name != "build" || r.RunCwd != mustReal(t, e.Home) {
 		t.Errorf("one name: %v", err)
 	}
 	_, err := ResolveName(c, []string{"build", "an arg"}, Lookup{})

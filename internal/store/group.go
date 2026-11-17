@@ -135,7 +135,7 @@ func (g Group) DefiningFile(name string) string {
 }
 
 // Folder is where relative 'cwd' values resolve: the folder of the defining file.
-func (g Group) Folder() string { return filepath.Dir(platform.Abs(g.File)) }
+func (g Group) Folder() string { return filepath.Dir(g.File) } // File is absolute: every store dir is
 
 // ScriptBase: relative paths resolve against a namespace's folder, a project's root, or the global store.
 func (g Group) ScriptBase() string {
@@ -164,5 +164,5 @@ func (g Group) Label() string {
 	if g.Kind == KindNamespace {
 		return g.Name
 	}
-	return platform.Realpath(g.StoreDir)
+	return g.StoreDir
 }

@@ -149,12 +149,21 @@ func TestRegistry_ResolveScriptPath(t *testing.T) {
 	env := testkit.New(t)
 	base := env.Folder("base")
 	env.Folder("outside")
+	env.Folder("base/a")
 	env.Symlink(filepath.Join(env.Tmp, "outside"), filepath.Join(base, "link"))
 	if got, err := ResolveScriptPath(base, "/etc/passwd"); err != nil || got != "/etc/passwd" {
 		t.Errorf("absolute: %q %v", got, err)
 	}
 	if got, err := ResolveScriptPath(base, "a/../b.sh"); err != nil || got != filepath.Join(base, "b.sh") {
 		t.Errorf("relative: %q %v", got, err)
+	}
+	env.Symlink("loop2", filepath.Join(base, "loop1"))
+	env.Symlink("loop1", filepath.Join(base, "loop2"))
+	if got, err := ResolveScriptPath(base, "loop1/x.sh"); err == nil { // a link loop is an error, not a path kept as written
+		t.Errorf("loop: %q", got)
+	}
+	if got, err := ResolveScriptPath(base, "nodir/x.sh"); err == nil {
+		t.Errorf("missing folder: %q", got)
 	}
 	for _, bad := range []string{"../x", "link/x", "a/../../x"} {
 		_, err := ResolveScriptPath(base, bad)
@@ -220,7 +229,7 @@ func TestStores_StoreDiscoverySkipsGlobalRoot(t *testing.T) {
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := NewContext(sub, nil).FindProjectRoot(sub); got != platform.Realpath(proj) {
+	if got, _ := NewContext(sub, nil).FindProjectRoot(sub); got != mustReal(t, proj) {
 		t.Errorf("sub: %q", got)
 	}
 }
@@ -231,6 +240,9 @@ func TestStores_ProjectRootViaLocalFileOnlyAndNearest(t *testing.T) {
 	env.WriteFile(filepath.Join(outer, ".shortcuts.local"), `{"version": 1, "shortcuts": {}}`, 0)
 	inner := filepath.Join(outer, "in")
 	env.WriteStore(filepath.Join(inner, ".shortcuts"), map[string]any{})
+	if err := os.Mkdir(filepath.Join(inner, "x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if got, _ := NewContext(filepath.Join(inner, "x"), nil).FindProjectRoot(filepath.Join(inner, "x")); got != inner {
 		t.Errorf("nearest: %q", got)
 	}

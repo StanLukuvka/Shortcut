@@ -15,7 +15,11 @@ import (
 // invoke builds the run's one Context and runs the command.
 func invoke(s *term.Streams, e *entry, args []string) int {
 	cwd, err := platform.Getwd()
-	return finish(s, e.Run(store.NewContext(cwd, err), s, e.Command, args))
+	c := store.NewContext(cwd, err)
+	if c.GlobalErr != nil { // no command works on a store it can't name
+		return finish(s, c.GlobalErr)
+	}
+	return finish(s, e.Run(c, s, e.Command, args))
 }
 
 // Main runs the command and returns the process's exit code. A write to a closed stdout or stderr ends the

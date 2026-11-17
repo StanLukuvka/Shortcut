@@ -90,7 +90,11 @@ func entryFields(c *store.Context, name string, ns term.Namespace, g store.Group
 // move.
 func newFromScript(c *store.Context, s *term.Streams, ns term.Namespace, group store.Group, fields *store.Entry) error {
 	path := ns.Str("script")
-	abs := platform.Abs(platform.ExpandUser(path))
+	expanded, err := platform.ExpandUser(path)
+	if err != nil {
+		return err
+	}
+	abs := platform.Join(c.Cwd, expanded) // not cleaned: `..` after a link is resolved physically
 	isFile, err := platform.IsFile(abs)
 	if err != nil {
 		return err
@@ -101,11 +105,27 @@ func newFromScript(c *store.Context, s *term.Streams, ns term.Namespace, group s
 	if err := platform.CheckExecutable(abs); err != nil {
 		return term.Die(err.Error())
 	}
-	base := platform.Realpath(group.ScriptBase())
-	real := platform.Realpath(abs)
+	real, err := platform.Realpath(abs)
+	if err != nil {
+		return err
+	}
 	field := abs
-	if platform.IsRelativeTo(real, base) {
-		field = platform.Relpath(real, base)
+	// A folder the paths resolve from may not be there yet (a new namespace in a fresh store, README "Namespaces"):
+	// then the script is not inside it and its path stays absolute.
+	baseThere, err := platform.Exists(group.ScriptBase())
+	if err != nil {
+		return err
+	}
+	if baseThere {
+		base, err := platform.Realpath(group.ScriptBase())
+		if err != nil {
+			return err
+		}
+		if platform.IsRelativeTo(real, base) {
+			if field, err = platform.Relpath(real, base); err != nil {
+				return err
+			}
+		}
 	}
 	entry := *fields
 	entry.Script = &field
@@ -198,17 +218,38 @@ func storedCwd(c *store.Context, value *string, g store.Group) (*string, error) 
 	if value == nil || *value == store.Caller {
 		return value, nil
 	}
-	path := platform.Realpath(platform.ExpandUser(*value))
-	isDir, err := platform.IsDir(path)
+	expanded, err := platform.ExpandUser(*value)
+	if err != nil {
+		return nil, err
+	}
+	abs := platform.Join(c.Cwd, expanded) // not cleaned: `link/..` is the link's parent, which IsDir and Realpath find
+	isDir, err := platform.IsDir(abs)
 	if err != nil {
 		return nil, err
 	}
 	if !isDir {
-		return nil, term.Die("--cwd directory does not exist: " + path)
+		return nil, term.Die("--cwd directory does not exist: " + abs)
 	}
-	if g.InProject && platform.IsRelativeTo(path, platform.Realpath(g.StoreDir)) {
-		rel := platform.Relpath(path, platform.Realpath(g.Folder()))
-		return &rel, nil
+	path, err := platform.Realpath(abs)
+	if err != nil {
+		return nil, err
+	}
+	if g.InProject {
+		store, err := platform.Realpath(g.StoreDir)
+		if err != nil {
+			return nil, err
+		}
+		if platform.IsRelativeTo(path, store) {
+			folder, err := platform.Realpath(g.Folder())
+			if err != nil {
+				return nil, err
+			}
+			rel, err := platform.Relpath(path, folder)
+			if err != nil {
+				return nil, err
+			}
+			return &rel, nil
+		}
 	}
 	return &path, nil
 }

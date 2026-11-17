@@ -159,7 +159,8 @@ func TestStores_AddAndLinkPaths(t *testing.T) {
 	testkit.Eq(t, "linked", fileShortcuts(t, filepath.Join(e.Store, "shortcuts.json"))["linked"].(map[string]any)["script"], realpath(t, ext))
 
 	// 2. Path containment check
-	if _, err := store.ResolveScriptPath(e.Store, "../../../etc/passwd"); err == nil || !strings.Contains(err.Error(), "path traversal detected") {
+	e.Folder("etc") // a folder that is not there is an error of its own; this one is outside the store
+	if _, err := store.ResolveScriptPath(e.Store, "../../etc/passwd"); err == nil || !strings.Contains(err.Error(), "path traversal detected") {
 		t.Errorf("traversal: %v", err)
 	}
 }
@@ -403,4 +404,42 @@ func TestList_NamesComeOutInByteOrder(t *testing.T) {
 	if want := []string{"10", "B", "a", "a-1"}; !slices.Equal(got, want) {
 		t.Errorf("got %q, want %q", got, want)
 	}
+}
+
+func TestStores_ShortcutsHomeMustBeAbsoluteAndTildeNeedsAHome(t *testing.T) {
+	e := testkit.New(t)
+	for _, c := range []struct {
+		env  map[string]string
+		want string
+	}{
+		{map[string]string{"SHORTCUTS_HOME": ""}, "SHORTCUTS_HOME must be an absolute path, not ''"},
+		{map[string]string{"SHORTCUTS_HOME": "store"}, "SHORTCUTS_HOME must be an absolute path, not 'store'"},
+		{map[string]string{"HOME": "relhome", "SHORTCUTS_HOME": "~/s"}, "HOME must be set to an absolute path, so '~' in '~/s' can't be expanded"},
+	} { // testkit refuses an empty HOME, so "HOME unset" is the unit test of expandWith; a relative HOME gets here
+		res := e.RunWith(testkit.Opts{Env: c.env}, "list")
+		testkit.Eq(t, c.want+" exit", res.Code, 1)
+		testkit.Contains(t, c.want, res.Stderr, "error: "+c.want)
+	}
+}
+
+// `--cwd link/..` is the parent of where the link leads, not the folder holding the link.
+func TestStores_CwdThroughALinkThenDotDotIsPhysical(t *testing.T) {
+	e := testkit.New(t)
+	real := filepath.Join(e.Tmp, "a", "b", "c")
+	if err := os.MkdirAll(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	e.Symlink(real, filepath.Join(e.Tmp, "link"))
+	runOK(t, e, testkit.Opts{}, "new", "up", "--cwd", e.Tmp+"/link/..", "--", "pwd") // not filepath.Join: it would clean the ".." away
+	testkit.Eq(t, "cwd", e.LoadGlobal()["up"].(map[string]any)["cwd"], realpath(t, filepath.Join(e.Tmp, "a", "b")))
+}
+
+// A script given as a link stays that link: the stored path is the one given, not where it leads.
+func TestStores_NewScriptKeepsTheLinkItWasGiven(t *testing.T) {
+	e := testkit.New(t)
+	target := e.Script("target.sh", "#!/bin/sh\necho t\n")
+	link := filepath.Join(e.Tmp, "link.sh")
+	e.Symlink(target, link)
+	runOK(t, e, testkit.Opts{}, "new", "linked", "--script", link)
+	testkit.Eq(t, "script", fileShortcuts(t, filepath.Join(e.Store, "shortcuts.json"))["linked"].(map[string]any)["script"], link)
 }

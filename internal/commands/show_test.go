@@ -46,6 +46,7 @@ const toolRegistry = `{"version": 1, "shortcuts": {
 func TestShow_FullOutput(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteRegistryRaw(e.Store, toolRegistry)
+	e.Folder("etc") // the folder of "trav"'s script, outside the store, must be there for the traversal check
 	e.WriteFile(filepath.Join(e.Store, "scripts", "tool.sh"), "#!/bin/sh\r\necho hi\r\n\n\n   \n", 0)
 	cases := []struct {
 		args   []string
