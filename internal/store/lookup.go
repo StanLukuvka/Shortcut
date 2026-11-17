@@ -170,18 +170,6 @@ func ResolveShortcut(c *Context, words []string, lk Lookup) (*ResolvedShortcut, 
 	return &ResolvedShortcut{Entry: entry, Group: f.Group, RunCwd: runCwd}, f.Rest, nil
 }
 
-// ResolveName resolves a name for commands that name a shortcut: `name` or `namespace name`, and nothing else.
-func ResolveName(c *Context, words []string, lk Lookup) (*ResolvedShortcut, error) {
-	r, rest, err := ResolveShortcut(c, words, Lookup{Scope: lk.Scope, Cmd: lk.Cmd})
-	if err != nil {
-		return nil, err
-	}
-	if len(rest) > 0 {
-		return nil, TooManyNames(words)
-	}
-	return r, nil
-}
-
 // TooManyNames is the error of a command that was given more words than a name.
 func TooManyNames(words []string) error {
 	return fmt.Errorf("too many names: %s", platform.ShellJoin(words))

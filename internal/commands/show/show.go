@@ -38,9 +38,12 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 	if ns.Bool("json") {
 		return showJSON(c, s, names, lk)
 	}
-	resolved, err := store.ResolveName(c, names, lk)
+	resolved, rest, err := store.ResolveShortcut(c, names, lk)
 	if err != nil {
 		return err
+	}
+	if len(rest) > 0 {
+		return store.TooManyNames(names)
 	}
 	entry, group := resolved.Entry, resolved.Group
 	out := func(text string) { s.Out.WriteString(text + "\n") }

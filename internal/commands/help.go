@@ -9,10 +9,6 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/terminal/argparse"
 )
 
-// usageNotes ends the usage text. A raw string cannot hold a backtick, so those are joined in.
-const usageNotes = `Set SHORTCUT_SHOW_DIR=0 to hide the "→ <run directory>" line.
-`
-
 // usageText is `shortcut --help`: one line per command, from the table.
 func usageText() string {
 	var b strings.Builder
@@ -20,7 +16,7 @@ func usageText() string {
 	for _, c := range commands() {
 		b.WriteString("  " + fmt.Sprintf("%-12s", c.Words(", ")) + "  " + c.Summary + "\n")
 	}
-	return b.String() + "\n`shortcut help <command>` lists a command's arguments.\n\n" + usageNotes
+	return b.String() + "\n`shortcut help <command>` lists a command's arguments.\n\nSet SHORTCUT_SHOW_DIR=0 to hide the \"→ <run directory>\" line.\n"
 }
 
 // cmdHelp prints a command's help, or the usage text.

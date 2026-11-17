@@ -110,16 +110,6 @@ func TestRealpath_NoCwdIsAnError(t *testing.T) {
 	}
 }
 
-func TestPaths_Relpath(t *testing.T) {
-	for _, c := range [][3]string{
-		{"/a/b", "/a", "b"}, {"/a", "/a/b", ".."}, {"/a/b/c", "/a/x/y", "../../b/c"}, {"/a", "/a", "."}, {"/a/b", "/", "a/b"},
-	} {
-		if got, err := Relpath(c[0], c[1]); err != nil || got != c[2] {
-			t.Errorf("Relpath(%q, %q) = %q, %v, want %q", c[0], c[1], got, err, c[2])
-		}
-	}
-}
-
 func TestPaths_IsRelativeTo(t *testing.T) {
 	for _, c := range []struct {
 		path, other string

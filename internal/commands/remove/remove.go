@@ -111,7 +111,8 @@ func rmNamespace(c *store.Context, s *terminal.Streams, name string, assumeYes b
 	if !found {
 		return terminal.Die("no namespace named '" + name + "' in your global store (" + platform.Join(storeDir, "imports") + ")")
 	}
-	listed := isListedImport(st, name)
+	imports, _ := st.Main.Doc.Object("imports")
+	listed := imports.Has(name)
 	folder := group.ScriptsDir()
 	var lines []string
 	if listed {
@@ -132,7 +133,7 @@ func rmNamespace(c *store.Context, s *terminal.Streams, name string, assumeYes b
 	}
 	err := c.WithLock(func() error {
 		if listed {
-			reg, err := store.LoadRegistry(storeDir)
+			reg, err := store.LoadRegistryFile(st.Main.File)
 			if err != nil {
 				return err
 			}
@@ -148,7 +149,7 @@ func rmNamespace(c *store.Context, s *terminal.Streams, name string, assumeYes b
 					reg["imports"] = raw
 				}
 			}
-			if err := store.SaveRegistryAtomic(storeDir, reg); err != nil {
+			if err := store.SaveRegistryFile(st.Main.File, reg); err != nil {
 				return err
 			}
 		} else if err := write.RemoveNamespaceFiles(group); err != nil {
@@ -170,11 +171,4 @@ func rmMessage(group store.Group, display string) string {
 		where = "namespace " + group.Name
 	}
 	return "Removes '" + display + "' from " + where + ": " + group.File
-}
-
-// isListedImport reports whether a namespace comes from the store file's "imports" rather than its
-// imports/ folder.
-func isListedImport(st store.Store, name string) bool {
-	imports, ok := st.Main.Doc.Object("imports")
-	return ok && imports.Has(name)
 }

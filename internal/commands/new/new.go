@@ -1,6 +1,7 @@
 package new
 
 import (
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -50,9 +51,11 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 		return err
 	}
 	name := ns.Str("name")
-	fields, err := entryFields(c, name, ns, group)
-	if err != nil {
-		return err
+	fields := &store.Entry{Name: name, Confirm: ns.Bool("confirm")}
+	if ns.Set("cwd") {
+		if fields.Cwd, err = storedCwd(c, ns.Str("cwd"), group); err != nil {
+			return err
+		}
 	}
 	if script != "" {
 		return newFromScript(c, s, ns, group, fields)
@@ -69,20 +72,6 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 	}
 	s.Out.WriteString("Created inline shortcut '" + group.Display(name) + "'.\n")
 	return nil
-}
-
-// entryFields returns the parts of an entry the flags of new set.
-func entryFields(c *store.Context, name string, ns argparse.Namespace, g store.Group) (*store.Entry, error) {
-	var cwd *string
-	if ns.Set("cwd") {
-		v := ns.Str("cwd")
-		var err error
-		if cwd, err = storedCwd(c, &v, g); err != nil {
-			return nil, err
-		}
-	}
-	e := &store.Entry{Name: name, Cwd: cwd, Confirm: ns.Bool("confirm")}
-	return e, nil
 }
 
 // newFromScript makes an entry that names the file where it is. A file inside the folder its paths
@@ -122,7 +111,7 @@ func newFromScript(c *store.Context, s *terminal.Streams, ns argparse.Namespace,
 			return err
 		}
 		if platform.IsRelativeTo(real, base) {
-			if field, err = platform.Relpath(real, base); err != nil {
+			if field, err = filepath.Rel(base, real); err != nil {
 				return err
 			}
 		}
@@ -213,11 +202,11 @@ func targetGroup(c *store.Context, ns argparse.Namespace) (store.Group, error) {
 
 // storedCwd converts --cwd as typed (relative to the user's shell) to the 'cwd' field (relative to the
 // defining file).
-func storedCwd(c *store.Context, value *string, g store.Group) (*string, error) {
-	if value == nil || *value == store.Caller {
-		return value, nil
+func storedCwd(c *store.Context, value string, g store.Group) (*string, error) {
+	if value == store.Caller {
+		return &value, nil
 	}
-	expanded, err := platform.ExpandUser(*value)
+	expanded, err := platform.ExpandUser(value)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +232,7 @@ func storedCwd(c *store.Context, value *string, g store.Group) (*string, error) 
 			if err != nil {
 				return nil, err
 			}
-			rel, err := platform.Relpath(path, folder)
+			rel, err := filepath.Rel(folder, path)
 			if err != nil {
 				return nil, err
 			}

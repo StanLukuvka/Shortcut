@@ -11,7 +11,10 @@ import (
 
 func TestStores_StoreDiscoverySkipsGlobalRoot(t *testing.T) {
 	env := testkit.New(t)
-	if err := SaveRegistryAtomic(env.Store, doc(t, `{"version": 1, "shortcuts": {}}`)); err != nil {
+	if err := os.MkdirAll(env.Store, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveRegistryFile(filepath.Join(env.Store, "shortcuts.json"), doc(t, `{"version": 1, "shortcuts": {}}`)); err != nil {
 		t.Fatal(err)
 	}
 	// Walking up from home or subdirectory must skip ~/.shortcuts

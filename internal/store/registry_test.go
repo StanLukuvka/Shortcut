@@ -143,10 +143,14 @@ func TestRegistry_ResolveScriptPath(t *testing.T) {
 func TestStores_AtomicRegistrySaveAndCorruptProtection(t *testing.T) {
 	env := testkit.New(t)
 	data := doc(t, `{"version": 1, "shortcuts": {"test": {"description": "test", "inline": "echo 1"}}}`)
-	if err := SaveRegistryAtomic(env.Store, data); err != nil {
+	path := filepath.Join(env.Store, "shortcuts.json")
+	if err := os.MkdirAll(env.Store, 0o777); err != nil {
 		t.Fatal(err)
 	}
-	loaded, err := LoadRegistry(env.Store)
+	if err := SaveRegistryFile(path, data); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadRegistryFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,10 +160,10 @@ func TestStores_AtomicRegistrySaveAndCorruptProtection(t *testing.T) {
 
 	// Corrupt JSON file protection
 	reg := env.WriteFile(filepath.Join(env.Store, "shortcuts.json"), `{"version": 1, corrupt json!`, 0)
-	if _, err := LoadRegistry(env.Store); err == nil || !strings.Contains(err.Error(), "corrupt registry") {
+	if _, err := LoadRegistryFile(path); err == nil || !strings.Contains(err.Error(), "corrupt registry") {
 		t.Errorf("load: %v", err)
 	}
-	if err := SaveRegistryAtomic(env.Store, data); err == nil || !strings.Contains(err.Error(), "cannot overwrite corrupt registry") {
+	if err := SaveRegistryFile(path, data); err == nil || !strings.Contains(err.Error(), "cannot overwrite corrupt registry") {
 		t.Errorf("save: %v", err)
 	}
 	// Verify the corrupt file was not replaced or overwritten

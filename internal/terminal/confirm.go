@@ -10,6 +10,9 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/terminal/argparse"
 )
 
+// Die returns an error that prints "error: msg" on stderr and exits 1.
+func Die(msg string) error { return &argparse.ExitError{Code: 1, Stderr: "error: " + msg + "\n"} }
+
 // Confirm is every question shortcut asks before it runs or changes something. Message says what will happen and is
 // shown above the question; -y answers yes; without a terminal it stops with NoTerminal.
 type Confirm struct {
