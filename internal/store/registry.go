@@ -27,7 +27,11 @@ func isJSONError(err error) bool {
 
 // LoadRegistryFile reads a registry file, with fixed messages.
 func LoadRegistryFile(path string) (platform.Doc, error) {
-	if !platform.IsFile(path) {
+	isFile, err := platform.IsFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if !isFile {
 		return nil, &RegistryNotFoundError{path}
 	}
 	text, err := platform.ReadJSONFile(path)
@@ -64,7 +68,11 @@ func LoadRegistry(storeDir string) (platform.Doc, error) {
 
 // SaveRegistryFile refuses to write over a file it can't read.
 func SaveRegistryFile(path string, data platform.Doc) error {
-	if platform.IsFile(path) {
+	isFile, err := platform.IsFile(path)
+	if err != nil {
+		return err
+	}
+	if isFile {
 		if _, err := platform.ReadJSONFile(path); err != nil {
 			return fmt.Errorf("cannot overwrite corrupt registry %s: %s", path, err)
 		}

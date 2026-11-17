@@ -60,7 +60,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	text := joinCommand(inline)
 	entry := *fields
 	entry.Inline = &text
-	entry.Description = descOr(ns, text)
+	entry.Description = ns.Str("desc")
 	if err := write.Register(c, s, group, &entry); err != nil {
 		return err
 	}
@@ -69,14 +69,6 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	}
 	_, err = s.Out.WriteString("Created inline shortcut '" + group.Display(name) + "'.\n")
 	return err
-}
-
-// descOr returns the --desc, or def when there is none.
-func descOr(ns term.Namespace, def string) string {
-	if ns.Set("desc") {
-		return ns.Str("desc")
-	}
-	return def
 }
 
 // entryFields returns the parts of an entry the flags of new set.
@@ -99,7 +91,11 @@ func entryFields(c *store.Context, name string, ns term.Namespace, g store.Group
 func newFromScript(c *store.Context, s *term.Streams, ns term.Namespace, group store.Group, fields *store.Entry) error {
 	path := ns.Str("script")
 	abs := platform.Abs(platform.ExpandUser(path))
-	if path == "-" || !platform.IsFile(abs) {
+	isFile, err := platform.IsFile(abs)
+	if err != nil {
+		return err
+	}
+	if path == "-" || !isFile {
 		return term.Die("script file not found: " + path)
 	}
 	if err := platform.CheckExecutable(abs); err != nil {
@@ -113,11 +109,11 @@ func newFromScript(c *store.Context, s *term.Streams, ns term.Namespace, group s
 	}
 	entry := *fields
 	entry.Script = &field
-	entry.Description = descOr(ns, "(no description)")
+	entry.Description = ns.Str("desc")
 	if err := write.Register(c, s, group, &entry); err != nil {
 		return err
 	}
-	_, err := s.Out.WriteString("Created shortcut '" + group.Display(entry.Name) + "' using " + abs + ".\n")
+	_, err = s.Out.WriteString("Created shortcut '" + group.Display(entry.Name) + "' using " + abs + ".\n")
 	return err
 }
 
@@ -203,7 +199,11 @@ func storedCwd(c *store.Context, value *string, g store.Group) (*string, error) 
 		return value, nil
 	}
 	path := platform.Realpath(platform.ExpandUser(*value))
-	if !platform.IsDir(path) {
+	isDir, err := platform.IsDir(path)
+	if err != nil {
+		return nil, err
+	}
+	if !isDir {
 		return nil, term.Die("--cwd directory does not exist: " + path)
 	}
 	if g.InProject && platform.IsRelativeTo(path, platform.Realpath(g.StoreDir)) {

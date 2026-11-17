@@ -43,7 +43,12 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 		return err
 	}
 	entry, group := resolved.Entry, resolved.Group
-	out := func(text string) { s.Out.WriteString(text + "\n") }
+	var werr error // the first write error
+	out := func(text string) {
+		if _, err := s.Out.WriteString(text + "\n"); werr == nil {
+			werr = err
+		}
+	}
 
 	display := resolved.Display()
 	out("Name:        " + display)
@@ -61,14 +66,18 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 
 	if entry.Inline != nil {
 		out("\nInline command:\n  " + *entry.Inline)
-		return nil
+		return werr
 	}
 	path, err := store.ResolveScriptPath(group.ScriptBase(), *entry.Script)
 	if err != nil {
 		return err
 	}
 	out("\nScript (" + path + "):")
-	if platform.IsFile(path) {
+	isFile, err := platform.IsFile(path)
+	if err != nil {
+		return err
+	}
+	if isFile {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -79,7 +88,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	} else {
 		out("  [file missing: " + path + "]")
 	}
-	return nil
+	return werr
 }
 
 // showTop are the top-level keys of `show --json`.

@@ -365,3 +365,41 @@ func TestRunning_TheDotSelectsTheScope(t *testing.T) {
 	e.WriteStore(e.Store, map[string]any{"echoes": testkit.Inline(`echo "$@"`)})
 	testkit.Eq(t, "late dot", e.RunWith(o, "r", "echoes", ".").Stdout, ".\n")
 }
+
+func TestRunning_ShowDirTakesZeroOrOne(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"hi": testkit.Inline("echo hi")})
+	for v, want := range map[string]string{"0": "", "1": "→ "} {
+		res := e.RunWith(testkit.Opts{Env: map[string]string{"SHORTCUT_SHOW_DIR": v}}, "r", "hi")
+		if res.Code != 0 || res.Stdout != "hi\n" || (want == "") != (res.Stderr == "") || !strings.HasPrefix(res.Stderr, want) {
+			t.Errorf("%q: %+v", v, res)
+		}
+	}
+	for _, v := range []string{"", "2", "yes"} {
+		res := e.RunWith(testkit.Opts{Env: map[string]string{"SHORTCUT_SHOW_DIR": v}}, "r", "hi")
+		if res.Code != 1 || res.Stdout != "" || res.Stderr != "error: SHORTCUT_SHOW_DIR must be 0 or 1, not '"+v+"'\n" {
+			t.Errorf("%q: %+v", v, res)
+		}
+	}
+}
+
+// A folder above the cwd that can't be searched is an error for the project scope, and the global scope doesn't care.
+func TestRunning_AProjectLookupThatCantTellDoesntTouchTheGlobalScope(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can search any folder")
+	}
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"x": map[string]any{"inline": "echo ran", "cwd": e.Home}})
+	child := filepath.Join(e.Folder("locked"), "child")
+	if err := os.Mkdir(child, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// the shell enters the folder first and then locks its parent: the cwd stays, but nothing above it can be searched
+	script := fmt.Sprintf(`cd '%s' && chmod 000 .. && { shortcut r . x; echo "project=$?"; shortcut r x; echo "global=$?"; shortcut list; echo "list=$?"; } 2>&1`, child)
+	res := e.Shell(testkit.Opts{Cwd: e.Home}, script)
+	testkit.Contains(t, "project scope", res.Stdout, "permission denied")
+	testkit.Contains(t, "project scope", res.Stdout, "project=1\n")
+	testkit.Contains(t, "global scope", res.Stdout, "ran\nglobal=0\n")
+	testkit.Contains(t, "list", res.Stdout, "warning: ")
+	testkit.Contains(t, "list", res.Stdout, "list=0\n")
+}

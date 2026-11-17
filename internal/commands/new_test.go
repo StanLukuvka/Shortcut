@@ -169,7 +169,7 @@ func TestStores_NewOneLiner(t *testing.T) {
 	runOK(t, e, testkit.Opts{}, "new", "hello", "--", "echo", "hello", "world")
 	hello := e.LoadGlobal()["hello"].(map[string]any)
 	testkit.Eq(t, "inline", hello["inline"], "echo hello world")
-	testkit.Eq(t, "description", hello["description"], "echo hello world")
+	testkit.Eq(t, "description", hello["description"], nil) // new makes up none
 }
 
 func TestStores_NewScriptInsideTheStoreIsKeptRelative(t *testing.T) {
@@ -391,7 +391,7 @@ func TestNew_EmptyFlagsAreErrors(t *testing.T) {
 	}
 	testkit.NotExist(t, filepath.Join(e.Store, "shortcuts.json"))
 	runOK(t, e, testkit.Opts{}, "new", "dflt", "--script", script)
-	testkit.Eq(t, "no desc", e.LoadGlobal()["dflt"].(map[string]any)["description"], "(no description)")
+	testkit.Eq(t, "no desc", e.LoadGlobal()["dflt"].(map[string]any)["description"], nil)
 }
 
 func TestList_NamesComeOutInByteOrder(t *testing.T) {

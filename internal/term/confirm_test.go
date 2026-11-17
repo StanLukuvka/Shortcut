@@ -1,6 +1,7 @@
 package term
 
 import (
+	"os"
 	"strings"
 	"syscall"
 	"testing"
@@ -20,16 +21,32 @@ func TestAsk_Answers(t *testing.T) {
 		{"", false, "\n"}, // end of input: a newline on stdout, answer no
 	} {
 		s, out, errs := capture(t, e, c.input)
-		if got := Ask(s, "go on? \x1b[2K"); got != c.want {
-			t.Errorf("Ask(%q) = %v", c.input, got)
+		if got, err := Ask(s, "go on? \x1b[2K"); got != c.want || err != nil {
+			t.Errorf("Ask(%q) = %v, %v", c.input, got, err)
 		}
 		if errs() != "go on? ^[[2K" || out() != c.out { // the prompt cannot carry an escape
 			t.Errorf("Ask(%q): stderr %q stdout %q", c.input, errs(), out())
 		}
 	}
 	s, _, _ := capture(t, e, "y\nn\nrest")
-	if !Ask(s, "") || Ask(s, "") {
+	first, _ := Ask(s, "")
+	second, _ := Ask(s, "")
+	if !first || second {
 		t.Error("two questions on one input must read one line each")
+	}
+}
+
+func TestAsk_AReadErrorIsAnError(t *testing.T) {
+	e := testkit.New(t)
+	s, _, _ := capture(t, e, "")
+	dir, err := os.Open(e.Tmp) // reading a folder fails with EISDIR, which is not end of input
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dir.Close()
+	s.In = dir
+	if ok, err := Ask(s, "go on? "); ok || err == nil {
+		t.Errorf("a failed read: %v, %v", ok, err)
 	}
 }
 

@@ -15,16 +15,18 @@ import (
 // store function that needs the cwd, the global store or the project root. One Context is one run:
 // the stores it has read are not read again, except by ReadStore.
 type Context struct {
-	Cwd     string // physical working directory; "" when CwdErr != nil
-	CwdErr  error  // read by run and new, which refuse to go on without a cwd
-	Global  string // absolute global store dir: $SHORTCUTS_HOME or ~/.shortcuts. The only read of the variable
-	Project string // nearest project root at or above Cwd, "" = none
+	Cwd        string // physical working directory; "" when CwdErr != nil
+	CwdErr     error  // getcwd's error, read by run and new, which refuse to go on without a cwd
+	Global     string // absolute global store dir: $SHORTCUTS_HOME or ~/.shortcuts. The only read of the variable
+	Project    string // nearest project root at or above Cwd, "" = none
+	ProjectErr error  // the project lookup couldn't tell (a folder it can't search): read by everything that looks in the project, never by the global scope
 
 	globalReal string           // platform.Realpath(Global), once
 	stores     map[string]Store // by the dir as the caller passed it: Global, or a realpath'd project root
 }
 
-// NewContext resolves the global store and the project root once. It never fails.
+// NewContext resolves the global store and the project root once. It never fails: a project lookup that can't tell
+// is ProjectErr.
 func NewContext(cwd string, cwdErr error) *Context {
 	home := os.Getenv("SHORTCUTS_HOME")
 	if home == "" {
@@ -33,7 +35,7 @@ func NewContext(cwd string, cwdErr error) *Context {
 	c := &Context{Cwd: cwd, CwdErr: cwdErr, Global: platform.Abs(platform.ExpandUser(home)), stores: map[string]Store{}}
 	c.globalReal = platform.Realpath(c.Global)
 	if cwdErr == nil {
-		c.Project = c.FindProjectRoot(cwd)
+		c.Project, c.ProjectErr = c.FindProjectRoot(cwd)
 	}
 	return c
 }
@@ -46,23 +48,32 @@ func (c *Context) neverAProject(p string) bool {
 	return p == c.globalReal || p == platform.Realpath(platform.Join(platform.ExpandUser("~"), ProjectFile))
 }
 
-func (c *Context) isProjectRoot(folder string) bool {
+func (c *Context) isProjectRoot(folder string) (bool, error) {
 	if c.neverAProject(platform.Realpath(platform.Join(folder, ProjectFile))) {
-		return false
+		return false, nil
 	}
-	return platform.IsFile(platform.Join(folder, ProjectFile)) || platform.IsFile(platform.Join(folder, LocalFile))
+	for _, name := range []string{ProjectFile, LocalFile} {
+		if ok, err := platform.IsFile(platform.Join(folder, name)); ok || err != nil {
+			return ok, err
+		}
+	}
+	return false, nil
 }
 
 // FindProjectRoot returns the nearest folder at or above start with a .shortcuts or .shortcuts.local that is
-// not the global store. "" = none.
-func (c *Context) FindProjectRoot(start string) string {
+// not the global store. "" = none. A folder it can't look in is an error, not "no project".
+func (c *Context) FindProjectRoot(start string) (string, error) {
 	for cur := platform.Realpath(start); ; {
-		if c.isProjectRoot(cur) {
-			return cur
+		ok, err := c.isProjectRoot(cur)
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			return cur, nil
 		}
 		parent := filepath.Dir(cur)
 		if parent == cur {
-			return ""
+			return "", nil
 		}
 		cur = parent
 	}
@@ -72,7 +83,11 @@ func (c *Context) FindProjectRoot(start string) string {
 // the messages die prints.
 func (c *Context) LocalProjectRoot() (string, error) {
 	here := platform.Realpath(c.Cwd)
-	if root := c.FindProjectRoot(here); root != "" && root != here {
+	root, err := c.FindProjectRoot(here)
+	if err != nil {
+		return "", err
+	}
+	if root != "" && root != here {
 		return "", fmt.Errorf("%s is inside the project at %s. Run this from there.", here, root)
 	}
 	if c.neverAProject(platform.Realpath(platform.Join(here, ProjectFile))) {
@@ -118,7 +133,6 @@ func (c *Context) Stores() []Store {
 
 // loadStore reads a store and its namespaces. It never fails on bad content: that is reported on the Group or the
 // Store, so list, show and rm still work on a broken store.
-// lazy: a folder that can't be listed counts as empty; no test reaches it.
 func (c *Context) loadStore(storeDir string) Store {
 	isGlobal := c.IsGlobal(storeDir)
 	var main Group
@@ -130,15 +144,20 @@ func (c *Context) loadStore(storeDir string) Store {
 	var problems []string
 	sources := map[string]string{}
 	importsDir := platform.Join(storeDir, "imports")
-	if isGlobal && platform.IsDir(importsDir) {
-		entries, _ := os.ReadDir(importsDir)
-		var names []string
-		for _, e := range entries {
-			names = append(names, e.Name())
+	if isGlobal {
+		isDir, err := platform.IsDir(importsDir)
+		if err != nil {
+			problems = append(problems, err.Error())
 		}
-		for _, filename := range slices.Sorted(slices.Values(names)) {
-			if strings.HasSuffix(filename, ImportSuffix) {
-				sources[strings.TrimSuffix(filename, ImportSuffix)] = platform.Join(importsDir, filename)
+		if isDir {
+			entries, err := os.ReadDir(importsDir)
+			if err != nil {
+				problems = append(problems, err.Error())
+			}
+			for _, e := range entries {
+				if filename := e.Name(); strings.HasSuffix(filename, ImportSuffix) {
+					sources[strings.TrimSuffix(filename, ImportSuffix)] = platform.Join(importsDir, filename)
+				}
 			}
 		}
 	}

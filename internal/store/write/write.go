@@ -71,7 +71,11 @@ func Register(c *store.Context, s *term.Streams, group store.Group, entry *store
 		return nil
 	}
 	err := c.WithLock(func() error {
-		reg, shortcuts, err := LoadForEdit(group.File, !platform.Exists(group.File))
+		exists, err := platform.Exists(group.File)
+		if err != nil {
+			return err
+		}
+		reg, shortcuts, err := LoadForEdit(group.File, !exists)
 		if err != nil {
 			return err
 		}
@@ -103,8 +107,11 @@ func Register(c *store.Context, s *term.Streams, group store.Group, entry *store
 func WriteLocal(c *store.Context, root string, change func(platform.Doc) error) error {
 	return c.WithLock(func() error {
 		path := store.LoadProjectGroup(root).LocalFile
-		isNewFile := !platform.Exists(path)
-		reg, shortcuts, err := LoadForEdit(path, isNewFile)
+		exists, err := platform.Exists(path)
+		if err != nil {
+			return err
+		}
+		reg, shortcuts, err := LoadForEdit(path, !exists)
 		if err != nil {
 			return err
 		}
@@ -120,7 +127,7 @@ func WriteLocal(c *store.Context, root string, change func(platform.Doc) error) 
 
 // UnlinkFile removes a file or a link, and not one that is already gone; never a folder (os.Remove
 // would take an empty one), and a link only ever loses itself.
-// lazy: the error text is Go's; only a folder where a file should be reaches it.
+// The error text is Go's; only a folder where a file should be reaches it.
 func UnlinkFile(path string) error {
 	if err := syscall.Unlink(path); err != nil && !errors.Is(err, syscall.ENOENT) {
 		return &os.PathError{Op: "unlink", Path: path, Err: err}
@@ -135,11 +142,16 @@ func RemoveNamespaceFiles(group store.Group) error {
 	if err := UnlinkFile(group.File); err != nil {
 		return err
 	}
-	switch {
-	case platform.IsLink(folder):
-		return UnlinkFile(folder)
-	case platform.IsDir(folder):
-		return os.RemoveAll(folder) // does not follow a link inside it either
+	isLink, err := platform.IsLink(folder)
+	if err != nil {
+		return err
 	}
-	return nil
+	if isLink {
+		return UnlinkFile(folder)
+	}
+	isDir, err := platform.IsDir(folder)
+	if err != nil || !isDir {
+		return err
+	}
+	return os.RemoveAll(folder) // does not follow a link inside it either
 }
