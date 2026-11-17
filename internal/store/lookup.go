@@ -3,8 +3,6 @@ package store
 import (
 	"errors"
 	"fmt"
-	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
@@ -125,33 +123,22 @@ func FindEntry(c *Context, words []string, lk Lookup) (Found, error) {
 		if group.Error != nil {
 			return Found{}, errors.New(*group.Error)
 		}
-		gs := group.Shortcuts()
-		members := strings.Join(slices.Sorted(slices.Values(gs.Names())), ", ")
-		if members == "" {
-			members = "(none)"
-		}
 		if len(rest) == 0 {
-			return Found{}, fmt.Errorf("'%s' is a namespace; run one of its shortcuts: %s", first, members)
+			return Found{}, fmt.Errorf("'%s' is a namespace; run one of its shortcuts", first)
 		}
-		it, ok := gs.Get(rest[0])
+		it, ok := group.Shortcuts().Get(rest[0])
 		if !ok {
 			note := ""
 			if hint := otherHint(c, lk, words); hint != "" {
 				note = ". " + hint
 			}
-			return Found{}, fmt.Errorf("'%s' not found in namespace '%s'. It has: %s%s", rest[0], first, members, note)
+			return Found{}, fmt.Errorf("'%s' not found in namespace '%s'%s", rest[0], first, note)
 		}
 		return Found{group, rest[0], it, rest[1:]}, nil
 	}
-	var missing string
-	switch {
-	case len(rest) > 0 && lk.Scope == ScopeGlobal: // `first` may be meant as a namespace
-		missing = fmt.Sprintf("shortcut or namespace '%s' not found. A global namespace is the file %s.",
-			first, platform.Join(store.Main.StoreDir, "imports", first+ImportSuffix))
-	case len(rest) > 0:
+	missing := fmt.Sprintf("shortcut '%s' not found.", first)
+	if len(rest) > 0 {
 		missing = fmt.Sprintf("shortcut or namespace '%s' not found.", first)
-	default:
-		missing = fmt.Sprintf("shortcut '%s' not found.", first)
 	}
 	notes := []string{missing}
 	if store.Main.Error != nil {
@@ -160,23 +147,10 @@ func FindEntry(c *Context, words []string, lk Lookup) (Found, error) {
 	if hint := otherHint(c, lk, words); hint != "" {
 		notes = append(notes, hint)
 	}
-	if root := c.Project; root != "" && lk.Scope == ScopeProject {
-		outer, err := c.FindProjectRoot(filepath.Dir(root))
-		if err != nil {
-			notes = append(notes, err.Error())
-		} else if outer != "" && outer != root && hasName(c.Store(outer), first) {
-			notes = append(notes, fmt.Sprintf("The project in %s has a '%s', but only the nearest project, %s, is used here.", outer, first, root))
-		}
-	}
 	return Found{}, errors.New(strings.Join(notes, " "))
 }
 
 func has(is Items, name string) bool { _, ok := is.Get(name); return ok }
-
-func hasName(s Store, name string) bool {
-	_, ns := s.Namespace(name)
-	return has(s.Main.Shortcuts(), name) || ns
-}
 
 // ResolveShortcut returns what `shortcut run <words>` runs, and where, and the words left over as
 // arguments.

@@ -63,7 +63,7 @@ func TestRegistry_LoadRegistryFile(t *testing.T) {
 	}
 	// Go's wording after the path, and the file is named; text that is not valid UTF-8 says so
 	for _, c := range []struct{ file, want string }{
-		{`{not json`, "invalid character 'n' looking for beginning of object key string (at byte "},
+		{`{not json`, "invalid character 'n' looking for beginning of object key string"},
 		{"\xef\xbb\xbf{}", "invalid character"},
 		{"{\r\n  \"a\": 1,\r\n}", "invalid character '}'"},
 		{`{"a": NaN}`, "invalid character 'N'"},

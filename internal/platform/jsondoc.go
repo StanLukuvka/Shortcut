@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"unicode/utf8"
 )
 
@@ -93,14 +92,6 @@ func checkJSON(raw []byte) error {
 	if !utf8.Valid(raw) {
 		return ErrNotUTF8
 	}
-	if json.Valid(raw) { // syntax, trailing data, nesting limit
-		return nil
-	}
-	var v any
-	err := json.Unmarshal(raw, &v)
-	var se *json.SyntaxError
-	if errors.As(err, &se) {
-		return fmt.Errorf("%w (at byte %d)", se, se.Offset)
-	}
-	return err // a depth error; Unmarshal always errors when Valid is false
+	var v json.RawMessage          // not `any`: a number like 1e400 is valid JSON though it fits no float64
+	return json.Unmarshal(raw, &v) // syntax, trailing data, nesting limit
 }

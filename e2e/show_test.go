@@ -93,13 +93,15 @@ func TestRunning_ShowPrintsTheEntryScriptAndCwd(t *testing.T) {
 	testkit.Contains(t, "show", res.Stdout, "Run CWD:     "+e.Tmp+"\n")
 }
 
-func TestRunning_ShowSaysWhenTheRunDirectoryOrScriptIsGone(t *testing.T) {
+func TestRunning_ShowOfAGoneRunDirectoryWorksAndAGoneScriptFails(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"gone": map[string]any{"inline": "true", "cwd": "/no/such/folder"}})
 	testkit.Contains(t, "cwd", e.Run("show", "gone").Stdout, "/no/such/folder")
 	e.Folder("home/.shortcuts/scripts") // the folder of a script must be there; the script is what is missing
 	e.WriteStore(e.Store, map[string]any{"gone": map[string]any{"script": "scripts/none.sh"}})
-	testkit.Contains(t, "script", e.Run("show", "gone").Stdout, "[file missing:")
+	res := e.Run("show", "gone")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "script", res.Stderr, "scripts/none.sh: no such file or directory")
 }
 
 func TestRunning_ShowJSONPrintsAnEntryShowRefuses(t *testing.T) {
@@ -272,7 +274,7 @@ echo hi
   "source": null
 }
 `, ""},
-		{[]string{"show", "gone"}, 0, `Name:        gone
+		{[]string{"show", "gone"}, 1, `Name:        gone
 Scope:       global
 Defined in:  TMP/home/.shortcuts/shortcuts.json
 CWD:         caller
@@ -280,11 +282,10 @@ Run CWD:     TMP/home
 Description: 
 
 Script (TMP/home/.shortcuts/scripts/none.sh):
-  [file missing: TMP/home/.shortcuts/scripts/none.sh]
-`, ""},
+`, "error: open TMP/home/.shortcuts/scripts/none.sh: no such file or directory\n"},
 		{[]string{"show", "bad"}, 1, "", "error: 'bad' is not a valid entry: 'cwd' must be a string\n"},
 		{[]string{"show", "nul"}, 1, "", "error: 'nul' is not a valid entry: expected a JSON object\n"},
-		{[]string{"show", "a", "b"}, 1, "", "error: shortcut or namespace 'a' not found. A global namespace is the file TMP/home/.shortcuts/imports/a.shortcut.\n"},
+		{[]string{"show", "a", "b"}, 1, "", "error: shortcut or namespace 'a' not found.\n"},
 		{[]string{"show", "--json", "build", "x"}, 1, "", "error: too many names: build x\n"},
 		{[]string{"show", "--json", "x"}, 1, "", "error: shortcut 'x' not found.\n"},
 	}
@@ -381,7 +382,6 @@ func TestShow_Field(t *testing.T) {
 	})
 	e.WriteFile(filepath.Join(e.Store, "scripts", "tool.sh"), "#!/bin/sh\n", 0)
 	store := filepath.Join(e.Store, "shortcuts.json")
-	list := "name, namespace, scope, defined_in, source, cwd, run_cwd, script_path, error, description, inline, script"
 	cases := []struct {
 		args   []string
 		code   int
@@ -397,7 +397,7 @@ func TestShow_Field(t *testing.T) {
 		{[]string{"show", "--field", "inline", "line"}, 0, "echo hi\n", ""},
 		{[]string{"show", "--field", "script", "tool"}, 0, "scripts/tool.sh\n", ""},
 		{[]string{"show", "--field", "error", "line"}, 0, "", ""},
-		{[]string{"show", "--field", "confirm", "line"}, 1, "", "error: unknown field 'confirm' (one of: " + list + ")\n"},
+		{[]string{"show", "--field", "confirm", "line"}, 1, "", "error: unknown field 'confirm'\n"},
 		{[]string{"show", "--field", "name", "--json", "line"}, 1, "", "error: --field and --json can't be used together\n"},
 		{[]string{"show", "--field", "name", "nothing"}, 1, "", "error: shortcut 'nothing' not found.\n"},
 		{[]string{"show", "--field", "name", "a", "b", "c"}, 1, "", ""},

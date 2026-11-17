@@ -61,7 +61,7 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 	entry := *fields
 	entry.Inline = &text
 	entry.Description = ns.Str("desc")
-	if err := write.Register(c, s, group, &entry); err != nil {
+	if err := write.Register(c, group, &entry); err != nil {
 		return err
 	}
 	if !positionalAnywhere.MatchString(text) {
@@ -130,7 +130,7 @@ func newFromScript(c *store.Context, s *terminal.Streams, ns argparse.Namespace,
 	entry := *fields
 	entry.Script = &field
 	entry.Description = ns.Str("desc")
-	if err := write.Register(c, s, group, &entry); err != nil {
+	if err := write.Register(c, group, &entry); err != nil {
 		return err
 	}
 	s.Out.WriteString("Created shortcut '" + group.Display(entry.Name) + "' using " + abs + ".\n")
@@ -181,8 +181,7 @@ func targetGroup(c *store.Context, ns argparse.Namespace) (store.Group, error) {
 	}
 	local, namespace := ns.Bool("local"), ns.Str("namespace")
 	if local && namespace != "" {
-		return store.Group{}, terminal.Die("--namespace can't be used with --local: " + store.LocalFile + " is one file, and " +
-			store.ProjectFile + " is yours to edit")
+		return store.Group{}, terminal.Die("--namespace can't be used with --local: " + store.LocalFile + " is one file")
 	}
 	storeDir := c.Global
 	if local {

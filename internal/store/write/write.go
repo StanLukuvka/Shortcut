@@ -45,7 +45,7 @@ func SaveEdited(path string, reg, shortcuts platform.Doc) error {
 }
 
 // Register adds entry to group's file under the registry lock. It creates a missing store or namespace file. A project's group means .shortcuts.local.
-func Register(c *store.Context, s *terminal.Streams, group store.Group, entry *store.Entry) error {
+func Register(c *store.Context, group store.Group, entry *store.Entry) error {
 	storeDir := group.StoreDir
 	if group.Kind == store.KindProject {
 		change := func(shortcuts platform.Doc) error {
@@ -64,9 +64,6 @@ func Register(c *store.Context, s *terminal.Streams, group store.Group, entry *s
 		}
 		if err := WriteLocal(c, storeDir, change); err != nil {
 			return err
-		}
-		if _, shared := group.Shared.Get(entry.Name); shared {
-			s.Err.WriteString("note: this overrides '" + entry.Name + "' from " + store.ProjectFile + " for you\n")
 		}
 		return nil
 	}
