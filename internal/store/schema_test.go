@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -123,5 +124,29 @@ func TestSchema_EveryFieldIsAccepted(t *testing.T) {
 	}
 	if errs := EntryErrors(group); len(errs) > 0 {
 		t.Errorf("entry errors: %v", errs)
+	}
+}
+
+func TestFormat_IsFrozenForItsVersion(t *testing.T) {
+	var got []string
+	for _, k := range FileKeys() {
+		got = append(got, "file "+k)
+	}
+	for _, f := range Fields() {
+		got = append(got, "entry "+f.Name+" "+f.Type)
+	}
+	path := fmt.Sprintf("testdata/format-v%d.txt", RegistryVersion)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("%v: there is no frozen list for version %d; add one", err, RegistryVersion)
+	}
+	var want []string
+	for _, l := range strings.Split(string(raw), "\n") {
+		if l != "" && !strings.HasPrefix(l, "#") {
+			want = append(want, l)
+		}
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("the file format changed but RegistryVersion is still %d: bump it and add testdata/format-v<new>.txt\nfrozen: %q\nnow:    %q", RegistryVersion, want, got)
 	}
 }

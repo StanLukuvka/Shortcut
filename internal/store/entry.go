@@ -45,6 +45,10 @@ func Fields() []Field {
 	}
 }
 
+// FileKeys are the keys a store file may have. 'imports' is allowed only in a store's main file; fileError
+// refuses it in a namespace file. A test freezes this list and Fields() for each RegistryVersion.
+func FileKeys() []string { return []string{"version", "description", "shortcuts", "imports"} }
+
 // DecodeEntry reads an entry's text, with fixed messages and check order. For an object it returns the entry
 // with every well-typed field set, even beside an error, so a broken entry's script and cwd can still be read.
 func DecodeEntry(name string, raw []byte) (*Entry, error) {
