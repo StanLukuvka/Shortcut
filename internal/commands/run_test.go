@@ -290,9 +290,8 @@ func TestRunning_AClosedPipeStopsQuietly(t *testing.T) {
 	}
 }
 
-// The "-> cwd" line goes to stderr with a bad byte escaped (as \xNN). A global shortcut still runs from a folder
-// whose name is not valid UTF-8.
-func TestRun_CwdLineEscapesNonUTF8(t *testing.T) {
+// A global shortcut still runs from a folder whose name is not valid UTF-8, and the "-> cwd" line shows it as it is.
+func TestRun_RunsFromANonUTF8Folder(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"hello": testkit.Inline("true")})
 	dir := filepath.Join(e.Tmp, "p\xffroj")
@@ -301,7 +300,7 @@ func TestRun_CwdLineEscapesNonUTF8(t *testing.T) {
 	}
 	res := e.RunWith(testkit.Opts{Cwd: dir}, "run", "hello")
 	res.WantCode(t, 0)
-	testkit.Contains(t, "stderr", res.Stderr, "p\\xffroj")
+	testkit.Contains(t, "stderr", res.Stderr, "p\xffroj")
 }
 
 // run reaches the global store without the dot and only the project with it, for a name and for a group, and each side

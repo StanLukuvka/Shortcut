@@ -1,6 +1,6 @@
-package term
+package terminal
 
-import "github.com/StanLukuvka/Shortcut/internal/term/argparse"
+import "github.com/StanLukuvka/Shortcut/internal/terminal/argparse"
 
 // ExitError ends a command with a code and, optionally, text for stdout and stderr, which Main prints as it is
 // (so a message carries its own "error: " and newline). Code 0 is -h; 2 is a usage error; 1 is Die.

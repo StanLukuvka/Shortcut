@@ -142,34 +142,3 @@ func TestDispatch_UsageAndVersion(t *testing.T) {
 		t.Errorf("empty word: exit %d stderr %q", res.Code, res.Stderr)
 	}
 }
-
-// The raw bytes of control characters in an unknown word are made safe (stderr is a SafeOutput).
-func TestDispatch_ErrorsAreSafe(t *testing.T) {
-	e := testkit.New(t)
-	res := e.Run("bad\x1b[31mword")
-	if res.Code != 2 || strings.Contains(res.Stderr, "\x1b") || !strings.Contains(res.Stderr, "bad^[[31mword") {
-		t.Errorf("exit %d stderr %q", res.Code, res.Stderr)
-	}
-}
-
-// Bytes that are not valid UTF-8 print as \xNN.
-func TestStderr_NonUTF8ArgvPrintsAsEscapes(t *testing.T) {
-	e := testkit.New(t)
-	runOK(t, e, testkit.Opts{}, "new", "hi", "--", "echo hi")
-	for _, c := range []struct {
-		args []string
-		code int
-		want string
-	}{
-		{[]string{"show", "\xff"}, 1, "error: shortcut '\\xff' not found.\n"},
-		{[]string{"--j\xff"}, 2, "error: unrecognized option '--j\\xff'\nTry 'shortcut --help' for more information.\n"},
-		{[]string{"list", "-", "\xff"}, 2, "error: unexpected argument '-'\nTry 'shortcut list -h' for more information.\n"},
-		{[]string{"list", "\xff"}, 2, "error: unexpected argument '\\xff'\nTry 'shortcut list -h' for more information.\n"},
-		{[]string{"show", "hi", "\xff"}, 1, "error: too many names: hi '\\xff'\n"},
-	} {
-		res := e.Run(c.args...)
-		if res.Code != c.code || res.Stdout != "" || res.Stderr != c.want {
-			t.Errorf("%q: exit %d stdout %q stderr %q, want exit %d stderr %q", c.args, res.Code, res.Stdout, res.Stderr, c.code, c.want)
-		}
-	}
-}

@@ -12,12 +12,12 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
-	"github.com/StanLukuvka/Shortcut/internal/term"
+	"github.com/StanLukuvka/Shortcut/internal/terminal"
 )
 
 // Run runs a shortcut. -y and --yes are the only options it reads, and only before the name, and a . after them
 // selects the project; everything after that, -h included, is the shortcut's.
-func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) error {
+func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []string) error {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
 		s.Out.WriteString(cmd.HelpText())
 		return nil
@@ -29,20 +29,18 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	}
 	scope, args := store.SplitScope(args)
 	if len(args) == 0 {
-		return &term.ExitError{Code: 2, Stderr: "error: missing shortcut name\n" + cmd.UsageLine() + "\n"}
+		return &terminal.ExitError{Code: 2, Stderr: "error: missing shortcut name\n" + cmd.UsageLine() + "\n"}
 	}
 	if scope == store.ScopeProject && strings.HasPrefix(args[0], "-") { // a name can't start with -, so this is an option
-		return term.Die("'" + args[0] + "' is not a name: options go before the dot, as in " +
+		return terminal.Die("'" + args[0] + "' is not a name: options go before the dot, as in " +
 			strings.TrimSpace("shortcut r -y . "+platform.ShellJoin(args[1:])))
 	}
 	return runShortcut(c, s, args, store.Lookup{Scope: scope, Cmd: "r"}, assumeYes)
 }
 
-func oneLine(text string) string { return strings.ReplaceAll(text, "\n", "\\n") }
-
 // runShortcut handles the confirmation and the child process, which replaces this one.
 // It returns only when something stops the run.
-func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Lookup, assumeYes bool) error {
+func runShortcut(c *store.Context, s *terminal.Streams, words []string, lk store.Lookup, assumeYes bool) error {
 	if c.CwdErr != nil {
 		return c.CwdErr
 	}
@@ -63,7 +61,7 @@ func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Loo
 	}
 	withArgs := ""
 	if len(args) > 0 {
-		withArgs = " with " + oneLine(platform.ShellJoin(args))
+		withArgs = " with " + platform.ShellJoin(args)
 	}
 	again := []string{"shortcut", "r", "-y"}
 	if lk.Scope == store.ScopeProject {
@@ -75,10 +73,10 @@ func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Loo
 		return err
 	}
 	if entry.Confirm {
-		if err := term.Confirmed(s, term.Confirm{
+		if err := terminal.Confirmed(s, terminal.Confirm{
 			Question:   "run '" + name + "'" + withArgs + " in " + realCwd + "?",
-			NoTerminal: "'" + name + "' asks for confirmation: run it in a terminal, or pass -y (" + oneLine(platform.ShellJoin(again)) + ")",
-			Message:    oneLine(entry.Description),
+			NoTerminal: "'" + name + "' asks for confirmation: run it in a terminal, or pass -y (" + platform.ShellJoin(again) + ")",
+			Message:    entry.Description,
 		}, assumeYes); err != nil {
 			return err
 		}
@@ -88,11 +86,11 @@ func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Loo
 		return err
 	}
 	if show {
-		line := term.Safe("\u2192 " + realCwd)
+		line := "\u2192 " + realCwd
 		if s.Err.IsTerminal() {
 			line = "\x1b[2m" + line + "\x1b[0m"
 		}
-		s.Err.WriteStyled(line + "\n")
+		s.Err.WriteString(line + "\n")
 	}
 
 	argv, err := childCommand(resolved, entry, name, args)
@@ -111,7 +109,7 @@ func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Loo
 	}
 	err = platform.ExecChild(argv, resolved.RunCwd, env)
 	if entry.Inline == nil && errors.Is(err, syscall.ENOEXEC) { // inline shortcuts exec bash, so this is a script
-		return term.Die(argv[0] + " can't run as it is: it needs to start with #! and a program that runs here, such as #!/bin/sh, or to be a binary for this system")
+		return terminal.Die(argv[0] + " can't run as it is: it needs to start with #! and a program that runs here, such as #!/bin/sh, or to be a binary for this system")
 	}
 	return err
 }

@@ -48,7 +48,7 @@ func TestShow_FullOutput(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteRegistryRaw(e.Store, toolRegistry)
 	e.Folder("etc") // the folder of "trav"'s script, outside the store, must be there for the traversal check
-	e.WriteFile(filepath.Join(e.Store, "scripts", "tool.sh"), "#!/bin/sh\r\necho hi\r\n\n\n   \n", 0)
+	e.WriteFile(filepath.Join(e.Store, "scripts", "tool.sh"), "#!/bin/sh\necho hi\n\n\n   \n", 0)
 	cases := []struct {
 		args   []string
 		code   int
@@ -151,19 +151,6 @@ Script (TMP/home/.shortcuts/scripts/none.sh):
 		if res.Code != c.code || res.Stdout != want || res.Stderr != wantErr {
 			t.Errorf("%v: exit %d\nstdout %q\nstderr %q\nwant exit %d\nstdout %q\nstderr %q", c.args, res.Code, res.Stdout, res.Stderr, c.code, want, wantErr)
 		}
-	}
-}
-
-// A script that is not UTF-8 is shown with one U+FFFD for each run of bad bytes, line ends as \n, trailing spaces, tabs and
-// newlines cut, and what could rewrite the screen made visible.
-func TestShow_AScriptThatIsNotUTF8(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"inv": map[string]any{"script": "scripts/inv.sh"}})
-	e.WriteFile(filepath.Join(e.Store, "scripts", "inv.sh"), []byte("bad \xff\xfe utf \xe2\x82 end \x1b[31m\r\nx\ry \xe2\x80\xa8 \n\x1f \n"), 0)
-	res := e.Run("show", "inv")
-	want := "\nScript (" + filepath.Join(e.Store, "scripts", "inv.sh") + "):\nbad \uFFFD utf \uFFFD end ^[[31m\nx\ny \\u2028 \n^_"
-	if res.Code != 0 || !strings.Contains(res.Stdout, want+"\n") {
-		t.Errorf("exit %d: %q", res.Code, res.Stdout)
 	}
 }
 

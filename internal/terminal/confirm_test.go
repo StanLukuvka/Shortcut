@@ -1,4 +1,4 @@
-package term
+package terminal
 
 import (
 	"os"
@@ -21,10 +21,10 @@ func TestAsk_Answers(t *testing.T) {
 		{"", false, "\n"}, // end of input: a newline on stdout, answer no
 	} {
 		s, out, errs := capture(t, e, c.input)
-		if got, err := Ask(s, "go on? \x1b[2K"); got != c.want || err != nil {
+		if got, err := Ask(s, "go on? "); got != c.want || err != nil {
 			t.Errorf("Ask(%q) = %v, %v", c.input, got, err)
 		}
-		if errs() != "go on? ^[[2K" || out() != c.out { // the prompt cannot carry an escape
+		if errs() != "go on? " || out() != c.out { // the prompt is written as it is
 			t.Errorf("Ask(%q): stderr %q stdout %q", c.input, errs(), out())
 		}
 	}
@@ -81,9 +81,9 @@ func TestAsk_ATerminalSession(t *testing.T) {
 		}
 		return out
 	}
-	// The message sits above the question, an escape in it is shown as ^[, and `[y/N]` marks the default.
+	// The message sits above the question, it is written as it is, and `[y/N]` marks the default.
 	out := run([]testkit.Key{{Wait: "[y/N]", Send: []byte("y\n")}})
-	if !strings.Contains(out, "will run ^[[2Kit\r\nrun 'go'? [y/N] ") || !strings.Contains(out, "granted=true err=<nil>") || strings.Contains(out, "Aborted.") {
+	if !strings.Contains(out, "will run \x1b[2Kit\r\nrun 'go'? [y/N] ") || !strings.Contains(out, "granted=true err=<nil>") || strings.Contains(out, "Aborted.") {
 		t.Errorf("yes: %q", out)
 	}
 	out = run([]testkit.Key{{Wait: "[y/N]", Send: []byte("n\n")}})

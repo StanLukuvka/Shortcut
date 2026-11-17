@@ -68,8 +68,7 @@ repair, or carry on.
 - The README's Security model, statements 1–4, word for word.
 - Entries are immutable: no edit command. To change one, `rm` it and make it again.
 - shortcut never writes a project's `.shortcuts`.
-- Text from a file is printed through `term.Safe`.
-- Every question goes through `term.Confirm`.
+- Every question goes through `terminal.Confirm`.
 - The file format is `"version": 1`. Adding, removing or changing the meaning of any field, in an entry or at a
   file's top level, bumps `"version"`; a shortcut that reads an older version keeps reading it, and one that meets a
   newer version refuses it with the existing "upgrade shortcut" error. `internal/store/testdata/format-v1.txt` is the
@@ -78,9 +77,9 @@ repair, or carry on.
 ## Layout
 
 - `cmd/shortcut/`: the main package.
-- `internal/commands/`: `commands.go` is the command table, from which `dispatch.go`, each command's parser and the usage and help text (`help.go`, `term`) are read. Each command is a package below it: `run/`, `new/`, `list/`, `show/`, `rm/` and `completion/` (which holds the bash, zsh and fish scripts). No command imports another command.
+- `internal/commands/`: `commands.go` is the command table, from which `dispatch.go`, each command's parser and the usage and help text (`help.go`, `terminal`) are read. Each command is a package below it: `run/`, `new/`, `list/`, `show/`, `remove/` and `completion/` (which holds the bash, zsh and fish scripts). No command imports another command.
 - `internal/store/`: store files, entries, groups, lookup and the run's context. It never prints. `write/` is everything that changes a store: adding an entry and the registry lock.
-- `internal/term/`: printed text and questions, the exit error and `Die` that commands share, and the description of a command that its parser, usage line and help are read from. `argparse/` is the argument parser; it imports nothing of this repository.
+- `internal/terminal/`: printed text and questions, the exit error and `Die` that commands share, and the description of a command that its parser, usage line and help are read from. `argparse/` is the argument parser; it imports nothing of this repository.
 - `internal/platform/`: the parts of the standard library's file, process, lock and JSON behaviour that shortcut's output depends on, including JSON read as `map[string]json.RawMessage` and written with sorted keys. A file that is not valid UTF-8 is refused when it is read. It imports nothing of this repository.
 - `internal/testkit/`: the test sandbox and helpers. A package's frozen golden data is in its own `testdata/` folder.
 - `installer/`: `install.sh` and its tests.
@@ -89,7 +88,7 @@ repair, or carry on.
 
 ## Imports
 
-Imports point down this tree and never up: `cmd/shortcut`, `internal/commands`, one command, `internal/store/write`, `internal/store`, `internal/term`, `internal/platform`. A command may import `internal/store`, `internal/store/write`, `internal/term`, `internal/term/argparse` and `internal/platform`; it imports no other command and not `internal/commands`. `internal/store` imports only `internal/platform`; `internal/store/write` also imports `internal/term`. `internal/platform` imports nothing of this repository. The table is in [internal/testkit/layers_test.go](internal/testkit/layers_test.go). The test fails on an import the table doesn't list and on a package that isn't in it, so a new package or import is a row there.
+Imports point down this tree and never up: `cmd/shortcut`, `internal/commands`, one command, `internal/store/write`, `internal/store`, `internal/terminal`, `internal/platform`. A command may import `internal/store`, `internal/store/write`, `internal/terminal`, `internal/terminal/argparse` and `internal/platform`; it imports no other command and not `internal/commands`. `internal/store` imports only `internal/platform`; `internal/store/write` also imports `internal/terminal`. `internal/platform` imports nothing of this repository. The table is in [internal/testkit/layers_test.go](internal/testkit/layers_test.go). The test fails on an import the table doesn't list and on a package that isn't in it, so a new package or import is a row there.
 
 ## Docs and commits
 

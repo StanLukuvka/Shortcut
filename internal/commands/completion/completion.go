@@ -4,7 +4,7 @@ import (
 	"embed"
 
 	"github.com/StanLukuvka/Shortcut/internal/store"
-	"github.com/StanLukuvka/Shortcut/internal/term"
+	"github.com/StanLukuvka/Shortcut/internal/terminal"
 )
 
 //go:embed *.txt
@@ -14,7 +14,7 @@ var files embed.FS
 func Script(shell string) ([]byte, error) { return files.ReadFile(shell + ".txt") }
 
 // Run prints a completion script.
-func Run(_ *store.Context, s *term.Streams, cmd term.Command, args []string) error {
+func Run(_ *store.Context, s *terminal.Streams, cmd terminal.Command, args []string) error {
 	ns, err := cmd.Parse(args)
 	if err != nil {
 		return err
