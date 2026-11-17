@@ -4,60 +4,11 @@ import (
 	"bufio"
 	"errors"
 	"io"
-	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
+	"github.com/StanLukuvka/Shortcut/internal/terminal/argparse"
 )
-
-// Ask asks a question: the prompt goes to stderr (so it reaches the terminal when stdout is redirected),
-// one line is read, and it counts when its trimmed lower case is y or yes. End of input or Ctrl-C
-// prints a newline to stdout and answers no. SIGINT is caught only while
-// waiting, elsewhere it keeps its default and kills the process. A read error other than EOF is returned, and so is a failed
-// write of the prompt (or of what came before it): an answer to a question nobody saw does not count.
-// On Ctrl-C the reading goroutine is left behind.
-func Ask(s *Streams, prompt string) (bool, error) {
-	// Catch SIGINT before the prompt is shown: whoever sees the prompt (a person, a test) may press Ctrl-C at once.
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, syscall.SIGINT)
-	defer signal.Stop(interrupt)
-	s.Err.WriteString(prompt)
-	if err := s.Err.Failed(); err != nil {
-		return false, err
-	}
-	if s.in == nil {
-		s.in = bufio.NewReader(s.In)
-	}
-	type result struct {
-		line string
-		err  error
-	}
-	got := make(chan result, 1)
-	go func() {
-		line, err := s.in.ReadString('\n')
-		got <- result{line, err}
-	}()
-	select {
-	case r := <-got:
-		if r.err != nil && r.err != io.EOF {
-			return false, r.err
-		}
-		if r.err != nil && r.line == "" {
-			s.Out.WriteString("\n")
-			return false, nil
-		}
-		switch strings.ToLower(strings.TrimSpace(r.line)) {
-		case "y", "yes":
-			return true, nil
-		}
-		return false, nil
-	case <-interrupt:
-		s.Out.WriteString("\n")
-		return false, nil
-	}
-}
 
 // Confirm is every question shortcut asks before it runs or changes something. Message says what will happen and is
 // shown above the question; -y answers yes; without a terminal it stops with NoTerminal.
@@ -68,32 +19,41 @@ type Confirm struct {
 	TellOnYes  bool // show Message with -y too, for a change that can't be taken back
 }
 
-// Granted reports whether the answer was yes. With no terminal on stdin it returns an error carrying NoTerminal: the caller's error
-// path prints it as "error: ..." and exits 1. After a "no" it has printed "Aborted." and
-// returns false. With -y, a Message that could not be written is an error and the answer is not yes.
-func (c Confirm) Granted(s *Streams, assumeYes bool) (bool, error) {
+// Confirmed asks c and returns nil when the answer is yes. With -y it does not ask; a Message that could not be
+// written is an error. With no terminal on stdin it returns an error carrying NoTerminal. Otherwise Message and the
+// question go to stderr (so they reach the terminal when stdout is redirected) and one line is read: yes is its
+// trimmed lower case being y or yes. Anything else, and end of input (which also prints a newline to stdout), prints
+// "Aborted." and returns an ExitError with code 1. A read error other than EOF is returned, and so is a failed write
+// of the question: an answer to a question nobody saw does not count.
+func Confirmed(s *Streams, c Confirm, assumeYes bool) error {
 	if assumeYes {
 		if c.TellOnYes && c.Message != "" {
 			s.Out.WriteString(c.Message + "\n")
-			if err := s.Out.Failed(); err != nil {
-				return false, err
-			}
+			return s.Out.Failed()
 		}
-		return true, nil
+		return nil
 	}
 	if !platform.IsTerminal(int(s.In.Fd())) {
-		return false, errors.New(c.NoTerminal)
+		return errors.New(c.NoTerminal)
 	}
 	if c.Message != "" {
 		s.Err.WriteString(c.Message + "\n")
 	}
-	yes, err := Ask(s, c.Question+" [y/N] ")
-	if err != nil {
-		return false, err
+	s.Err.WriteString(c.Question + " [y/N] ")
+	if err := s.Err.Failed(); err != nil {
+		return err
 	}
-	if yes {
-		return true, nil
+	line, err := bufio.NewReader(s.In).ReadString('\n')
+	if err != nil && err != io.EOF {
+		return err
+	}
+	if err != nil && line == "" {
+		s.Out.WriteString("\n")
+	}
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes":
+		return nil
 	}
 	s.Err.WriteString("Aborted.\n")
-	return false, nil
+	return &argparse.ExitError{Code: 1}
 }

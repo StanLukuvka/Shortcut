@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"fmt"
 	"strings"
 	"unicode/utf8"
 )
@@ -67,7 +68,7 @@ func (c Command) HelpText() string {
 			b.WriteString("\n" + title + ":\n")
 		}
 		for _, r := range rows {
-			b.WriteString("  " + PadRight(r[0], width) + "  " + r[1] + "\n")
+			b.WriteString("  " + fmt.Sprintf("%-*s", width, r[0]) + "  " + r[1] + "\n")
 		}
 	}
 	return b.String()

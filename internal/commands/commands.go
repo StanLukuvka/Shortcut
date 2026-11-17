@@ -15,7 +15,7 @@ import (
 )
 
 // handler is a command: it gets what follows the command word and its own description, and ends with nil (exit 0),
-// a *terminal.ExitError or any other error, which dispatch prints as "error: <text>" with exit 1.
+// a *argparse.ExitError or any other error, which dispatch prints as "error: <text>" with exit 1.
 type handler func(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []string) error
 
 // entry is one row of the table: a command's description and what runs it.

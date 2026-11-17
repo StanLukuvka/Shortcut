@@ -72,7 +72,7 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 }
 
 // entryFields returns the parts of an entry the flags of new set.
-func entryFields(c *store.Context, name string, ns terminal.Namespace, g store.Group) (*store.Entry, error) {
+func entryFields(c *store.Context, name string, ns argparse.Namespace, g store.Group) (*store.Entry, error) {
 	var cwd *string
 	if ns.Set("cwd") {
 		v := ns.Str("cwd")
@@ -88,7 +88,7 @@ func entryFields(c *store.Context, name string, ns terminal.Namespace, g store.G
 // newFromScript makes an entry that names the file where it is. A file inside the folder its paths
 // resolve from (the project, the namespace file's folder, the global store) is kept relative, so the folder can
 // move.
-func newFromScript(c *store.Context, s *terminal.Streams, ns terminal.Namespace, group store.Group, fields *store.Entry) error {
+func newFromScript(c *store.Context, s *terminal.Streams, ns argparse.Namespace, group store.Group, fields *store.Entry) error {
 	path := ns.Str("script")
 	expanded, err := platform.ExpandUser(path)
 	if err != nil {
@@ -175,7 +175,7 @@ func joinCommand(words []string) string {
 }
 
 // targetGroup returns the file a new shortcut goes in. It creates nothing; write.Register does.
-func targetGroup(c *store.Context, ns terminal.Namespace) (store.Group, error) {
+func targetGroup(c *store.Context, ns argparse.Namespace) (store.Group, error) {
 	if err := store.ValidateName(ns.Str("name")); err != nil {
 		return store.Group{}, err
 	}

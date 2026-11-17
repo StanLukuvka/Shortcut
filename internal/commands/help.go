@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/store"
@@ -16,7 +17,7 @@ func usageText() string {
 	var b strings.Builder
 	b.WriteString("shortcut - run and manage quick scripts and commands\n\nUsage:\n  shortcut <command> [args...]\n  shortcut --version\n\nCommands:\n")
 	for _, c := range commands() {
-		b.WriteString("  " + terminal.PadRight(c.Words(", "), 12) + "  " + c.Summary + "\n")
+		b.WriteString("  " + fmt.Sprintf("%-12s", c.Words(", ")) + "  " + c.Summary + "\n")
 	}
 	return b.String() + "\n`shortcut help <command>` lists a command's arguments.\n\n" + usageNotes
 }

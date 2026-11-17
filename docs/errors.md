@@ -9,7 +9,7 @@ In the tables, `<word>` stands for a value filled in when the error happens. A m
 | Code | When |
 |---|---|
 | 0 | Done |
-| 1 | Any error below, or no to a question; `Aborted.` is printed. Ctrl-C at a question counts as no |
+| 1 | Any error below, or no to a question; `Aborted.` is printed |
 | 2 | A usage error: an unknown command or option, a bad flag for a command |
 | 141 | shortcut was ended by SIGPIPE because what it was printing to stopped reading, as in `shortcut list \| head -1`. A shell shows this as 141. Nothing more is printed |
 | anything else | `run` passes the shortcut's own exit code through, and a signal that kills it |

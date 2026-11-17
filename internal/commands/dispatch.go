@@ -10,6 +10,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
 	"github.com/StanLukuvka/Shortcut/internal/terminal"
+	"github.com/StanLukuvka/Shortcut/internal/terminal/argparse"
 )
 
 // invoke builds the run's one Context and runs the command.
@@ -65,7 +66,7 @@ func dispatch(s *terminal.Streams, args []string) int {
 
 // finish turns a command's result into its exit code, printing what an *ExitError or an error carries.
 func finish(s *terminal.Streams, err error) int {
-	var ee *terminal.ExitError
+	var ee *argparse.ExitError
 	switch {
 	case err == nil:
 		return 0

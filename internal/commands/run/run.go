@@ -13,6 +13,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
 	"github.com/StanLukuvka/Shortcut/internal/terminal"
+	"github.com/StanLukuvka/Shortcut/internal/terminal/argparse"
 )
 
 // Run runs a shortcut. -y and --yes are the only options it reads, and only before the name, and a . after them
@@ -29,7 +30,7 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 	}
 	scope, args := store.SplitScope(args)
 	if len(args) == 0 {
-		return &terminal.ExitError{Code: 2, Stderr: "error: missing shortcut name\n" + cmd.UsageLine() + "\n"}
+		return &argparse.ExitError{Code: 2, Stderr: "error: missing shortcut name\n" + cmd.UsageLine() + "\n"}
 	}
 	if scope == store.ScopeProject && strings.HasPrefix(args[0], "-") { // a name can't start with -, so this is an option
 		return terminal.Die("'" + args[0] + "' is not a name: options go before the dot, as in " +
