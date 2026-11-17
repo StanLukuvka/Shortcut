@@ -15,7 +15,8 @@ import (
 // Ask asks a question: the prompt goes to stderr through Safe (so it reaches the terminal when stdout is redirected),
 // one line is read, and it counts when its trimmed lower case is y or yes. End of input or Ctrl-C
 // prints a newline to stdout and answers no. SIGINT is caught only while
-// waiting, elsewhere it keeps its default and kills the process. A read error other than EOF is returned.
+// waiting, elsewhere it keeps its default and kills the process. A read error other than EOF is returned, and so is a failed
+// write of the prompt (or of what came before it): an answer to a question nobody saw does not count.
 // On Ctrl-C the reading goroutine is left behind.
 func Ask(s *Streams, prompt string) (bool, error) {
 	// Catch SIGINT before the prompt is shown: whoever sees the prompt (a person, a test) may press Ctrl-C at once.
@@ -23,6 +24,9 @@ func Ask(s *Streams, prompt string) (bool, error) {
 	signal.Notify(interrupt, syscall.SIGINT)
 	defer signal.Stop(interrupt)
 	s.Err.WriteString(prompt)
+	if err := s.Err.Failed(); err != nil {
+		return false, err
+	}
 	if s.in == nil {
 		s.in = bufio.NewReader(s.In)
 	}
