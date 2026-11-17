@@ -134,8 +134,6 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `--desc can't be empty` | `new` |
 | `--namespace can't be empty` | `new` |
 | `script file not found: <path>` | The file given to `--script` |
-| `<path> can't run as it is: it needs a #! line, such as #!/bin/sh, or to be a binary for this system` | A script that is executable but the system won't start: no `#!` line and not a binary for this system |
-| `'<word>' is not a name: options go before the dot, as in shortcut r -y . <rest>` | `run .` with an option after the dot. A name can't start with `-` |
 | `<path> is not executable. Make it so: chmod +x <path>` | The file given to `--script` |
 | `--cwd directory does not exist: <dir>` | |
 | `--namespace can't be used with --local: .shortcuts.local is one file, and .shortcuts is yours to edit` | |
