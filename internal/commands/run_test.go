@@ -257,16 +257,6 @@ func TestRunning_ARunThatCantStartIsAnError(t *testing.T) {
 	testkit.Contains(t, "stderr", res.Stderr, "error:")
 }
 
-func TestRunning_AScriptWithWindowsLineEndingsSaysSo(t *testing.T) {
-	e := testkit.New(t)
-	script := e.Script("crlf.sh", "#!/usr/bin/env bash\r\necho hi\r\n")
-	e.WriteStore(e.Store, map[string]any{"crlf": map[string]any{"script": script}})
-	res := e.Run("r", "crlf")
-	res.WantCode(t, 1)
-	testkit.Contains(t, "stderr", res.Stderr, "error: "+script+" has Windows line endings")
-	testkit.Contains(t, "stderr", res.Stderr, "sed -i 's/\\r$//' "+script)
-}
-
 func TestRunning_AHandWrittenInvalidNameDoesntRun(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"a b": testkit.Inline("echo ran")})

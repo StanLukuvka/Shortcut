@@ -1,12 +1,10 @@
 package run
 
 import (
-	"bufio"
-	"bytes"
 	"cmp"
 	"errors"
 	"fmt"
-	"io"
+	"io/fs"
 	"os"
 	"slices"
 	"strings"
@@ -128,24 +126,13 @@ func childCommand(resolved *store.ResolvedShortcut, entry *store.Entry, name str
 		return nil, err
 	}
 	if _, err := os.Stat(path); err != nil {
-		return nil, errors.New("script file not found: " + path)
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, errors.New("script file not found: " + path)
+		}
+		return nil, err
 	}
 	if err := platform.CheckExecutable(path); err != nil {
 		return nil, err
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	first, err := bufio.NewReader(f).ReadSlice('\n')
-	f.Close() // read-only: a failed close loses nothing
-	// bufio.ErrBufferFull is a first line over 4096 bytes: the kernel takes a far shorter #! line, so such a script is not started by a #! line anyway.
-	if err != nil && err != io.EOF && err != bufio.ErrBufferFull {
-		return nil, err
-	}
-	if bytes.HasPrefix(first, []byte("#!")) && bytes.HasSuffix(first, []byte("\r\n")) {
-		return nil, fmt.Errorf("%s has Windows line endings, so its #! line can't start it. Convert it: sed -i 's/\\r$//' %s",
-			path, platform.ShellQuote(path))
 	}
 	return append([]string{path}, args...), nil
 }
