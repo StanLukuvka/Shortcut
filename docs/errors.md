@@ -25,7 +25,13 @@ Before any command runs, the global store has to be named:
 | Message | Meaning |
 |---|---|
 | `SHORTCUTS_HOME must be an absolute path, not '<value>'` | The variable is empty or relative. It can start with `~/`. Unset, the store is `~/.shortcuts` |
-| `HOME must be set to an absolute path, so '~' in '<path>' can't be expanded` | A path with `~` (the default store, `SHORTCUTS_HOME`, an import, a `cwd`, `--script`, `--cwd`) while `$HOME` is unset, empty or relative |
+
+A `~` in a path needs an absolute `$HOME`:
+
+| Message | Meaning |
+|---|---|
+| `HOME must be set to an absolute path, so '~' in '<path>' can't be expanded` | The default store, `SHORTCUTS_HOME`, an import, a `cwd`, `--script` or `--cwd` starts with `~` while `$HOME` is unset, empty or relative |
+| `import '<ns>' in <file>: <error>` | The same, for an import path |
 
 Usage errors, which exit 2:
 

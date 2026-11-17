@@ -421,3 +421,15 @@ func TestStores_ShortcutsHomeMustBeAbsoluteAndTildeNeedsAHome(t *testing.T) {
 		testkit.Contains(t, c.want, res.Stderr, "error: "+c.want)
 	}
 }
+
+// `--cwd link/..` is the parent of where the link leads, not the folder holding the link.
+func TestStores_CwdThroughALinkThenDotDotIsPhysical(t *testing.T) {
+	e := testkit.New(t)
+	real := filepath.Join(e.Tmp, "a", "b", "c")
+	if err := os.MkdirAll(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	e.Symlink(real, filepath.Join(e.Tmp, "link"))
+	runOK(t, e, testkit.Opts{}, "new", "up", "--cwd", e.Tmp+"/link/..", "--", "pwd") // not filepath.Join: it would clean the ".." away
+	testkit.Eq(t, "cwd", e.LoadGlobal()["up"].(map[string]any)["cwd"], realpath(t, filepath.Join(e.Tmp, "a", "b")))
+}

@@ -167,16 +167,18 @@ func rmNamespace(c *store.Context, s *term.Streams, name string, assumeYes bool)
 	return nil
 }
 
-// keptScript returns the script an entry names, as a path, for saying it stays. "" is none.
+// keptScript returns the script an entry names, for saying it stays: its path, or the field with why the path can't
+// be worked out (rm still removes a broken entry). "" is none.
 func keptScript(group store.Group, it store.Item) string {
 	if it.Entry == nil || it.Entry.Script == nil || *it.Entry.Script == "" {
 		return ""
 	}
 	script := *it.Entry.Script
-	if path, err := store.ResolveScriptPath(group.ScriptBase(), script); err == nil {
-		return path
+	path, err := store.ResolveScriptPath(group.ScriptBase(), script)
+	if err != nil {
+		return script + " (can't resolve it: " + err.Error() + ")"
 	}
-	return script
+	return path
 }
 
 // rmMessage returns what rm is about to change, shown above its question.

@@ -22,12 +22,14 @@ type Context struct {
 	Project    string // nearest project root at or above Cwd, "" = none
 	ProjectErr error  // the project lookup couldn't tell (a folder it can't search): read by everything that looks in the project, never by the global scope
 
+	homeReal   string           // the resolved ~/.shortcuts, "" when it is not there
+	homeErr    error            // why it, or ~, can't be resolved: the project lookup can't tell
 	globalReal string           // platform.Realpath(Global), once; "" when the global store is not there or can't be resolved
 	stores     map[string]Store // by the dir as the caller passed it: Global, or a realpath'd project root
 }
 
-// NewContext resolves the global store and the project root once. It never fails: a project lookup that can't tell
-// is ProjectErr.
+// NewContext names the global store and, if it can, the project root, once. It never fails: a global store it can't
+// name is GlobalErr (and then there is no project lookup); a project lookup that can't tell is ProjectErr.
 func NewContext(cwd string, cwdErr error) *Context {
 	home, set := os.LookupEnv("SHORTCUTS_HOME")
 	if !set {
@@ -41,11 +43,16 @@ func NewContext(cwd string, cwdErr error) *Context {
 	case !strings.HasPrefix(global, "/"):
 		c.GlobalErr = fmt.Errorf("SHORTCUTS_HOME must be an absolute path, not '%s'", home)
 	default:
-		c.Global = filepath.Clean(global)
+		c.Global = global
 		c.globalReal, c.GlobalErr = resolveIfThere(c.Global)
 	}
 	if c.GlobalErr != nil {
 		return c
+	}
+	if userHome, err := platform.ExpandUser("~"); err != nil {
+		c.homeErr = err
+	} else {
+		c.homeReal, c.homeErr = resolveIfThere(platform.Join(userHome, ProjectFile))
 	}
 	if cwdErr == nil {
 		c.Project, c.ProjectErr = c.FindProjectRoot(cwd)
@@ -76,12 +83,7 @@ func (c *Context) neverAProject(file string) (bool, error) {
 	if real == c.globalReal {
 		return true, nil
 	}
-	userHome, err := platform.ExpandUser("~")
-	if err != nil {
-		return false, err
-	}
-	home, err := resolveIfThere(platform.Join(userHome, ProjectFile))
-	return real == home, err
+	return real == c.homeReal, c.homeErr
 }
 
 func (c *Context) isProjectRoot(folder string) (bool, error) {

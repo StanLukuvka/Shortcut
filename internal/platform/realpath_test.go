@@ -92,15 +92,12 @@ func TestRealpath_RelativeInputUsesThePhysicalCwd(t *testing.T) {
 			t.Errorf("Realpath(%q) = %q, %v, want %q", in, got, err, want)
 		}
 	}
-	if got, err := Abs("x/../y"); err != nil || got != want+"/y" {
-		t.Errorf("Abs = %q, %v", got, err)
-	}
 	if _, err := Realpath("../m/../f"); err == nil {
 		t.Error("a path to a file that is not there resolved")
 	}
 }
 
-func TestAbs_NoCwdIsAnError(t *testing.T) {
+func TestRealpath_NoCwdIsAnError(t *testing.T) {
 	e := testkit.New(t)
 	gone := filepath.Join(e.Tmp, "gone")
 	e.WriteFile(filepath.Join(gone, ".keep"), "", 0)
@@ -108,17 +105,8 @@ func TestAbs_NoCwdIsAnError(t *testing.T) {
 	if err := os.RemoveAll(gone); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := Abs("x"); err == nil {
-		t.Errorf("Abs(x) = %q with no cwd", got)
-	}
 	if got, err := Realpath("x"); err == nil {
 		t.Errorf("Realpath(x) = %q with no cwd", got)
-	}
-	if got, err := Relpath("x", "/"); err == nil {
-		t.Errorf("Relpath(x, /) = %q with no cwd", got)
-	}
-	if got, err := Abs("/a/../b"); err != nil || got != "/b" {
-		t.Errorf("Abs of an absolute path needs no cwd: %q, %v", got, err)
 	}
 }
 

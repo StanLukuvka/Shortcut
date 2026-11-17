@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 )
@@ -47,7 +49,11 @@ func ResolveRunDir(cwd *string, g Group, callerCwd string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Clean(platform.Join(g.Folder(), expanded)), nil
+	path := platform.Join(g.Folder(), expanded)
+	if slices.Contains(strings.Split(path, "/"), "..") {
+		return path, nil // not cleaned: `..` after a link is the kernel's to resolve, physically
+	}
+	return filepath.Clean(path), nil // no `..`: cleaning only drops `.` and doubled slashes
 }
 
 // LoadGroup reads one file into a Group. It never fails: why a file can't be used is on the Group.

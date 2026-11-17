@@ -109,7 +109,7 @@ func ResolveScriptPath(baseDir, scriptField string) (string, error) {
 		return "", err
 	}
 	target := platform.Join(base, scriptField)
-	there, err := platform.Exists(target)
+	there, err := platform.Lexists(target) // a link as the last part must resolve: a dangling one is an error, not a missing script
 	if err != nil {
 		return "", err
 	}
