@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"slices"
 	"strings"
@@ -125,7 +126,10 @@ func childCommand(resolved *store.ResolvedShortcut, entry *store.Entry, name str
 		return nil, err
 	}
 	if _, err := os.Stat(path); err != nil {
-		return nil, errors.New("script file not found: " + path)
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, errors.New("script file not found: " + path)
+		}
+		return nil, err
 	}
 	if err := platform.CheckExecutable(path); err != nil {
 		return nil, err
