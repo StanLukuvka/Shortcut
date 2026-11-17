@@ -38,7 +38,7 @@ CI also checks `gofmt` and runs `go vet ./...`.
 
 - A new error or warning: a row in [docs/errors.md](docs/errors.md). `internal/commands/errors_doc_test.go` fails without one.
 - A new entry field: a row in `Fields()` in `internal/store/entry.go`, and [docs/shortcut.schema.json](docs/shortcut.schema.json) (a test fails if they differ).
-- A new command or flag: its row in `commands()` in `internal/commands/commands.go` (dispatch, parsing, usage and help follow from it), the three completion scripts in `internal/commands/completion/` (a test fails if they disagree with `commands()`), the README command list, and AGENT.md if agents use it.
+- A new command or flag: its row in `commands()` in `internal/commands/commands.go` (dispatch, parsing, usage and help follow from it), the three completion scripts in `internal/commands/completion/` (a test fails if they disagree with `commands()`), and the README command list.
 - Anything a user would notice: a line under Unreleased in [CHANGELOG.md](CHANGELOG.md).
 
 ## How it fails
@@ -81,7 +81,7 @@ repair, or carry on.
 - `internal/testkit/`: the test sandbox and helpers. A package's frozen golden data is in its own `testdata/` folder.
 - `installer/`: `install.sh` and its tests.
 - `examples/`: namespaces to copy from.
-- `docs/`: the diagrams, the schema and the error table.
+- `docs/`: the schema and the error table.
 
 ## Imports
 
@@ -90,12 +90,11 @@ Imports point down this tree and never up: `cmd/shortcut`, `internal/commands`, 
 ## Docs and commits
 
 - Docs say what something is and what it does, plainly, without arguing for it.
-- Diagrams are edited in `docs/shortcut-overview.drawio` and exported again as the numbered PNGs.
 - A commit message is one line that says what the change does, as in `git log`. One change per pull request.
 
 ## Agents
 
-[AGENT.md](AGENT.md) is for agents that use shortcut. An agent working on this repo follows this file, and runs anything that writes a store in the separate home above.
+An agent working on this repo follows this file, and runs anything that writes a store in the separate home above.
 
 The usual mistake is adding a handler where an error would do; see [How it fails](#how-it-fails).
 
