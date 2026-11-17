@@ -111,7 +111,7 @@ func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Loo
 	}
 	err = platform.ExecChild(argv, resolved.RunCwd, env)
 	if entry.Inline == nil && errors.Is(err, syscall.ENOEXEC) { // inline shortcuts exec bash, so this is a script
-		return term.Die(argv[0] + " can't run as it is: it needs a #! line, such as #!/bin/sh, or to be a binary for this system")
+		return term.Die(argv[0] + " can't run as it is: it needs to start with #! and a program that runs here, such as #!/bin/sh, or to be a binary for this system")
 	}
 	return err
 }

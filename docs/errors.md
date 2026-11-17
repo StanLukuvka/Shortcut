@@ -119,7 +119,7 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `run directory does not exist: <dir>` | The entry's `cwd` is gone |
 | `script file not found: <path>` | |
 | `SHORTCUT_SHOW_DIR must be 0 or 1, not '<value>'` | The variable is set to something else. Unset it or use `1` to show the folder, `0` to hide it |
-| `<path> can't run as it is: it needs a #! line, such as #!/bin/sh, or to be a binary for this system` | A script that is executable but the system won't start: no `#!` line and not a binary for this system |
+| `<path> can't run as it is: it needs to start with #! and a program that runs here, such as #!/bin/sh, or to be a binary for this system` | An executable script the system won't start: no `#!` line, a `#!` program that doesn't run here, or a binary for another system |
 | `'<word>' is not a name: options go before the dot, as in shortcut r -y . <rest>` | `run .` with an option after the dot. A name can't start with `-` |
 | `<path> is not executable. Make it so: chmod +x <path>` | A script runs as it is, so it needs the execute bit. `list` warns |
 | `'<name>' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y [.] <name> <args>)` | A `confirm` entry run without a terminal. The command is the one that was run, with `-y`, and the dot if it had one |

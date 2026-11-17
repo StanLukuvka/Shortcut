@@ -121,7 +121,7 @@ func TestRunning_AScriptRunsAsItIs(t *testing.T) {
 	res = e.Run("run", "macho")
 	testkit.Eq(t, "macho exit", res.Code, 1)
 	testkit.Eq(t, "macho stdout", res.Stdout, "")
-	testkit.Contains(t, "macho stderr", res.Stderr, "can't run as it is: it needs a #! line")
+	testkit.Contains(t, "macho stderr", res.Stderr, "can't run as it is: it needs to start with #!")
 	if strings.Contains(res.Stderr, "bash") || strings.Contains(res.Stderr, "line ") {
 		t.Errorf("macho was run by bash: %q", res.Stderr)
 	}
@@ -402,7 +402,7 @@ func TestRunning_AScriptWithNoShebangSaysWhatItNeeds(t *testing.T) {
 	e.WriteStore(e.Store, map[string]any{"p": map[string]any{"script": "scripts/p.sh"}})
 	res := e.Run("r", "p")
 	testkit.Eq(t, "exit", res.Code, 1)
-	testkit.Contains(t, "stderr", res.Stderr, "error: "+path+" can't run as it is: it needs a #! line, such as #!/bin/sh, or to be a binary for this system")
+	testkit.Contains(t, "stderr", res.Stderr, "error: "+path+" can't run as it is: it needs to start with #! and a program that runs here, such as #!/bin/sh, or to be a binary for this system")
 }
 
 func TestRunning_AnOptionAfterTheDotSaysToMoveItBefore(t *testing.T) {
