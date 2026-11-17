@@ -43,10 +43,9 @@ func Lexists(path string) (bool, error) {
 	return stat(path, false, func(os.FileInfo) bool { return true })
 }
 
-// IsLink reports whether path is a symlink.
-func IsLink(path string) bool {
-	st, err := os.Lstat(path)
-	return err == nil && st.Mode()&os.ModeSymlink != 0
+// IsLink reports whether path is a symlink. An error other than "not there" is returned.
+func IsLink(path string) (bool, error) {
+	return stat(path, false, func(st os.FileInfo) bool { return st.Mode()&os.ModeSymlink != 0 })
 }
 
 // CheckExecutable is nil when the current user may execute path, else the error that says how to fix it.

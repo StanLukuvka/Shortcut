@@ -142,7 +142,11 @@ func RemoveNamespaceFiles(group store.Group) error {
 	if err := UnlinkFile(group.File); err != nil {
 		return err
 	}
-	if platform.IsLink(folder) {
+	isLink, err := platform.IsLink(folder)
+	if err != nil {
+		return err
+	}
+	if isLink {
 		return UnlinkFile(folder)
 	}
 	isDir, err := platform.IsDir(folder)

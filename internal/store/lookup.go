@@ -76,6 +76,9 @@ func FindEntry(c *Context, words []string, lk Lookup) (Found, error) {
 	first, rest := words[0], words[1:]
 	var store Store
 	if lk.Scope == ScopeProject {
+		if c.ProjectErr != nil {
+			return Found{}, c.ProjectErr
+		}
 		if c.Project == "" {
 			return Found{}, errors.New("no project here: no " + ProjectFile + " or " + LocalFile + " in this folder or its parents")
 		}

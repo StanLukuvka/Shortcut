@@ -23,6 +23,9 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 			stores = stores[len(stores)-1:]
 		}
 	}
+	if c.ProjectErr != nil && (!ns.Set("names") || ns.Str("names") == ".") { // the project is in this listing
+		s.Err.WriteString("warning: " + c.ProjectErr.Error() + "\n")
+	}
 	for _, st := range stores {
 		for _, p := range st.Problems {
 			s.Err.WriteString("warning: " + p + "\n")
@@ -85,7 +88,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 		}
 		sections++
 		s.Out.WriteString(title + ":\n")
-		if d, _ := g.Doc.String("description"); d != "" {
+		if d, _ := g.Doc.String("description"); d != "" { // ok ignored: a description that isn't a string makes the group unusable (fileError), and only usable groups get here
 			s.Out.WriteString("  " + d + "\n")
 		}
 		type row struct{ name, mode, source, desc string }

@@ -15,17 +15,18 @@ import (
 // store function that needs the cwd, the global store or the project root. One Context is one run:
 // the stores it has read are not read again, except by ReadStore.
 type Context struct {
-	Cwd     string // physical working directory; "" when CwdErr != nil
-	CwdErr  error  // read by run and new, which refuse to go on without a cwd; also set when the project lookup failed
-	Global  string // absolute global store dir: $SHORTCUTS_HOME or ~/.shortcuts. The only read of the variable
-	Project string // nearest project root at or above Cwd, "" = none
+	Cwd        string // physical working directory; "" when CwdErr != nil
+	CwdErr     error  // getcwd's error, read by run and new, which refuse to go on without a cwd
+	Global     string // absolute global store dir: $SHORTCUTS_HOME or ~/.shortcuts. The only read of the variable
+	Project    string // nearest project root at or above Cwd, "" = none
+	ProjectErr error  // the project lookup couldn't tell (a folder it can't search): read by everything that looks in the project, never by the global scope
 
 	globalReal string           // platform.Realpath(Global), once
 	stores     map[string]Store // by the dir as the caller passed it: Global, or a realpath'd project root
 }
 
 // NewContext resolves the global store and the project root once. It never fails: a project lookup that can't tell
-// is CwdErr.
+// is ProjectErr.
 func NewContext(cwd string, cwdErr error) *Context {
 	home := os.Getenv("SHORTCUTS_HOME")
 	if home == "" {
@@ -34,7 +35,7 @@ func NewContext(cwd string, cwdErr error) *Context {
 	c := &Context{Cwd: cwd, CwdErr: cwdErr, Global: platform.Abs(platform.ExpandUser(home)), stores: map[string]Store{}}
 	c.globalReal = platform.Realpath(c.Global)
 	if cwdErr == nil {
-		c.Project, c.CwdErr = c.FindProjectRoot(cwd)
+		c.Project, c.ProjectErr = c.FindProjectRoot(cwd)
 	}
 	return c
 }
