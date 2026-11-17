@@ -433,3 +433,13 @@ func TestStores_CwdThroughALinkThenDotDotIsPhysical(t *testing.T) {
 	runOK(t, e, testkit.Opts{}, "new", "up", "--cwd", e.Tmp+"/link/..", "--", "pwd") // not filepath.Join: it would clean the ".." away
 	testkit.Eq(t, "cwd", e.LoadGlobal()["up"].(map[string]any)["cwd"], realpath(t, filepath.Join(e.Tmp, "a", "b")))
 }
+
+// A script given as a link stays that link: the stored path is the one given, not where it leads.
+func TestStores_NewScriptKeepsTheLinkItWasGiven(t *testing.T) {
+	e := testkit.New(t)
+	target := e.Script("target.sh", "#!/bin/sh\necho t\n")
+	link := filepath.Join(e.Tmp, "link.sh")
+	e.Symlink(target, link)
+	runOK(t, e, testkit.Opts{}, "new", "linked", "--script", link)
+	testkit.Eq(t, "script", fileShortcuts(t, filepath.Join(e.Store, "shortcuts.json"))["linked"].(map[string]any)["script"], link)
+}

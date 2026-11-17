@@ -109,7 +109,7 @@ func newFromScript(c *store.Context, s *term.Streams, ns term.Namespace, group s
 	if err != nil {
 		return err
 	}
-	field := real
+	field := abs
 	// A folder the paths resolve from may not be there yet (a new namespace in a fresh store, README "Namespaces"):
 	// then the script is not inside it and its path stays absolute.
 	baseThere, err := platform.Exists(group.ScriptBase())
