@@ -3,7 +3,6 @@ package platform
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -35,30 +34,13 @@ func helper(job string) {
 	}
 }
 
-// With PWD naming a symlink to the cwd, os.Getwd gives the link and Getwd the physical folder.
-func TestGetwd_IsPhysical(t *testing.T) {
-	e := testkit.New(t)
-	real := e.Folder("real")
-	e.Symlink(real, filepath.Join(e.Tmp, "link"))
-	res := e.RunCmd(testkit.Opts{Cwd: filepath.Join(e.Tmp, "link"), Env: map[string]string{"PLATFORM_HELPER": "cwd", "PWD": filepath.Join(e.Tmp, "link")}}, testkit.SelfArgs()...)
-	if want := filepath.Join(e.Tmp, "link") + "\n" + real + "\n"; res.Stdout != want {
-		t.Errorf("stdout %q, want %q (os.Getwd then platform.Getwd)", res.Stdout, want)
+func hexOf(t *testing.T, line string) uint64 {
+	var name string
+	var v uint64
+	if _, err := fmt.Sscanf(line, "%s %x", &name, &v); err != nil {
+		t.Fatalf("%q: %v", line, err)
 	}
-}
-
-func TestTTY_StdinAndStdout(t *testing.T) {
-	e := testkit.New(t)
-	opts := func(env map[string]string) testkit.Opts {
-		env["PLATFORM_HELPER"] = "tty"
-		return testkit.Opts{Env: env}
-	}
-	if res := e.RunCmd(opts(map[string]string{}), testkit.SelfArgs()...); res.Stdout != "false false\n" { // /dev/null is not a terminal
-		t.Errorf("no terminal: %q", res.Stdout)
-	}
-	code, out := e.InTerminalCmd(opts(map[string]string{}), nil, testkit.SelfArgs()...)
-	if code != 0 || out != "true true\r\n" {
-		t.Errorf("terminal: %d %q", code, out)
-	}
+	return v
 }
 
 func TestExec_FailureBeforeExecReturnsAnError(t *testing.T) {
@@ -106,13 +88,4 @@ func TestExec_TheChildStartsClean(t *testing.T) {
 	if ign&(1<<(syscall.SIGPIPE-1)) != 0 || ign&(1<<(syscall.SIGXFSZ-1)) != 0 || blk != 0 {
 		t.Errorf("%s / %s", lines[1], lines[2])
 	}
-}
-
-func hexOf(t *testing.T, line string) uint64 {
-	var name string
-	var v uint64
-	if _, err := fmt.Sscanf(line, "%s %x", &name, &v); err != nil {
-		t.Fatalf("%q: %v", line, err)
-	}
-	return v
 }

@@ -1,4 +1,4 @@
-package commands
+package e2e
 
 import (
 	"os"
@@ -10,13 +10,46 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-const bashShebang = "#!/usr/bin/env bash\n"
-
-func fileExists(path string) bool { _, err := os.Stat(path); return err == nil }
-
 func noteFile(t *testing.T, e *testkit.Env, rel string) string {
 	t.Helper()
 	return e.WriteFile(filepath.Join(e.Store, rel), bashShebang+"echo stored\n", 0o755)
+}
+
+func TestProjectFiles_RmWithoutLocalNeverReachesAProjectEntry(t *testing.T) {
+	e := testkit.New(t)
+	proj := overlaid(t, e)
+	before := testkit.ReadFile(t, filepath.Join(proj, ".shortcuts.local"))
+	for _, args := range [][]string{{"rm", "keep", "-y"}, {"rm", "mine", "-y"}} {
+		res := e.RunWith(in(proj), args...)
+		testkit.Eq(t, strings.Join(args, " "), res.Code, 1)
+		testkit.Contains(t, strings.Join(args, " "), res.Stderr, "shortcut '"+args[1]+"' not found.")
+	}
+	testkit.Eq(t, "local file", testkit.ReadFile(t, filepath.Join(proj, ".shortcuts.local")), before)
+}
+
+func TestProjectFiles_RmLocalOfAnOverrideBringsTheSharedEntryBack(t *testing.T) {
+	e := testkit.New(t)
+	proj := overlaid(t, e)
+	testkit.Eq(t, "rm", e.RunWith(in(proj), "rm", "--local", "swap", "-y").Code, 0)
+	testkit.Eq(t, "run", e.RunWith(in(proj), "r", "-y", ".", "swap").Stdout, "shared swap\n")
+}
+
+func TestProjectFiles_RmLocalSaysTheSharedEntryAppliesAgain(t *testing.T) {
+	e := testkit.New(t)
+	proj := overlaid(t, e)
+	rc, out := e.InTerminal(in(proj), []testkit.Key{{Wait: "[y/N]", Send: y("n\n")}}, "rm", "--local", "swap")
+	testkit.Eq(t, "exit", rc, 1)
+	testkit.Contains(t, "removes", out, "Removes your 'swap' from "+filepath.Join(proj, ".shortcuts.local")+".")
+	testkit.Contains(t, "again", out, "The 'swap' in .shortcuts applies again.")
+}
+
+func TestProjectFiles_RmLocalOfANameOnlyInTheSharedFileFails(t *testing.T) {
+	e := testkit.New(t)
+	proj := overlaid(t, e)
+	res := e.RunWith(in(proj), "rm", "--local", "keep", "-y")
+	testkit.Eq(t, "exit", res.Code, 1)
+	testkit.Contains(t, "err", res.Stderr, "'keep' isn't in .shortcuts.local, and shortcut doesn't change .shortcuts")
+	testkit.Eq(t, "still shared", e.RunWith(in(proj), "r", ".", "keep").Stdout, "shared keep\n")
 }
 
 func TestStores_RmInteractiveAndForce(t *testing.T) {
@@ -235,35 +268,6 @@ func TestStores_AnEntryWithBothInlineAndScriptIsRefused(t *testing.T) {
 	runOK(t, e, testkit.Opts{}, "rm", "both", "-y")
 	if _, has := e.LoadGlobal()["both"]; has {
 		t.Error("both is still registered")
-	}
-}
-
-func TestStores_UnknownTopLevelFieldStopsAGlobalShortcut(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"hi": testkit.Inline("echo ran")}, map[string]any{"future_safety": true})
-	res := e.Run("r", "hi")
-	testkit.Eq(t, "run", res.Code, 1)
-	testkit.Contains(t, "run", res.Stderr, "unknown field: future_safety")
-	if strings.Contains(res.Stdout, "ran") {
-		t.Error("it ran")
-	}
-	runOK(t, e, testkit.Opts{}, "rm", "hi", "-y")
-}
-
-func TestStores_NamespaceFlagKeepsEachGroupsScriptsApart(t *testing.T) {
-	e := testkit.New(t)
-	for _, p := range [][2]string{{"docker", "dock"}, {"kube", "kub"}} {
-		source := e.WriteFile(filepath.Join(e.Store, "imports", "scripts", p[0], "delete.sh"), bashShebang+"echo "+p[1]+"\n", 0o755)
-		runOK(t, e, testkit.Opts{}, "new", "delete", "--script", source, "--namespace", p[0], "--desc", "d")
-	}
-	testkit.Eq(t, "docker", e.Run("r", "docker", "delete").Stdout, "dock\n")
-	testkit.Eq(t, "kube", e.Run("r", "kube", "delete").Stdout, "kub\n")
-
-	cp := filepath.Join(e.Store, "imports", "scripts", "docker", "delete.sh")
-	testkit.Eq(t, "script_path", e.Run("show", "--field", "script_path", "docker", "delete").Stdout, cp+"\n")
-	runOK(t, e, testkit.Opts{}, "rm", "docker", "delete", "-y")
-	if !fileExists(cp) || !fileExists(filepath.Join(e.Store, "imports", "scripts", "kube", "delete.sh")) {
-		t.Error("rm deleted a script file")
 	}
 }
 

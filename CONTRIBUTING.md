@@ -27,16 +27,22 @@ go test ./...
 One package, or the tests whose names match:
 
 ```bash
-go test ./internal/commands -run TestName
+go test ./e2e -run TestName
 ```
+
+A unit test is in `<file>_test.go` next to the file whose code it tests. The one test file with no matching code file is `helpers_test.go`, for helpers that several test files of the package share.
+
+Tests that run the built binary are in [e2e/](e2e/), one file per command: `run_test.go`, `new_test.go`, `list_test.go`, `show_test.go`, `remove_test.go` and `completion_test.go`. `shortcut_test.go` holds what is not one command (no arguments, `--version`, `help`, an unknown command, a failed stdout) and `main_test.go` holds `TestMain` and the helpers the files share.
+
+Checks on the whole repository are in [internal/repocheck/](internal/repocheck/), a package of test files only: the imports table, the rules for test files, no dependencies, and every message in docs/errors.md.
 
 CI also checks `gofmt` and runs `go vet ./...`.
 
-[internal/testkit](internal/testkit/) is the hub. Each test gets its own sandbox from `testkit.New(t)`: a temp dir with `home/` as `HOME` and `home/.shortcuts` as `SHORTCUTS_HOME`. `XDG_DATA_HOME`, `XDG_CONFIG_HOME` and `BIN_DIR` are under the same home. Before any child process starts, `RefuseUnlessSandboxed` checks its environment and working directory, and refuses if they reach outside the temp dir. Tests start processes and make temp dirs only through testkit: `rules_test.go` fails a test file that imports `os/exec`, or calls `t.TempDir`, `t.Setenv`, `os.Setenv` or `os.MkdirTemp`.
+[internal/testkit](internal/testkit/) is the hub. Each test gets its own sandbox from `testkit.New(t)`: a temp dir with `home/` as `HOME` and `home/.shortcuts` as `SHORTCUTS_HOME`. `XDG_DATA_HOME`, `XDG_CONFIG_HOME` and `BIN_DIR` are under the same home. Before any child process starts, `RefuseUnlessSandboxed` checks its environment and working directory, and refuses if they reach outside the temp dir. Tests start processes and make temp dirs only through testkit: `internal/repocheck/rules_test.go` fails a test file that imports `os/exec`, or calls `t.TempDir`, `t.Setenv`, `os.Setenv` or `os.MkdirTemp`.
 
 ## What a change updates
 
-- A new error or warning: a row in [docs/errors.md](docs/errors.md). `internal/commands/errors_doc_test.go` fails without one.
+- A new error or warning: a row in [docs/errors.md](docs/errors.md). `internal/repocheck/errors_doc_test.go` fails without one.
 - A new entry field: a row in `Fields()` in `internal/store/entry.go`, and [docs/shortcut.schema.json](docs/shortcut.schema.json) (a test fails if they differ).
 - A new command or flag: its row in `commands()` in `internal/commands/commands.go` (dispatch, parsing, usage and help follow from it), the three completion scripts in `internal/commands/completion/` (a test fails if they disagree with `commands()`), and the README command list.
 - Anything a user would notice: a line under Unreleased in [CHANGELOG.md](CHANGELOG.md).
@@ -82,13 +88,15 @@ repair, or carry on.
 - `internal/terminal/`: printed text and questions, the exit error and `Die` that commands share, and the description of a command that its parser, usage line and help are read from. `argparse/` is the argument parser; it imports nothing of this repository.
 - `internal/platform/`: the parts of the standard library's file, process, lock and JSON behaviour that shortcut's output depends on, including JSON read as `map[string]json.RawMessage` and written with sorted keys. A file that is not valid UTF-8 is refused when it is read. It imports nothing of this repository.
 - `internal/testkit/`: the test sandbox and helpers. A package's frozen golden data is in its own `testdata/` folder.
+- `internal/repocheck/`: tests of the whole repository (test files only).
+- `e2e/`: tests that run the built binary (test files only).
 - `installer/`: `install.sh` and its tests.
 - `examples/`: namespaces to copy from.
 - `docs/`: the schema and the error table.
 
 ## Imports
 
-Imports point down this tree and never up: `cmd/shortcut`, `internal/commands`, one command, `internal/store/write`, `internal/store`, `internal/terminal`, `internal/platform`. A command may import `internal/store`, `internal/store/write`, `internal/terminal`, `internal/terminal/argparse` and `internal/platform`; it imports no other command and not `internal/commands`. `internal/commands` also imports `internal/terminal/argparse`. `internal/store` imports only `internal/platform`; `internal/store/write` also imports `internal/terminal`. `internal/platform` imports nothing of this repository. The table is in [internal/testkit/layers_test.go](internal/testkit/layers_test.go). The test fails on an import the table doesn't list and on a package that isn't in it, so a new package or import is a row there.
+Imports point down this tree and never up: `cmd/shortcut`, `internal/commands`, one command, `internal/store/write`, `internal/store`, `internal/terminal`, `internal/platform`. A command may import `internal/store`, `internal/store/write`, `internal/terminal`, `internal/terminal/argparse` and `internal/platform`; it imports no other command and not `internal/commands`. `internal/commands` also imports `internal/terminal/argparse`. `internal/store` imports only `internal/platform`; `internal/store/write` also imports `internal/terminal`. `internal/platform` imports nothing of this repository. The table is in [internal/repocheck/layers_test.go](internal/repocheck/layers_test.go). The test fails on an import the table doesn't list and on a package that isn't in it, so a new package or import is a row there.
 
 ## Docs and commits
 

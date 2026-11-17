@@ -1,6 +1,6 @@
 // Package testkit is the hub of the Go tests: one sandbox per test, one set of
 // fixtures, one way to start a process. Only this package may call t.TempDir, t.Setenv, os.Setenv or
-// os.MkdirTemp, or import os/exec (rules_test.go enforces it); every launch is refused unless it stays inside
+// os.MkdirTemp, or import os/exec (internal/repocheck/rules_test.go enforces it); every launch is refused unless it stays inside
 // the test's temp dir.
 package testkit
 
@@ -25,11 +25,11 @@ type Env struct {
 	ToolBin string            // Tmp/bin: where a `shortcut` link goes (Shell)
 	Vars    map[string]string // HOME, SHORTCUTS_HOME, XDG_DATA_HOME, XDG_CONFIG_HOME, BIN_DIR over os.Environ()
 
-	fail func(error) // test seam: sandbox_test.go swaps t.Fatal for a panic to see a refusal
+	fail func(error) // test seam: testkit_test.go swaps t.Fatal for a panic to see a refusal
 }
 
 // What a run can write to besides HOME, and where it goes when the variable is unset or empty.
-// A var so sandbox_test.go can add an escaping entry.
+// A var so testkit_test.go can add an escaping entry.
 var sandboxedPaths = []struct{ Name, Default string }{
 	{"SHORTCUTS_HOME", "~/.shortcuts"},
 	{"XDG_DATA_HOME", "~/.local/share"},
@@ -212,8 +212,8 @@ var (
 	binDir  string
 	binPath string
 	binErr  error
-	// testBinary stands in for the built binary while testkit tests itself, so sandbox_test.go and
-	// testkit_test.go use `sh` scripts.
+	// testBinary stands in for the built binary while testkit tests itself, so testkit's own tests
+	// use `sh` scripts.
 	testBinary string
 )
 

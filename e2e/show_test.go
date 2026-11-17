@@ -1,4 +1,4 @@
-package commands
+package e2e
 
 import (
 	"os"
@@ -9,6 +9,157 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
+
+const toolRegistry = `{"version": 1, "shortcuts": {
+ "tool": {"description": "A tool: é", "script": "scripts/tool.sh", "confirm": true },
+ "bad": {"inline": "x", "cwd": 5, "description": "bd"},
+ "gone": {"script": "scripts/none.sh"},
+ "trav": {"script": "../../etc/passwd"},
+ "nul": null,
+ "build": {"description": "Global build", "inline": "echo gb", "cwd": "/tmp"}}}`
+
+func TestStores_BrokenProjectRefusesANamespaceItImported(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"docker": testkit.Inline("echo global")})
+	proj := e.Project(map[string]any{},
+		testkit.Extra(map[string]any{"imports": map[string]any{"docker": "../tools/docker.shortcut"}}),
+		testkit.Files(map[string]any{"tools/docker.shortcut": `{"version": 1, "shortcuts": {"ps": {"inline": "true"}}}`}))
+	e.CorruptStore(filepath.Join(proj, ".shortcuts"))
+
+	res := e.RunWith(in(proj), "r", ".", "docker", "ps")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "stderr", res.Stderr, "Nothing runs inside this project until it's fixed.")
+	// The file can't be read, so its imports are gone too: show finds the global 'docker'
+	testkit.Contains(t, "show", e.RunWith(in(proj), "show", "docker").Stdout, "Scope:       global")
+}
+
+func TestStores_AnUnknownTopLevelFieldStopsTheProjectToo(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"outside": testkit.Inline("echo outside")})
+	proj := e.Project(map[string]any{"inside": testkit.Inline("true"), "mine": testkit.Inline("true")})
+	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version": 1, "shortcuts": {"mine": {"inline": "echo mine"}}}`, 0)
+	registry := filepath.Join(proj, ".shortcuts")
+	e.WriteStore(registry, map[string]any{"inside": testkit.Inline("true"), "mine": testkit.Inline("true")}, map[string]any{"bogus": 1})
+
+	for _, name := range []string{"inside", "mine"} {
+		res := e.RunWith(in(proj), "r", ".", name)
+		res.WantCode(t, 1)
+		testkit.Contains(t, name, res.Stderr, registry+" has an unknown field: bogus. Nothing runs inside this project")
+	}
+
+	// The file still parses, so show finds its entries
+	res := e.RunWith(in(proj), "show", ".", "inside")
+	res.WantCode(t, 0)
+	testkit.Contains(t, "show", res.Stdout, "Scope:       project")
+	// show and rm --local find its entries
+	testkit.Eq(t, "rm inside", e.RunWith(in(proj), "rm", "inside", "-y").Code, 1) // rm never reaches a project entry
+	res = e.RunWith(in(proj), "rm", "--local", "mine", "-y")
+	res.WantCode(t, 0)
+	if _, has := localData(t, proj)["mine"]; has {
+		t.Error("mine is still in .shortcuts.local")
+	}
+	testkit.Contains(t, "registry", testkit.ReadFile(t, registry), `"bogus":1`)
+}
+
+func TestProjectFiles_ShowJSONSaysWhichFileAnEntryComesFrom(t *testing.T) {
+	e := testkit.New(t)
+	proj := overlaid(t, e)
+	info := decodeObject(t, e.RunWith(in(proj), "show", "--json", ".", "mine").Stdout)
+	testkit.Eq(t, "entry", info["entry"], map[string]any{"inline": "echo mine"})
+	testkit.Eq(t, "name", info["name"], "mine")
+	testkit.Eq(t, "namespace", info["namespace"], nil)
+	testkit.Eq(t, "scope", info["scope"], "project")
+	testkit.Eq(t, "source", info["source"], "local")
+	testkit.Eq(t, "defined_in", info["defined_in"], filepath.Join(proj, ".shortcuts.local"))
+	testkit.Eq(t, "script_path", info["script_path"], nil)
+}
+
+func TestProjectFiles_ShowNamesTheFileThatDefinesIt(t *testing.T) {
+	e := testkit.New(t)
+	proj := overlaid(t, e)
+	res := e.RunWith(in(proj), "show", ".", "swap")
+	testkit.Contains(t, "show", res.Stdout, "Defined in:  "+filepath.Join(proj, ".shortcuts.local"))
+	testkit.Contains(t, "show", res.Stdout, "Source:      overridden")
+}
+
+func TestRunning_ShowPrintsTheEntryScriptAndCwd(t *testing.T) {
+	e := testkit.New(t)
+	script := e.Script("shown.sh", "#!/usr/bin/env bash\necho show output running\n")
+	e.WriteStore(e.Store, map[string]any{"shown": map[string]any{"script": script, "description": "Show sample", "cwd": e.Tmp}})
+	res := e.Run("show", "shown")
+	res.WantCode(t, 0)
+	testkit.Contains(t, "show", res.Stdout, "Description: Show sample\n")
+	testkit.Contains(t, "show", res.Stdout, "echo show output running")
+	testkit.Contains(t, "show", res.Stdout, "Run CWD:     "+e.Tmp+"\n")
+}
+
+func TestRunning_ShowSaysWhenTheRunDirectoryOrScriptIsGone(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"gone": map[string]any{"inline": "true", "cwd": "/no/such/folder"}})
+	testkit.Contains(t, "cwd", e.Run("show", "gone").Stdout, "/no/such/folder")
+	e.Folder("home/.shortcuts/scripts") // the folder of a script must be there; the script is what is missing
+	e.WriteStore(e.Store, map[string]any{"gone": map[string]any{"script": "scripts/none.sh"}})
+	testkit.Contains(t, "script", e.Run("show", "gone").Stdout, "[file missing:")
+}
+
+func TestRunning_ShowJSONPrintsAnEntryShowRefuses(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"bad": map[string]any{"inline": "true", "cwd": 123}})
+	testkit.Contains(t, "show bad", e.Run("show", "bad").Stderr, "'cwd' must be a string")
+	res := e.Run("show", "--json", "bad")
+	if res.Code != 0 {
+		t.Fatalf("exit %d: %s", res.Code, res.Stderr)
+	}
+	info := decodeObject(t, res.Stdout)
+	testkit.Eq(t, "entry", info["entry"], map[string]any{"inline": "true", "cwd": float64(123)})
+	testkit.Contains(t, "error", info["error"].(string), "'cwd' must be a string")
+	testkit.Eq(t, "name", info["name"], "bad")
+	for _, k := range []string{"cwd", "run_cwd", "script_path"} {
+		testkit.Eq(t, k, info[k], nil)
+	}
+}
+
+func TestRunning_ShowJSONIsOneObjectWithWhereItResolves(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"s": map[string]any{"script": "scripts/s.sh", "cwd": "/tmp"}, "c": testkit.Inline("true")})
+	e.Folder("home/.shortcuts/scripts")
+	info := decodeObject(t, e.Run("show", "--json", "s").Stdout)
+	for k, want := range map[string]any{"name": "s", "namespace": nil, "scope": "global", "defined_in": filepath.Join(e.Store, "shortcuts.json"),
+		"source": nil, "script_path": filepath.Join(e.Store, "scripts", "s.sh"), "cwd": "/tmp", "run_cwd": "/tmp",
+		"error": nil, "entry": map[string]any{"script": "scripts/s.sh", "cwd": "/tmp"}} {
+		testkit.Eq(t, k, info[k], want)
+	}
+	info = decodeObject(t, e.RunWith(in(e.Tmp), "show", "--json", "c").Stdout)
+	testkit.Eq(t, "cwd", info["cwd"], nil)
+	testkit.Eq(t, "run_cwd", info["run_cwd"], e.Tmp)
+}
+
+func TestRunning_ShowJSONNamesANamespaceEntryBare(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteImport(e.Store, "dk", testkit.NS(map[string]any{"ps": map[string]any{"inline": "true", "cwd": "."}}))
+	info := decodeObject(t, e.Run("show", "--json", "dk", "ps").Stdout)
+	for k, want := range map[string]any{"name": "ps", "namespace": "dk", "scope": "namespace",
+		"defined_in": filepath.Join(e.Store, "imports", "dk.shortcut"), "cwd": ".", "run_cwd": filepath.Join(e.Store, "imports")} {
+		testkit.Eq(t, k, info[k], want)
+	}
+}
+
+func TestRunning_ShowDirTakesZeroOrOne(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"hi": testkit.Inline("echo hi")})
+	for v, want := range map[string]string{"0": "", "1": "→ "} {
+		res := e.RunWith(testkit.Opts{Env: map[string]string{"SHORTCUT_SHOW_DIR": v}}, "r", "hi")
+		if res.Code != 0 || res.Stdout != "hi\n" || (want == "") != (res.Stderr == "") || !strings.HasPrefix(res.Stderr, want) {
+			t.Errorf("%q: %+v", v, res)
+		}
+	}
+	for _, v := range []string{"", "2", "yes"} {
+		res := e.RunWith(testkit.Opts{Env: map[string]string{"SHORTCUT_SHOW_DIR": v}}, "r", "hi")
+		if res.Code != 1 || res.Stdout != "" || res.Stderr != "error: SHORTCUT_SHOW_DIR must be 0 or 1, not '"+v+"'\n" {
+			t.Errorf("%q: %+v", v, res)
+		}
+	}
+}
 
 func TestStores_Show(t *testing.T) {
 	e := testkit.New(t)
@@ -34,14 +185,6 @@ func TestEntries_CommandsThatTakeANameShowHowMany(t *testing.T) {
 		testkit.Contains(t, cmd+" --help", e.Run(cmd, "--help").Stdout, "namespace and name")
 	}
 }
-
-const toolRegistry = `{"version": 1, "shortcuts": {
- "tool": {"description": "A tool: é", "script": "scripts/tool.sh", "confirm": true },
- "bad": {"inline": "x", "cwd": 5, "description": "bd"},
- "gone": {"script": "scripts/none.sh"},
- "trav": {"script": "../../etc/passwd"},
- "nul": null,
- "build": {"description": "Global build", "inline": "echo gb", "cwd": "/tmp"}}}`
 
 // The exact text of show for these (TMP is the test's temp dir).
 func TestShow_FullOutput(t *testing.T) {

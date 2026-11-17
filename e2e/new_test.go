@@ -1,4 +1,4 @@
-package commands
+package e2e
 
 import (
 	"os"
@@ -12,25 +12,6 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-// fileShortcuts is the "shortcuts" object of a store or namespace file, as the test sees it.
-func fileShortcuts(t *testing.T, path string) map[string]any {
-	t.Helper()
-	doc := decodeObject(t, testkit.ReadFile(t, path))
-	s, _ := doc["shortcuts"].(map[string]any)
-	return s
-}
-
-func TestRunning_CommandWordsAreOrdinaryShortcutNames(t *testing.T) {
-	e := testkit.New(t)
-	for _, name := range []string{"new", "list", "run", "r", "nano"} {
-		runOK(t, e, testkit.Opts{}, "new", name, "--", "echo ran "+name)
-		testkit.Eq(t, "run "+name, e.Run("run", name).Stdout, "ran "+name+"\n")
-	}
-	if !slices.Contains(strings.Fields(e.Run("list", "--names").Stdout), "run") {
-		t.Errorf("list --names lacks run")
-	}
-}
-
 func TestRunning_NewSaysWhenACommandIgnoresArguments(t *testing.T) {
 	e := testkit.New(t)
 	const hint = "won't see any arguments"
@@ -42,29 +23,6 @@ func TestRunning_NewSaysWhenACommandIgnoresArguments(t *testing.T) {
 			t.Errorf("%s: unexpected hint in %q", c[1], res.Stderr)
 		}
 	}
-}
-
-func TestRunning_SeveralWordCommandsKeepPositionalArgumentsLive(t *testing.T) {
-	e := testkit.New(t)
-	for i, c := range []struct {
-		words  []string
-		stored string
-	}{
-		{[]string{"echo", "$1"}, `echo "$1"`},
-		{[]string{"printf", "[%s]", "$@"}, `printf '[%s]' "$@"`},
-		{[]string{"echo", "a b", "${1}"}, `echo 'a b' "${1}"`},
-		{[]string{"echo", "$HOME"}, `echo '$HOME'`},
-		{[]string{"echo", `say "$1"`}, `echo "say \"$1\""`},
-		{[]string{"echo", "$(id) `id` \\ $1"}, `echo "\$(id) \` + "`id\\`" + ` \\ $1"`},
-	} {
-		name := "cmd" + string(rune('0'+i))
-		runOK(t, e, testkit.Opts{}, append([]string{"new", name, "--"}, c.words...)...)
-		testkit.Eq(t, name, e.LoadGlobal()[name].(map[string]any)["inline"], c.stored)
-	}
-	testkit.Eq(t, "cmd0", e.Run("r", "cmd0", "hello world").Stdout, "hello world\n")
-	testkit.Eq(t, "cmd1", e.Run("r", "cmd1", "a b", "c").Stdout, "[a b][c]")
-	testkit.Eq(t, "cmd3", e.Run("r", "cmd3").Stdout, "$HOME\n")
-	testkit.Eq(t, "cmd5", e.Run("r", "cmd5", "x").Stdout, "$(id) `id` \\ x\n")
 }
 
 func TestStores_CreationScopeRules(t *testing.T) {
@@ -294,24 +252,6 @@ func TestStores_ASymlinkedStoreFileIsWrittenWhereItLeads(t *testing.T) {
 	}
 }
 
-func TestStores_UnknownFieldsAreErrors(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, nil) // an empty store
-	for _, c := range []struct {
-		name, message string
-		data          map[string]any
-	}{
-		{"top", "unknown field: owner", map[string]any{"version": 1, "owner": "x", "shortcuts": map[string]any{}}},
-		{"entry", "unknown field: sandbox", testkit.NS(map[string]any{
-			"a": map[string]any{"inline": "true", "sandbox": true}})},
-		{"args", "unknown field: args", testkit.NS(map[string]any{
-			"a": map[string]any{"inline": "true", "args": []any{map[string]any{"name": "x"}}}})},
-	} {
-		e.WriteImport(e.Store, c.name, c.data)
-		testkit.Contains(t, c.name+" list", e.Run("list").Stderr, c.message)
-	}
-}
-
 func TestStores_DefaultHomeStoreIsNeverAProject(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, nil) // with the default store: ~/.shortcuts
@@ -395,33 +335,6 @@ func TestNew_EmptyFlagsAreErrors(t *testing.T) {
 	testkit.Eq(t, "no desc", e.LoadGlobal()["dflt"].(map[string]any)["description"], nil)
 }
 
-func TestList_NamesComeOutInByteOrder(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{
-		"B": testkit.Inline("true"), "a-1": testkit.Inline("true"), "a": testkit.Inline("true"), "10": testkit.Inline("true"),
-	})
-	got := strings.Fields(runOK(t, e, testkit.Opts{}, "list", "--names").Stdout)
-	if want := []string{"10", "B", "a", "a-1"}; !slices.Equal(got, want) {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
-func TestStores_ShortcutsHomeMustBeAbsoluteAndTildeNeedsAHome(t *testing.T) {
-	e := testkit.New(t)
-	for _, c := range []struct {
-		env  map[string]string
-		want string
-	}{
-		{map[string]string{"SHORTCUTS_HOME": ""}, "SHORTCUTS_HOME must be an absolute path, not ''"},
-		{map[string]string{"SHORTCUTS_HOME": "store"}, "SHORTCUTS_HOME must be an absolute path, not 'store'"},
-		{map[string]string{"HOME": "relhome", "SHORTCUTS_HOME": "~/s"}, "HOME must be set to an absolute path, so '~' in '~/s' can't be expanded"},
-	} { // testkit refuses an empty HOME, so "HOME unset" is the unit test of expandWith; a relative HOME gets here
-		res := e.RunWith(testkit.Opts{Env: c.env}, "list")
-		testkit.Eq(t, c.want+" exit", res.Code, 1)
-		testkit.Contains(t, c.want, res.Stderr, "error: "+c.want)
-	}
-}
-
 // `--cwd link/..` is the parent of where the link leads, not the folder holding the link.
 func TestStores_CwdThroughALinkThenDotDotIsPhysical(t *testing.T) {
 	e := testkit.New(t)
@@ -442,4 +355,69 @@ func TestStores_NewScriptKeepsTheLinkItWasGiven(t *testing.T) {
 	e.Symlink(target, link)
 	runOK(t, e, testkit.Opts{}, "new", "linked", "--script", link)
 	testkit.Eq(t, "script", fileShortcuts(t, filepath.Join(e.Store, "shortcuts.json"))["linked"].(map[string]any)["script"], link)
+}
+
+func TestProjectFiles_NewLocalOverridesASharedNameAndSaysSo(t *testing.T) {
+	e := testkit.New(t)
+	proj := overlaid(t, e)
+	res := e.RunWith(in(proj), "new", "keep", "--local", "--", "echo mine now")
+	testkit.Contains(t, "stderr", res.Stderr, "this overrides 'keep'")
+	testkit.Eq(t, "run", e.RunWith(in(proj), "r", ".", "keep").Stdout, "mine now\n")
+}
+
+func TestProjectFiles_NewLocalTakesACommandAndAddRecordsThePath(t *testing.T) {
+	e := testkit.New(t)
+	proj := e.Project(map[string]any{}, testkit.Files(map[string]any{"tools/run.sh": "#!/usr/bin/env bash\n"}), testkit.Mode(0o755))
+	outside := e.Script("outside.sh", "#!/usr/bin/env bash\n")
+	res := e.RunWith(in(proj), "new", "x", "--local", "--desc", "d")
+	res.WantCode(t, 2)
+	testkit.Contains(t, "stderr", res.Stderr, "after '--'")
+	testkit.Eq(t, "in", e.RunWith(in(proj), "new", "in", "--script", "tools/run.sh", "--desc", "d", "--local").Code, 0)
+	testkit.Eq(t, "out", e.RunWith(in(proj), "new", "out", "--script", outside, "--desc", "d", "--local").Code, 0)
+	testkit.Eq(t, "in script", localData(t, proj)["in"].(map[string]any)["script"], "tools/run.sh")
+	testkit.Eq(t, "out script", localData(t, proj)["out"].(map[string]any)["script"], outside)
+	var names []string
+	entries, _ := os.ReadDir(proj)
+	for _, en := range entries {
+		names = append(names, en.Name())
+	}
+	slices.Sort(names)
+	testkit.Eq(t, "files", names, []string{".shortcuts", ".shortcuts.local", "tools"})
+}
+
+func TestProjectFiles_LocalOnlyWorksAtTheProjectRoot(t *testing.T) {
+	e := testkit.New(t)
+	proj := overlaid(t, e)
+	src := filepath.Join(proj, "src")
+	res := e.RunWith(in(src), "new", "x", "--local", "--", "true")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "stderr", res.Stderr, "is inside the project at")
+	testkit.NotExist(t, filepath.Join(src, ".shortcuts.local"))
+	testkit.Eq(t, "keep", e.RunWith(in(src), "r", ".", "keep").Stdout, "shared keep\n")
+}
+
+func TestProjectFiles_TheCliNeverWritesTheSharedFile(t *testing.T) {
+	e := testkit.New(t)
+	proj := overlaid(t, e)
+	before := testkit.ReadFile(t, filepath.Join(proj, ".shortcuts"))
+	source := e.Script("tool.sh", "#!/usr/bin/env bash\n")
+	for _, args := range [][]string{
+		{"new", "a", "--local", "--", "echo a"},
+		{"new", "b", "--script", source, "--desc", "d", "--local"},
+		{"rm", "--local", "swap", "-y"},
+	} {
+		testkit.Eq(t, strings.Join(args, " "), e.RunWith(in(proj), args...).Code, 0)
+	}
+	testkit.Eq(t, "shared", testkit.ReadFile(t, filepath.Join(proj, ".shortcuts")), before)
+}
+
+func TestSymlinkSafety_LocalNeverWritesThroughACommittedSymlink(t *testing.T) {
+	e := testkit.New(t)
+	victim := e.WriteFile(filepath.Join(e.Tmp, "victim"), "keep\n", 0)
+	proj := e.Project(map[string]any{})
+	e.Symlink(victim, filepath.Join(proj, ".shortcuts.local"))
+	res := e.RunWith(in(proj), "new", "build", "--local", "--", "true")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "stderr", res.Stderr, "is a symlink")
+	testkit.Eq(t, "victim", testkit.ReadFile(t, victim), "keep\n")
 }

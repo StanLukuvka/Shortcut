@@ -1,13 +1,11 @@
-package commands
+package e2e
 
 import (
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/StanLukuvka/Shortcut/internal/commands/completion"
-	"github.com/StanLukuvka/Shortcut/internal/terminal"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
@@ -81,47 +79,4 @@ func TestCompletion_BashPastFlagsAndIntoNamespaces(t *testing.T) {
 	// After the dot the names are the project's (`list --names .`): none outside a project, and no error
 	check(nil, "r", ".", "")
 	check(nil, "r", ".", "docker", "")
-}
-
-// The static completion scripts name every command and alias, the options of the commands that take names, and the
-// shells `completion` offers.
-func TestCompletion_FollowsTheTable(t *testing.T) {
-	has := func(text, word string) bool { // a whole word: "r" is not the "-r" of a fish option
-		return regexp.MustCompile(`(^|[^\w-])` + regexp.QuoteMeta(word) + `([^\w-]|$)`).MatchString(text)
-	}
-	for _, shell := range []string{"bash", "zsh", "fish"} {
-		b, err := completion.Script(shell)
-		if err != nil {
-			t.Fatal(err)
-		}
-		text := string(b)
-		for _, c := range commands() {
-			for _, w := range append([]string{c.Name}, c.Aliases...) {
-				if !has(text, w) {
-					t.Errorf("%s: no command word %q", shell, w)
-				}
-			}
-			var words []string
-			for _, a := range c.Args {
-				switch {
-				case a.Choices != nil:
-					words = append(words, a.Choices...)
-				case a.Flags != nil && slices.ContainsFunc(c.Args, func(p terminal.Arg) bool { return p.Flags == nil && (p.Nargs == '+' || p.Nargs == '*') }):
-					flag := a.Flags[0]
-					if shell == "fish" { // fish spells -y as -s y and --json as -l json
-						flag = "-l " + strings.TrimPrefix(flag, "--")
-						if !strings.HasPrefix(a.Flags[0], "--") {
-							flag = "-s " + strings.TrimPrefix(a.Flags[0], "-")
-						}
-					}
-					words = append(words, flag)
-				}
-			}
-			for _, w := range words {
-				if !has(text, w) {
-					t.Errorf("%s: %s: no %q", shell, c.Name, w)
-				}
-			}
-		}
-	}
 }

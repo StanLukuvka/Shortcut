@@ -1,13 +1,51 @@
-package commands
+package e2e
 
 import (
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-func TestMain(m *testing.M) { testkit.Main(m) }
+func TestRunning_AClosedStdoutIsTheShortcutsProblem(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"quiet": testkit.Inline("true")})
+	res := e.Shell(testkit.Opts{}, "shortcut r quiet >&-")
+	if res.Code != 0 || strings.Contains(res.Stderr, "Traceback") || strings.Contains(res.Stderr, "panic") {
+		t.Errorf("exit %d stderr %q", res.Code, res.Stderr)
+	}
+}
+
+// With fds 0, 1 or 2 closed the Go runtime puts /dev/null in their place, so the commands exit as they would
+// with them open, print nothing anywhere visible and don't panic (a Go panic exits 2). What the child sees there is /dev/null.
+func TestRunning_ClosedStdFDsDoNotStopACommand(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"go": testkit.Inline("echo ran")})
+	for _, fds := range [][]int{{0}, {1}, {2}, {0, 1, 2}} {
+		for _, args := range [][]string{{"list"}, {"r", "go"}, {"show", "go"}} {
+			if res := e.RunCmd(testkit.Opts{CloseFDs: fds}, append([]string{testkit.Binary(t)}, args...)...); res.Code != 0 {
+				t.Errorf("%v closed, %v: exit %d stdout %q stderr %q", fds, args, res.Code, res.Stdout, res.Stderr)
+			}
+		}
+	}
+	// stdout closed but stderr kept: nothing reaches stderr either
+	res := e.RunCmd(testkit.Opts{CloseFDs: []int{1}}, testkit.Binary(t), "list")
+	if res.Stderr != "" {
+		t.Errorf("stderr %q", res.Stderr)
+	}
+}
+
+// A write error other than a closed pipe is an error: stdout on /dev/full makes even --version exit 1.
+func TestWriteError_StdoutOnDevFullExits1(t *testing.T) {
+	if _, err := os.Stat("/dev/full"); err != nil {
+		t.Skip("no /dev/full")
+	}
+	e := testkit.New(t)
+	res := e.RunCmd(testkit.Opts{}, "sh", "-c", `exec "$@" >/dev/full`, "sh", testkit.Binary(t), "--version")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "stderr", res.Stderr, "error: writing stdout:")
+}
 
 // What the binary prints before any parser runs.
 func TestDispatch_ErrorsBeforeAnyParser(t *testing.T) {
@@ -84,14 +122,6 @@ func TestRunning_UnknownCommandsPointToRun(t *testing.T) {
 	}
 }
 
-func TestRunning_RunWithoutANameIsAnError(t *testing.T) {
-	e := testkit.New(t)
-	res := e.Run("run")
-	if res.Code != 2 || !strings.HasPrefix(res.Stderr, "error: missing shortcut name\nusage: shortcut run") {
-		t.Errorf("exit %d stderr %q", res.Code, res.Stderr)
-	}
-}
-
 func TestRunning_HelpNamesACommand(t *testing.T) {
 	e := testkit.New(t)
 	res := e.Run("help", "new")
@@ -100,45 +130,5 @@ func TestRunning_HelpNamesACommand(t *testing.T) {
 	}
 	if out := e.Run("help", "run").Stdout; !strings.Contains(out, "usage: shortcut run") {
 		t.Errorf("help run: %q", out)
-	}
-}
-
-// Every command's `help <cmd>` and `<cmd> -h` print what the table renders, and nothing else; an alias is its command.
-// help itself is the exception: `help -h` is the usage text.
-func TestHelp_LiveOutputIsTheTable(t *testing.T) {
-	e := testkit.New(t)
-	for _, c := range commands() {
-		for _, name := range append([]string{c.Name}, c.Aliases...) {
-			argvs := [][]string{{"help", name}}
-			if c.Name != "help" {
-				argvs = append(argvs, []string{name, "-h"}, []string{name, "--help"})
-			}
-			for _, argv := range argvs {
-				if res := e.Run(argv...); res.Code != 0 || res.Stdout != c.HelpText() || res.Stderr != "" {
-					t.Errorf("%v: exit %d stderr %q stdout %q", argv, res.Code, res.Stderr, res.Stdout)
-				}
-			}
-		}
-	}
-}
-
-// The words that show the whole usage and the version.
-func TestDispatch_UsageAndVersion(t *testing.T) {
-	e := testkit.New(t)
-	for _, argv := range [][]string{{}, {"-h"}, {"--help"}, {"help"}, {"help", "nosuch"}} {
-		res := e.Run(argv...)
-		if res.Code != 0 || res.Stdout != usageText() || res.Stderr != "" {
-			t.Errorf("%v: exit %d stderr %q", argv, res.Code, res.Stderr)
-		}
-	}
-	if !strings.HasPrefix(usageText(), "shortcut - run and manage quick scripts and commands\n\nUsage:\n") || !strings.HasSuffix(usageText(), "line.\n") {
-		t.Errorf("usageText is not the usage text: %q", usageText())
-	}
-	if res := e.Run("--version"); res.Code != 0 || res.Stdout != "shortcut 0.1.0\n" || Version != "0.1.0" {
-		t.Errorf("--version: exit %d stdout %q", res.Code, res.Stdout)
-	}
-	// An empty word is an unknown command, not a crash.
-	if res := e.Run(""); res.Code != 2 || !strings.HasPrefix(res.Stderr, "error: unknown command ''") {
-		t.Errorf("empty word: exit %d stderr %q", res.Code, res.Stderr)
 	}
 }
