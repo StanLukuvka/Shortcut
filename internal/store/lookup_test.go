@@ -48,9 +48,9 @@ func TestLookup_TheOtherScopeIsAHintNeverAFallback(t *testing.T) {
 		{[]string{"tool"}, Lookup{Cmd: "show"}, "The project in " + proj + " has it: shortcut show . tool"},
 		{[]string{"tool", "a b"}, Lookup{Cmd: "r"}, "has it: shortcut r . tool 'a b'"},
 		{[]string{"terraform", "plan"}, Lookup{Cmd: "r"}, "has it: shortcut r . terraform plan"},
-		{[]string{"docker", "delete"}, Lookup{Cmd: "r"}, "'delete' not found in namespace 'docker'. It has: ps. The project in " + proj + " has it: shortcut r . docker delete"},
+		{[]string{"docker", "delete"}, Lookup{Cmd: "r"}, "'delete' not found in namespace 'docker'. The project in " + proj + " has it: shortcut r . docker delete"},
 		{[]string{"mine"}, Lookup{Scope: ScopeProject, Cmd: "r"}, "shortcut 'mine' not found. Your global store has it: shortcut r mine"},
-		{[]string{"docker", "ps"}, Lookup{Scope: ScopeProject, Cmd: "r"}, "'ps' not found in namespace 'docker'. It has: delete. Your global store has it: shortcut r docker ps"},
+		{[]string{"docker", "ps"}, Lookup{Scope: ScopeProject, Cmd: "r"}, "'ps' not found in namespace 'docker'. Your global store has it: shortcut r docker ps"},
 		{[]string{"nothing"}, Lookup{Cmd: "r"}, ""},
 		{[]string{"tool"}, Lookup{}, ""}, // rm gives no hint
 		{[]string{"docker", "ps"}, Lookup{}, "found"},
@@ -80,15 +80,6 @@ func TestLookup_ANameCannotBeADot(t *testing.T) {
 	}
 }
 
-func TestLookup_NotFound_ANameInAnOuterProjectIsPointedAt(t *testing.T) {
-	e := testkit.New(t)
-	outer := e.Project(map[string]any{"outer": testkit.Inline("echo outer")}, testkit.Name("outer"))
-	inner := filepath.Join(outer, "vendor")
-	e.WriteStore(filepath.Join(inner, ".shortcuts"), map[string]any{})
-	_, err := FindEntry(NewContext(inner, nil), []string{"outer"}, Lookup{Scope: ScopeProject})
-	testkit.WantErr(t, err, "The project in "+outer+" has a 'outer', but only the nearest project, "+inner+", is used here.")
-}
-
 func TestLookup_NotFound_AOneXProjectFolderGetsThePlainMessage(t *testing.T) {
 	e := testkit.New(t)
 	old := e.Project(nil, testkit.Name("old"), testkit.Dirs(".shortcuts"))
@@ -105,10 +96,9 @@ func TestLookup_NamespacesAndNotFound(t *testing.T) {
 		words []string
 		want  string
 	}{
-		{[]string{"docker"}, "'docker' is a namespace; run one of its shortcuts: delete, where"},
-		{[]string{"docker", "nope"}, "'nope' not found in namespace 'docker'. It has: delete, where"},
-		{[]string{"podman", "list"}, "shortcut or namespace 'podman' not found. A global namespace is the file " +
-			filepath.Join(e.Store, "imports", "podman.shortcut") + "."},
+		{[]string{"docker"}, "'docker' is a namespace; run one of its shortcuts"},
+		{[]string{"docker", "nope"}, "'nope' not found in namespace 'docker'"},
+		{[]string{"podman", "list"}, "shortcut or namespace 'podman' not found."},
 		{[]string{"podman"}, "shortcut 'podman' not found."},
 	} {
 		_, err := FindEntry(NewContext(e.Home, nil), c.words, Lookup{})

@@ -64,11 +64,6 @@ func runShortcut(c *store.Context, s *terminal.Streams, words []string, lk store
 	if len(args) > 0 {
 		withArgs = " with " + platform.ShellJoin(args)
 	}
-	again := []string{"shortcut", "r", "-y"}
-	if lk.Scope == store.ScopeProject {
-		again = append(again, ".")
-	}
-	again = append(append(again, strings.Fields(name)...), args...)
 	realCwd, err := platform.Realpath(resolved.RunCwd)
 	if err != nil {
 		return err
@@ -76,7 +71,7 @@ func runShortcut(c *store.Context, s *terminal.Streams, words []string, lk store
 	if entry.Confirm {
 		if err := terminal.Confirmed(s, terminal.Confirm{
 			Question:   "run '" + name + "'" + withArgs + " in " + realCwd + "?",
-			NoTerminal: "'" + name + "' asks for confirmation: run it in a terminal, or pass -y (" + platform.ShellJoin(again) + ")",
+			NoTerminal: "'" + name + "' asks for confirmation: run it in a terminal, or pass -y",
 			Message:    entry.Description,
 		}, assumeYes); err != nil {
 			return err

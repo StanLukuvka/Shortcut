@@ -54,13 +54,13 @@ func dispatch(s *terminal.Streams, args []string) int {
 		s.Out.WriteString("shortcut " + Version + "\n")
 		return 0
 	case strings.HasPrefix(first, "-"):
-		s.Err.WriteString("error: unrecognized option '" + first + "'\nTry 'shortcut --help' for more information.\n")
+		s.Err.WriteString("error: unrecognized option '" + first + "'\n")
 		return 2
 	}
 	if cmd := find(first); cmd != nil {
 		return invoke(s, cmd, args[1:])
 	}
-	s.Err.WriteString("error: unknown command '" + first + "' (to run a shortcut: shortcut run " + first + ")\n")
+	s.Err.WriteString("error: unknown command '" + first + "'\n")
 	return 2
 }
 

@@ -34,13 +34,12 @@ func TestProjectFiles_RmLocalOfAnOverrideBringsTheSharedEntryBack(t *testing.T) 
 	testkit.Eq(t, "run", e.RunWith(in(proj), "r", "-y", ".", "swap").Stdout, "shared swap\n")
 }
 
-func TestProjectFiles_RmLocalSaysTheSharedEntryAppliesAgain(t *testing.T) {
+func TestProjectFiles_RmLocalSaysWhatItRemoves(t *testing.T) {
 	e := testkit.New(t)
 	proj := overlaid(t, e)
 	rc, out := e.InTerminal(in(proj), []testkit.Key{{Wait: "[y/N]", Send: y("n\n")}}, "rm", "--local", "swap")
 	testkit.Eq(t, "exit", rc, 1)
 	testkit.Contains(t, "removes", out, "Removes your 'swap' from "+filepath.Join(proj, ".shortcuts.local")+".")
-	testkit.Contains(t, "again", out, "The 'swap' in .shortcuts applies again.")
 }
 
 func TestProjectFiles_RmLocalOfANameOnlyInTheSharedFileFails(t *testing.T) {
@@ -110,7 +109,7 @@ func TestStores_RmMalformedEntry(t *testing.T) {
 	}
 }
 
-func TestStores_RmSaysWhatItRemovesAndWhatHappensToTheScript(t *testing.T) {
+func TestStores_RmSaysWhatItRemoves(t *testing.T) {
 	e := testkit.New(t)
 	source := e.Script("src.sh", bashShebang)
 	noteFile(t, e, "scripts/copied.sh")
@@ -121,10 +120,8 @@ func TestStores_RmSaysWhatItRemovesAndWhatHappensToTheScript(t *testing.T) {
 	rc, out := e.InTerminal(testkit.Opts{}, []testkit.Key{{Wait: "[y/N]", Send: y("n\n")}}, "rm", "copied")
 	testkit.Eq(t, "decline", rc, 1)
 	testkit.Contains(t, "removes", out, "Removes 'copied' from your global shortcuts: "+filepath.Join(e.Store, "shortcuts.json"))
-	testkit.Contains(t, "keeps", out, "Keeps its script: "+filepath.Join(e.Store, "scripts", "copied.sh"))
 	rc, out = e.InTerminal(testkit.Opts{}, []testkit.Key{{Wait: "[y/N]", Send: y("y\n")}}, "rm", "linked")
 	testkit.Eq(t, "accept", rc, 0)
-	testkit.Contains(t, "keeps", out, "Keeps its script: "+source)
 	if !fileExists(source) {
 		t.Error("the --script file is gone")
 	}
@@ -175,7 +172,6 @@ func TestStores_RmNamespaceImportedFromElsewhereKeepsItsFiles(t *testing.T) {
 	e.WriteStore(e.Store, map[string]any{}, map[string]any{"imports": map[string]any{"tools": elsewhere}})
 	res := runOK(t, e, testkit.Opts{}, "rm", "-y", "--namespace", "tools")
 	testkit.Contains(t, "stops", res.Stdout, "Stops importing 'tools' in "+filepath.Join(e.Store, "shortcuts.json"))
-	testkit.Contains(t, "keeps", res.Stdout, "Keeps its file: "+elsewhere)
 	if !fileExists(elsewhere) || !fileExists(extra) {
 		t.Error("an imported namespace's files were removed")
 	}
@@ -190,7 +186,6 @@ func TestStores_RmYStillSaysWhatItRemoved(t *testing.T) {
 	e.WriteStore(e.Store, map[string]any{"copied": map[string]any{"script": "scripts/copied.sh"}})
 	res := runOK(t, e, testkit.Opts{}, "rm", "-y", "copied")
 	testkit.Contains(t, "removes", res.Stdout, "Removes 'copied' from your global shortcuts: "+filepath.Join(e.Store, "shortcuts.json"))
-	testkit.Contains(t, "keeps", res.Stdout, "Keeps its script: "+filepath.Join(e.Store, "scripts", "copied.sh"))
 	if !fileExists(filepath.Join(e.Store, "scripts", "copied.sh")) {
 		t.Error("rm deleted a script file")
 	}
@@ -333,11 +328,11 @@ func TestRm_NamespaceWithALinkedScriptsFolderLosesOnlyTheLink(t *testing.T) {
 	}
 }
 
-func TestRm_NamespaceWithANameSaysHowToRemoveOneEntry(t *testing.T) {
+func TestRm_NamespaceWithANameIsRefused(t *testing.T) {
 	e := testkit.New(t)
 	res := e.Run("rm", "--namespace", "podman", "top")
 	res.WantCode(t, 1)
-	testkit.Contains(t, "stderr", res.Stderr, "--namespace takes the namespace alone: shortcut rm --namespace podman. To remove one entry: shortcut rm podman top")
+	testkit.Contains(t, "stderr", res.Stderr, "--namespace takes the namespace alone: shortcut rm --namespace podman")
 }
 
 func TestRm_EmptyNamespaceIsAnErrorAndRemovesNothing(t *testing.T) {

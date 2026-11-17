@@ -23,11 +23,7 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 	}
 	names := ns.List("name")
 	if ns.Set("namespace") {
-		if len(names) > 0 {
-			return terminal.Die("--namespace takes the namespace alone: shortcut rm --namespace " + ns.Str("namespace") +
-				". To remove one entry: shortcut rm " + ns.Str("namespace") + " " + platform.ShellJoin(names))
-		}
-		if ns.Bool("local") {
+		if len(names) > 0 || ns.Bool("local") {
 			return terminal.Die("--namespace takes the namespace alone: shortcut rm --namespace " + ns.Str("namespace"))
 		}
 		return rmNamespace(c, s, ns.Str("namespace"), ns.Bool("yes"))
@@ -51,7 +47,7 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 	display := group.Display(name)
 
 	if err := terminal.Confirmed(s, terminal.Confirm{Question: "remove '" + display + "'?", NoTerminal: "remove '" + display + "' in a terminal, or pass -y",
-		Message: rmMessage(group, display, found.Item), TellOnYes: true}, ns.Bool("yes")); err != nil {
+		Message: rmMessage(group, display), TellOnYes: true}, ns.Bool("yes")); err != nil {
 		return err
 	}
 
@@ -92,7 +88,7 @@ func rmLocal(c *store.Context, s *terminal.Streams, ns argparse.Namespace) error
 		return terminal.Die("'" + name + "' isn't in " + store.ProjectFile + " or " + store.LocalFile + " here")
 	}
 	if err := terminal.Confirmed(s, terminal.Confirm{Question: "remove '" + name + "'?", NoTerminal: "remove '" + name + "' in a terminal, or pass -y",
-		Message: rmLocalMessage(group, name), TellOnYes: true}, ns.Bool("yes")); err != nil {
+		Message: "Removes your '" + name + "' from " + group.LocalFile + ".", TellOnYes: true}, ns.Bool("yes")); err != nil {
 		return err
 	}
 	err = write.WriteLocal(c, group.StoreDir, func(shortcuts platform.Doc) error {
@@ -119,7 +115,7 @@ func rmNamespace(c *store.Context, s *terminal.Streams, name string, assumeYes b
 	folder := group.ScriptsDir()
 	var lines []string
 	if listed {
-		lines = []string{"Stops importing '" + name + "' in " + st.Main.File, "Keeps its file: " + group.File}
+		lines = []string{"Stops importing '" + name + "' in " + st.Main.File}
 	} else {
 		lines = []string{"Removes namespace '" + name + "' (" + strconv.Itoa(len(group.Shortcuts())) + " shortcuts): " + group.File}
 		exists, err := platform.Lexists(folder)
@@ -167,44 +163,13 @@ func rmNamespace(c *store.Context, s *terminal.Streams, name string, assumeYes b
 	return nil
 }
 
-// keptScript returns the script an entry names, for saying it stays: its path, or the field with why the path can't
-// be worked out (rm still removes a broken entry). "" is none.
-func keptScript(group store.Group, it store.Item) string {
-	if it.Entry == nil || it.Entry.Script == nil || *it.Entry.Script == "" {
-		return ""
-	}
-	script := *it.Entry.Script
-	path, err := store.ResolveScriptPath(group.ScriptBase(), script)
-	if err != nil {
-		return script + " (can't resolve it: " + err.Error() + ")"
-	}
-	return path
-}
-
 // rmMessage returns what rm is about to change, shown above its question.
-func rmMessage(group store.Group, display string, it store.Item) string {
+func rmMessage(group store.Group, display string) string {
 	where := "your global shortcuts"
 	if group.Kind == store.KindNamespace {
 		where = "namespace " + group.Name
 	}
-	lines := []string{"Removes '" + display + "' from " + where + ": " + group.File}
-	if kept := keptScript(group, it); kept != "" {
-		lines = append(lines, "Keeps its script: "+kept)
-	}
-	return strings.Join(lines, "\n")
-}
-
-// rmLocalMessage returns what rm --local is about to change in .shortcuts.local, shown above its question.
-func rmLocalMessage(group store.Group, name string) string {
-	mine, _ := group.Local.Get(name) // the caller found name in Local, so it is there
-	lines := []string{"Removes your '" + name + "' from " + group.LocalFile + "."}
-	if _, shared := group.Shared.Get(name); shared {
-		lines = append(lines, "The '"+name+"' in "+store.ProjectFile+" applies again.")
-	}
-	if kept := keptScript(group, mine); kept != "" {
-		lines = append(lines, "Keeps its script: "+kept)
-	}
-	return strings.Join(lines, "\n")
+	return "Removes '" + display + "' from " + where + ": " + group.File
 }
 
 // isListedImport reports whether a namespace comes from the store file's "imports" rather than its

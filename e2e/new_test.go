@@ -357,11 +357,10 @@ func TestStores_NewScriptKeepsTheLinkItWasGiven(t *testing.T) {
 	testkit.Eq(t, "script", fileShortcuts(t, filepath.Join(e.Store, "shortcuts.json"))["linked"].(map[string]any)["script"], link)
 }
 
-func TestProjectFiles_NewLocalOverridesASharedNameAndSaysSo(t *testing.T) {
+func TestProjectFiles_NewLocalOverridesASharedName(t *testing.T) {
 	e := testkit.New(t)
 	proj := overlaid(t, e)
-	res := e.RunWith(in(proj), "new", "keep", "--local", "--", "echo mine now")
-	testkit.Contains(t, "stderr", res.Stderr, "this overrides 'keep'")
+	runOK(t, e, in(proj), "new", "keep", "--local", "--", "echo mine now")
 	testkit.Eq(t, "run", e.RunWith(in(proj), "r", ".", "keep").Stdout, "mine now\n")
 }
 

@@ -37,11 +37,11 @@ Usage errors, which exit 2:
 
 | Message | Meaning |
 |---|---|
-| `unknown command '<word>' (to run a shortcut: shortcut run <word>)` | The first word isn't a command. Shortcuts run with `shortcut r <name>` |
-| `unrecognized option '<option>'` | An option before the command that shortcut doesn't have. A second line points to `shortcut --help` |
+| `unknown command '<word>'` | The first word isn't a command |
+| `unrecognized option '<option>'` | An option before the command that shortcut doesn't have |
 | `missing shortcut name` | `shortcut run` with no name. The usage lines follow |
 
-A command's own arguments print `error: <message>` and a second line, `Try 'shortcut <command> -h' for more information.`, and exit 2:
+A command's own arguments, and `shortcut help <word>` with an unknown command, print `error: <message>` and a second line, `Try 'shortcut <command> -h' for more information.`, and exit 2:
 
 | Message | Meaning |
 |---|---|
@@ -61,12 +61,12 @@ A word that starts with `-` is an option. To pass one as a name or a value, put 
 | Message | Meaning |
 |---|---|
 | `registry not found: <path>` | A namespace file that's imported doesn't exist |
-| `corrupt registry <path>: <json error>` | The file isn't valid JSON. The text after the path is Go's; for a syntax error it ends with `(at byte N)`, the byte where it went wrong |
+| `corrupt registry <path>: <json error>` | The file isn't valid JSON. The text after the path is Go's |
 | `corrupt registry <path>: contains text that is not valid UTF-8` | The file has a byte sequence that is not valid UTF-8. Shortcut won't guess which name it meant; fix or replace the bytes |
 | `corrupt registry <path>: root must be a JSON object` | The file is JSON, but not `{...}` |
 | `corrupt registry <path>: 'shortcuts' must be an object` | |
 | `corrupt registry <path>: 'description' must be a string` | |
-| `cannot overwrite corrupt registry <path>: <json error>` | shortcut won't write over a file it can't read, including one that isn't valid UTF-8. The text after the path is as in the row above, ending `(at byte N)` for a syntax error. Fix or move it |
+| `cannot overwrite corrupt registry <path>: <json error>` | shortcut won't write over a file it can't read, including one that isn't valid UTF-8. The text after the path is as in the row above. Fix or move it |
 | `<path> is format version <n>, newer than this shortcut reads; upgrade shortcut` | |
 | `corrupt registry <path>: 'version' must be a whole number, such as 1` | `"version"` is a string, a fraction (`1.0`), `null` or `true` |
 | `<path> needs "version": 1` | No `version`, or one below 1, in any store, project or namespace file |
@@ -105,15 +105,14 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | Message | Meaning |
 |---|---|
 | `shortcut '<name>' not found.` | Not in the one store looked in: your global store, or with the dot (`r .`, `show .`) the nearest project. There is no fallback to the other |
-| `shortcut or namespace '<name>' not found. A global namespace is the file <store>/imports/<name>.shortcut.` | The same, with words after the name, so it may be meant as a namespace. The file sentence is for the global store only |
+| `shortcut or namespace '<name>' not found.` | The same, with words after the name, so it may be meant as a namespace |
 | `... The project in <dir> has it: shortcut <r or show> . <words>` | Added to any of these when your global store lacks the name and the nearest project has it. Nothing runs |
 | `... Your .shortcuts.local in <dir> has it: shortcut rm --local <name>, from <dir>` | `rm` from inside a project, for a name only your `.shortcuts.local` there has |
 | `... The project in <dir> has it; rm changes only your global store and your .shortcuts.local` | `rm` from inside a project, for a name only the project has. `.shortcuts` is yours to edit by hand |
 | `... Your global store has it: shortcut <r or show> <words>` | The same the other way round, after a lookup with the dot |
 | `no project here: no .shortcuts or .shortcuts.local in this folder or its parents` | `run .` or `show .` outside any project |
-| `... The project in <outer> has a '<name>', but only the nearest project, <dir>, is used here.` | Added when a project holds another, and only the outer one has the name |
-| `'<name>' not found in namespace '<ns>'. It has: <names>` | When the namespace of the other scope has the name, the same hint as above follows |
-| `'<ns>' is a namespace; run one of its shortcuts: <names>` | |
+| `'<name>' not found in namespace '<ns>'` | When the namespace of the other scope has the name, the same hint as above follows |
+| `'<ns>' is a namespace; run one of its shortcuts` | |
 | `too many names: <words>` | `show` and `rm` take a name, or a namespace and a name |
 | `<file error>. Nothing runs inside this project until it's fixed.` | `run .` with the project's file broken. Your global shortcuts are not behind it |
 | `run directory does not exist: <dir>` | The entry's `cwd` is gone |
@@ -122,7 +121,7 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `<path> can't run as it is: it needs to start with #! and a program that runs here, such as #!/bin/sh, or to be a binary for this system` | An executable script the system won't start: no `#!` line, a `#!` program that doesn't run here, or a binary for another system |
 | `'<word>' is not a name: options go before the dot, as in shortcut r -y . <rest>` | `run .` with an option after the dot. A name can't start with `-` |
 | `<path> is not executable. Make it so: chmod +x <path>` | A script runs as it is, so it needs the execute bit. `list` warns |
-| `'<name>' asks for confirmation: run it in a terminal, or pass -y (shortcut r -y [.] <name> <args>)` | A `confirm` entry run without a terminal. The command is the one that was run, with `-y`, and the dot if it had one |
+| `'<name>' asks for confirmation: run it in a terminal, or pass -y` | A `confirm` entry run without a terminal |
 
 ## new
 
@@ -136,7 +135,7 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `script file not found: <path>` | The file given to `--script` |
 | `<path> is not executable. Make it so: chmod +x <path>` | The file given to `--script` |
 | `--cwd directory does not exist: <dir>` | |
-| `--namespace can't be used with --local: .shortcuts.local is one file, and .shortcuts is yours to edit` | |
+| `--namespace can't be used with --local: .shortcuts.local is one file` | |
 | `'<ns>' is a shortcut in store <store>, so it can't be a namespace` | |
 | `shortcut '<name>' already exists in <file>` | `new` never replaces an entry. Remove it first |
 | `'<name>' is a namespace in store <store>` | |
@@ -155,7 +154,7 @@ A new local shortcut needs a project folder:
 
 | Message | Meaning |
 |---|---|
-| `unknown field '<key>' (one of: <list>)` | `show --field` takes a top-level key of `show --json`, or `description`, `inline`, `script` |
+| `unknown field '<key>'` | `show --field` takes a top-level key of `show --json`, or `description`, `inline`, `script` |
 | `--field and --json can't be used together` | |
 
 ## rm
@@ -166,8 +165,7 @@ A new local shortcut needs a project folder:
 | `'<name>' is no longer in <file>; nothing was removed` | The entry went away between the question and the removal |
 | `'<name>' isn't in .shortcuts or .shortcuts.local here` | |
 | `'<name>' isn't in .shortcuts.local, and shortcut doesn't change .shortcuts` | `rm --local` of a name only in `.shortcuts` |
-| `--namespace takes the namespace alone: shortcut rm --namespace <ns>` | |
-| `--namespace takes the namespace alone: shortcut rm --namespace <ns>. To remove one entry: shortcut rm <ns> <name>` | A name was given too |
+| `--namespace takes the namespace alone: shortcut rm --namespace <ns>` | A name or `--local` was given too |
 | `no namespace named '<ns>' in your global store (<store>/imports)` | `rm --namespace` removes only global namespaces |
 | `remove namespace '<ns>' in a terminal, or pass -y` | |
 | `remove '<name>' in a terminal, or pass -y` | No terminal to ask in. `rm --local` says `<verb> '<name>' ...` with what it would do |

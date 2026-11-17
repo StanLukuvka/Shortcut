@@ -49,20 +49,11 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 
 	if ns.Set("names") {
 		var names []string
-		seen := map[string]bool{}
-		add := func(n string) {
-			if !seen[n] {
-				seen[n] = true
-				names = append(names, n)
-			}
-		}
 		for _, st := range stores {
-			for _, n := range slices.Sorted(slices.Values(st.Main.Shortcuts().Names())) {
-				add(n)
-			}
+			names = append(names, slices.Sorted(slices.Values(st.Main.Shortcuts().Names()))...)
 			for _, n := range st.Namespaces {
 				if usable(n.Group) {
-					add(n.Name)
+					names = append(names, n.Name)
 				}
 			}
 		}

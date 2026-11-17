@@ -68,19 +68,11 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 		return err
 	}
 	out("\nScript (" + path + "):")
-	isFile, err := platform.IsFile(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	if isFile {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		out(strings.TrimRight(string(raw), " \t\n"))
-	} else {
-		out("  [file missing: " + path + "]")
-	}
+	out(strings.TrimRight(string(raw), " \t\n"))
 	return nil
 }
 
@@ -136,8 +128,8 @@ func showFields() []string {
 // showField prints one field of what `show --json` describes, bare.
 // A field is printed as it is, so a name that is not valid UTF-8 prints; only `show --json` refuses it.
 func showField(c *store.Context, s *terminal.Streams, words []string, lk store.Lookup, key string) error {
-	if keys := showFields(); !slices.Contains(keys, key) {
-		return terminal.Die("unknown field '" + key + "' (one of: " + strings.Join(keys, ", ") + ")")
+	if !slices.Contains(showFields(), key) {
+		return terminal.Die("unknown field '" + key + "'")
 	}
 	vals, entry, err := showObject(c, words, lk)
 	if err != nil {

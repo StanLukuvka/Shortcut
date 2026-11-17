@@ -51,7 +51,7 @@ func TestWriteError_StdoutOnDevFullExits1(t *testing.T) {
 func TestDispatch_ErrorsBeforeAnyParser(t *testing.T) {
 	e := testkit.New(t)
 	const runMissing = "error: missing shortcut name\nusage: shortcut run|r [-y] [.] <name> [args...]\n       shortcut run|r [-y] [.] <namespace> <name> [args...]\n"
-	const unknown = "error: unknown command 'bogus' (to run a shortcut: shortcut run bogus)\n"
+	const unknown = "error: unknown command 'bogus'\n"
 	for _, c := range []struct {
 		argv []string
 		want string
@@ -59,9 +59,9 @@ func TestDispatch_ErrorsBeforeAnyParser(t *testing.T) {
 		{[]string{"run"}, runMissing},
 		{[]string{"run", "-y"}, runMissing},
 		{[]string{"r"}, runMissing},
-		{[]string{"--bogus"}, "error: unrecognized option '--bogus'\nTry 'shortcut --help' for more information.\n"},
+		{[]string{"--bogus"}, "error: unrecognized option '--bogus'\n"},
 		{[]string{"bogus"}, unknown},
-		{[]string{"-x"}, "error: unrecognized option '-x'\nTry 'shortcut --help' for more information.\n"},
+		{[]string{"-x"}, "error: unrecognized option '-x'\n"},
 		{[]string{"bogus", "--help"}, unknown},
 	} {
 		res := e.Run(c.argv...)
@@ -105,14 +105,14 @@ func TestDispatch_ParserErrorsEndToEnd(t *testing.T) {
 	}
 }
 
-func TestRunning_UnknownCommandsPointToRun(t *testing.T) {
+func TestRunning_UnknownCommandsAreRefused(t *testing.T) {
 	e := testkit.New(t)
 	for _, word := range []string{"nano", "activate", "version"} {
 		res := e.Run(word, "x")
 		if res.Code != 2 {
 			t.Errorf("%s: exit %d", word, res.Code)
 		}
-		if want := "error: unknown command '" + word + "' (to run a shortcut: shortcut run " + word + ")\n"; res.Stderr != want {
+		if want := "error: unknown command '" + word + "'\n"; res.Stderr != want {
 			t.Errorf("%s: stderr %q, want %q", word, res.Stderr, want)
 		}
 	}

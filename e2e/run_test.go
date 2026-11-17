@@ -49,13 +49,11 @@ func TestStores_NamespaceDispatch(t *testing.T) {
 
 	res = e.Run("r", "docker")
 	res.WantCode(t, 1)
-	testkit.Contains(t, "namespace alone", res.Stderr, "'docker' is a namespace; run one of its shortcuts: delete, where")
+	testkit.Contains(t, "namespace alone", res.Stderr, "'docker' is a namespace; run one of its shortcuts")
 	testkit.Contains(t, "nope", e.Run("r", "docker", "nope").Stderr, "'nope' not found in namespace 'docker'")
-	// A name with words after it may be meant as a namespace: say where one would be
 	res = e.Run("r", "podman", "list")
 	res.WantCode(t, 1)
-	testkit.Contains(t, "podman list", res.Stderr, "shortcut or namespace 'podman' not found. A global namespace is the file "+
-		filepath.Join(realpath(t, e.Store), "imports", "podman.shortcut")+".")
+	testkit.Contains(t, "podman list", res.Stderr, "shortcut or namespace 'podman' not found.")
 	testkit.Contains(t, "podman", e.Run("r", "podman").Stderr, "shortcut 'podman' not found.")
 }
 
@@ -472,13 +470,13 @@ func TestRunning_Confirm(t *testing.T) {
 		t.Errorf("out.txt: %q", raw)
 	}
 
-	// The question names the arguments, and the hint is the same run with -y
+	// The question names the arguments
 	rc, out = e.InTerminal(o, []testkit.Key{{Wait: "run 'drop' with -f 'my db' in " + work + "? [y/N]", Send: y("n\n")}}, "r", "drop", "-f", "my db")
 	if rc != 1 {
 		t.Errorf("drop: exit %d\n%s", rc, out)
 	}
 	res = e.RunWith(o, "r", "drop", "-f", "my db")
-	testkit.Contains(t, "hint", res.Stderr, "pass -y (shortcut r -y drop -f 'my db')\n")
+	testkit.Contains(t, "hint", res.Stderr, "or pass -y\n")
 	if got := e.RunWith(o, "r", "-y", "drop", "-f", "my db").Stdout; got != "dropped -f my db\n" {
 		t.Errorf("drop -y: %q", got)
 	}
@@ -578,7 +576,6 @@ func TestRunning_ANameAloneNeverRunsAShortcut(t *testing.T) {
 			t.Errorf("%v: exit %d stdout %q", argv, res.Code, res.Stdout)
 		}
 		testkit.Contains(t, "stderr", res.Stderr, "unknown command '"+argv[0]+"'")
-		testkit.Contains(t, "stderr", res.Stderr, "shortcut run "+argv[0])
 	}
 }
 
@@ -775,7 +772,7 @@ func TestRunning_TheDotSelectsTheScope(t *testing.T) {
 	}{
 		{[]string{"r", "ponly"}, "shortcut 'ponly' not found. The project in " + proj + " has it: shortcut r . ponly"},
 		{[]string{"r", "terraform", "plan"}, "The project in " + proj + " has it: shortcut r . terraform plan"},
-		{[]string{"r", "docker", "delete"}, "'delete' not found in namespace 'docker'. It has: ps. The project in " + proj + " has it: shortcut r . docker delete"},
+		{[]string{"r", "docker", "delete"}, "'delete' not found in namespace 'docker'. The project in " + proj + " has it: shortcut r . docker delete"},
 		{[]string{"r", ".", "gonly"}, "shortcut 'gonly' not found. Your global store has it: shortcut r gonly"},
 		{[]string{"r", ".", "docker", "ps"}, "Your global store has it: shortcut r docker ps"},
 	} {

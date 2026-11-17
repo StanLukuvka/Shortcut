@@ -6,6 +6,7 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/store"
 	"github.com/StanLukuvka/Shortcut/internal/terminal"
+	"github.com/StanLukuvka/Shortcut/internal/terminal/argparse"
 )
 
 // usageNotes ends the usage text. A raw string cannot hold a backtick, so those are joined in.
@@ -24,12 +25,14 @@ func usageText() string {
 
 // cmdHelp prints a command's help, or the usage text.
 func cmdHelp(_ *store.Context, s *terminal.Streams, _ terminal.Command, args []string) error {
-	text := usageText()
 	if len(args) > 0 {
-		if c := find(args[0]); c != nil {
-			text = c.HelpText()
+		c := find(args[0])
+		if c == nil {
+			return argparse.UsageError("help", "unknown command '"+args[0]+"'")
 		}
+		s.Out.WriteString(c.HelpText())
+		return nil
 	}
-	s.Out.WriteString(text)
+	s.Out.WriteString(usageText())
 	return nil
 }

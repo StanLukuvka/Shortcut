@@ -29,11 +29,14 @@ func TestHelp_LiveOutputIsTheTable(t *testing.T) {
 // The words that show the whole usage and the version.
 func TestDispatch_UsageAndVersion(t *testing.T) {
 	e := testkit.New(t)
-	for _, argv := range [][]string{{}, {"-h"}, {"--help"}, {"help"}, {"help", "nosuch"}} {
+	for _, argv := range [][]string{{}, {"-h"}, {"--help"}, {"help"}} {
 		res := e.Run(argv...)
 		if res.Code != 0 || res.Stdout != usageText() || res.Stderr != "" {
 			t.Errorf("%v: exit %d stderr %q", argv, res.Code, res.Stderr)
 		}
+	}
+	if res := e.Run("help", "nosuch"); res.Code != 2 || res.Stdout != "" || res.Stderr != "error: unknown command 'nosuch'\nTry 'shortcut help -h' for more information.\n" {
+		t.Errorf("help nosuch: exit %d stdout %q stderr %q", res.Code, res.Stdout, res.Stderr)
 	}
 	if !strings.HasPrefix(usageText(), "shortcut - run and manage quick scripts and commands\n\nUsage:\n") || !strings.HasSuffix(usageText(), "line.\n") {
 		t.Errorf("usageText is not the usage text: %q", usageText())
