@@ -21,33 +21,33 @@ import (
 //	internal/commands/<cmd>      one package per command; none imports another, none imports commands
 //	internal/store/write         everything that changes a store
 //	internal/store               files, entries, groups, lookup, the context
-//	internal/term                output, prompts, the command description; term/argparse is its parser
+//	internal/terminal            output, prompts, the command description; terminal/argparse is its parser
 //	internal/platform            paths, exec, locks, JSON; imports nothing internal
 const (
 	platform = "internal/platform"
-	argparse = "internal/term/argparse"
-	term     = "internal/term"
+	argparse = "internal/terminal/argparse"
+	terminal = "internal/terminal"
 	store    = "internal/store"
 	write    = "internal/store/write"
 	commands = "internal/commands"
 )
 
-// below is what a command may import: the store, term and platform trees. A command is never in it.
-var below = []string{write, store, argparse, term, platform}
+// below is what a command may import: the store, terminal and platform trees. A command is never in it.
+var below = []string{write, store, argparse, terminal, platform}
 
 var layers = map[string][]string{
 	"cmd/shortcut": {commands},
-	commands: {commands + "/completion", commands + "/list", commands + "/new", commands + "/rm", commands + "/run",
-		commands + "/show", store, term, platform},
+	commands: {commands + "/completion", commands + "/list", commands + "/new", commands + "/remove", commands + "/run",
+		commands + "/show", store, terminal, platform},
 	commands + "/completion": below,
 	commands + "/list":       below,
 	commands + "/new":        below,
-	commands + "/rm":         below,
+	commands + "/remove":     below,
 	commands + "/run":        below,
 	commands + "/show":       below,
-	write:                    {store, term, platform},
+	write:                    {store, terminal, platform},
 	store:                    {platform},
-	term:                     {argparse, platform},
+	terminal:                 {argparse, platform},
 	argparse:                 {},
 	platform:                 {},
 	"internal/testkit":       {},

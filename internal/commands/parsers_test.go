@@ -3,14 +3,14 @@ package commands
 import (
 	"testing"
 
-	"github.com/StanLukuvka/Shortcut/internal/term"
+	"github.com/StanLukuvka/Shortcut/internal/terminal"
 )
 
 // Every command's parser prints the help the table renders on -h.
 func TestParsers_HelpIsTheTable(t *testing.T) {
 	for _, c := range commands() {
 		_, err := c.Parse([]string{"-h"})
-		ee, ok := err.(*term.ExitError)
+		ee, ok := err.(*terminal.ExitError)
 		if !ok || ee.Code != 0 || ee.Stdout != c.HelpText() || ee.Stderr != "" {
 			t.Errorf("%s -h: %v", c.Name, err)
 		}

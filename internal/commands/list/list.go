@@ -6,11 +6,11 @@ import (
 	"unicode/utf8"
 
 	"github.com/StanLukuvka/Shortcut/internal/store"
-	"github.com/StanLukuvka/Shortcut/internal/term"
+	"github.com/StanLukuvka/Shortcut/internal/terminal"
 )
 
 // Run lists shortcuts.
-func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) error {
+func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []string) error {
 	ns, err := cmd.Parse(args)
 	if err != nil {
 		return err
@@ -114,9 +114,9 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 			sourceWidth = max(sourceWidth, utf8.RuneCountInString(r.source))
 		}
 		for _, r := range rows {
-			line := "  " + term.PadRight(r.name, 20) + " " + term.PadRight(r.mode, width) + "  "
+			line := "  " + terminal.PadRight(r.name, 20) + " " + terminal.PadRight(r.mode, width) + "  "
 			if r.source != "" {
-				line += term.PadRight(r.source, sourceWidth) + "  "
+				line += terminal.PadRight(r.source, sourceWidth) + "  "
 			}
 			s.Out.WriteString(line + r.desc + "\n")
 		}

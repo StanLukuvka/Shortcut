@@ -1,4 +1,4 @@
-package term
+package terminal
 
 import (
 	"fmt"
@@ -26,9 +26,6 @@ func helper(job string) {
 		s.Out.WriteString("out\n")
 		s.Err.WriteString("err\n")
 		os.Exit(code)
-	case "ask":
-		ok, _ := Ask(s, "go on? ")
-		s.Out.WriteString(fmt.Sprintf("answer=%v\n", ok))
 	case "confirm":
 		ok, err := Confirm{Question: "run 'go'?", NoTerminal: "no terminal", Message: "will run \x1b[2Kit"}.Granted(s, false)
 		s.Out.WriteString(fmt.Sprintf("granted=%v err=%v\n", ok, err))
@@ -58,19 +55,19 @@ func capture(t *testing.T, e *testkit.Env, input string) (s *Streams, out, errs 
 	return NewStreams(inf, open("out"), open("err")), read("out"), read("err")
 }
 
-func TestStreams_OutIsSafeAndStyled(t *testing.T) {
+func TestStreams_WritesAreAsTheyAre(t *testing.T) {
 	e := testkit.New(t)
 	s, out, errs := capture(t, e, "")
 	if s.Out.IsTerminal() || s.Err.IsTerminal() {
 		t.Error("files are not terminals")
 	}
 	s.Out.WriteString("a\x1b[2Kb\rc\n")
-	s.Out.WriteStyled("\x1b[2mdim\x1b[0m\n") // ours: not made safe
+	s.Out.WriteString("\x1b[2mdim\x1b[0m\n")
 	s.Err.WriteString("e\x1b\n")
-	if errs() != "e^[\n" {
+	if errs() != "e\x1b\n" {
 		t.Errorf("stderr %q", errs())
 	}
-	if want := "a^[[2Kb^Mc\n\x1b[2mdim\x1b[0m\n"; out() != want {
+	if want := "a\x1b[2Kb\rc\n\x1b[2mdim\x1b[0m\n"; out() != want {
 		t.Errorf("stdout %q, want %q", out(), want)
 	}
 }
@@ -81,18 +78,4 @@ func TestStreams_ClosedStdFdsAreReopenedByTheRuntime(t *testing.T) {
 	res := e.RunCmd(testkit.Opts{Env: map[string]string{"TERM_HELPER": "closed"}},
 		"sh", "-c", `exec "$0" -test.run='^$' <&- >&- 2>&-`, os.Args[0])
 	res.WantCode(t, 0) // else the code's bits 0-2 say which of fd 0-2 was found closed, bit 3 that the write failed
-}
-
-// Q-3: stdout escapes bytes that are not UTF-8 like stderr, in Write and in WriteStyled.
-func TestStreams_NonUTF8IsEscapedOnBothStreams(t *testing.T) {
-	e := testkit.New(t)
-	s, out, errs := capture(t, e, "")
-	const raw, want = "a\x9bb\xed\xa0\x80c\n", "a\\x9bb\\xed\\xa0\\x80c\n"
-	s.Out.WriteString(raw)
-	s.Out.WriteStyled(raw)
-	s.Out.WriteString(raw)
-	s.Err.WriteString(raw)
-	if out() != want+want+want || errs() != want {
-		t.Errorf("stdout %q, stderr %q, want %q", out(), errs(), want)
-	}
 }

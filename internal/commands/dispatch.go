@@ -9,11 +9,11 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
-	"github.com/StanLukuvka/Shortcut/internal/term"
+	"github.com/StanLukuvka/Shortcut/internal/terminal"
 )
 
 // invoke builds the run's one Context and runs the command.
-func invoke(s *term.Streams, e *entry, args []string) int {
+func invoke(s *terminal.Streams, e *entry, args []string) int {
 	cwd, err := platform.Getwd()
 	c := store.NewContext(cwd, err)
 	if c.GlobalErr != nil { // no command works on a store it can't name
@@ -26,7 +26,7 @@ func invoke(s *term.Streams, e *entry, args []string) int {
 // process by SIGPIPE (the Go runtime's default; this program does not Notify it). Any other write error is kept by
 // the stream: if stdout failed, "error: writing stdout: ..." goes to stderr; either failure makes an exit code of 0 a 1.
 func Main(args []string, in, out, errw *os.File) int {
-	s := term.NewStreams(in, out, errw)
+	s := terminal.NewStreams(in, out, errw)
 	code := dispatch(s, args)
 	outErr := s.Out.Failed()
 	if outErr != nil {
@@ -39,13 +39,12 @@ func Main(args []string, in, out, errw *os.File) int {
 }
 
 // dispatch runs the command the first word picks.
-func dispatch(s *term.Streams, args []string) int {
+func dispatch(s *terminal.Streams, args []string) int {
 	if len(args) == 0 {
 		s.Out.WriteString(usageText())
 		return 0
 	}
 	first := args[0]
-	cmd := find(first)
 	switch {
 	case first == "--help" || first == "-h":
 		s.Out.WriteString(usageText())
@@ -53,19 +52,20 @@ func dispatch(s *term.Streams, args []string) int {
 	case first == "--version":
 		s.Out.WriteString("shortcut " + Version + "\n")
 		return 0
-	case cmd != nil:
-		return invoke(s, cmd, args[1:])
 	case strings.HasPrefix(first, "-"):
 		s.Err.WriteString("error: unrecognized option '" + first + "'\nTry 'shortcut --help' for more information.\n")
 		return 2
+	}
+	if cmd := find(first); cmd != nil {
+		return invoke(s, cmd, args[1:])
 	}
 	s.Err.WriteString("error: unknown command '" + first + "' (to run a shortcut: shortcut run " + first + ")\n")
 	return 2
 }
 
 // finish turns a command's result into its exit code, printing what an *ExitError or an error carries.
-func finish(s *term.Streams, err error) int {
-	var ee *term.ExitError
+func finish(s *terminal.Streams, err error) int {
+	var ee *terminal.ExitError
 	switch {
 	case err == nil:
 		return 0

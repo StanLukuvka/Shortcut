@@ -1,4 +1,4 @@
-package term
+package terminal
 
 import (
 	"bufio"
@@ -12,7 +12,7 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 )
 
-// Ask asks a question: the prompt goes to stderr through Safe (so it reaches the terminal when stdout is redirected),
+// Ask asks a question: the prompt goes to stderr (so it reaches the terminal when stdout is redirected),
 // one line is read, and it counts when its trimmed lower case is y or yes. End of input or Ctrl-C
 // prints a newline to stdout and answers no. SIGINT is caught only while
 // waiting, elsewhere it keeps its default and kills the process. A read error other than EOF is returned, and so is a failed

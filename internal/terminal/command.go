@@ -1,9 +1,9 @@
-package term
+package terminal
 
 import (
 	"strings"
 
-	"github.com/StanLukuvka/Shortcut/internal/term/argparse"
+	"github.com/StanLukuvka/Shortcut/internal/terminal/argparse"
 )
 
 // Takes is what an option does with the words after it.

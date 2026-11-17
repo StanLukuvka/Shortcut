@@ -8,15 +8,15 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
 	"github.com/StanLukuvka/Shortcut/internal/store/write"
-	"github.com/StanLukuvka/Shortcut/internal/term"
-	"github.com/StanLukuvka/Shortcut/internal/term/argparse"
+	"github.com/StanLukuvka/Shortcut/internal/terminal"
+	"github.com/StanLukuvka/Shortcut/internal/terminal/argparse"
 )
 
 // positionalAnywhere matches $1, $@, $* or ${1} anywhere in a command.
 var positionalAnywhere = regexp.MustCompile(`\$(?:[1-9@*]|\{[1-9@*])`)
 
 // Run makes a shortcut from an inline command after -- or --script.
-func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) error {
+func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []string) error {
 	// everything after the first -- is the command, and argparse never sees it
 	pre, inline, hasInline := args, []string(nil), false
 	if i := slices.Index(args, "--"); i >= 0 {
@@ -29,15 +29,15 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	script := ns.Str("script")
 	switch {
 	case hasInline && len(inline) == 0:
-		return term.Die("command expected after '--'")
+		return terminal.Die("command expected after '--'")
 	case ns.Set("script") && script == "":
-		return term.Die("--script needs a file name")
+		return terminal.Die("--script needs a file name")
 	case ns.Set("desc") && ns.Str("desc") == "":
-		return term.Die("--desc can't be empty")
+		return terminal.Die("--desc can't be empty")
 	case ns.Set("namespace") && ns.Str("namespace") == "":
-		return term.Die("--namespace can't be empty")
+		return terminal.Die("--namespace can't be empty")
 	case hasInline && script != "":
-		return term.Die("use one of: '-- CMD', --script")
+		return terminal.Die("use one of: '-- CMD', --script")
 	case !hasInline && script == "":
 		return argparse.UsageError("new", "give a command after '--', or --script PATH")
 	}
@@ -72,7 +72,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 }
 
 // entryFields returns the parts of an entry the flags of new set.
-func entryFields(c *store.Context, name string, ns term.Namespace, g store.Group) (*store.Entry, error) {
+func entryFields(c *store.Context, name string, ns terminal.Namespace, g store.Group) (*store.Entry, error) {
 	var cwd *string
 	if ns.Set("cwd") {
 		v := ns.Str("cwd")
@@ -88,7 +88,7 @@ func entryFields(c *store.Context, name string, ns term.Namespace, g store.Group
 // newFromScript makes an entry that names the file where it is. A file inside the folder its paths
 // resolve from (the project, the namespace file's folder, the global store) is kept relative, so the folder can
 // move.
-func newFromScript(c *store.Context, s *term.Streams, ns term.Namespace, group store.Group, fields *store.Entry) error {
+func newFromScript(c *store.Context, s *terminal.Streams, ns terminal.Namespace, group store.Group, fields *store.Entry) error {
 	path := ns.Str("script")
 	expanded, err := platform.ExpandUser(path)
 	if err != nil {
@@ -100,10 +100,10 @@ func newFromScript(c *store.Context, s *term.Streams, ns term.Namespace, group s
 		return err
 	}
 	if path == "-" || !isFile {
-		return term.Die("script file not found: " + path)
+		return terminal.Die("script file not found: " + path)
 	}
 	if err := platform.CheckExecutable(abs); err != nil {
-		return term.Die(err.Error())
+		return terminal.Die(err.Error())
 	}
 	real, err := platform.Realpath(abs)
 	if err != nil {
@@ -175,13 +175,13 @@ func joinCommand(words []string) string {
 }
 
 // targetGroup returns the file a new shortcut goes in. It creates nothing; write.Register does.
-func targetGroup(c *store.Context, ns term.Namespace) (store.Group, error) {
+func targetGroup(c *store.Context, ns terminal.Namespace) (store.Group, error) {
 	if err := store.ValidateName(ns.Str("name")); err != nil {
 		return store.Group{}, err
 	}
 	local, namespace := ns.Bool("local"), ns.Str("namespace")
 	if local && namespace != "" {
-		return store.Group{}, term.Die("--namespace can't be used with --local: " + store.LocalFile + " is one file, and " +
+		return store.Group{}, terminal.Die("--namespace can't be used with --local: " + store.LocalFile + " is one file, and " +
 			store.ProjectFile + " is yours to edit")
 	}
 	storeDir := c.Global
@@ -198,7 +198,7 @@ func targetGroup(c *store.Context, ns term.Namespace) (store.Group, error) {
 			return store.Group{}, err
 		}
 		if _, clash := st.Main.Shortcuts().Get(namespace); clash {
-			return store.Group{}, term.Die("'" + namespace + "' is a shortcut in store " + storeDir + ", so it can't be a namespace")
+			return store.Group{}, terminal.Die("'" + namespace + "' is a shortcut in store " + storeDir + ", so it can't be a namespace")
 		}
 		var ok bool
 		if group, ok = st.Namespace(namespace); !ok {
@@ -207,7 +207,7 @@ func targetGroup(c *store.Context, ns term.Namespace) (store.Group, error) {
 		}
 	}
 	if group.Error != nil {
-		return store.Group{}, term.Die(*group.Error)
+		return store.Group{}, terminal.Die(*group.Error)
 	}
 	return group, nil
 }
@@ -228,7 +228,7 @@ func storedCwd(c *store.Context, value *string, g store.Group) (*string, error) 
 		return nil, err
 	}
 	if !isDir {
-		return nil, term.Die("--cwd directory does not exist: " + abs)
+		return nil, terminal.Die("--cwd directory does not exist: " + abs)
 	}
 	path, err := platform.Realpath(abs)
 	if err != nil {

@@ -7,8 +7,8 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
-	"github.com/StanLukuvka/Shortcut/internal/term"
-	"github.com/StanLukuvka/Shortcut/internal/term/argparse"
+	"github.com/StanLukuvka/Shortcut/internal/terminal"
+	"github.com/StanLukuvka/Shortcut/internal/terminal/argparse"
 )
 
 func orCaller(s *string) string {
@@ -19,7 +19,7 @@ func orCaller(s *string) string {
 }
 
 // Run prints a shortcut's definition and where it resolves.
-func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) error {
+func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []string) error {
 	ns, err := cmd.Parse(args)
 	if err != nil {
 		return err
@@ -31,7 +31,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	lk := store.Lookup{Scope: scope, Cmd: "show"}
 	if ns.Set("field") {
 		if ns.Bool("json") {
-			return term.Die("--field and --json can't be used together")
+			return terminal.Die("--field and --json can't be used together")
 		}
 		return showField(c, s, names, lk, ns.Str("field"))
 	}
@@ -77,9 +77,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 		if err != nil {
 			return err
 		}
-		// invalid UTF-8 becomes U+FFFD; \r\n and \r become \n
-		text := strings.ReplaceAll(strings.ReplaceAll(strings.ToValidUTF8(string(raw), "\uFFFD"), "\r\n", "\n"), "\r", "\n")
-		out(strings.TrimRight(text, " \t\n"))
+		out(strings.TrimRight(string(raw), " \t\n"))
 	} else {
 		out("  [file missing: " + path + "]")
 	}
@@ -101,7 +99,7 @@ func setOpt(d platform.Doc, key string, val *string) {
 }
 
 // showJSON prints one JSON object, the entry plus where it resolves.
-func showJSON(c *store.Context, s *term.Streams, words []string, lk store.Lookup) error {
+func showJSON(c *store.Context, s *terminal.Streams, words []string, lk store.Lookup) error {
 	vals, entry, err := showObject(c, words, lk)
 	if err != nil {
 		return err
@@ -137,9 +135,9 @@ func showFields() []string {
 
 // showField prints one field of what `show --json` describes, bare.
 // A field is printed as it is, so a name that is not valid UTF-8 prints; only `show --json` refuses it.
-func showField(c *store.Context, s *term.Streams, words []string, lk store.Lookup, key string) error {
+func showField(c *store.Context, s *terminal.Streams, words []string, lk store.Lookup, key string) error {
 	if keys := showFields(); !slices.Contains(keys, key) {
-		return term.Die("unknown field '" + key + "' (one of: " + strings.Join(keys, ", ") + ")")
+		return terminal.Die("unknown field '" + key + "' (one of: " + strings.Join(keys, ", ") + ")")
 	}
 	vals, entry, err := showObject(c, words, lk)
 	if err != nil {

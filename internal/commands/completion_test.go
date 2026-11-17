@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/StanLukuvka/Shortcut/internal/commands/completion"
-	"github.com/StanLukuvka/Shortcut/internal/term"
+	"github.com/StanLukuvka/Shortcut/internal/terminal"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
@@ -106,7 +106,7 @@ func TestCompletion_FollowsTheTable(t *testing.T) {
 				switch {
 				case a.Choices != nil:
 					words = append(words, a.Choices...)
-				case a.Flags != nil && slices.ContainsFunc(c.Args, func(p term.Arg) bool { return p.Flags == nil && (p.Nargs == '+' || p.Nargs == '*') }):
+				case a.Flags != nil && slices.ContainsFunc(c.Args, func(p terminal.Arg) bool { return p.Flags == nil && (p.Nargs == '+' || p.Nargs == '*') }):
 					flag := a.Flags[0]
 					if shell == "fish" { // fish spells -y as -s y and --json as -l json
 						flag = "-l " + strings.TrimPrefix(flag, "--")

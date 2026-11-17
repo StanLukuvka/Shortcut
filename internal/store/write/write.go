@@ -11,7 +11,7 @@ import (
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
-	"github.com/StanLukuvka/Shortcut/internal/term"
+	"github.com/StanLukuvka/Shortcut/internal/terminal"
 )
 
 // LoadForEdit is the registry at path, or a fresh one when isNew, with its "shortcuts" object. A "shortcuts" that is
@@ -45,15 +45,15 @@ func SaveEdited(path string, reg, shortcuts platform.Doc) error {
 }
 
 // Register adds entry to group's file under the registry lock. It creates a missing store or namespace file. A project's group means .shortcuts.local.
-func Register(c *store.Context, s *term.Streams, group store.Group, entry *store.Entry) error {
+func Register(c *store.Context, s *terminal.Streams, group store.Group, entry *store.Entry) error {
 	storeDir := group.StoreDir
 	if group.Kind == store.KindProject {
 		change := func(shortcuts platform.Doc) error {
 			if shortcuts.Has(entry.Name) {
-				return term.Die("shortcut '" + entry.Name + "' already exists in " + group.LocalFile)
+				return terminal.Die("shortcut '" + entry.Name + "' already exists in " + group.LocalFile)
 			}
 			if _, clash := c.ReadStore(storeDir).Namespace(entry.Name); clash {
-				return term.Die("'" + entry.Name + "' is a namespace in " + storeDir)
+				return terminal.Die("'" + entry.Name + "' is a namespace in " + storeDir)
 			}
 			raw, err := entry.Raw()
 			if err != nil {
@@ -80,11 +80,11 @@ func Register(c *store.Context, s *term.Streams, group store.Group, entry *store
 			return err
 		}
 		if shortcuts.Has(entry.Name) {
-			return term.Die("shortcut '" + entry.Name + "' already exists in " + group.File)
+			return terminal.Die("shortcut '" + entry.Name + "' already exists in " + group.File)
 		}
 		if group.Kind != store.KindNamespace {
 			if _, clash := c.ReadStore(storeDir).Namespace(entry.Name); clash {
-				return term.Die("'" + entry.Name + "' is a namespace in store " + storeDir)
+				return terminal.Die("'" + entry.Name + "' is a namespace in store " + storeDir)
 			}
 		}
 		raw, err := entry.Raw()

@@ -53,8 +53,8 @@ func callName(e ast.Expr) string {
 }
 
 // raisers are the calls whose first argument is a user-facing message (plus problems.append); the
-// messages built inside internal/term/argparse are out of scope.
-var raisers = map[string]bool{"Die": true, "term.Die": true, "fail": true, "bad": true, "errors.New": true, "fmt.Errorf": true,
+// messages built inside internal/terminal/argparse are out of scope.
+var raisers = map[string]bool{"Die": true, "terminal.Die": true, "fail": true, "bad": true, "errors.New": true, "fmt.Errorf": true,
 	"append": true}
 
 // goMessages: each message passed to a raiser, appended to problems, set as ExitError.Stderr, or returned by FileError,

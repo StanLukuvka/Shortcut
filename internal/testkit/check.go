@@ -27,13 +27,6 @@ func Contains(t testing.TB, what, text, want string) {
 	}
 }
 
-func NotContains(t testing.TB, what, text, bad string) {
-	t.Helper()
-	if strings.Contains(text, bad) {
-		t.Errorf("%s: %q contains %q", what, text, bad)
-	}
-}
-
 func Matches(t testing.TB, text, pattern string) {
 	t.Helper()
 	if !regexp.MustCompile(pattern).MatchString(text) {
