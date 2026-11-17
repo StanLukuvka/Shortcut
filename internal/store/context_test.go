@@ -34,10 +34,20 @@ func TestContext_ProjectAndGlobalResolvedOnce(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(map[string]any{"x": testkit.Inline("x")})
 	c := NewContext(proj, nil)
-	if c.Project != platform.Realpath(proj) || c.Global != e.Store || !c.IsGlobal(e.Store) || c.IsGlobal(proj) {
+	if c.Project != mustReal(t, proj) || c.Global != e.Store || !c.IsGlobal(e.Store) || c.IsGlobal(proj) {
 		t.Errorf("project %q global %q", c.Project, c.Global)
 	}
 	if got := NewContext(filepath.Join(e.Home, "elsewhere"), nil).Project; got != "" {
 		t.Errorf("no project: %q", got)
 	}
+}
+
+// mustReal is the resolved path of one that exists.
+func mustReal(t *testing.T, p string) string {
+	t.Helper()
+	real, err := platform.Realpath(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return real
 }

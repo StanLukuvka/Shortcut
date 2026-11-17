@@ -21,7 +21,8 @@ type Context struct {
 	Project    string // nearest project root at or above Cwd, "" = none
 	ProjectErr error  // the project lookup couldn't tell (a folder it can't search): read by everything that looks in the project, never by the global scope
 
-	globalReal string           // platform.Realpath(Global), once
+	globalReal string           // platform.Realpath(Global), once; "" when the global store is not there or can't be resolved
+	globalErr  error            // why it can't be resolved: shown as a problem of the global store
 	stores     map[string]Store // by the dir as the caller passed it: Global, or a realpath'd project root
 }
 
@@ -32,25 +33,48 @@ func NewContext(cwd string, cwdErr error) *Context {
 	if home == "" {
 		home = "~/.shortcuts"
 	}
-	c := &Context{Cwd: cwd, CwdErr: cwdErr, Global: platform.Abs(platform.ExpandUser(home)), stores: map[string]Store{}}
-	c.globalReal = platform.Realpath(c.Global)
+	c := &Context{Cwd: cwd, CwdErr: cwdErr, stores: map[string]Store{}}
+	var err error
+	if c.Global, err = platform.Abs(platform.ExpandUser(home)); err != nil {
+		c.Global = platform.ExpandUser(home) // no cwd to make it absolute: that is CwdErr, which run and new refuse
+	}
+	c.globalReal, c.globalErr = resolveIfThere(c.Global)
 	if cwdErr == nil {
 		c.Project, c.ProjectErr = c.FindProjectRoot(cwd)
 	}
 	return c
 }
 
-// IsGlobal reports whether dir is the global store, after resolving symlinks in both.
-func (c *Context) IsGlobal(dir string) bool { return platform.Realpath(dir) == c.globalReal }
+// resolveIfThere is platform.Realpath of p, or "" when nothing is there: a store or project file is optional
+// (README "Files": the quick start works with no ~/.shortcuts). Any other error is returned.
+func resolveIfThere(p string) (string, error) {
+	if there, err := platform.Lexists(p); !there || err != nil {
+		return "", err
+	}
+	return platform.Realpath(p)
+}
+
+// IsGlobal reports whether dir is the global store: Global itself, as the callers pass it. A project root is a
+// resolved path that is never the global store (neverAProject).
+func (c *Context) IsGlobal(dir string) bool { return dir == c.Global }
 
 // neverAProject: ~/.shortcuts is never a project, also when SHORTCUTS_HOME points the global store elsewhere.
-func (c *Context) neverAProject(p string) bool {
-	return p == c.globalReal || p == platform.Realpath(platform.Join(platform.ExpandUser("~"), ProjectFile))
+// file is the folder's .shortcuts; one that is not there is not the global store.
+func (c *Context) neverAProject(file string) (bool, error) {
+	real, err := resolveIfThere(file)
+	if err != nil || real == "" {
+		return false, err
+	}
+	if real == c.globalReal {
+		return true, nil
+	}
+	home, err := resolveIfThere(platform.Join(platform.ExpandUser("~"), ProjectFile))
+	return real == home, err
 }
 
 func (c *Context) isProjectRoot(folder string) (bool, error) {
-	if c.neverAProject(platform.Realpath(platform.Join(folder, ProjectFile))) {
-		return false, nil
+	if never, err := c.neverAProject(platform.Join(folder, ProjectFile)); never || err != nil {
+		return false, err
 	}
 	for _, name := range []string{ProjectFile, LocalFile} {
 		if ok, err := platform.IsFile(platform.Join(folder, name)); ok || err != nil {
@@ -63,7 +87,11 @@ func (c *Context) isProjectRoot(folder string) (bool, error) {
 // FindProjectRoot returns the nearest folder at or above start with a .shortcuts or .shortcuts.local that is
 // not the global store. "" = none. A folder it can't look in is an error, not "no project".
 func (c *Context) FindProjectRoot(start string) (string, error) {
-	for cur := platform.Realpath(start); ; {
+	cur, err := platform.Realpath(start)
+	if err != nil {
+		return "", err
+	}
+	for {
 		ok, err := c.isProjectRoot(cur)
 		if err != nil {
 			return "", err
@@ -82,7 +110,10 @@ func (c *Context) FindProjectRoot(start string) (string, error) {
 // LocalProjectRoot returns where --local writes, the cwd and never a parent. Its errors are
 // the messages die prints.
 func (c *Context) LocalProjectRoot() (string, error) {
-	here := platform.Realpath(c.Cwd)
+	here, err := platform.Realpath(c.Cwd)
+	if err != nil {
+		return "", err
+	}
 	root, err := c.FindProjectRoot(here)
 	if err != nil {
 		return "", err
@@ -90,7 +121,9 @@ func (c *Context) LocalProjectRoot() (string, error) {
 	if root != "" && root != here {
 		return "", fmt.Errorf("%s is inside the project at %s. Run this from there.", here, root)
 	}
-	if c.neverAProject(platform.Realpath(platform.Join(here, ProjectFile))) {
+	if never, err := c.neverAProject(platform.Join(here, ProjectFile)); err != nil {
+		return "", err
+	} else if never {
 		return "", fmt.Errorf("%s holds the global store, so it can't hold local shortcuts. Run this inside a project folder.", here)
 	}
 	if platform.IsRelativeTo(here, c.globalReal) {
@@ -136,12 +169,15 @@ func (c *Context) Stores() []Store {
 func (c *Context) loadStore(storeDir string) Store {
 	isGlobal := c.IsGlobal(storeDir)
 	var main Group
+	var problems []string
 	if isGlobal {
+		if c.globalErr != nil {
+			problems = append(problems, c.globalErr.Error())
+		}
 		main = LoadGroup(platform.Join(storeDir, "shortcuts.json"), storeDir, "")
 	} else {
 		main = LoadProjectGroup(storeDir)
 	}
-	var problems []string
 	sources := map[string]string{}
 	importsDir := platform.Join(storeDir, "imports")
 	if isGlobal {

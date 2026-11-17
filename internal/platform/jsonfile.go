@@ -24,7 +24,15 @@ func WriteJSONAtomic(path string, doc Doc) error {
 	if err != nil {
 		return err
 	}
-	path = Realpath(path) // follow a symlinked file to where it lives
+	exists, err := Lexists(path)
+	if err != nil {
+		return err
+	}
+	if exists { // follow a symlinked file to where it lives; a file not there yet is created where it is named
+		if path, err = Realpath(path); err != nil {
+			return err
+		}
+	}
 	dir, base := filepath.Split(path)
 	dir = filepath.Clean(dir)
 	var mode os.FileMode

@@ -2,6 +2,7 @@ package platform
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -36,43 +37,39 @@ func TestRealpath_Vectors(t *testing.T) {
 		{"t/l/sub/../../l/sub", "t/real/sub"},
 		{"t/m/..", "t/real"},
 		{"t/l/", "t/real"},
-		{"t/real/sub/../missing/../x", "t/real/x"},
-		{"a", "a"},
-		{"a/x", "a/x"},
 		{"t/real/sub/f.txt", "t/real/sub/f.txt"},
 		{"t/lf", "t/real/sub/f.txt"},
 		{"t/l/sub", "t/real/sub"},
-		{"t/dead", "t/nowhere/deeper"},
-		{"t/dead/x/../y", "t/nowhere/deeper/y"},
 		{"t/abs/sub", "t/real/sub"},
-		{"t/new/file.json", "t/new/file.json"},
 		{"t//real/./sub/", "t/real/sub"},
-		{"w/loopa", "w/loopa"},
-		{"w/loopa/x", "w/loopa/x"},
-		{"w/./loopa/../up/dang", "dang"},
-		{"w/loopa/../up/dang", "dang"},
-		{"w/loopa/../t", "w/t"},
-		{"w/loop//l2", "w/loop/l2"},
-		{"w/loop/x/../l2/up", "w/loop/l2/up"},
-		{"w/c1/..", "w"},
-		{"w/c1/../c2/x", "w/c1/x"},
 		{"w/up", "."},
 		{"w/up/t/l", "t/real"},
-		{"w/dang", "w/nowhere/x"},
-		{"w/dang/../x", "w/nowhere/x"},
-		{"w/d/up/t/m", "w/t/m"},
-		{"w/d/back", "w/w/d"},
-		{"w/d/up/w/d/up", "w/w/d/up"},
-		{"w/e", "w/w/d"},
-		{"w/e/up/up", "w/w/d/up/up"},
-		{"w/l2/up/w/loopa/../t/l", "w/w/t/l"},
-		{"w/loopa/loopa/../..", "w"},
-		{"w/up/w/loopa/up", "w/loopa/up"},
+		{"w/d/up", "w"},
+		{"w/d/up/d/up/d", "w/d"},
+		{"w/l2/up/..", "."},
 	}
 	for _, c := range cases {
 		t.Run(c.in, func(t *testing.T) {
-			if got, want := Realpath(e.Tmp+"/"+c.in), filepath.Join(e.Tmp, c.want); got != want {
-				t.Errorf("Realpath(%q) = %q, want %q", c.in, got, want)
+			if got, err := Realpath(e.Tmp + "/" + c.in); err != nil || got != filepath.Join(e.Tmp, c.want) {
+				t.Errorf("Realpath(%q) = %q, %v, want %q", c.in, got, err, filepath.Join(e.Tmp, c.want))
+			}
+		})
+	}
+}
+
+// A part that is missing, a dangling link, and a loop are errors: nothing is kept as written. These were
+// resolved by guessing before.
+func TestRealpath_ErrorsInsteadOfGuessing(t *testing.T) {
+	e := tree(t)
+	for _, in := range []string{
+		"t/real/sub/../missing/../x", "t/new/file.json", "t/dead", "t/dead/x/../y", // missing, dangling
+		"a", "a/x", "b", "w/loopa", "w/loopa/x", "w/c1/..", "w/loop//l2", // loops
+		"w/./loopa/../up/dang", "w/dang", "w/dang/../x", "w/up/w/loopa/up",
+		"w/d/up/t/m", "w/d/back", "w/e", // through links to folders that are not there
+	} {
+		t.Run(in, func(t *testing.T) {
+			if got, err := Realpath(e.Tmp + "/" + in); err == nil {
+				t.Errorf("Realpath(%q) = %q, want an error", in, got)
 			}
 		})
 	}
@@ -86,17 +83,42 @@ func TestRealpath_RelativeInputUsesThePhysicalCwd(t *testing.T) {
 		t.Fatalf("Getwd() = %q, want the physical %q", cwd, want)
 	}
 	for in, want := range map[string]string{
-		"sub":        want + "/sub",
-		"../m/../f":  want + "/f",
-		"./sub/../x": want + "/x",
-		"../../a":    e.Tmp + "/a",
+		"sub":                want + "/sub",
+		"../m/..":            want,
+		"./sub/../sub/f.txt": want + "/sub/f.txt",
+		"../..":              e.Tmp,
 	} {
-		if got := Realpath(in); got != want {
-			t.Errorf("Realpath(%q) = %q, want %q", in, got, want)
+		if got, err := Realpath(in); err != nil || got != want {
+			t.Errorf("Realpath(%q) = %q, %v, want %q", in, got, err, want)
 		}
 	}
-	if got := Abs("x/../y"); got != want+"/y" {
-		t.Errorf("Abs = %q", got)
+	if got, err := Abs("x/../y"); err != nil || got != want+"/y" {
+		t.Errorf("Abs = %q, %v", got, err)
+	}
+	if _, err := Realpath("../m/../f"); err == nil {
+		t.Error("a path to a file that is not there resolved")
+	}
+}
+
+func TestAbs_NoCwdIsAnError(t *testing.T) {
+	e := testkit.New(t)
+	gone := filepath.Join(e.Tmp, "gone")
+	e.WriteFile(filepath.Join(gone, ".keep"), "", 0)
+	t.Chdir(gone)
+	if err := os.RemoveAll(gone); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Abs("x"); err == nil {
+		t.Errorf("Abs(x) = %q with no cwd", got)
+	}
+	if got, err := Realpath("x"); err == nil {
+		t.Errorf("Realpath(x) = %q with no cwd", got)
+	}
+	if got, err := Relpath("x", "/"); err == nil {
+		t.Errorf("Relpath(x, /) = %q with no cwd", got)
+	}
+	if got, err := Abs("/a/../b"); err != nil || got != "/b" {
+		t.Errorf("Abs of an absolute path needs no cwd: %q, %v", got, err)
 	}
 }
 
@@ -104,8 +126,8 @@ func TestPaths_Relpath(t *testing.T) {
 	for _, c := range [][3]string{
 		{"/a/b", "/a", "b"}, {"/a", "/a/b", ".."}, {"/a/b/c", "/a/x/y", "../../b/c"}, {"/a", "/a", "."}, {"/a/b", "/", "a/b"},
 	} {
-		if got := Relpath(c[0], c[1]); got != c[2] {
-			t.Errorf("Relpath(%q, %q) = %q, want %q", c[0], c[1], got, c[2])
+		if got, err := Relpath(c[0], c[1]); err != nil || got != c[2] {
+			t.Errorf("Relpath(%q, %q) = %q, %v, want %q", c[0], c[1], got, err, c[2])
 		}
 	}
 }

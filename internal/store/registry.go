@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"math/big"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -103,8 +104,26 @@ func ResolveScriptPath(baseDir, scriptField string) (string, error) {
 	if strings.HasPrefix(scriptField, "/") {
 		return scriptField, nil
 	}
-	base := platform.Realpath(baseDir)
-	target := platform.Realpath(platform.Join(base, scriptField))
+	base, err := platform.Realpath(baseDir)
+	if err != nil {
+		return "", err
+	}
+	target := platform.Join(base, scriptField)
+	there, err := platform.Exists(target)
+	if err != nil {
+		return "", err
+	}
+	if there {
+		target, err = platform.Realpath(target)
+	} else { // a script that is not there is reported by its caller ("script file not found"): its folder must be
+		dir, name := filepath.Split(target) // not Dir: it would clean away a `..` that follows a link
+		if dir, err = platform.Realpath(dir); err == nil {
+			target = platform.Join(dir, name)
+		}
+	}
+	if err != nil {
+		return "", err
+	}
 	if !platform.IsRelativeTo(target, base) {
 		return "", fmt.Errorf("path traversal detected: '%s' resolves to '%s', outside '%s'.", scriptField, target, base)
 	}

@@ -120,6 +120,7 @@ shortcut --version
 - It runs in its `cwd`, and gets `SHORTCUT_NAME`, `SHORTCUT_NAMESPACE` and `SHORTCUT_CALLER_CWD`. Its exit code is
   shortcut's.
 - `SHORTCUT_SHOW_DIR=0` hides the `→ dir` line; `1` or unset shows it; any other value is an error.
+- Symlinks in paths are followed. A path that does not exist where one is needed, or can't be read, is an error.
 - shortcut does what it was told, or stops with an error. [docs/errors.md](docs/errors.md) lists every message.
 
 ## Security model

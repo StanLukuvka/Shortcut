@@ -65,7 +65,10 @@ func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Loo
 		again = append(again, ".")
 	}
 	again = append(append(again, strings.Fields(name)...), args...)
-	realCwd := platform.Realpath(resolved.RunCwd)
+	realCwd, err := platform.Realpath(resolved.RunCwd)
+	if err != nil {
+		return err
+	}
 	if entry.Confirm {
 		if err := term.Confirmed(s, term.Confirm{
 			Question:   "run '" + name + "'" + withArgs + " in " + realCwd + "?",
