@@ -210,7 +210,7 @@ func TestRm_AQuestionThatCannotBeShownIsNotAsked(t *testing.T) {
 	}
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"keep": testkit.Inline("true")})
-	rc, out := e.InTerminalCmd(testkit.Opts{}, nil, "sh", "-c", `exec "$@" 2>/dev/full`, "sh", testkit.Binary(t), "rm", "keep")
+	rc, out := e.InTerminalCmd(testkit.Opts{}, []testkit.Key{{Wait: "", Send: y("y\n")}}, "sh", "-c", `exec "$@" 2>/dev/full`, "sh", testkit.Binary(t), "rm", "keep")
 	if rc != 1 {
 		t.Errorf("exit %d\n%s", rc, out)
 	}

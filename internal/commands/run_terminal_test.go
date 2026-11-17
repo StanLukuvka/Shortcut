@@ -134,7 +134,7 @@ func TestRunning_AConfirmQuestionThatCannotBeShownDoesNotRun(t *testing.T) {
 	e := testkit.New(t)
 	marker := filepath.Join(e.Tmp, "ran")
 	e.WriteStore(e.Store, map[string]any{"danger": map[string]any{"inline": "echo ran >" + marker, "confirm": true}})
-	rc, out := e.InTerminalCmd(testkit.Opts{}, nil, "sh", "-c", `exec "$@" 2>/dev/full`, "sh", testkit.Binary(t), "r", "danger")
+	rc, out := e.InTerminalCmd(testkit.Opts{}, []testkit.Key{{Wait: "", Send: y("y\n")}}, "sh", "-c", `exec "$@" 2>/dev/full`, "sh", testkit.Binary(t), "r", "danger")
 	if rc != 1 {
 		t.Errorf("exit %d\n%s", rc, out)
 	}
