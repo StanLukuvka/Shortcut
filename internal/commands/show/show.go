@@ -187,8 +187,11 @@ func showObject(c *store.Context, words []string, lk store.Lookup) (vals map[str
 	if err == nil {
 		e := f.Item.Entry
 		vals["cwd"] = e.Cwd
-		vals["run_cwd"] = str(store.ResolveRunDir(e.Cwd, g, c.Cwd))
-		if e.Script != nil {
+		var runCwd string
+		if runCwd, err = store.ResolveRunDir(e.Cwd, g, c.Cwd); err == nil {
+			vals["run_cwd"] = &runCwd
+		}
+		if err == nil && e.Script != nil {
 			var path string
 			if path, err = store.ResolveScriptPath(g.ScriptBase(), *e.Script); err == nil {
 				vals["script_path"] = &path

@@ -20,6 +20,13 @@ A write to stdout or stderr that fails for any reason other than a closed pipe, 
 |---|---|
 | `writing stdout: <error>` | stdout could not be written. If stderr failed too, nothing is printed |
 
+Before any command runs, the global store has to be named:
+
+| Message | Meaning |
+|---|---|
+| `SHORTCUTS_HOME must be an absolute path, not '<value>'` | The variable is empty or relative. It can start with `~/`. Unset, the store is `~/.shortcuts` |
+| `HOME must be set to an absolute path, so '~' in '<path>' can't be expanded` | A path with `~` (the default store, `SHORTCUTS_HOME`, an import, a `cwd`, `--script`, `--cwd`) while `$HOME` is unset, empty or relative |
+
 Usage errors, which exit 2:
 
 | Message | Meaning |

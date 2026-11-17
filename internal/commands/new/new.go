@@ -90,7 +90,11 @@ func entryFields(c *store.Context, name string, ns term.Namespace, g store.Group
 // move.
 func newFromScript(c *store.Context, s *term.Streams, ns term.Namespace, group store.Group, fields *store.Entry) error {
 	path := ns.Str("script")
-	abs, err := platform.Abs(platform.ExpandUser(path))
+	expanded, err := platform.ExpandUser(path)
+	if err != nil {
+		return err
+	}
+	abs, err := platform.Abs(expanded)
 	if err != nil {
 		return err
 	}
@@ -217,7 +221,11 @@ func storedCwd(c *store.Context, value *string, g store.Group) (*string, error) 
 	if value == nil || *value == store.Caller {
 		return value, nil
 	}
-	abs, err := platform.Abs(platform.ExpandUser(*value))
+	expanded, err := platform.ExpandUser(*value)
+	if err != nil {
+		return nil, err
+	}
+	abs, err := platform.Abs(expanded)
 	if err != nil {
 		return nil, err
 	}

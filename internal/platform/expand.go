@@ -1,24 +1,26 @@
 package platform
 
 import (
+	"fmt"
 	"os"
 	"strings"
 )
 
-// ExpandUser expands "~" and "~/x" with $HOME. "~name" is not expanded, and a path with an unset or empty $HOME is left as typed.
-func ExpandUser(path string) string { return expandWith(path, os.UserHomeDir) }
+// ExpandUser expands "~" and "~/x" with $HOME. "~name" is not expanded. A "~" with $HOME unset, empty or not
+// absolute is an error.
+func ExpandUser(path string) (string, error) { return expandWith(path, os.UserHomeDir) }
 
 // expandWith is ExpandUser with the home lookup passed in (the test fixtures refuse an empty or unset HOME).
-func expandWith(path string, userHomeDir func() (string, error)) string {
+func expandWith(path string, userHomeDir func() (string, error)) (string, error) {
 	if path != "~" && !strings.HasPrefix(path, "~/") {
-		return path
+		return path, nil
 	}
 	home, err := userHomeDir() // os.UserHomeDir: $HOME; an error when unset or empty
-	if err != nil {
-		return path
+	if err != nil || !strings.HasPrefix(home, "/") {
+		return "", fmt.Errorf("HOME must be set to an absolute path, so '~' in '%s' can't be expanded", path)
 	}
 	if out := strings.TrimRight(home, "/") + path[1:]; out != "" {
-		return out
+		return out, nil
 	}
-	return "/"
+	return "/", nil
 }

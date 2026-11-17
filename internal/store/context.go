@@ -18,27 +18,35 @@ type Context struct {
 	Cwd        string // physical working directory; "" when CwdErr != nil
 	CwdErr     error  // getcwd's error, read by run and new, which refuse to go on without a cwd
 	Global     string // absolute global store dir: $SHORTCUTS_HOME or ~/.shortcuts. The only read of the variable
+	GlobalErr  error  // $SHORTCUTS_HOME or ~ can't be used, or the store can't be resolved: no command runs
 	Project    string // nearest project root at or above Cwd, "" = none
 	ProjectErr error  // the project lookup couldn't tell (a folder it can't search): read by everything that looks in the project, never by the global scope
 
 	globalReal string           // platform.Realpath(Global), once; "" when the global store is not there or can't be resolved
-	globalErr  error            // why it can't be resolved: shown as a problem of the global store
 	stores     map[string]Store // by the dir as the caller passed it: Global, or a realpath'd project root
 }
 
 // NewContext resolves the global store and the project root once. It never fails: a project lookup that can't tell
 // is ProjectErr.
 func NewContext(cwd string, cwdErr error) *Context {
-	home := os.Getenv("SHORTCUTS_HOME")
-	if home == "" {
+	home, set := os.LookupEnv("SHORTCUTS_HOME")
+	if !set {
 		home = "~/.shortcuts"
 	}
 	c := &Context{Cwd: cwd, CwdErr: cwdErr, stores: map[string]Store{}}
-	var err error
-	if c.Global, err = platform.Abs(platform.ExpandUser(home)); err != nil {
-		c.Global = platform.ExpandUser(home) // no cwd to make it absolute: that is CwdErr, which run and new refuse
+	global, err := platform.ExpandUser(home)
+	switch {
+	case err != nil:
+		c.GlobalErr = err
+	case !strings.HasPrefix(global, "/"):
+		c.GlobalErr = fmt.Errorf("SHORTCUTS_HOME must be an absolute path, not '%s'", home)
+	default:
+		c.Global = filepath.Clean(global)
+		c.globalReal, c.GlobalErr = resolveIfThere(c.Global)
 	}
-	c.globalReal, c.globalErr = resolveIfThere(c.Global)
+	if c.GlobalErr != nil {
+		return c
+	}
 	if cwdErr == nil {
 		c.Project, c.ProjectErr = c.FindProjectRoot(cwd)
 	}
@@ -68,7 +76,11 @@ func (c *Context) neverAProject(file string) (bool, error) {
 	if real == c.globalReal {
 		return true, nil
 	}
-	home, err := resolveIfThere(platform.Join(platform.ExpandUser("~"), ProjectFile))
+	userHome, err := platform.ExpandUser("~")
+	if err != nil {
+		return false, err
+	}
+	home, err := resolveIfThere(platform.Join(userHome, ProjectFile))
 	return real == home, err
 }
 
@@ -171,9 +183,6 @@ func (c *Context) loadStore(storeDir string) Store {
 	var main Group
 	var problems []string
 	if isGlobal {
-		if c.globalErr != nil {
-			problems = append(problems, c.globalErr.Error())
-		}
 		main = LoadGroup(platform.Join(storeDir, "shortcuts.json"), storeDir, "")
 	} else {
 		main = LoadProjectGroup(storeDir)
@@ -211,7 +220,12 @@ func (c *Context) loadStore(storeDir string) Store {
 			case taken:
 				problems = append(problems, fmt.Sprintf("namespace '%s' is imported twice in %s", name, storeDir))
 			default:
-				sources[name] = filepath.Clean(platform.Join(main.Folder(), platform.ExpandUser(path)))
+				expanded, err := platform.ExpandUser(path)
+				if err != nil {
+					problems = append(problems, fmt.Sprintf("import '%s' in %s: %s", name, main.File, err))
+					continue
+				}
+				sources[name] = filepath.Clean(platform.Join(main.Folder(), expanded))
 			}
 		}
 	}

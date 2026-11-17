@@ -159,18 +159,26 @@ func TestExpandUser(t *testing.T) {
 	for in, want := range map[string]string{
 		"~": e.Home, "~/x": e.Home + "/x", "x/~": "x/~", "": "", "~bob/x": "~bob/x", "~root": "~root",
 	} {
-		if got := ExpandUser(in); got != want {
-			t.Errorf("ExpandUser(%q) = %q, want %q", in, got, want)
+		if got, err := ExpandUser(in); err != nil || got != want {
+			t.Errorf("ExpandUser(%q) = %q, %v, want %q", in, got, err, want)
 		}
 	}
 	home := func(h string, err error) func() (string, error) { return func() (string, error) { return h, err } }
-	if got := expandWith("~/x", home("", errors.New("$HOME is not defined"))); got != "~/x" { // os.UserHomeDir fails on unset or empty HOME
-		t.Errorf("no HOME: %q", got)
+	for _, bad := range []error{errors.New("$HOME is not defined")} { // os.UserHomeDir fails on unset or empty HOME
+		if got, err := expandWith("~/x", home("", bad)); err == nil {
+			t.Errorf("no HOME: %q", got)
+		}
 	}
-	if got := expandWith("~/x", home("/", nil)); got != "/x" {
-		t.Errorf("HOME=/: %q", got)
+	if got, err := expandWith("~/x", home("rel", nil)); err == nil { // a relative HOME
+		t.Errorf("relative HOME: %q", got)
 	}
-	if got := expandWith("~", home("/", nil)); got != "/" {
-		t.Errorf("~ with HOME=/: %q", got)
+	if got, err := expandWith("x/~", home("", errors.New("unset"))); err != nil || got != "x/~" { // no "~" to expand: HOME is not read
+		t.Errorf("no tilde: %q, %v", got, err)
+	}
+	if got, err := expandWith("~/x", home("/", nil)); err != nil || got != "/x" {
+		t.Errorf("HOME=/: %q, %v", got, err)
+	}
+	if got, err := expandWith("~", home("/", nil)); err != nil || got != "/" {
+		t.Errorf("~ with HOME=/: %q, %v", got, err)
 	}
 }

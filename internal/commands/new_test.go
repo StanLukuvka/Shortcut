@@ -405,3 +405,19 @@ func TestList_NamesComeOutInByteOrder(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+func TestStores_ShortcutsHomeMustBeAbsoluteAndTildeNeedsAHome(t *testing.T) {
+	e := testkit.New(t)
+	for _, c := range []struct {
+		env  map[string]string
+		want string
+	}{
+		{map[string]string{"SHORTCUTS_HOME": ""}, "SHORTCUTS_HOME must be an absolute path, not ''"},
+		{map[string]string{"SHORTCUTS_HOME": "store"}, "SHORTCUTS_HOME must be an absolute path, not 'store'"},
+		{map[string]string{"HOME": "relhome", "SHORTCUTS_HOME": "~/s"}, "HOME must be set to an absolute path, so '~' in '~/s' can't be expanded"},
+	} { // testkit refuses an empty HOME, so "HOME unset" is the unit test of expandWith; a relative HOME gets here
+		res := e.RunWith(testkit.Opts{Env: c.env}, "list")
+		testkit.Eq(t, c.want+" exit", res.Code, 1)
+		testkit.Contains(t, c.want, res.Stderr, "error: "+c.want)
+	}
+}

@@ -39,11 +39,15 @@ func (s Store) Groups() []Group {
 }
 
 // ResolveRunDir returns where a shortcut with this cwd runs.
-func ResolveRunDir(cwd *string, g Group, callerCwd string) string {
+func ResolveRunDir(cwd *string, g Group, callerCwd string) (string, error) {
 	if cwd == nil || *cwd == "" || *cwd == Caller {
-		return callerCwd
+		return callerCwd, nil
 	}
-	return filepath.Clean(platform.Join(g.Folder(), platform.ExpandUser(*cwd)))
+	expanded, err := platform.ExpandUser(*cwd)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(platform.Join(g.Folder(), expanded)), nil
 }
 
 // LoadGroup reads one file into a Group. It never fails: why a file can't be used is on the Group.
