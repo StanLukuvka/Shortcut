@@ -125,6 +125,17 @@ shortcut --version
 - Symlinks in paths are followed. A path that does not exist where one is needed, or can't be read, is an error.
 - shortcut does what it was told, or stops with an error. [docs/errors.md](docs/errors.md) lists every message.
 
+## Agents
+
+Agents write most shortcuts, for the person they work with. An agent:
+
+- always passes `--desc`;
+- in a project, uses `--local` from the project root, and proposes entries for `.shortcuts` (`show --json` prints one
+  as `entry`) for the person to commit;
+- never passes `-y` for the person: `rm` and a `--confirm` shortcut are theirs to answer;
+- reads a project's shortcut with `shortcut show . <name>` before running it;
+- ends with how to run it: `Run it: shortcut r <name>`, or `shortcut r . <name>` for one in the project.
+
 ## Security model
 
 > 1. shortcut runs exactly what its definitions say, without inspecting them.

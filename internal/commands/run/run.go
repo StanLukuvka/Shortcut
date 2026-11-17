@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
@@ -29,6 +30,10 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	scope, args := store.SplitScope(args)
 	if len(args) == 0 {
 		return &term.ExitError{Code: 2, Stderr: "error: missing shortcut name\n" + cmd.UsageLine() + "\n"}
+	}
+	if scope == store.ScopeProject && strings.HasPrefix(args[0], "-") { // a name can't start with -, so this is an option
+		return term.Die("'" + args[0] + "' is not a name: options go before the dot, as in " +
+			strings.TrimSpace("shortcut r -y . "+platform.ShellJoin(args[1:])))
 	}
 	return runShortcut(c, s, args, store.Lookup{Scope: scope, Cmd: "r"}, assumeYes)
 }
@@ -104,7 +109,11 @@ func runShortcut(c *store.Context, s *term.Streams, words []string, lk store.Loo
 	if err := cmp.Or(s.Out.Failed(), s.Err.Failed()); err != nil {
 		return err
 	}
-	return platform.ExecChild(argv, resolved.RunCwd, env)
+	err = platform.ExecChild(argv, resolved.RunCwd, env)
+	if entry.Inline == nil && errors.Is(err, syscall.ENOEXEC) { // inline shortcuts exec bash, so this is a script
+		return term.Die(argv[0] + " can't run as it is: it needs to start with #! and a program that runs here, such as #!/bin/sh, or to be a binary for this system")
+	}
+	return err
 }
 
 // showDir reads SHORTCUT_SHOW_DIR: unset or 1 shows the folder, 0 hides it, anything else is refused.

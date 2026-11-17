@@ -22,7 +22,7 @@ const (
 type Lookup struct {
 	Scope  Scope
 	Strict bool   // run: refuse every name in a project that can't be used
-	Cmd    string // the command a hint at the other scope names: "r" or "show"; "" gives no hint
+	Cmd    string // the command a hint at the other scope names: "r", "show" or "rm"; "" gives no hint
 }
 
 // SplitScope reads the dot: a first word "." selects the project, and is not part of the name.
@@ -58,6 +58,18 @@ func otherHint(c *Context, lk Lookup, words []string) string {
 		return ""
 	}
 	joined := platform.ShellJoin(words)
+	if lk.Cmd == "rm" { // rm changes only the global store and .shortcuts.local, so it names no command for the project
+		if c.Project == "" {
+			return ""
+		}
+		if _, ok := c.Store(c.Project).Main.Local.Get(words[0]); ok && len(words) == 1 {
+			return fmt.Sprintf("Your %s in %s has it: shortcut rm --local %s, from %s", LocalFile, c.Project, joined, c.Project)
+		}
+		if otherHas(c.Store(c.Project), words) {
+			return fmt.Sprintf("The project in %s has it; rm changes only your global store and your %s", c.Project, LocalFile)
+		}
+		return ""
+	}
 	if lk.Scope == ScopeProject {
 		if otherHas(c.Store(c.Global), words) {
 			return fmt.Sprintf("Your global store has it: shortcut %s %s", lk.Cmd, joined)

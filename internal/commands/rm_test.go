@@ -348,3 +348,16 @@ func TestRm_EmptyNamespaceIsAnErrorAndRemovesNothing(t *testing.T) {
 		t.Error("rm --namespace '' changed the store")
 	}
 }
+
+func TestStores_RmFromAProjectNamesWhereTheEntryIs(t *testing.T) {
+	e := testkit.New(t)
+	proj := e.Project(map[string]any{"build": testkit.Inline("echo b")}, testkit.Dirs("sub"))
+	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version":1,"shortcuts":{"mine":{"inline":"echo m"}}}`, 0o644)
+	o := testkit.Opts{Cwd: filepath.Join(proj, "sub")}
+	res := e.RunWith(o, "rm", "build", "-y")
+	testkit.Eq(t, "shared exit", res.Code, 1)
+	testkit.Contains(t, "shared", res.Stderr, "shortcut 'build' not found. The project in "+proj+" has it; rm changes only your global store and your .shortcuts.local")
+	res = e.RunWith(o, "rm", "mine", "-y")
+	testkit.Eq(t, "local exit", res.Code, 1)
+	testkit.Contains(t, "local", res.Stderr, "Your .shortcuts.local in "+proj+" has it: shortcut rm --local mine, from "+proj)
+}

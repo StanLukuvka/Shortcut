@@ -40,7 +40,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	}
 
 	// Raw lookup: an entry that can't run must still be removable
-	found, err := store.FindEntry(c, names, store.Lookup{})
+	found, err := store.FindEntry(c, names, store.Lookup{Cmd: "rm"})
 	if err != nil {
 		return err
 	}
