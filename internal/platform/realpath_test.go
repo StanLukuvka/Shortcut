@@ -170,3 +170,14 @@ func TestExpandUser(t *testing.T) {
 		t.Errorf("~ with HOME=/: %q, %v", got, err)
 	}
 }
+
+// With PWD naming a symlink to the cwd, os.Getwd gives the link and Getwd the physical folder.
+func TestGetwd_IsPhysical(t *testing.T) {
+	e := testkit.New(t)
+	real := e.Folder("real")
+	e.Symlink(real, filepath.Join(e.Tmp, "link"))
+	res := e.RunCmd(testkit.Opts{Cwd: filepath.Join(e.Tmp, "link"), Env: map[string]string{"PLATFORM_HELPER": "cwd", "PWD": filepath.Join(e.Tmp, "link")}}, testkit.SelfArgs()...)
+	if want := filepath.Join(e.Tmp, "link") + "\n" + real + "\n"; res.Stdout != want {
+		t.Errorf("stdout %q, want %q (os.Getwd then platform.Getwd)", res.Stdout, want)
+	}
+}

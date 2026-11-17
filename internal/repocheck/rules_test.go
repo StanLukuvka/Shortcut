@@ -1,4 +1,4 @@
-package testkit
+package repocheck
 
 import (
 	"go/ast"

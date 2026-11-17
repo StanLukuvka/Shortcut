@@ -1,4 +1,4 @@
-package commands
+package repocheck
 
 import (
 	"go/ast"

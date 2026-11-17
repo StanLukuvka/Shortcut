@@ -2,7 +2,7 @@
 
 Every error is one line on stderr that starts with `error: `, and shortcut exits 1. The exceptions are in [Exit codes](#exit-codes).
 
-In the tables, `<word>` stands for a value filled in when the error happens. A message is listed as the code writes it; `internal/commands/errors_doc_test.go` fails when a message in the Go code under `internal/` isn't here.
+In the tables, `<word>` stands for a value filled in when the error happens. A message is listed as the code writes it; `internal/repocheck/errors_doc_test.go` fails when a message in the Go code under `internal/` isn't here.
 
 ## Exit codes
 

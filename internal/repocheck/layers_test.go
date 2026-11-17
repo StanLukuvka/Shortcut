@@ -1,4 +1,4 @@
-package testkit
+package repocheck
 
 import (
 	"go/parser"
@@ -51,6 +51,15 @@ var layers = map[string][]string{
 	argparse:                 {},
 	platform:                 {},
 	"internal/testkit":       {},
+}
+
+// moduleRoot is the directory holding go.mod: two levels above this package.
+func moduleRoot() string {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		panic(err)
+	}
+	return root
 }
 
 // The packages may only import what the table says, read from the import lines of their non-test files.
