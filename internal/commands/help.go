@@ -29,6 +29,6 @@ func cmdHelp(_ *store.Context, s *term.Streams, _ term.Command, args []string) e
 			text = c.HelpText()
 		}
 	}
-	_, err := s.Out.WriteString(text)
-	return err
+	s.Out.WriteString(text)
+	return nil
 }

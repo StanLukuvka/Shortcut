@@ -29,21 +29,24 @@ type Writer struct {
 	s   *Streams
 	f   *os.File
 	tty bool
+	err error // the first write error; after it nothing more is written
 }
 
 // IsTerminal is isatty on the stream: the dim "→ dir" line (stderr).
 func (w *Writer) IsTerminal() bool { return w.tty }
 
-// WriteString writes text to the stream through Safe, then backslashReplace, and returns len(text).
+// WriteString writes text to the stream through Safe, then backslashReplace. A failed write is kept for Failed.
 // A byte that is not UTF-8 prints as \xNN on both streams, so no raw byte such as 0x9b (CSI on an 8-bit terminal) reaches a terminal.
-func (w *Writer) WriteString(text string) (int, error) {
-	return len(text), w.put(backslashReplace(Safe(text)))
-}
+func (w *Writer) WriteString(text string) { w.put(backslashReplace(Safe(text))) }
 
 // WriteStyled writes past Safe, but not past the escape. Everything from a file must already be Safe.
-func (w *Writer) WriteStyled(text string) error { return w.put(backslashReplace(text)) }
+func (w *Writer) WriteStyled(text string) { w.put(backslashReplace(text)) }
 
-func (w *Writer) put(text string) error {
-	_, err := w.f.Write([]byte(text))
-	return err
+// Failed is the first error a write to the stream returned, or nil.
+func (w *Writer) Failed() error { return w.err }
+
+func (w *Writer) put(text string) {
+	if w.err == nil {
+		_, w.err = w.f.Write([]byte(text))
+	}
 }

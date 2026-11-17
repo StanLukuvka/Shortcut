@@ -19,9 +19,19 @@ func invoke(s *term.Streams, e *entry, args []string) int {
 }
 
 // Main runs the command and returns the process's exit code. A write to a closed stdout or stderr ends the
-// process by SIGPIPE (the Go runtime's default; this program does not Notify it).
+// process by SIGPIPE (the Go runtime's default; this program does not Notify it). Any other write error is kept by
+// the stream: if stdout failed, "error: writing stdout: ..." goes to stderr; either failure makes an exit code of 0 a 1.
 func Main(args []string, in, out, errw *os.File) int {
-	return dispatch(term.NewStreams(in, out, errw), args)
+	s := term.NewStreams(in, out, errw)
+	code := dispatch(s, args)
+	outErr := s.Out.Failed()
+	if outErr != nil {
+		s.Err.WriteString("error: writing stdout: " + outErr.Error() + "\n")
+	}
+	if code == 0 && (outErr != nil || s.Err.Failed() != nil) {
+		return 1
+	}
+	return code
 }
 
 // dispatch runs the command the first word picks.

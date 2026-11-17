@@ -43,12 +43,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 		return err
 	}
 	entry, group := resolved.Entry, resolved.Group
-	var werr error // the first write error
-	out := func(text string) {
-		if _, err := s.Out.WriteString(text + "\n"); werr == nil {
-			werr = err
-		}
-	}
+	out := func(text string) { s.Out.WriteString(text + "\n") }
 
 	display := resolved.Display()
 	out("Name:        " + display)
@@ -66,7 +61,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 
 	if entry.Inline != nil {
 		out("\nInline command:\n  " + *entry.Inline)
-		return werr
+		return nil
 	}
 	path, err := store.ResolveScriptPath(group.ScriptBase(), *entry.Script)
 	if err != nil {
@@ -88,7 +83,7 @@ func Run(c *store.Context, s *term.Streams, cmd term.Command, args []string) err
 	} else {
 		out("  [file missing: " + path + "]")
 	}
-	return werr
+	return nil
 }
 
 // showTop are the top-level keys of `show --json`.
@@ -125,8 +120,8 @@ func showJSON(c *store.Context, s *term.Streams, words []string, lk store.Lookup
 	if err != nil {
 		return err
 	}
-	_, err = s.Out.WriteString(string(text))
-	return err
+	s.Out.WriteString(string(text))
+	return nil
 }
 
 // showFields are the keys `--field` reads: the top-level keys of `show --json`, then the entry's fields marked Show.
@@ -161,9 +156,9 @@ func showField(c *store.Context, s *term.Streams, words []string, lk store.Looku
 		}
 	}
 	if text != nil {
-		_, err = s.Out.WriteString(*text + "\n")
+		s.Out.WriteString(*text + "\n")
 	}
-	return err
+	return nil
 }
 
 // showObject is the values of showTop (nil for null) and the entry as written. A broken entry still gives them,

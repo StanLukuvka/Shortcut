@@ -194,7 +194,7 @@ func rmMessage(group store.Group, display string, it store.Item) string {
 
 // rmLocalMessage returns what rm --local is about to change in .shortcuts.local, shown above its question.
 func rmLocalMessage(group store.Group, name string) string {
-	mine, _ := group.Local.Get(name)
+	mine, _ := group.Local.Get(name) // the caller found name in Local, so it is there
 	lines := []string{"Removes your '" + name + "' from " + group.LocalFile + "."}
 	if _, shared := group.Shared.Get(name); shared {
 		lines = append(lines, "The '"+name+"' in "+store.ProjectFile+" applies again.")

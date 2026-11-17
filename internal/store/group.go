@@ -54,9 +54,9 @@ func (is Items) Names() []string {
 	return names
 }
 
-// ItemsOf decodes d["shortcuts"] when it is an object; otherwise there are none.
+// ItemsOf decodes d["shortcuts"].
 func ItemsOf(d platform.Doc) Items {
-	shortcuts, _ := d.Object("shortcuts")
+	shortcuts, _ := d.Object("shortcuts") // a "shortcuts" that is not an object gives no items, and fileError marks the group in error; absent is none
 	var items Items
 	for _, k := range slices.Sorted(maps.Keys(shortcuts)) {
 		e, err := DecodeEntry(k, shortcuts[k])

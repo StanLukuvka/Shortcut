@@ -120,6 +120,17 @@ func TestRunning_ClosedStdFDsDoNotStopACommand(t *testing.T) {
 	}
 }
 
+// A write error other than a closed pipe is an error: stdout on /dev/full makes even --version exit 1.
+func TestWriteError_StdoutOnDevFullExits1(t *testing.T) {
+	if _, err := os.Stat("/dev/full"); err != nil {
+		t.Skip("no /dev/full")
+	}
+	e := testkit.New(t)
+	res := e.RunCmd(testkit.Opts{}, "sh", "-c", `exec "$@" >/dev/full`, "sh", testkit.Binary(t), "--version")
+	res.WantCode(t, 1)
+	testkit.Contains(t, "stderr", res.Stderr, "error: writing stdout:")
+}
+
 // The caller's cwd is the physical one, whatever PWD says: SHORTCUT_CALLER_CWD, show --json's run_cwd and the
 // project a run belongs to.
 func TestCwd_ASymlinkedCwdIsThePhysicalOne(t *testing.T) {

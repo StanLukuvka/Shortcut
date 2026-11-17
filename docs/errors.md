@@ -14,6 +14,12 @@ In the tables, `<word>` stands for a value filled in when the error happens. A m
 | 141 | shortcut was ended by SIGPIPE because what it was printing to stopped reading, as in `shortcut list \| head -1`. A shell shows this as 141. Nothing more is printed |
 | anything else | `run` passes the shortcut's own exit code through, and a signal that kills it |
 
+A write to stdout or stderr that fails for any reason other than a closed pipe, such as a full disk, exits 1 even when the command succeeded:
+
+| Message | Meaning |
+|---|---|
+| `writing stdout: <error>` | stdout could not be written. If stderr failed too, nothing is printed |
+
 Usage errors, which exit 2:
 
 | Message | Meaning |

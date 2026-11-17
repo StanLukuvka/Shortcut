@@ -15,7 +15,8 @@ import (
 // Ask asks a question: the prompt goes to stderr through Safe (so it reaches the terminal when stdout is redirected),
 // one line is read, and it counts when its trimmed lower case is y or yes. End of input or Ctrl-C
 // prints a newline to stdout and answers no. SIGINT is caught only while
-// waiting, elsewhere it keeps its default and kills the process. A read error other than EOF is returned.
+// waiting, elsewhere it keeps its default and kills the process. A read error other than EOF is returned, and so is a failed
+// write of the prompt (or of what came before it): an answer to a question nobody saw does not count.
 // On Ctrl-C the reading goroutine is left behind.
 func Ask(s *Streams, prompt string) (bool, error) {
 	// Catch SIGINT before the prompt is shown: whoever sees the prompt (a person, a test) may press Ctrl-C at once.
@@ -23,6 +24,9 @@ func Ask(s *Streams, prompt string) (bool, error) {
 	signal.Notify(interrupt, syscall.SIGINT)
 	defer signal.Stop(interrupt)
 	s.Err.WriteString(prompt)
+	if err := s.Err.Failed(); err != nil {
+		return false, err
+	}
 	if s.in == nil {
 		s.in = bufio.NewReader(s.In)
 	}
@@ -66,11 +70,14 @@ type Confirm struct {
 
 // Granted reports whether the answer was yes. With no terminal on stdin it returns an error carrying NoTerminal: the caller's error
 // path prints it as "error: ..." and exits 1. After a "no" it has printed "Aborted." and
-// returns false.
+// returns false. With -y, a Message that could not be written is an error and the answer is not yes.
 func (c Confirm) Granted(s *Streams, assumeYes bool) (bool, error) {
 	if assumeYes {
 		if c.TellOnYes && c.Message != "" {
 			s.Out.WriteString(c.Message + "\n")
+			if err := s.Out.Failed(); err != nil {
+				return false, err
+			}
 		}
 		return true, nil
 	}
