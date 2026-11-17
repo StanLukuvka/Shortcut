@@ -3,6 +3,7 @@ package commands
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -282,6 +283,24 @@ func TestShow_Field(t *testing.T) {
 		if res.Code != c.code || res.Stdout != c.stdout || res.Stderr != c.stderr {
 			t.Errorf("%v: exit %d stdout %q stderr %q; want exit %d stdout %q stderr %q", c.args, res.Code, res.Stdout, res.Stderr, c.code, c.stdout, c.stderr)
 		}
+	}
+}
+
+// show --field only reads: every file in the store and the project is the same afterwards, and none is added or removed.
+func TestShow_FieldWritesNothing(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"g": map[string]any{"description": "G", "script": "scripts/g.sh"}})
+	e.WriteFile(filepath.Join(e.Store, "scripts", "g.sh"), "#!/bin/sh\n", 0o755)
+	proj := e.Project(testkit.GO)
+	store, project := treeOf(t, e.Store), treeOf(t, proj)
+	for _, args := range [][]string{{"show", "--field", "description", "g"}, {"show", "--field", "inline", ".", "go"}} {
+		runOK(t, e, in(proj), args...)
+	}
+	if got := treeOf(t, e.Store); !reflect.DeepEqual(got, store) {
+		t.Errorf("the store changed: %v -> %v", store, got)
+	}
+	if got := treeOf(t, proj); !reflect.DeepEqual(got, project) {
+		t.Errorf("the project changed: %v -> %v", project, got)
 	}
 }
 

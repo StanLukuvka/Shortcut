@@ -177,6 +177,48 @@ func TestStores_DecliningRmExits1(t *testing.T) {
 	}
 }
 
+// rm -y that cannot say what it removed removes nothing: stdout on /dev/full exits 1 with the entry still there.
+func TestRm_YWithStdoutOnDevFullRemovesNothing(t *testing.T) {
+	if _, err := os.Stat("/dev/full"); err != nil {
+		t.Skip("no /dev/full")
+	}
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"keep": testkit.Inline("true")})
+	imports := filepath.Join(e.Store, "imports")
+	e.WriteImport(e.Store, "dk", testkit.NS(map[string]any{"ps": map[string]any{"script": "scripts/dk/ps.sh"}}))
+	e.WriteFile(filepath.Join(imports, "scripts", "dk", "ps.sh"), bashShebang+"echo ps\n", 0o755)
+	for _, args := range [][]string{{"rm", "-y", "keep"}, {"rm", "--namespace", "dk", "-y"}} {
+		res := e.RunCmd(testkit.Opts{}, append([]string{"sh", "-c", `exec "$@" >/dev/full`, "sh", testkit.Binary(t)}, args...)...)
+		if res.Code != 1 {
+			t.Errorf("%v: exit %d stderr %q", args, res.Code, res.Stderr)
+		}
+	}
+	if _, has := e.LoadGlobal()["keep"]; !has {
+		t.Error("rm -y removed the entry")
+	}
+	for _, p := range []string{filepath.Join(imports, "dk.shortcut"), filepath.Join(imports, "scripts", "dk", "ps.sh")} {
+		if !fileExists(p) {
+			t.Errorf("rm --namespace -y removed %s", p)
+		}
+	}
+}
+
+// A question whose prompt cannot be shown is not asked: stdin a terminal, stderr on /dev/full, rm removes nothing.
+func TestRm_AQuestionThatCannotBeShownIsNotAsked(t *testing.T) {
+	if _, err := os.Stat("/dev/full"); err != nil {
+		t.Skip("no /dev/full")
+	}
+	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"keep": testkit.Inline("true")})
+	rc, out := e.InTerminalCmd(testkit.Opts{}, nil, "sh", "-c", `exec "$@" 2>/dev/full`, "sh", testkit.Binary(t), "rm", "keep")
+	if rc != 1 {
+		t.Errorf("exit %d\n%s", rc, out)
+	}
+	if _, has := e.LoadGlobal()["keep"]; !has {
+		t.Error("rm removed the entry without asking")
+	}
+}
+
 func TestStores_AnEntryWithBothInlineAndScriptIsRefused(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteFile(filepath.Join(e.Store, "both.sh"), bashShebang+"echo script\n", 0)

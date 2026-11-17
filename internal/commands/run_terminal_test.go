@@ -125,3 +125,18 @@ func TestRunning_CtrlCReachesTheShortcut(t *testing.T) {
 		t.Errorf("took %v", time.Since(start))
 	}
 }
+
+// A --confirm shortcut whose question cannot be shown does not run: stdin a terminal, stderr on /dev/full.
+func TestRunning_AConfirmQuestionThatCannotBeShownDoesNotRun(t *testing.T) {
+	if _, err := os.Stat("/dev/full"); err != nil {
+		t.Skip("no /dev/full")
+	}
+	e := testkit.New(t)
+	marker := filepath.Join(e.Tmp, "ran")
+	e.WriteStore(e.Store, map[string]any{"danger": map[string]any{"inline": "echo ran >" + marker, "confirm": true}})
+	rc, out := e.InTerminalCmd(testkit.Opts{}, nil, "sh", "-c", `exec "$@" 2>/dev/full`, "sh", testkit.Binary(t), "r", "danger")
+	if rc != 1 {
+		t.Errorf("exit %d\n%s", rc, out)
+	}
+	testkit.NotExist(t, marker)
+}
