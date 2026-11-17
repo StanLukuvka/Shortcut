@@ -88,7 +88,7 @@ repair, or carry on.
 
 ## Imports
 
-Imports point down this tree and never up: `cmd/shortcut`, `internal/commands`, one command, `internal/store/write`, `internal/store`, `internal/terminal`, `internal/platform`. A command may import `internal/store`, `internal/store/write`, `internal/terminal`, `internal/terminal/argparse` and `internal/platform`; it imports no other command and not `internal/commands`. `internal/store` imports only `internal/platform`; `internal/store/write` also imports `internal/terminal`. `internal/platform` imports nothing of this repository. The table is in [internal/testkit/layers_test.go](internal/testkit/layers_test.go). The test fails on an import the table doesn't list and on a package that isn't in it, so a new package or import is a row there.
+Imports point down this tree and never up: `cmd/shortcut`, `internal/commands`, one command, `internal/store/write`, `internal/store`, `internal/terminal`, `internal/platform`. A command may import `internal/store`, `internal/store/write`, `internal/terminal`, `internal/terminal/argparse` and `internal/platform`; it imports no other command and not `internal/commands`. `internal/commands` also imports `internal/terminal/argparse`. `internal/store` imports only `internal/platform`; `internal/store/write` also imports `internal/terminal`. `internal/platform` imports nothing of this repository. The table is in [internal/testkit/layers_test.go](internal/testkit/layers_test.go). The test fails on an import the table doesn't list and on a package that isn't in it, so a new package or import is a row there.
 
 ## Docs and commits
 

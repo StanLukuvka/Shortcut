@@ -38,7 +38,7 @@ var below = []string{write, store, argparse, terminal, platform}
 var layers = map[string][]string{
 	"cmd/shortcut": {commands},
 	commands: {commands + "/completion", commands + "/list", commands + "/new", commands + "/remove", commands + "/run",
-		commands + "/show", store, terminal, platform},
+		commands + "/show", store, terminal, argparse, platform},
 	commands + "/completion": below,
 	commands + "/list":       below,
 	commands + "/new":        below,

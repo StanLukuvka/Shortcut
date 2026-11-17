@@ -43,7 +43,7 @@ func (c Command) Words(sep string) string {
 }
 
 // Parse parses a command's words with the parser its Args describe. Its -h prints HelpText.
-func (c Command) Parse(argv []string) (Namespace, error) {
+func (c Command) Parse(argv []string) (argparse.Namespace, error) {
 	return c.parser().Parse(argv)
 }
 

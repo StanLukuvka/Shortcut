@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"testing"
 
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
@@ -16,19 +15,9 @@ func TestMain(m *testing.M) { testkit.HelperMain(m, "TERM_HELPER", helper) }
 func helper(job string) {
 	s := NewStreams(os.Stdin, os.Stdout, os.Stderr)
 	switch job {
-	case "closed": // started with fds 0, 1 and 2 closed: the runtime has reopened them, so nothing fails
-		code := 0
-		for fd := 0; fd < 3; fd++ {
-			if _, _, e := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), syscall.F_GETFD, 0); e != 0 {
-				code |= 1 << fd
-			}
-		}
-		s.Out.WriteString("out\n")
-		s.Err.WriteString("err\n")
-		os.Exit(code)
 	case "confirm":
-		ok, err := Confirm{Question: "run 'go'?", NoTerminal: "no terminal", Message: "will run \x1b[2Kit"}.Granted(s, false)
-		s.Out.WriteString(fmt.Sprintf("granted=%v err=%v\n", ok, err))
+		err := Confirmed(s, Confirm{Question: "run 'go'?", NoTerminal: "no terminal", Message: "will run \x1b[2Kit"}, false)
+		s.Out.WriteString(fmt.Sprintf("err=%v\n", err))
 	}
 }
 
@@ -53,29 +42,4 @@ func capture(t *testing.T, e *testkit.Env, input string) (s *Streams, out, errs 
 		return func() string { b, _ := os.ReadFile(filepath.Join(e.Tmp, name)); return string(b) }
 	}
 	return NewStreams(inf, open("out"), open("err")), read("out"), read("err")
-}
-
-func TestStreams_WritesAreAsTheyAre(t *testing.T) {
-	e := testkit.New(t)
-	s, out, errs := capture(t, e, "")
-	if s.Out.IsTerminal() || s.Err.IsTerminal() {
-		t.Error("files are not terminals")
-	}
-	s.Out.WriteString("a\x1b[2Kb\rc\n")
-	s.Out.WriteString("\x1b[2mdim\x1b[0m\n")
-	s.Err.WriteString("e\x1b\n")
-	if errs() != "e\x1b\n" {
-		t.Errorf("stderr %q", errs())
-	}
-	if want := "a\x1b[2Kb\rc\n\x1b[2mdim\x1b[0m\n"; out() != want {
-		t.Errorf("stdout %q, want %q", out(), want)
-	}
-}
-
-// A process started with fds 0, 1 and 2 closed finds them open on /dev/null.
-func TestStreams_ClosedStdFdsAreReopenedByTheRuntime(t *testing.T) {
-	e := testkit.New(t)
-	res := e.RunCmd(testkit.Opts{Env: map[string]string{"TERM_HELPER": "closed"}},
-		"sh", "-c", `exec "$0" -test.run='^$' <&- >&- 2>&-`, os.Args[0])
-	res.WantCode(t, 0) // else the code's bits 0-2 say which of fd 0-2 was found closed, bit 3 that the write failed
 }

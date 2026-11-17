@@ -81,8 +81,8 @@ func (n Namespace) Bool(dest string) bool { b, _ := n[dest].(bool); return b }
 // List is the words of a positional that takes several.
 func (n Namespace) List(dest string) []string { l, _ := n[dest].([]string); return l }
 
-// ExitError is what a command exits with: 2 and a message on stderr, or 0 and the help on stdout for -h.
-// The caller prints Stdout and Stderr as they are and exits with Code.
+// ExitError ends a command with a code and, optionally, text for stdout and stderr, which Main prints as it is
+// (so a message carries its own "error: " and newline). Code 0 is -h; 2 is a usage error; 1 is terminal.Die.
 type ExitError struct {
 	Code           int
 	Stdout, Stderr string

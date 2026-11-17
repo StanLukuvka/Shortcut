@@ -3,7 +3,6 @@
 package terminal
 
 import (
-	"bufio"
 	"os"
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
@@ -14,7 +13,6 @@ import (
 type Streams struct {
 	In       *os.File
 	Out, Err *Writer
-	in       *bufio.Reader // lazily; shared by every Ask so no input is lost between questions
 }
 
 // NewStreams wraps the three files, usually os.Stdin, os.Stdout, os.Stderr.

@@ -74,7 +74,7 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 }
 
 // rmLocal takes a name out of .shortcuts.local, which also undoes an override.
-func rmLocal(c *store.Context, s *terminal.Streams, ns terminal.Namespace) error {
+func rmLocal(c *store.Context, s *terminal.Streams, ns argparse.Namespace) error {
 	names := ns.List("name")
 	if len(names) > 1 {
 		return terminal.Die("--local takes one name: namespaces aren't in " + store.LocalFile)

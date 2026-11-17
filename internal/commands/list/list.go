@@ -1,6 +1,7 @@
 package list
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -114,9 +115,9 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 			sourceWidth = max(sourceWidth, utf8.RuneCountInString(r.source))
 		}
 		for _, r := range rows {
-			line := "  " + terminal.PadRight(r.name, 20) + " " + terminal.PadRight(r.mode, width) + "  "
+			line := "  " + fmt.Sprintf("%-20s", r.name) + " " + fmt.Sprintf("%-*s", width, r.mode) + "  "
 			if r.source != "" {
-				line += terminal.PadRight(r.source, sourceWidth) + "  "
+				line += fmt.Sprintf("%-*s", sourceWidth, r.source) + "  "
 			}
 			s.Out.WriteString(line + r.desc + "\n")
 		}
