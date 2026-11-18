@@ -126,7 +126,7 @@ func TestStores_RmNamespaceRemovesItWithItsScriptsFolder(t *testing.T) {
 	rc, out := e.InTerminal(testkit.Opts{}, []testkit.Key{{Wait: "[y/N]", Send: y("n\n")}}, "rm", "--namespace", "dk")
 	testkit.Eq(t, "decline", rc, 1)
 	testkit.Contains(t, "removes", out, "Removes namespace 'dk' (1 shortcuts): "+filepath.Join(imports, "dk.shortcut"))
-	testkit.Contains(t, "folder", out, "Deletes its scripts folder: "+filepath.Join(imports, "scripts", "dk"))
+	testkit.Contains(t, "folder", out, "Deletes its scripts folder, if it has one: "+filepath.Join(imports, "scripts", "dk"))
 	testkit.Eq(t, "still runs", e.Run("r", "dk", "ps").Stdout, "ps\n")
 	res := e.Run("rm", "--namespace", "dk")
 	testkit.Eq(t, "no -y", res.Code, 1)

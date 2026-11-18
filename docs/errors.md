@@ -60,7 +60,6 @@ A word that starts with `-` is an option. To pass one as a name or a value, put 
 
 | Message | Meaning |
 |---|---|
-| `registry not found: <path>` | A namespace file that's imported doesn't exist |
 | `corrupt registry <path>: <json error>` | The file isn't valid JSON. The text after the path is Go's |
 | `corrupt registry <path>: contains text that is not valid UTF-8` | The file has a byte sequence that is not valid UTF-8. Shortcut won't guess which name it meant; fix or replace the bytes |
 | `corrupt registry <path>: root must be a JSON object` | The file is JSON, but not `{...}` |
@@ -129,8 +128,6 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `put the command after -- in single quotes, as one word: -- '<the words>'` | More than one word came after `--`. The words are shown joined by spaces |
 | `--desc can't be empty` | `new` |
 | `--namespace can't be empty` | `new` |
-| `script file not found: <path>` | The file given to `--script` |
-| `--cwd directory does not exist: <dir>` | |
 | `--namespace can't be used with --local: .shortcuts.local is one file` | |
 | `'<ns>' is a shortcut in store <store>, so it can't be a namespace` | |
 | `shortcut '<name>' already exists in <file>` | `new` never replaces an entry. Remove it first |

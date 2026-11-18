@@ -13,10 +13,6 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 )
 
-// errRegistryNotFound is for a missing registry file: a store without a registry is empty,
-// but a named namespace file that is missing is a problem.
-var errRegistryNotFound = errors.New("registry not found")
-
 // isJSONError: a problem with the file's text (what the decoder reports), as opposed to reading it (an *fs.PathError).
 func isJSONError(err error) bool {
 	var pe *fs.PathError
@@ -25,13 +21,6 @@ func isJSONError(err error) bool {
 
 // LoadRegistryFile reads a registry file, with fixed messages.
 func LoadRegistryFile(path string) (platform.Doc, error) {
-	isFile, err := platform.IsFile(path)
-	if err != nil {
-		return nil, err
-	}
-	if !isFile {
-		return nil, fmt.Errorf("%w: %s", errRegistryNotFound, path)
-	}
 	text, err := platform.ReadJSONFile(path)
 	var data platform.Doc
 	if err == nil {

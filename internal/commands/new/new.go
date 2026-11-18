@@ -86,13 +86,6 @@ func newFromScript(c *store.Context, s *terminal.Streams, ns argparse.Namespace,
 		return err
 	}
 	abs := platform.Join(c.Cwd, expanded) // not cleaned: `..` after a link is resolved physically
-	isFile, err := platform.IsFile(abs)
-	if err != nil {
-		return err
-	}
-	if path == "-" || !isFile {
-		return terminal.Die("script file not found: " + path)
-	}
 	real, err := platform.Realpath(abs)
 	if err != nil {
 		return err
@@ -172,14 +165,7 @@ func storedCwd(c *store.Context, value string, g store.Group) (*string, error) {
 	if err != nil {
 		return nil, err
 	}
-	abs := platform.Join(c.Cwd, expanded) // not cleaned: `link/..` is the link's parent, which IsDir and Realpath find
-	isDir, err := platform.IsDir(abs)
-	if err != nil {
-		return nil, err
-	}
-	if !isDir {
-		return nil, terminal.Die("--cwd directory does not exist: " + abs)
-	}
+	abs := platform.Join(c.Cwd, expanded) // not cleaned: `link/..` is the link's parent, which Realpath finds
 	path, err := platform.Realpath(abs)
 	if err != nil {
 		return nil, err

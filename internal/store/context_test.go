@@ -155,7 +155,7 @@ func TestStores_LoadStoreImportProblems(t *testing.T) {
 	for _, n := range store.Namespaces {
 		byName[n.Name] = n.Group
 	}
-	if g := byName["ok"]; g.File != filepath.Join(env.Home, "x.shortcut") || g.Error == nil || *g.Error != "registry not found: "+g.File {
+	if g := byName["ok"]; g.File != filepath.Join(env.Home, "x.shortcut") || g.Error == nil || *g.Error != "open "+g.File+": no such file or directory" {
 		t.Errorf("ok: %+v", g)
 	}
 	if g := byName["Bad Name"]; g.Error == nil || !strings.HasPrefix(*g.Error, "invalid shortcut name 'Bad Name'") {
@@ -200,6 +200,29 @@ func TestStore_AnUnreadableImportsFolderIsAProblem(t *testing.T) {
 	problems := NewContext(env.Home, nil).Store(env.Store).Problems
 	if len(problems) != 1 || !strings.Contains(problems[0], imports) {
 		t.Errorf("problems: %q", problems)
+	}
+}
+
+func TestStore_NotAFileOrFolderWhereOneIsReadIsAnError(t *testing.T) {
+	env := testkit.New(t)
+	if err := os.MkdirAll(filepath.Join(env.Store, "shortcuts.json"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env.WriteFile(filepath.Join(env.Store, "imports"), "x", 0)
+	store := NewContext(env.Home, nil).Store(env.Store)
+	if store.Main.Error == nil || !strings.HasPrefix(*store.Main.Error, "read "+store.Main.File+": ") {
+		t.Errorf("main: %+v", store.Main.Error)
+	}
+	if len(store.Problems) != 1 || !strings.Contains(store.Problems[0], filepath.Join(env.Store, "imports")) {
+		t.Errorf("problems: %q", store.Problems)
+	}
+}
+
+func TestStore_NoFileAndNoImportsFolderIsAnEmptyStore(t *testing.T) {
+	env := testkit.New(t)
+	store := NewContext(env.Home, nil).Store(env.Store)
+	if store.Main.Error != nil || len(store.Problems) != 0 || len(store.Namespaces) != 0 {
+		t.Errorf("%+v", store)
 	}
 }
 

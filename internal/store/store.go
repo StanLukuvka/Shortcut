@@ -3,6 +3,7 @@ package store
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -65,8 +66,8 @@ func LoadGroup(path, storeDir, name string) Group {
 	g := Group{Kind: kind, Name: name, File: path, StoreDir: storeDir, Doc: platform.Doc{}}
 	data, err := LoadRegistryFile(path)
 	switch {
-	case errors.Is(err, errRegistryNotFound):
-		if name != "" { // a store without a registry is simply empty
+	case errors.Is(err, fs.ErrNotExist):
+		if name != "" { // a store without a main file is simply empty
 			msg := err.Error()
 			g.Error = &msg
 		}

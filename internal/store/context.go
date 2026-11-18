@@ -1,7 +1,9 @@
 package store
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -192,19 +194,13 @@ func (c *Context) loadStore(storeDir string) Store {
 	sources := map[string]string{}
 	importsDir := platform.Join(storeDir, "imports")
 	if isGlobal {
-		isDir, err := platform.IsDir(importsDir)
-		if err != nil {
+		entries, err := os.ReadDir(importsDir)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) { // a store without imports/ is normal
 			problems = append(problems, err.Error())
 		}
-		if isDir {
-			entries, err := os.ReadDir(importsDir)
-			if err != nil {
-				problems = append(problems, err.Error())
-			}
-			for _, e := range entries {
-				if filename := e.Name(); strings.HasSuffix(filename, ImportSuffix) {
-					sources[strings.TrimSuffix(filename, ImportSuffix)] = platform.Join(importsDir, filename)
-				}
+		for _, e := range entries {
+			if filename := e.Name(); strings.HasSuffix(filename, ImportSuffix) {
+				sources[strings.TrimSuffix(filename, ImportSuffix)] = platform.Join(importsDir, filename)
 			}
 		}
 	}
