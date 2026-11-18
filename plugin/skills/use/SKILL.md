@@ -51,6 +51,7 @@ shortcut r . <name> [args...]
    - For any folder: no `--local`. It goes in the user's global store and runs with `shortcut r <name>`.
    - For everyone on the project: shortcut never writes `.shortcuts`. Make it with `--local`, show the user its `entry` from `shortcut show --json . <name>` to add to `.shortcuts`, then remove your copy with `shortcut rm --local -y <name>`, or it overrides theirs.
    - In a group: `--namespace NS`, run with `shortcut r NS <name>`. Not with `--local`.
+   - For your own use while you work: the namespace `temp` is your scratch pad. Make it with `--namespace temp`, and put any script you write for it in `~/.shortcuts/imports/scripts/temp/`. Nothing in `temp` is the user's, so you may remove from it with `-y` at any time: one with `shortcut rm -y temp <name>`, or all of it, scripts included, with `shortcut rm --namespace temp -y`.
 
 3. **Write the command.** Always pass `--desc`: it's what `list` shows. Then either:
    - an inline command after `--`, as one word in single quotes, with `$1` or `"$@"` where the user's words belong. shortcut doesn't add them. If `new` prints `won't see any arguments you give it`, add `"$@"`. If the command needs a single quote, write a script; or
@@ -69,7 +70,7 @@ shortcut r . <name> [args...]
 
    > Run it: `shortcut r . test`
 
-To change a shortcut, remove it and make it again. If you made it in this task and got it wrong, remove it with `shortcut rm -y <name>` (or `shortcut rm --local -y <name>` from the project root). For any other removal, give the user the `shortcut rm` command to run, or pass `-y` only when they asked for that exact removal. The plugin usually makes Claude Code ask them before a `shortcut rm -y`, but don't rely on it.
+To change a shortcut, remove it and make it again. If you made it in this task and got it wrong, remove it with `shortcut rm -y <name>` (or `shortcut rm --local -y <name>` from the project root). For any other removal outside `temp`, give the user the `shortcut rm` command to run, or pass `-y` only when they asked for that exact removal. The plugin usually makes Claude Code ask them before a `shortcut rm -y`, but don't rely on it.
 
 ## When it fails
 
