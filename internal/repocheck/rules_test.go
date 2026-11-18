@@ -4,7 +4,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io/fs"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -60,33 +59,17 @@ func TestX(t *testing.T) {
 	}
 
 	// The tree: every _test.go outside internal/testkit.
-	root := moduleRoot()
 	fset = token.NewFileSet()
 	var bad []string
-	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	for _, rel := range goFiles(t, true) {
+		if strings.HasPrefix(rel, "internal/testkit/") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, filepath.Join(root, rel), nil, 0)
 		if err != nil {
-			return err
-		}
-		rel, _ := filepath.Rel(root, p)
-		if d.IsDir() {
-			switch {
-			case rel == "internal/testkit", d.Name() == ".git", d.Name() == ".lad", d.Name() == "testdata", isNestedRepo(root, p):
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(p, "_test.go") {
-			return nil
-		}
-		f, err := parser.ParseFile(fset, p, nil, 0)
-		if err != nil {
-			return err
+			t.Fatal(err)
 		}
 		bad = append(bad, violations(fset, f)...)
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
 	}
 	for _, b := range bad {
 		t.Error(b)
