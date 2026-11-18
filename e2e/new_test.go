@@ -76,7 +76,8 @@ func TestNew_Refusals(t *testing.T) {
 		{"empty desc with script", "", []string{"x", "--script", exec, "--desc", ""}, 1, "error: --desc can't be empty\n"},
 		{"empty namespace", "", []string{"x", "--namespace", "", "--", "true"}, 1, "error: --namespace can't be empty\n"},
 		{"empty namespace=", "", []string{"x", "--namespace=", "--desc", "d"}, 1, "error: --namespace can't be empty\n"},
-		{"cwd that is not there", "", []string{"nowhere", "--cwd", "/nonexistent/path/xyz", "--", "echo 1"}, 1, "--cwd directory does not exist"},
+		{"cwd that is not there", "", []string{"nowhere", "--cwd", "/nonexistent/path/xyz", "--", "echo 1"}, 1, "lstat /nonexistent: no such file or directory"},
+		{"script that is not there", "", []string{"nowhere", "--script", "/nonexistent/path/xyz.sh"}, 1, "lstat /nonexistent: no such file or directory"},
 		{"duplicate name", dup, []string{"taken", "--local", "--", "echo duplicate"}, 1, "already exists in"},
 	} {
 		res := e.RunWith(in(c.cwd), append([]string{"new"}, c.args...)...)
@@ -87,6 +88,12 @@ func TestNew_Refusals(t *testing.T) {
 	testkit.NotExist(t, filepath.Join(proj, ".shortcuts.local"))
 	testkit.NotExist(t, filepath.Join(e.Store, "shortcuts.json"))
 	testkit.Eq(t, "taken is still the one entry", fileShortcuts(t, filepath.Join(dup, ".shortcuts.local"))["taken"].(map[string]any)["inline"], "true")
+}
+
+func TestStores_NewCwdThatIsAFileIsStored(t *testing.T) {
+	e := testkit.New(t)
+	file := e.WriteFile(filepath.Join(e.Tmp, "afile"), "x", 0)
+	runOK(t, e, testkit.Opts{}, "new", "f", "--cwd", file, "--", "true")
 }
 
 func TestStores_NewScriptInsideTheStoreIsKeptRelative(t *testing.T) {

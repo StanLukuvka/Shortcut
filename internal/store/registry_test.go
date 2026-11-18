@@ -1,7 +1,9 @@
 package store
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,7 +88,7 @@ func TestRegistry_LoadRegistryFile(t *testing.T) {
 		}
 	}
 	_, err := LoadRegistryFile(filepath.Join(env.Tmp, "gone.json"))
-	if err == nil || err.Error() != "registry not found: "+filepath.Join(env.Tmp, "gone.json") {
+	if !errors.Is(err, fs.ErrNotExist) {
 		t.Error(err)
 	}
 }

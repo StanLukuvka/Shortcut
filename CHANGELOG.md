@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `new --script` and `new --cwd` no longer check the path first: a missing one shows the system's error, and the path is stored as given otherwise.
+- A store or namespace file that can't be read, and an `imports` that isn't a folder, now show the system's error. A folder where a store file should be is no longer read as an empty store.
 - A relative `script` path is no longer checked against its store: it is joined to the file's folder and run as it is, links and `..` included.
 - A script is run as it is: when the system won't start it, shortcut shows the system's error. `new --script` and `list` no longer check the execute bit.
 - `new` takes the command after `--` as one word, in single quotes; more than one word is refused (exit 2) and nothing is written.
