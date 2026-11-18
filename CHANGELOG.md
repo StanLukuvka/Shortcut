@@ -3,6 +3,7 @@
 ## Unreleased
 
 - AGENT.md and the plugin's skill let an agent use the namespace `temp` as a scratch pad for its own shortcuts and scripts, and clear it with `-y`.
+- The plugin's guard no longer asks before `shortcut rm -y temp <name>` or `shortcut rm --namespace temp -y`.
 
 ## 1.0.0 - 2026-11-18
 

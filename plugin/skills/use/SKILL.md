@@ -51,7 +51,7 @@ shortcut r . <name> [args...]
    - For any folder: no `--local`. It goes in the user's global store and runs with `shortcut r <name>`.
    - For everyone on the project: shortcut never writes `.shortcuts`. Make it with `--local`, show the user its `entry` from `shortcut show --json . <name>` to add to `.shortcuts`, then remove your copy with `shortcut rm --local -y <name>`, or it overrides theirs.
    - In a group: `--namespace NS`, run with `shortcut r NS <name>`. Not with `--local`.
-   - For your own use while you work: the namespace `temp` is your scratch pad. Make it with `--namespace temp`, and put any script you write for it in `~/.shortcuts/imports/scripts/temp/`. Nothing in `temp` is the user's, so you may remove from it with `-y` at any time: one with `shortcut rm -y temp <name>`, or all of it, scripts included, with `shortcut rm --namespace temp -y`.
+   - For your own use while you work: the namespace `temp` is your scratch pad. Make it with `--namespace temp`, and put any script you write for it in `~/.shortcuts/imports/scripts/temp/`. Nothing in `temp` is the user's, so you may remove from it with `-y` at any time: one with `shortcut rm -y temp <name>`, or all of it, scripts included, with `shortcut rm --namespace temp -y`. Write them just so, with no other names or `--local`, or the plugin asks the user.
 
 3. **Write the command.** Always pass `--desc`: it's what `list` shows. Then either:
    - an inline command after `--`, as one word in single quotes, with `$1` or `"$@"` where the user's words belong. shortcut doesn't add them. If `new` prints `won't see any arguments you give it`, add `"$@"`. If the command needs a single quote, write a script; or

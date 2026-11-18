@@ -280,7 +280,8 @@ For one listed under `"imports"`, it only removes the listing and leaves the fil
 
 [plugin/](plugin/) is a plugin for Claude Code. With it, Claude knows the project's shortcuts from the start of each
 session, runs them, and saves commands you ask it to keep, in the project's `.shortcuts.local` by default. Claude Code
-asks you first when a command's text runs `shortcut r` or `shortcut rm` with `-y`. A command run through a variable, an alias, a wrapper script or `eval` can still get past it.
+asks you first when a command's text runs `shortcut r` or `shortcut rm` with `-y`, except a removal from the namespace
+`temp`, Claude's scratch pad. A command run through a variable, an alias, a wrapper script or `eval` can still get past it.
 
 ```bash
 claude plugin marketplace add StanLukuvka/Shortcut
