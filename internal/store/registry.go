@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"maps"
 	"math/big"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -86,35 +85,13 @@ func ValidateName(name string) error {
 	return nil
 }
 
-// ResolveScriptPath: absolute paths are used as given; relative ones resolve against baseDir and cannot escape it.
-func ResolveScriptPath(baseDir, scriptField string) (string, error) {
+// ScriptPath is where an entry's script is: an absolute path as given, a relative one joined to baseDir (not
+// cleaned, so the OS resolves a `..` after a link as it does for any path).
+func ScriptPath(baseDir, scriptField string) string {
 	if strings.HasPrefix(scriptField, "/") {
-		return scriptField, nil
+		return scriptField
 	}
-	base, err := platform.Realpath(baseDir)
-	if err != nil {
-		return "", err
-	}
-	target := platform.Join(base, scriptField)
-	there, err := platform.Lexists(target) // a link as the last part must resolve: a dangling one is an error, not a missing script
-	if err != nil {
-		return "", err
-	}
-	if there {
-		target, err = platform.Realpath(target)
-	} else { // a script that is not there is reported by its caller ("script file not found"): its folder must be
-		dir, name := filepath.Split(target) // not Dir: it would clean away a `..` that follows a link
-		if dir, err = platform.Realpath(dir); err == nil {
-			target = platform.Join(dir, name)
-		}
-	}
-	if err != nil {
-		return "", err
-	}
-	if !platform.IsRelativeTo(target, base) {
-		return "", fmt.Errorf("path traversal detected: '%s' resolves to '%s', outside '%s'.", scriptField, target, base)
-	}
-	return target, nil
+	return platform.Join(baseDir, scriptField)
 }
 
 // fileError returns what's wrong with a file as a whole ("" = nothing); EntryErrors checks what's inside

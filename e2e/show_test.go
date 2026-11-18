@@ -127,7 +127,6 @@ func TestShow_FullOutput(t *testing.T) {
  "trav": {"script": "../../etc/passwd"},
  "nul": null,
  "build": {"description": "Global build", "inline": "echo gb", "cwd": "/tmp"}}}`)
-	e.Folder("etc") // the folder of "trav"'s script, outside the store, must be there for the traversal check
 	e.WriteFile(filepath.Join(e.Store, "scripts", "tool.sh"), "#!/bin/sh\necho hi\n\n\n   \n", 0)
 	cases := []struct {
 		args   []string
@@ -187,12 +186,12 @@ echo hi
   "entry": {
     "script": "../../etc/passwd"
   },
-  "error": "path traversal detected: '../../etc/passwd' resolves to 'TMP/etc/passwd', outside 'TMP/home/.shortcuts'.",
+  "error": null,
   "name": "trav",
   "namespace": null,
   "run_cwd": "TMP/home",
   "scope": "global",
-  "script_path": null,
+  "script_path": "TMP/home/.shortcuts/../../etc/passwd",
   "source": null
 }
 `, ""},

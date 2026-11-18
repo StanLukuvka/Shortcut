@@ -44,7 +44,7 @@
           "type": "string"
         },
         "script": {
-          "description": "Path to a script. A relative path starts at this file's folder and can't escape it. An absolute path is used as it is.",
+          "description": "Path to a script. A relative path starts at this file's folder. An absolute path is used as it is.",
           "type": "string"
         },
         "cwd": {

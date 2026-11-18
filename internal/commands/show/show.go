@@ -66,10 +66,7 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 		out("\nInline command:\n  " + *entry.Inline)
 		return nil
 	}
-	path, err := store.ResolveScriptPath(group.ScriptBase(), *entry.Script)
-	if err != nil {
-		return err
-	}
+	path := store.ScriptPath(group.ScriptBase(), *entry.Script)
 	out("\nScript (" + path + "):")
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -185,10 +182,8 @@ func showObject(c *store.Context, words []string, lk store.Lookup) (vals map[str
 			vals["run_cwd"] = &runCwd
 		}
 		if err == nil && e.Script != nil {
-			var path string
-			if path, err = store.ResolveScriptPath(g.ScriptBase(), *e.Script); err == nil {
-				vals["script_path"] = &path
-			}
+			path := store.ScriptPath(g.ScriptBase(), *e.Script)
+			vals["script_path"] = &path
 		}
 	}
 	if err != nil {
