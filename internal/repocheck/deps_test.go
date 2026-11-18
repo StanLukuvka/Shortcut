@@ -2,13 +2,14 @@ package repocheck
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"testing"
 )
 
 // shortcut is stdlib only: go.mod has no require line or block.
 func TestGoModHasNoRequire(t *testing.T) {
-	raw, err := os.ReadFile("../../go.mod")
+	raw, err := os.ReadFile(filepath.Join(root, "go.mod"))
 	if err != nil {
 		t.Fatal(err)
 	}

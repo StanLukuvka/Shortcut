@@ -3,8 +3,7 @@ package repocheck
 import (
 	"go/parser"
 	"go/token"
-	"io/fs"
-	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -53,72 +52,41 @@ var layers = map[string][]string{
 	"internal/testkit":       {},
 }
 
-// moduleRoot is the directory holding go.mod: two levels above this package.
-func moduleRoot() string {
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		panic(err)
-	}
-	return root
-}
-
 // The packages may only import what the table says, read from the import lines of their non-test files.
 func TestLayers_PackagesImportOnlyWhatTheTableAllows(t *testing.T) {
-	root := moduleRoot()
 	const module = "github.com/StanLukuvka/Shortcut"
 	fset := token.NewFileSet()
 	var bad []string
 	seen := map[string]bool{}
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	for _, rel := range goFiles(t, false) {
+		pkg := path.Dir(rel)
+		f, err := parser.ParseFile(fset, filepath.Join(root, rel), nil, parser.ImportsOnly)
 		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			switch d.Name() {
-			case ".git", ".lad", "testdata":
-				return filepath.SkipDir
-			}
-			if isNestedRepo(root, p) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
-			return nil
-		}
-		pkg, _ := filepath.Rel(root, filepath.Dir(p))
-		pkg = filepath.ToSlash(pkg)
-		f, err := parser.ParseFile(fset, p, nil, parser.ImportsOnly)
-		if err != nil {
-			return err
+			t.Fatal(err)
 		}
 		seen[pkg] = true
 		allowed, listed := layers[pkg]
 		if !listed {
 			bad = append(bad, "package "+pkg+" is not in the layer table; place it in layers_test.go")
-			return nil
+			continue
 		}
 		for _, imp := range f.Imports {
-			path, _ := strconv.Unquote(imp.Path.Value)
-			rel, internal := strings.CutPrefix(path, module)
+			ip, _ := strconv.Unquote(imp.Path.Value)
+			dep, internal := strings.CutPrefix(ip, module)
 			if !internal {
 				continue // stdlib: no dependencies exist (deps_test.go)
 			}
-			if rel = strings.TrimPrefix(rel, "/"); rel == "" {
-				rel = "."
+			if dep = strings.TrimPrefix(dep, "/"); dep == "" {
+				dep = "."
 			}
 			ok := false
 			for _, a := range allowed {
-				ok = ok || a == rel
+				ok = ok || a == dep
 			}
 			if !ok {
-				bad = append(bad, "package "+pkg+" ("+filepath.ToSlash(p[len(root)+1:])+") imports "+rel+", which the layer table does not allow it")
+				bad = append(bad, "package "+pkg+" ("+rel+") imports "+dep+", which the layer table does not allow it")
 			}
 		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
 	}
 	// Nothing may be left in the table for a package that is gone.
 	var all []string
@@ -134,14 +102,4 @@ func TestLayers_PackagesImportOnlyWhatTheTableAllows(t *testing.T) {
 	for _, b := range bad {
 		t.Error(b)
 	}
-}
-
-// isNestedRepo is true for a folder below root that holds its own .git (a file or a folder): another checkout, such as
-// a worktree under .claude/worktrees, is not this repository's code.
-func isNestedRepo(root, dir string) bool {
-	if dir == root {
-		return false
-	}
-	_, err := os.Lstat(filepath.Join(dir, ".git"))
-	return err == nil
 }

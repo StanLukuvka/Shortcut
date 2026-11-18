@@ -4,7 +4,6 @@ import (
 	"go/ast"
 	goparser "go/parser"
 	"go/token"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -61,22 +60,14 @@ var raisers = map[string]bool{"Die": true, "terminal.Die": true, "fail": true, "
 // in every non-test package under internal/ except testkit and testdata.
 func goMessages(t *testing.T) [][]string {
 	var found [][]string
-	err := filepath.WalkDir("..", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	for _, rel := range goFiles(t, false) {
+		if !strings.HasPrefix(rel, "internal/") || strings.HasPrefix(rel, "internal/testkit/") {
+			continue
 		}
-		if d.IsDir() {
-			if d.Name() == "testkit" || d.Name() == "testdata" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
+		path := filepath.Join(root, rel)
 		f, err := goparser.ParseFile(token.NewFileSet(), path, nil, 0)
 		if err != nil {
-			return err
+			t.Fatal(err)
 		}
 		add := func(e ast.Expr) {
 			if l := lits(e); l != nil {
@@ -115,16 +106,12 @@ func goMessages(t *testing.T) [][]string {
 			}
 			return true
 		})
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
 	}
 	return found
 }
 
 func TestEveryMessageIsInTheTable(t *testing.T) {
-	raw, err := os.ReadFile("../../docs/errors.md")
+	raw, err := os.ReadFile(filepath.Join(root, "docs/errors.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
