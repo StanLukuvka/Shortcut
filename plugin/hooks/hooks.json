@@ -1,0 +1,21 @@
+{
+  "description": "Lists the project's shortcuts at session start, and asks the user before a command that answers one of shortcut's questions.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/project-shortcuts.sh\"", "timeout": 15 }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/confirm-guard.sh\"", "timeout": 10 }
+        ]
+      }
+    ]
+  }
+}

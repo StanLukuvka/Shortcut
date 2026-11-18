@@ -1,0 +1,9 @@
+{
+  "name": "shortcut",
+  "version": "0.1.0",
+  "description": "Find, run and save shortcuts with the shortcut CLI. The project's shortcuts are in Claude's context from the start, and Claude Code asks you before Claude answers one of shortcut's questions.",
+  "author": { "name": "Stan Lukuvka" },
+  "homepage": "https://github.com/StanLukuvka/Shortcut",
+  "license": "MIT",
+  "keywords": ["shortcut", "cli", "shell", "commands", "scripts"]
+}
