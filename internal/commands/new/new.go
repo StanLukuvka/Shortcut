@@ -93,9 +93,6 @@ func newFromScript(c *store.Context, s *terminal.Streams, ns argparse.Namespace,
 	if path == "-" || !isFile {
 		return terminal.Die("script file not found: " + path)
 	}
-	if err := platform.CheckExecutable(abs); err != nil {
-		return terminal.Die(err.Error())
-	}
 	real, err := platform.Realpath(abs)
 	if err != nil {
 		return err

@@ -71,7 +71,9 @@ func TestBrokenStores_ListWarnsAboutEveryEntryThatCannotRun(t *testing.T) {
 	testkit.Contains(t, "stderr", res.Stderr, "script not found: scripts/none.sh")
 	testkit.Contains(t, "stderr", res.Stderr, "'cwd' must be a string")
 	testkit.Contains(t, "stderr", res.Stderr, "warning: ns: 'both'")
-	testkit.Contains(t, "stderr", res.Stderr, "'plain': "+plain+" is not executable. Make it so: chmod +x "+plain)
+	if strings.Contains(res.Stderr, "plain") {
+		t.Errorf("list warned about a script that is not executable: %q", res.Stderr)
+	}
 	testkit.Contains(t, "stdout", res.Stdout, "good")
 	if got := e.Run("list", "--names").Stderr; got != "" {
 		t.Errorf("--names warned: %q", got)

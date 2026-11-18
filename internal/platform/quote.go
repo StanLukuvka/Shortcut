@@ -2,10 +2,10 @@ package platform
 
 import "strings"
 
-// ShellQuote quotes s for a POSIX shell: unchanged when it holds only ASCII letters, digits and _@%+=:,./-;
+// shellQuote quotes s for a POSIX shell: unchanged when it holds only ASCII letters, digits and _@%+=:,./-;
 // two single quotes when empty; otherwise single-quoted with ' written as '"'"'. Used to print commands the
 // user can paste.
-func ShellQuote(s string) string {
+func shellQuote(s string) string {
 	if s == "" {
 		return "''"
 	}
@@ -27,7 +27,7 @@ func ShellQuote(s string) string {
 func ShellJoin(parts []string) string {
 	q := make([]string, len(parts))
 	for i, p := range parts {
-		q[i] = ShellQuote(p)
+		q[i] = shellQuote(p)
 	}
 	return strings.Join(q, " ")
 }

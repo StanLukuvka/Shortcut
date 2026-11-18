@@ -4,7 +4,6 @@ import (
 	"errors"
 	"io/fs"
 	"os"
-	"syscall"
 )
 
 // notThere is nil for "nothing is there": any other error (permission denied, say) is returned, because then
@@ -53,12 +52,4 @@ func IsLink(path string) (bool, error) {
 		return false, notThere(err)
 	}
 	return st.Mode()&os.ModeSymlink != 0, nil
-}
-
-// CheckExecutable is nil when the current user may execute path, else the error that says how to fix it.
-func CheckExecutable(path string) error {
-	if syscall.Access(path, 1) != nil {
-		return errors.New(path + " is not executable. Make it so: chmod +x " + ShellQuote(path))
-	}
-	return nil
 }

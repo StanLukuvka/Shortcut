@@ -115,12 +115,9 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `'<ns>' is a namespace; run one of its shortcuts` | |
 | `too many names: <words>` | `show` and `rm` take a name, or a namespace and a name |
 | `<file error>. Nothing runs inside this project until it's fixed.` | `run .` with the project's file broken. Your global shortcuts are not behind it |
-| `run directory does not exist: <dir>` | The entry's `cwd` is gone |
-| `script file not found: <path>` | |
 | `SHORTCUT_SHOW_DIR must be 0 or 1, not '<value>'` | The variable is set to something else. Unset it or use `1` to show the folder, `0` to hide it |
-| `<path> can't run as it is: it needs to start with #! and a program that runs here, such as #!/bin/sh, or to be a binary for this system` | An executable script the system won't start: no `#!` line, a `#!` program that doesn't run here, or a binary for another system |
+| `exec <path>: <reason>` | The system would not start the script: `permission denied` (not executable: `chmod +x` it), `exec format error` (no `#!` line, or a binary for another system), `no such file or directory` (the file, or the program its `#!` line names, is missing) |
 | `'<word>' is not a name: options go before the dot, as in shortcut r -y . <rest>` | `run .` with an option after the dot. A name can't start with `-` |
-| `<path> is not executable. Make it so: chmod +x <path>` | A script runs as it is, so it needs the execute bit. `list` warns |
 | `'<name>' asks for confirmation: run it in a terminal, or pass -y` | A `confirm` entry run without a terminal |
 
 ## new
@@ -134,7 +131,6 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `--desc can't be empty` | `new` |
 | `--namespace can't be empty` | `new` |
 | `script file not found: <path>` | The file given to `--script` |
-| `<path> is not executable. Make it so: chmod +x <path>` | The file given to `--script` |
 | `--cwd directory does not exist: <dir>` | |
 | `--namespace can't be used with --local: .shortcuts.local is one file` | |
 | `'<ns>' is a shortcut in store <store>, so it can't be a namespace` | |
