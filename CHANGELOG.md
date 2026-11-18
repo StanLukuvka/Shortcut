@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 - 2026-11-18
 
 - A Claude Code plugin, in `plugin/`, installed with `claude plugin marketplace add StanLukuvka/Shortcut` and `claude plugin install shortcut@shortcut`.
 - `new --script` and `new --cwd` no longer check the path first: a missing one shows the system's error, and the path is stored as given otherwise.

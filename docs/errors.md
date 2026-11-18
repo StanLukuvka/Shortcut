@@ -65,7 +65,7 @@ A word that starts with `-` is an option. To pass one as a name or a value, put 
 | `corrupt registry <path>: root must be a JSON object` | The file is JSON, but not `{...}` |
 | `corrupt registry <path>: 'shortcuts' must be an object` | |
 | `corrupt registry <path>: 'description' must be a string` | |
-| `cannot overwrite corrupt registry <path>: <json error>` | shortcut won't write over a file it can't read, including one that isn't valid UTF-8. The text after the path is as in the row above. Fix or move it |
+| `cannot overwrite corrupt registry <path>: <json error>` | shortcut won't write over a file it can't read, including one that isn't valid UTF-8 or isn't a JSON object. The text after the path says what's wrong. Fix or move it |
 | `<path> is format version <n>, newer than this shortcut reads; upgrade shortcut` | |
 | `corrupt registry <path>: 'version' must be a whole number, such as 1` | `"version"` is a string, a fraction (`1.0`), `null` or `true` |
 | `<path> needs "version": 1` | No `version`, or one below 1, in any store, project or namespace file |
