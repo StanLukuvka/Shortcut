@@ -143,6 +143,14 @@ func TestStores_AtomicRegistrySaveAndCorruptProtection(t *testing.T) {
 	if got, _ := os.ReadFile(reg); string(got) != `{"version": 1, corrupt json!` {
 		t.Errorf("file is now %q", got)
 	}
+	// A file that is valid JSON but not an object is refused the same way
+	env.WriteFile(path, `[]`, 0)
+	if err := SaveRegistryFile(path, data); err == nil || !strings.HasPrefix(err.Error(), "cannot overwrite corrupt registry ") {
+		t.Errorf("save over []: %v", err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != `[]` {
+		t.Errorf("file is now %q", got)
+	}
 }
 
 // A store's shortcuts.json, a project's .shortcuts and .shortcuts.local, and a namespace .shortcut all need

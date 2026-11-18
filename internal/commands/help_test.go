@@ -34,7 +34,7 @@ func TestDispatch_UsageAndVersion(t *testing.T) {
 	if !strings.HasPrefix(usageText(), "shortcut - run and manage quick scripts and commands\n\nUsage:\n") || !strings.HasSuffix(usageText(), "line.\n") {
 		t.Errorf("usageText is not the usage text: %q", usageText())
 	}
-	if res := e.Run("--version"); res.Code != 0 || res.Stdout != "shortcut 0.1.0\n" || Version != "0.1.0" {
+	if res := e.Run("--version"); res.Code != 0 || res.Stdout != "shortcut 1.0.0\n" || Version != "1.0.0" {
 		t.Errorf("--version: exit %d stdout %q", res.Code, res.Stdout)
 	}
 	// An empty word is an unknown command, not a crash.
