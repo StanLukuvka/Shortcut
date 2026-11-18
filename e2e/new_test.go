@@ -16,7 +16,6 @@ func TestRunning_NewSaysWhenACommandIgnoresArguments(t *testing.T) {
 	e := testkit.New(t)
 	const hint = "won't see any arguments"
 	testkit.Contains(t, "a", e.Run("new", "a", "--", "rg --hidden").Stderr, hint)
-	testkit.Contains(t, "b", e.Run("new", "b", "--", "rg", "--hidden").Stderr, hint)
 	for _, c := range [][2]string{{"c", `rg "$@"`}, {"d", "echo $1"}, {"e", "echo ${2}"}, {"f", "echo $*"}} {
 		res := runOK(t, e, testkit.Opts{}, "new", c[0], "--", c[1])
 		if strings.Contains(res.Stderr, hint) {
@@ -123,12 +122,12 @@ func TestStores_AddAndLinkPaths(t *testing.T) {
 	}
 }
 
-func TestStores_NewOneLiner(t *testing.T) {
+func TestStores_NewRefusesSeveralWordsAfterTheDashes(t *testing.T) {
 	e := testkit.New(t)
-	runOK(t, e, testkit.Opts{}, "new", "hello", "--", "echo", "hello", "world")
-	hello := e.LoadGlobal()["hello"].(map[string]any)
-	testkit.Eq(t, "inline", hello["inline"], "echo hello world")
-	testkit.Eq(t, "description", hello["description"], nil) // new makes up none
+	res := e.Run("new", "hello", "--", "echo", "hello", "world")
+	res.WantCode(t, 2)
+	testkit.Contains(t, "stderr", res.Stderr, "error: put the command after -- in single quotes, as one word: -- 'echo hello world'\n")
+	testkit.NotExist(t, filepath.Join(e.Store, "shortcuts.json"))
 }
 
 func TestStores_NewScriptInsideTheStoreIsKeptRelative(t *testing.T) {

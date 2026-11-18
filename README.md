@@ -82,14 +82,10 @@ type after the name reach it as `$1`, `$2` and so on, and `"$@"` is all of them.
 
 If the command itself contains a single quote, put it in a script and use `--script` (below).
 
-You can also leave out the quotes: shortcut then stores each word as it reached it, quoted so that it stays one word.
-Your shell has already read the words by then, so quote anything it shouldn't expand: `shortcut new home -- echo
-'$HOME'` makes a shortcut that prints the text `$HOME`. One single-quoted command is the easier habit.
-
 A command that doesn't use `$1` or `"$@"` never sees the words you give it. shortcut tells you so when you make it:
 
 ```
-$ shortcut new ports --desc "What's listening" -- ss -tlnp
+$ shortcut new ports --desc "What's listening" -- 'ss -tlnp'
 note: 'ports' won't see any arguments you give it; add "$@" to pass them on
 Created inline shortcut 'ports'.
 ```
@@ -311,8 +307,8 @@ shortcut --version
 - `new` takes `--desc D`, `--cwd caller|DIR` (where it runs; default: the caller's directory), `--confirm` (ask
   before running, showing the description and the words given), `--local` (write to `.shortcuts.local`) and
   `--namespace NS` (write to a global namespace).
-- `new <name> -- CMD`: one quoted word is kept as written, so `-- 'ls "$1" | wc -l'` keeps its pipe. Several words are
-  each quoted, so each stays one word: `-- echo '$HOME'` prints `$HOME`. `$1`, `$@` and the other arguments stay live.
+- `new <name> -- CMD`: the command is one word, kept as written, so `-- 'ls "$1" | wc -l'` keeps its pipe. More than
+  one word after `--` is refused. `$1`, `$@` and the other arguments stay live.
 - `--local`, on `new` and `rm`, works only from the project root. Outside any project, `new --local` makes the current
   folder one, except the folder holding the global store or a folder inside it.
 - A shortcut or namespace name matches `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`, and is used once in its file.

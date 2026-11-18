@@ -198,27 +198,15 @@ func TestRunning_CommandWordsAreOrdinaryShortcutNames(t *testing.T) {
 	}
 }
 
-func TestRunning_SeveralWordCommandsKeepPositionalArgumentsLive(t *testing.T) {
+func TestRunning_AQuotedCommandKeepsPositionalArgumentsLive(t *testing.T) {
 	e := testkit.New(t)
-	for i, c := range []struct {
-		words  []string
-		stored string
-	}{
-		{[]string{"echo", "$1"}, `echo "$1"`},
-		{[]string{"printf", "[%s]", "$@"}, `printf '[%s]' "$@"`},
-		{[]string{"echo", "a b", "${1}"}, `echo 'a b' "${1}"`},
-		{[]string{"echo", "$HOME"}, `echo '$HOME'`},
-		{[]string{"echo", `say "$1"`}, `echo "say \"$1\""`},
-		{[]string{"echo", "$(id) `id` \\ $1"}, `echo "\$(id) \` + "`id\\`" + ` \\ $1"`},
-	} {
-		name := "cmd" + string(rune('0'+i))
-		runOK(t, e, testkit.Opts{}, append([]string{"new", name, "--"}, c.words...)...)
-		testkit.Eq(t, name, e.LoadGlobal()[name].(map[string]any)["inline"], c.stored)
+	for name, command := range map[string]string{"cmd0": `echo "$1"`, "cmd1": `printf '[%s]' "$@"`, "cmd3": `echo '$HOME'`} {
+		runOK(t, e, testkit.Opts{}, "new", name, "--", command)
+		testkit.Eq(t, name, e.LoadGlobal()[name].(map[string]any)["inline"], command)
 	}
 	testkit.Eq(t, "cmd0", e.Run("r", "cmd0", "hello world").Stdout, "hello world\n")
 	testkit.Eq(t, "cmd1", e.Run("r", "cmd1", "a b", "c").Stdout, "[a b][c]")
 	testkit.Eq(t, "cmd3", e.Run("r", "cmd3").Stdout, "$HOME\n")
-	testkit.Eq(t, "cmd5", e.Run("r", "cmd5", "x").Stdout, "$(id) `id` \\ x\n")
 }
 
 // A NUL in a cwd cannot be a directory: the run is refused and the command does not start.

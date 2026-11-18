@@ -130,6 +130,7 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | `command expected after '--'` | |
 | `--script needs a file name` | |
 | `use one of: '-- CMD', --script` | |
+| `put the command after -- in single quotes, as one word: -- '<the words>'` | More than one word came after `--`. The words are shown joined by spaces |
 | `--desc can't be empty` | `new` |
 | `--namespace can't be empty` | `new` |
 | `script file not found: <path>` | The file given to `--script` |

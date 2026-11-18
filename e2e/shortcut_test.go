@@ -99,7 +99,7 @@ func TestDispatch_ParserErrorsEndToEnd(t *testing.T) {
 	if res := e.Run("show", "--", "-rf"); res.Code != 1 || strings.Contains(res.Stderr, "unrecognized") {
 		t.Errorf("show -- -rf: exit %d stderr %q", res.Code, res.Stderr)
 	}
-	runOK(t, e, testkit.Opts{}, "new", "foo", "--desc", "x", "--", "echo", "--", "y")
+	runOK(t, e, testkit.Opts{}, "new", "foo", "--desc", "x", "--", "echo -- y")
 	if got := runOK(t, e, testkit.Opts{}, "show", "foo", "--json").Stdout; !strings.Contains(got, "echo -- y") {
 		t.Errorf("new kept the command part wrong: %s", got)
 	}
