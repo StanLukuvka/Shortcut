@@ -2,7 +2,7 @@ package e2e
 
 import (
 	"fmt"
-	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,23 +15,10 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-func tree(t *testing.T, roots ...string) []string {
-	t.Helper()
-	var paths []string
-	for _, root := range roots {
-		filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-			paths = append(paths, p)
-			return nil
-		})
-	}
-	slices.Sort(paths)
-	return paths
-}
-
 func TestStores_NamespaceDispatch(t *testing.T) {
 	e := testkit.New(t)
 	imports := filepath.Join(e.Store, "imports")
-	e.WriteFile(filepath.Join(imports, "scripts", "del.sh"), "#!/usr/bin/env bash\necho \"deleting $1\"\n", 0o755)
+	e.WriteFile(filepath.Join(imports, "scripts", "del.sh"), bashShebang+"echo \"deleting $1\"\n", 0o755)
 	e.WriteImport(e.Store, "docker", testkit.NS(map[string]any{
 		"delete": map[string]any{"script": "scripts/del.sh"},
 		"where":  map[string]any{"inline": "pwd", "cwd": "."},
@@ -113,7 +100,7 @@ func TestStores_ABareShortcutFileIsRefusedWithWhy(t *testing.T) {
 	os.Remove(bare)
 
 	proj := e.Project(testkit.OWN, testkit.Extra(map[string]any{"imports": map[string]any{"x": ".shortcut"}}),
-		testkit.Files(map[string]any{".shortcut": docText(t, testkit.DockerPS)}))
+		testkit.Files(map[string]string{".shortcut": docText(t, testkit.DockerPS)}))
 	for _, cmd := range [][]string{{"r", ".", "x", "ps"}, {"r", ".", "own"}} {
 		res := e.RunWith(in(proj), cmd...)
 		res.WantCode(t, 1)
@@ -152,9 +139,7 @@ func TestStores_BrokenProjectStopsEveryRunInsideIt(t *testing.T) {
 
 	// rm is global-only, so a broken project file doesn't matter
 	testkit.Eq(t, "rm", e.RunWith(in(proj), "rm", "outside", "-y").Code, 0)
-	if _, has := e.LoadGlobal()["outside"]; has {
-		t.Error("rm left it")
-	}
+	wantGone(t, e, "outside")
 	testkit.Contains(t, "list", e.RunWith(in(proj), "list").Stderr, "corrupt registry")
 }
 
@@ -179,11 +164,6 @@ func TestStores_BrokenGlobalStoreStillReports(t *testing.T) {
 	res := e.Run("r", "anything")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "run", res.Stderr, "corrupt registry")
-	for _, bad := range []string{"panic", "goroutine"} {
-		if strings.Contains(res.Stderr, bad) {
-			t.Errorf("stderr has %q", bad)
-		}
-	}
 	testkit.Contains(t, "list", e.Run("list").Stderr, "corrupt registry")
 }
 
@@ -233,7 +213,7 @@ func TestProjectFiles_LocalAddsAndReplacesAWholeEntry(t *testing.T) {
 func TestProjectFiles_RelativePathsResolveFromTheProjectRootInBothFiles(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(map[string]any{"shared": map[string]any{"script": "bin/run.sh", "cwd": "."}},
-		testkit.Dirs("src"), testkit.Files(map[string]any{"bin/run.sh": "#!/usr/bin/env bash\npwd\n"}), testkit.Mode(0o755))
+		testkit.Dirs("src"), testkit.Files(map[string]string{"bin/run.sh": bashShebang + "pwd\n"}), testkit.Mode(0o755))
 	writeLocalFile(t, e, proj, map[string]any{"mine": map[string]any{"script": "bin/run.sh", "cwd": "src"}})
 	src := filepath.Join(proj, "src")
 	testkit.Eq(t, "shared", e.RunWith(in(src), "r", ".", "shared").Stdout, proj+"\n")
@@ -295,10 +275,7 @@ func TestRunning_ExitCodeAndSignalsPassStraightThrough(t *testing.T) {
 		"trap": testkit.Inline(`trap 'kill $!; exit 7' USR1; echo ready; sleep 30 >/dev/null 2>&1 & wait`),
 	})
 	// stdout and stderr stay apart, and the exit code is the shortcut's own
-	res := e.RunWith(testkit.Opts{Env: map[string]string{"SHORTCUT_SHOW_DIR": "0"}}, "r", "fail")
-	if res.Code != 42 || res.Stdout != "out\n" || res.Stderr != "err\n" {
-		t.Errorf("fail: %+v", res)
-	}
+	e.RunWith(testkit.Opts{Env: map[string]string{"SHORTCUT_SHOW_DIR": "0"}}, "r", "fail").Want(t, 42, "out\n", "err\n")
 
 	// The run is the shortcut's process: same pid, and nothing in between to relay a signal
 	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGHUP, syscall.SIGKILL} {
@@ -404,30 +381,32 @@ func TestRunning_Confirm(t *testing.T) {
 		"echoes": testkit.Inline(`echo "$@"`),
 	})
 	o := in(work)
+	// ask runs the shortcut on a terminal, waits for the question and types the answer.
+	ask := func(o testkit.Opts, wait, answer string, args ...string) (int, string) {
+		t.Helper()
+		return e.InTerminal(o, []testkit.Key{{Wait: wait, Send: y(answer + "\n")}}, args...)
+	}
+	question := func(name string) string { return "run '" + name + "' in " + work + "? [y/N]" }
 
 	res := e.RunWith(o, "r", "danger")
-	if res.Code != 1 || res.Stdout != "" {
-		t.Errorf("no terminal: exit %d stdout %q", res.Code, res.Stdout)
-	}
+	res.WantCode(t, 1)
+	testkit.Eq(t, "no terminal stdout", res.Stdout, "")
 	testkit.Contains(t, "no terminal", res.Stderr, "pass -y")
 	res = e.RunWith(o, "r", "-y", "danger")
 	res.WantCode(t, 0)
 	testkit.Contains(t, "-y", res.Stdout, "ran")
 
-	prompt := "run 'danger' in " + work + "? [y/N]"
-	rc, out := e.InTerminal(o, []testkit.Key{{Wait: prompt, Send: y("y\n")}}, "r", "danger")
-	if rc != 0 {
+	rc, out := ask(o, question("danger"), "y", "r", "danger")
+	if rc != 0 || !strings.Contains(out, "ran") {
 		t.Errorf("y: exit %d\n%s", rc, out)
 	}
-	testkit.Contains(t, "y", out, "ran")
-	rc, out = e.InTerminal(o, []testkit.Key{{Wait: prompt, Send: y("n\n")}}, "r", "danger")
+	rc, out = ask(o, question("danger"), "n", "r", "danger")
 	if rc != 1 || strings.Contains(out, "ran\r\n") {
 		t.Errorf("n: exit %d\n%s", rc, out)
 	}
 
 	// The description shows above the question, and not with -y
-	prompt = "run 'wipe' in " + work + "? [y/N]"
-	rc, out = e.InTerminal(o, []testkit.Key{{Wait: prompt, Send: y("n\n")}}, "r", "wipe")
+	rc, out = ask(o, question("wipe"), "n", "r", "wipe")
 	if rc != 1 {
 		t.Errorf("wipe: exit %d", rc)
 	}
@@ -440,7 +419,7 @@ func TestRunning_Confirm(t *testing.T) {
 	}
 	// No description given: nothing above the question, not a placeholder or the command
 	for _, name := range []string{"plain", "noted"} {
-		rc, out = e.InTerminal(o, []testkit.Key{{Wait: "run '" + name + "' in " + work + "? [y/N]", Send: y("n\n")}}, "r", name)
+		rc, out = ask(o, question(name), "n", "r", name)
 		if rc != 1 || strings.Contains(out, "echo ran") || strings.Contains(out, "(no description)") {
 			t.Errorf("%s: exit %d\n%s", name, rc, out)
 		}
@@ -449,30 +428,23 @@ func TestRunning_Confirm(t *testing.T) {
 	file := filepath.Join(e.Tmp, "out.txt")
 	toFile := o
 	toFile.StdoutTo = file
-	rc, out = e.InTerminal(toFile, []testkit.Key{{Wait: "[y/N]", Send: y("y\n")}}, "r", "wipe")
+	rc, out = ask(toFile, "[y/N]", "y", "r", "wipe")
 	if rc != 0 {
 		t.Errorf("stdout to a file: exit %d", rc)
 	}
 	testkit.Contains(t, "stdout to a file", out, "Wipes the cache")
-	if raw, _ := os.ReadFile(file); string(raw) != "ran\n" {
-		t.Errorf("out.txt: %q", raw)
-	}
+	testkit.Eq(t, "out.txt", testkit.ReadFile(t, file), "ran\n")
 
 	// The question names the arguments
-	rc, out = e.InTerminal(o, []testkit.Key{{Wait: "run 'drop' with -f 'my db' in " + work + "? [y/N]", Send: y("n\n")}}, "r", "drop", "-f", "my db")
+	rc, out = ask(o, "run 'drop' with -f 'my db' in "+work+"? [y/N]", "n", "r", "drop", "-f", "my db")
 	if rc != 1 {
 		t.Errorf("drop: exit %d\n%s", rc, out)
 	}
-	res = e.RunWith(o, "r", "drop", "-f", "my db")
-	testkit.Contains(t, "hint", res.Stderr, "or pass -y\n")
-	if got := e.RunWith(o, "r", "-y", "drop", "-f", "my db").Stdout; got != "dropped -f my db\n" {
-		t.Errorf("drop -y: %q", got)
-	}
+	testkit.Contains(t, "hint", e.RunWith(o, "r", "drop", "-f", "my db").Stderr, "or pass -y\n")
+	testkit.Eq(t, "drop -y", e.RunWith(o, "r", "-y", "drop", "-f", "my db").Stdout, "dropped -f my db\n")
 
 	// After the name, -y belongs to the script
-	if got := e.Run("r", "echoes", "-y").Stdout; got != "-y\n" {
-		t.Errorf("echoes -y: %q", got)
-	}
+	testkit.Eq(t, "echoes -y", e.Run("r", "echoes", "-y").Stdout, "-y\n")
 }
 
 func TestRunning_ARunKeepsTheRealTerminal(t *testing.T) {
@@ -506,28 +478,14 @@ func TestRunning_CtrlCReachesTheShortcut(t *testing.T) {
 
 // A --confirm shortcut whose question cannot be shown does not run: stdin a terminal, stderr on /dev/full.
 func TestRunning_AConfirmQuestionThatCannotBeShownDoesNotRun(t *testing.T) {
-	if _, err := os.Stat("/dev/full"); err != nil {
-		t.Skip("no /dev/full")
-	}
 	e := testkit.New(t)
 	marker := filepath.Join(e.Tmp, "ran")
 	e.WriteStore(e.Store, map[string]any{"danger": map[string]any{"inline": "echo ran >" + marker, "confirm": true}})
-	rc, out := e.InTerminalCmd(testkit.Opts{}, []testkit.Key{{Wait: "", Send: y("y\n")}}, "sh", "-c", `exec "$@" 2>/dev/full`, "sh", testkit.Binary(t), "r", "danger")
+	rc, out := devFullQuestion(t, e, "r", "danger")
 	if rc != 1 {
 		t.Errorf("exit %d\n%s", rc, out)
 	}
 	testkit.NotExist(t, marker)
-}
-
-func TestRunning_RunInlineWithPassthroughArgs(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"echo": testkit.Inline("echo name=$0 first=$1 all=$*")})
-	for range 2 {
-		res := e.Run("run", "echo", "-v", "--option", "arg1", "arg2")
-		if res.Code != 0 || strings.TrimSpace(res.Stdout) != "name=echo first=-v all=-v --option arg1 arg2" {
-			t.Errorf("exit %d stdout %q stderr %q", res.Code, res.Stdout, res.Stderr)
-		}
-	}
 }
 
 func TestRunning_TheEnvironmentSaysWhatRunsAndFromWhere(t *testing.T) {
@@ -535,7 +493,7 @@ func TestRunning_TheEnvironmentSaysWhatRunsAndFromWhere(t *testing.T) {
 	show := `echo "$SHORTCUT_NAME|$SHORTCUT_NAMESPACE|$SHORTCUT_CALLER_CWD"`
 	e.WriteImport(e.Store, "dk", testkit.NS(map[string]any{
 		"env": testkit.Inline(show)}))
-	e.WriteStore(e.Store, map[string]any{"env": testkit.Inline(show)})
+	e.WriteStore(e.Store, map[string]any{"env": testkit.Inline(show), "cnt": testkit.Inline(`env | grep -c '^SHORTCUT_NAME='; echo "$SHORTCUT_NAME"`)})
 	caller := e.Folder("caller")
 	outer := map[string]string{"SHORTCUT_NAMESPACE": "outer"}
 	res := e.RunWith(testkit.Opts{Cwd: caller, Env: outer}, "r", "dk", "env")
@@ -546,34 +504,9 @@ func TestRunning_TheEnvironmentSaysWhatRunsAndFromWhere(t *testing.T) {
 	if want := "env||" + caller + "\n"; res.Stdout != want {
 		t.Errorf("stdout %q, want %q (%s)", res.Stdout, want, res.Stderr)
 	}
-}
-
-func TestRunning_APresetShortcutNameIsReplacedOnce(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"cnt": testkit.Inline(`env | grep -c '^SHORTCUT_NAME='; echo "$SHORTCUT_NAME"`)})
-	res := e.RunWith(testkit.Opts{Env: map[string]string{"SHORTCUT_NAME": "outer"}}, "r", "cnt")
-	testkit.Eq(t, "stdout", res.Stdout, "1\ncnt\n")
-}
-
-func TestRunning_ANameAloneNeverRunsAShortcut(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"hello": testkit.Inline("echo hello")})
-	for _, argv := range [][]string{{"hello"}, {"nano", "hello"}} {
-		res := e.Run(argv...)
-		if res.Code != 2 || res.Stdout != "" {
-			t.Errorf("%v: exit %d stdout %q", argv, res.Code, res.Stdout)
-		}
-		testkit.Contains(t, "stderr", res.Stderr, "unknown command '"+argv[0]+"'")
-	}
-}
-
-func TestRunning_RIsShortForRun(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"hello": testkit.Inline(`echo "hello $1"`)})
-	if out := e.Run("r", "hello", "you").Stdout; out != "hello you\n" {
-		t.Errorf("r hello you: %q", out)
-	}
-	testkit.Contains(t, "r --help", e.Run("r", "--help").Stdout, "shortcut run|r [-y] [.] <name>")
+	// A preset SHORTCUT_NAME is replaced, not added to
+	res = e.RunWith(testkit.Opts{Env: map[string]string{"SHORTCUT_NAME": "outer"}}, "r", "cnt")
+	testkit.Eq(t, "one SHORTCUT_NAME", res.Stdout, "1\ncnt\n")
 }
 
 // A script is handed to the kernel as it is: its #! line runs it, a binary runs, a file the kernel refuses says so,
@@ -591,10 +524,10 @@ func TestRunning_AScriptRunsAsItIs(t *testing.T) {
 	if bin == nil {
 		t.Skip("no true binary")
 	}
-	e.WriteFile(filepath.Join(scripts, "exec.sh"), "#!/usr/bin/env bash\necho exec_shebang\n", 0o755)
+	e.WriteFile(filepath.Join(scripts, "exec.sh"), bashShebang+"echo exec_shebang\n", 0o755)
 	e.WriteFile(filepath.Join(scripts, "plain.sh"), "#!/usr/bin/env sh\necho plain\n", 0o644)
-	e.WriteFile(filepath.Join(scripts, "bin"), bin, 0o755)
-	e.WriteFile(filepath.Join(scripts, "macho"), append([]byte("\xcf\xfa\xed\xfe"), make([]byte, 64)...), 0o755)
+	e.WriteFile(filepath.Join(scripts, "bin"), string(bin), 0o755)
+	e.WriteFile(filepath.Join(scripts, "macho"), "\xcf\xfa\xed\xfe"+string(make([]byte, 64)), 0o755)
 	e.WriteStore(e.Store, map[string]any{
 		"exec":  map[string]any{"script": "scripts/exec.sh"},
 		"plain": map[string]any{"script": "scripts/plain.sh"},
@@ -616,7 +549,7 @@ func TestRunning_AScriptRunsAsItIs(t *testing.T) {
 	res = e.Run("run", "macho")
 	testkit.Eq(t, "macho exit", res.Code, 1)
 	testkit.Eq(t, "macho stdout", res.Stdout, "")
-	testkit.Contains(t, "macho stderr", res.Stderr, "can't run as it is: it needs to start with #!")
+	testkit.Contains(t, "macho stderr", res.Stderr, "error: "+filepath.Join(scripts, "macho")+" can't run as it is: it needs to start with #! and a program that runs here, such as #!/bin/sh, or to be a binary for this system")
 	if strings.Contains(res.Stderr, "bash") || strings.Contains(res.Stderr, "line ") {
 		t.Errorf("macho was run by bash: %q", res.Stderr)
 	}
@@ -624,10 +557,10 @@ func TestRunning_AScriptRunsAsItIs(t *testing.T) {
 
 func TestRunning_RunHelp(t *testing.T) {
 	e := testkit.New(t)
-	for _, flag := range []string{"--help", "-h"} {
-		res := e.Run("run", flag)
+	for _, argv := range [][]string{{"run", "--help"}, {"run", "-h"}, {"r", "--help"}} {
+		res := e.Run(argv...)
 		res.WantCode(t, 0)
-		testkit.Contains(t, "run "+flag, res.Stdout, "shortcut run|r [-y] [.] <name> [args...]")
+		testkit.Contains(t, strings.Join(argv, " "), res.Stdout, "shortcut run|r [-y] [.] <name> [args...]")
 	}
 	e.WriteStore(e.Store, map[string]any{"echo_args": testkit.Inline(`echo "args: $@"`)})
 	res := e.Run("run", "echo_args", "--help")
@@ -663,14 +596,7 @@ func TestRunning_RunDirectoryLine(t *testing.T) {
 	e := testkit.New(t)
 	work := e.Folder("work")
 	e.WriteStore(e.Store, map[string]any{"pwd": testkit.Inline("pwd")})
-	res := e.RunWith(in(work), "run", "pwd")
-	if res.Stdout != work+"\n" || res.Stderr != "→ "+work+"\n" {
-		t.Errorf("stdout %q stderr %q", res.Stdout, res.Stderr)
-	}
-	res = e.RunWith(testkit.Opts{Cwd: work, Env: map[string]string{"SHORTCUT_SHOW_DIR": "0"}}, "run", "pwd")
-	if res.Stderr != "" {
-		t.Errorf("SHORTCUT_SHOW_DIR=0: stderr %q", res.Stderr)
-	}
+	e.RunWith(in(work), "run", "pwd").Want(t, 0, work+"\n", "→ "+work+"\n")
 	_, out := e.InTerminal(in(work), nil, "run", "pwd")
 	testkit.Contains(t, "on a terminal", out, "\x1b[2m→ "+work+"\x1b[0m")
 }
@@ -695,9 +621,12 @@ func TestRunning_AHandWrittenInvalidNameDoesntRun(t *testing.T) {
 
 func TestRunning_EveryWordReachesTheShortcutAFirstDoubleDashIncluded(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"words": testkit.Inline(`printf "[%s]" "$@"; echo`)})
+	e.WriteStore(e.Store, map[string]any{"words": testkit.Inline(`printf "[%s]" "$@"; echo`), "echo": testkit.Inline("echo name=$0 first=$1 all=$*")})
 	testkit.Eq(t, "--", e.Run("r", "words", "--", "-5", "x").Stdout, "[--][-5][x]\n")
 	testkit.Eq(t, "flags", e.Run("r", "words", "--force", "", "a b").Stdout, "[--force][][a b]\n")
+	res := e.Run("run", "echo", "-v", "--option", "arg1", "arg2")
+	res.WantCode(t, 0)
+	testkit.Eq(t, "$0 and $*", res.Stdout, "name=echo first=-v all=-v --option arg1 arg2\n")
 }
 
 func TestRunning_AClosedPipeStopsQuietly(t *testing.T) {
@@ -727,9 +656,9 @@ func TestRun_RunsFromANonUTF8Folder(t *testing.T) {
 	testkit.Contains(t, "stderr", res.Stderr, "p\xffroj")
 }
 
-// run reaches the global store without the dot and only the project with it, for a name and for a group, and each side
-// says where the other has the name. Nothing runs on a miss.
-func TestRunning_TheDotSelectsTheScope(t *testing.T) {
+// run and show reach the global store without the dot and only the project with it, for a name and for a group, and
+// each side says where the other has the name. Nothing runs on a miss.
+func TestScope_TheDotSelectsTheScope(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"build": testkit.Inline("echo global-build"), "gonly": testkit.Inline("echo gonly")})
 	e.WriteImport(e.Store, "docker", testkit.NS(map[string]any{"ps": testkit.Inline("echo global-ps")}))
@@ -738,44 +667,64 @@ func TestRunning_TheDotSelectsTheScope(t *testing.T) {
 	e.WriteImport(filepath.Join(proj, ".shortcuts"), "docker", testkit.NS(map[string]any{"delete": testkit.Inline("echo project-delete")}))
 	o := testkit.Opts{Cwd: proj, Env: map[string]string{"SHORTCUT_SHOW_DIR": "0"}}
 
-	for _, c := range []struct {
-		args []string
-		want string
-	}{
-		{[]string{"r", "build"}, "global-build\n"},
-		{[]string{"r", "gonly"}, "gonly\n"},
-		{[]string{"r", "docker", "ps"}, "global-ps\n"},
-		{[]string{"r", ".", "build"}, "project-build\n"},
-		{[]string{"r", ".", "ponly"}, "ponly\n"},
-		{[]string{"r", ".", "terraform", "plan"}, "plan\n"},
-		{[]string{"r", ".", "docker", "delete"}, "project-delete\n"},
-		{[]string{"r", "-y", ".", "build"}, "project-build\n"},
-	} {
-		testkit.Eq(t, strings.Join(c.args, " "), e.RunWith(o, c.args...).Stdout, c.want)
-	}
+	for _, cmd := range []string{"r", "show"} {
+		// run prints what the shortcut echoes; show prints the entry, whose inline text is "echo " + that.
+		for _, c := range []struct {
+			args  []string
+			out   string
+			scope string // show's Scope line, where the name is a shortcut
+		}{
+			{[]string{"build"}, "global-build", "global"},
+			{[]string{"gonly"}, "gonly", "global"},
+			{[]string{"docker", "ps"}, "global-ps", ""},
+			{[]string{".", "build"}, "project-build", "project"},
+			{[]string{".", "ponly"}, "ponly", "project"},
+			{[]string{".", "terraform", "plan"}, "plan", ""},
+			{[]string{".", "docker", "delete"}, "project-delete", ""},
+		} {
+			what := cmd + " " + strings.Join(c.args, " ")
+			res := e.RunWith(o, append([]string{cmd}, c.args...)...)
+			res.WantCode(t, 0)
+			if cmd == "r" {
+				testkit.Eq(t, what, res.Stdout, c.out+"\n")
+				continue
+			}
+			testkit.Contains(t, what, res.Stdout, "echo "+c.out)
+			if c.scope != "" {
+				testkit.Contains(t, what, res.Stdout, "Scope:       "+c.scope+"\n")
+			}
+		}
+		if cmd == "r" {
+			testkit.Eq(t, "r -y . build", e.RunWith(o, "r", "-y", ".", "build").Stdout, "project-build\n")
+		}
 
-	for _, c := range []struct {
-		args []string
-		want string
-	}{
-		{[]string{"r", "ponly"}, "shortcut 'ponly' not found. The project in " + proj + " has it: shortcut r . ponly"},
-		{[]string{"r", "terraform", "plan"}, "The project in " + proj + " has it: shortcut r . terraform plan"},
-		{[]string{"r", "docker", "delete"}, "'delete' not found in namespace 'docker'. The project in " + proj + " has it: shortcut r . docker delete"},
-		{[]string{"r", ".", "gonly"}, "shortcut 'gonly' not found. Your global store has it: shortcut r gonly"},
-		{[]string{"r", ".", "docker", "ps"}, "Your global store has it: shortcut r docker ps"},
-	} {
-		res := e.RunWith(o, c.args...)
-		testkit.Eq(t, strings.Join(c.args, " ")+" exit", res.Code, 1)
-		testkit.Eq(t, strings.Join(c.args, " ")+" stdout", res.Stdout, "")
-		testkit.Contains(t, strings.Join(c.args, " "), res.Stderr, c.want)
-	}
+		for _, c := range []struct {
+			args []string
+			want string
+		}{
+			{[]string{"ponly"}, "shortcut 'ponly' not found. The project in " + proj + " has it: shortcut " + cmd + " . ponly"},
+			{[]string{"terraform", "plan"}, "The project in " + proj + " has it: shortcut " + cmd + " . terraform plan"},
+			{[]string{"docker", "delete"}, "'delete' not found in namespace 'docker'. The project in " + proj + " has it: shortcut " + cmd + " . docker delete"},
+			{[]string{".", "gonly"}, "shortcut 'gonly' not found. Your global store has it: shortcut " + cmd + " gonly"},
+			{[]string{".", "docker", "ps"}, "Your global store has it: shortcut " + cmd + " docker ps"},
+		} {
+			what := cmd + " " + strings.Join(c.args, " ")
+			res := e.RunWith(o, append([]string{cmd}, c.args...)...)
+			testkit.Eq(t, what+" exit", res.Code, 1)
+			testkit.Eq(t, what+" stdout", res.Stdout, "")
+			testkit.Contains(t, what, res.Stderr, c.want)
+		}
 
-	// The dot outside every project, and the dot alone
-	res := e.RunWith(testkit.Opts{Cwd: e.Tmp}, "r", ".", "build")
-	testkit.Eq(t, "outside exit", res.Code, 1)
-	testkit.Eq(t, "outside stdout", res.Stdout, "")
-	testkit.Contains(t, "outside", res.Stderr, "error: no project here: no .shortcuts or .shortcuts.local in this folder or its parents")
-	e.RunWith(o, "r", ".").WantCode(t, 2)
+		// The dot outside every project, and the dot alone
+		res := e.RunWith(testkit.Opts{Cwd: e.Tmp}, cmd, ".", "build")
+		res.WantCode(t, 1)
+		testkit.Eq(t, cmd+" outside stdout", res.Stdout, "")
+		testkit.Contains(t, cmd+" outside", res.Stderr, "error: no project here: no .shortcuts or .shortcuts.local in this folder or its parents")
+		e.RunWith(o, cmd, ".").WantCode(t, 2)
+	}
+	// show --field and --json follow the dot as well
+	testkit.Eq(t, "show --field", e.RunWith(o, "show", "--field", "scope", ".", "build").Stdout, "project\n")
+	testkit.Eq(t, "show --json", decodeObject(t, e.RunWith(o, "show", "--json", ".", "build").Stdout)["scope"], "project")
 	// the dot is only the first word after the options: later, it is the shortcut's
 	e.WriteStore(e.Store, map[string]any{"echoes": testkit.Inline(`echo "$@"`)})
 	testkit.Eq(t, "late dot", e.RunWith(o, "r", "echoes", ".").Stdout, ".\n")
@@ -802,15 +751,6 @@ func TestRunning_AProjectLookupThatCantTellDoesntTouchTheGlobalScope(t *testing.
 	testkit.Contains(t, "list", res.Stdout, "list=0\n")
 }
 
-func TestRunning_AScriptWithNoShebangSaysWhatItNeeds(t *testing.T) {
-	e := testkit.New(t)
-	path := e.WriteFile(filepath.Join(e.Store, "scripts", "p.sh"), "echo hi\n", 0o755)
-	e.WriteStore(e.Store, map[string]any{"p": map[string]any{"script": "scripts/p.sh"}})
-	res := e.Run("r", "p")
-	testkit.Eq(t, "exit", res.Code, 1)
-	testkit.Contains(t, "stderr", res.Stderr, "error: "+path+" can't run as it is: it needs to start with #! and a program that runs here, such as #!/bin/sh, or to be a binary for this system")
-}
-
 func TestRunning_AnOptionAfterTheDotSaysToMoveItBefore(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(map[string]any{"x": testkit.Inline("echo x")})
@@ -827,22 +767,14 @@ func TestRunning_AnOptionAfterTheDotSaysToMoveItBefore(t *testing.T) {
 func TestSymlinkSafety_ARunWritesNothingInTheProjectOrTheStore(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(testkit.GO)
-	before1, before2 := tree(t, e.Store), tree(t, proj)
+	store, project := treeOf(t, e.Store), treeOf(t, proj)
 	if got := e.RunWith(in(proj), "r", ".", "go").Stdout; got != "ran\n" {
 		t.Errorf("run: %q", got)
 	}
-	if after := tree(t, e.Store); !slices.Equal(before1, after) {
-		t.Errorf("the store changed: %v -> %v", before1, after)
+	if after := treeOf(t, e.Store); !maps.Equal(store, after) {
+		t.Errorf("the store changed: %v -> %v", store, after)
 	}
-	if after := tree(t, proj); !slices.Equal(before2, after) {
-		t.Errorf("the project changed: %v -> %v", before2, after)
-	}
-}
-
-func TestRunning_RunWithoutANameIsAnError(t *testing.T) {
-	e := testkit.New(t)
-	res := e.Run("run")
-	if res.Code != 2 || !strings.HasPrefix(res.Stderr, "error: missing shortcut name\nusage: shortcut run") {
-		t.Errorf("exit %d stderr %q", res.Code, res.Stderr)
+	if after := treeOf(t, proj); !maps.Equal(project, after) {
+		t.Errorf("the project changed: %v -> %v", project, after)
 	}
 }

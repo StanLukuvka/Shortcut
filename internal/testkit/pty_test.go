@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -23,17 +22,9 @@ func TestInTerminal_KeysAndWindow(t *testing.T) {
 	}
 }
 
-func TestInTerminal_SignalAndDoKeys(t *testing.T) {
+// A run that outlives its timeout fails the test rather than hanging it.
+func TestInTerminal_AHangBecomesAFailure(t *testing.T) {
 	e := New(t)
-	done := false
-	code, out := e.InTerminalCmd(Opts{}, []Key{
-		{Wait: "ready", Do: func() { done = true }},
-		{Wait: "ready", Signal: syscall.SIGINT},
-	}, "sh", "-c", `trap 'echo caught; exit 3' INT; echo ready; while :; do sleep 0.05; done`)
-	if code != 3 || !strings.Contains(out, "caught") || !done {
-		t.Errorf("code %d, done %v, out %q", code, done, out)
-	}
-	// A key that never matches ends at the deadline: with a short Timeout, the test fails rather than hangs.
 	e.fail = func(err error) { panic(err) }
 	defer func() {
 		if r := recover(); r == nil {

@@ -3,7 +3,6 @@ package testkit
 import (
 	"os"
 	"os/exec"
-	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
@@ -50,6 +49,14 @@ func (r Result) WantCode(t testing.TB, want int) {
 	}
 }
 
+// Want fails unless the exit code, stdout and stderr are exactly these.
+func (r Result) Want(t testing.TB, code int, stdout, stderr string) {
+	t.Helper()
+	if r != (Result{code, stdout, stderr}) {
+		t.Errorf("got exit %d, stdout %q, stderr %q\nwant exit %d, stdout %q, stderr %q", r.Code, r.Stdout, r.Stderr, code, stdout, stderr)
+	}
+}
+
 func ReadFile(t testing.TB, path string) string {
 	t.Helper()
 	raw, err := os.ReadFile(path)
@@ -64,16 +71,6 @@ func NotExist(t testing.TB, path string) {
 	if _, err := os.Lstat(path); err == nil {
 		t.Errorf("%s exists", path)
 	}
-}
-
-// Golden is a frozen data file, given as a path from the module root, found whatever the test's cwd.
-func Golden(t testing.TB, path string) []byte {
-	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(moduleRoot(), filepath.FromSlash(path)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return raw
 }
 
 // Have reports whether a program is on PATH. Only testkit may import os/exec, so tests ask here.

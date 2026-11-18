@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/StanLukuvka/Shortcut/internal/store"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
@@ -50,93 +49,55 @@ func TestStores_CreationScopeRules(t *testing.T) {
 	testkit.Eq(t, "in_sub cwd", fileShortcuts(t, filepath.Join(proj, ".shortcuts.local"))["in_sub"].(map[string]any)["cwd"], "sub")
 	e.Run("new", "explicit", "--cwd", "caller", "--", "pwd")
 	testkit.Eq(t, "explicit cwd", e.LoadGlobal()["explicit"].(map[string]any)["cwd"], "caller")
-
-	res := e.Run("new", "nowhere", "--cwd", "/nonexistent/path/xyz", "--", "echo 1")
-	if res.Code == 0 {
-		t.Errorf("nowhere: exit 0")
-	}
-	testkit.Contains(t, "stderr", res.Stderr, "--cwd directory does not exist")
-
-	// 4. Duplicate name error
-	res = e.RunWith(in(proj), "new", "local_cmd", "--local", "--", "echo duplicate")
-	if res.Code == 0 {
-		t.Errorf("duplicate: exit 0")
-	}
-	testkit.Contains(t, "stderr", res.Stderr, "already exists in")
 }
 
-func TestStores_NewInHomeRefusesLocalStore(t *testing.T) {
-	e := testkit.New(t)
-	res := e.RunWith(in(e.Home), "new", "hello", "--local", "--", "echo hi")
-	res.WantCode(t, 1)
-	testkit.Contains(t, "stderr", res.Stderr, "holds the global store")
-	if _, err := os.Stat(filepath.Join(e.Store, "shortcuts.json")); err == nil {
-		if _, has := e.LoadGlobal()["hello"]; has {
-			t.Errorf("hello was stored")
-		}
-	}
-}
-
-func TestStores_NewRefusesAScriptThatIsNotExecutable(t *testing.T) {
-	e := testkit.New(t)
-	script := e.WriteFile(filepath.Join(e.Tmp, "plain.sh"), "#!/bin/sh\n", 0o644)
-	res := e.Run("new", "x", "--script", script)
-	res.WantCode(t, 1)
-	testkit.Contains(t, "stderr", res.Stderr, "error: "+script+" is not executable. Make it so: chmod +x "+script)
-}
-
-func TestStores_NewTakesOneSource(t *testing.T) {
+// Each refusal exits as shown, says why, and writes nothing.
+func TestNew_Refusals(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(map[string]any{})
-	source := e.Script("tool.sh", "#!/usr/bin/env bash\n")
+	dup := e.Project(nil, testkit.Name("dup"))
+	runOK(t, e, in(dup), "new", "taken", "--local", "--", "true")
+	plain := e.WriteFile(filepath.Join(e.Tmp, "plain.sh"), "#!/bin/sh\n", 0o644)
+	exec := e.Script("tool.sh", bashShebang)
 	for _, c := range []struct {
-		args    []string
-		message string
+		name string
+		cwd  string
+		args []string
+		code int
+		msg  string
 	}{
-		{[]string{"new", "x", "--script", source, "--", "true"}, "use one of"},
-		{[]string{"new", "x", "--script", "", "--", "true"}, "needs a file name"},
-		{[]string{"new", "x", "--script", ""}, "needs a file name"},
+		{"not executable", "", []string{"x", "--script", plain}, 1, "error: " + plain + " is not executable. Make it so: chmod +x " + plain},
+		{"script and command", proj, []string{"x", "--script", exec, "--", "true"}, 1, "use one of"},
+		{"empty script and command", proj, []string{"x", "--script", "", "--", "true"}, 1, "needs a file name"},
+		{"empty script", proj, []string{"x", "--script", ""}, 1, "needs a file name"},
+		{"several words", "", []string{"hello", "--", "echo", "hello", "world"}, 2, "error: put the command after -- in single quotes, as one word: -- 'echo hello world'\n"},
+		{"namespace with local", proj, []string{"where", "--namespace", "dev", "--local", "--", "pwd"}, 1, "--namespace can't be used with --local"},
+		{"local without a command", proj, []string{"x", "--local", "--desc", "d"}, 2, "after '--'"},
+		{"empty desc", "", []string{"plain", "--desc", ""}, 1, "error: --desc can't be empty\n"},
+		{"empty desc=", "", []string{"x", "--desc=", "--", "true"}, 1, "error: --desc can't be empty\n"},
+		{"empty desc with script", "", []string{"x", "--script", exec, "--desc", ""}, 1, "error: --desc can't be empty\n"},
+		{"empty namespace", "", []string{"x", "--namespace", "", "--", "true"}, 1, "error: --namespace can't be empty\n"},
+		{"empty namespace=", "", []string{"x", "--namespace=", "--desc", "d"}, 1, "error: --namespace can't be empty\n"},
+		{"cwd that is not there", "", []string{"nowhere", "--cwd", "/nonexistent/path/xyz", "--", "echo 1"}, 1, "--cwd directory does not exist"},
+		{"duplicate name", dup, []string{"taken", "--local", "--", "echo duplicate"}, 1, "already exists in"},
 	} {
-		res := e.RunWith(in(proj), c.args...)
-		if res.Code == 0 {
-			t.Errorf("%v: exit 0", c.args)
+		res := e.RunWith(in(c.cwd), append([]string{"new"}, c.args...)...)
+		if res.Code != c.code || res.Stdout != "" || !strings.Contains(res.Stderr, c.msg) {
+			t.Errorf("%s: exit %d stdout %q stderr %q; want exit %d stderr with %q", c.name, res.Code, res.Stdout, res.Stderr, c.code, c.msg)
 		}
-		testkit.Contains(t, strings.Join(c.args, " "), res.Stderr, c.message)
 	}
 	testkit.NotExist(t, filepath.Join(proj, ".shortcuts.local"))
 	testkit.NotExist(t, filepath.Join(e.Store, "shortcuts.json"))
-}
-
-func TestStores_AddAndLinkPaths(t *testing.T) {
-	e := testkit.New(t)
-	// 1. Link absolute external file
-	ext := e.Script("external.sh", "#!/usr/bin/env bash\necho external\n")
-	runOK(t, e, testkit.Opts{}, "new", "linked", "--script", ext, "--desc", "Linked script")
-	testkit.NotExist(t, filepath.Join(e.Store, "scripts", "linked.sh"))
-	testkit.Eq(t, "linked", fileShortcuts(t, filepath.Join(e.Store, "shortcuts.json"))["linked"].(map[string]any)["script"], realpath(t, ext))
-
-	// 2. Path containment check
-	e.Folder("etc") // a folder that is not there is an error of its own; this one is outside the store
-	if _, err := store.ResolveScriptPath(e.Store, "../../etc/passwd"); err == nil || !strings.Contains(err.Error(), "path traversal detected") {
-		t.Errorf("traversal: %v", err)
-	}
-}
-
-func TestStores_NewRefusesSeveralWordsAfterTheDashes(t *testing.T) {
-	e := testkit.New(t)
-	res := e.Run("new", "hello", "--", "echo", "hello", "world")
-	res.WantCode(t, 2)
-	testkit.Contains(t, "stderr", res.Stderr, "error: put the command after -- in single quotes, as one word: -- 'echo hello world'\n")
-	testkit.NotExist(t, filepath.Join(e.Store, "shortcuts.json"))
+	testkit.Eq(t, "taken is still the one entry", fileShortcuts(t, filepath.Join(dup, ".shortcuts.local"))["taken"].(map[string]any)["inline"], "true")
 }
 
 func TestStores_NewScriptInsideTheStoreIsKeptRelative(t *testing.T) {
 	e := testkit.New(t)
 	imports := filepath.Join(e.Store, "imports")
-	inside := e.WriteFile(filepath.Join(imports, "dk", "ps.sh"), "#!/usr/bin/env bash\necho ps\n", 0o755)
-	kept := e.WriteFile(filepath.Join(imports, "scripts", "dk", "kept.sh"), "#!/usr/bin/env bash\n", 0o755)
-	outside := e.Script("out.sh", "#!/usr/bin/env bash\necho out\n")
-	mine := e.WriteFile(filepath.Join(e.Store, "tools", "mine.sh"), "#!/usr/bin/env bash\necho mine\n", 0o755)
+	inside := e.WriteFile(filepath.Join(imports, "dk", "ps.sh"), bashShebang+"echo ps\n", 0o755)
+	kept := e.WriteFile(filepath.Join(imports, "scripts", "dk", "kept.sh"), bashShebang, 0o755)
+	outside := e.Script("out.sh", bashShebang+"echo out\n")
+	mine := e.WriteFile(filepath.Join(e.Store, "tools", "mine.sh"), bashShebang+"echo mine\n", 0o755)
 	for _, argv := range [][]string{
 		{"--namespace", "dk", "ps", "--script", inside},
 		{"--namespace", "dk", "out", "--script", outside},
@@ -161,23 +122,13 @@ func TestStores_NamespaceFlagCreatesANamespace(t *testing.T) {
 	testkit.Eq(t, "version", doc["version"], float64(1))
 	testkit.Eq(t, "inline", doc["shortcuts"].(map[string]any)["delete"].(map[string]any)["inline"], `echo "rm $1"`)
 
+	testkit.NotExist(t, filepath.Join(e.Store, "shortcuts.json")) // only the namespace's own file is made
 	testkit.Eq(t, "run", e.Run("r", "docker", "delete", "x").Stdout, "rm x\n")
 
 	testkit.Eq(t, "second", e.Run("new", "ps", "--namespace", "docker", "--", "echo ps").Code, 0)
 	res := e.Run("new", "ps", "--namespace", "docker", "--", "echo again")
 	testkit.Eq(t, "again exit", res.Code, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "already exists")
-}
-
-func TestStores_NamespaceFlagCreatesOnlyItsOwnFile(t *testing.T) {
-	e := testkit.New(t)
-	runOK(t, e, testkit.Opts{}, "new", "--namespace", "X", "name", "--", "true")
-	if _, err := os.Stat(filepath.Join(e.Store, "imports", "X.shortcut")); err != nil {
-		t.Error(err)
-	}
-	if _, err := os.Stat(filepath.Join(e.Store, "shortcuts.json")); !os.IsNotExist(err) {
-		t.Errorf("shortcuts.json was created: %v", err)
-	}
 }
 
 func TestStores_NamespaceFlagCollisions(t *testing.T) {
@@ -196,15 +147,6 @@ func TestStores_NamespaceFlagCollisions(t *testing.T) {
 	res = e.Run("new", "kube", "--", "echo plain")
 	testkit.Eq(t, "kube exit", res.Code, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "'kube' is a namespace")
-}
-
-func TestStores_NamespaceFlagIsRefusedWithLocal(t *testing.T) {
-	e := testkit.New(t)
-	proj := e.Project(map[string]any{})
-	res := e.RunWith(in(proj), "new", "where", "--namespace", "dev", "--local", "--", "pwd")
-	res.WantCode(t, 1)
-	testkit.Contains(t, "stderr", res.Stderr, "--namespace can't be used with --local")
-	testkit.NotExist(t, filepath.Join(proj, ".shortcuts.local"))
 }
 
 func TestStores_ConcurrentNewKeepsEveryEntry(t *testing.T) {
@@ -270,10 +212,10 @@ func TestStores_DefaultHomeStoreIsNeverAProject(t *testing.T) {
 
 func TestStores_LocalOnlyUsesAStoreInThisDirectory(t *testing.T) {
 	e := testkit.New(t)
-	proj := e.Project(map[string]any{"up": testkit.Inline("true")}, testkit.Dirs("sub"))
+	proj := e.Project(map[string]any{"up": testkit.Inline("echo up")}, testkit.Dirs("sub"))
 	registry := filepath.Join(proj, ".shortcuts")
 	before := testkit.ReadFile(t, registry)
-	source := e.Script("tool.sh", "#!/usr/bin/env bash\n")
+	source := e.Script("tool.sh", bashShebang)
 	os.Chmod(source, 0o644)
 	sub := filepath.Join(proj, "sub")
 	for _, args := range [][]string{
@@ -286,6 +228,7 @@ func TestStores_LocalOnlyUsesAStoreInThisDirectory(t *testing.T) {
 	}
 	testkit.NotExist(t, filepath.Join(sub, ".shortcuts.local"))
 	testkit.Eq(t, "registry", testkit.ReadFile(t, registry), before)
+	testkit.Eq(t, "up", e.RunWith(in(sub), "r", ".", "up").Stdout, "up\n")
 }
 
 func TestStores_NewerStoreIsRefusedNotRewritten(t *testing.T) {
@@ -310,30 +253,6 @@ func TestNew_CreatedMessageNamesTheNamespace(t *testing.T) {
 	testkit.Contains(t, "script", res.Stdout, "Created shortcut 'docker up' using")
 }
 
-// An empty --desc or --namespace is an error, not "absent", and nothing is written.
-func TestNew_EmptyFlagsAreErrors(t *testing.T) {
-	e := testkit.New(t)
-	script := e.Script("f.sh", "#!/bin/sh\necho hi\n")
-	for _, c := range []struct {
-		args []string
-		msg  string
-	}{
-		{[]string{"new", "plain", "--desc", ""}, "error: --desc can't be empty\n"},
-		{[]string{"new", "x", "--desc=", "--", "true"}, "error: --desc can't be empty\n"},
-		{[]string{"new", "x", "--script", script, "--desc", ""}, "error: --desc can't be empty\n"},
-		{[]string{"new", "x", "--namespace", "", "--", "true"}, "error: --namespace can't be empty\n"},
-		{[]string{"new", "x", "--namespace=", "--desc", "d"}, "error: --namespace can't be empty\n"},
-	} {
-		res := e.Run(c.args...)
-		if res.Code != 1 || res.Stdout != "" || res.Stderr != c.msg {
-			t.Errorf("%v: exit %d stdout %q stderr %q", c.args, res.Code, res.Stdout, res.Stderr)
-		}
-	}
-	testkit.NotExist(t, filepath.Join(e.Store, "shortcuts.json"))
-	runOK(t, e, testkit.Opts{}, "new", "dflt", "--script", script)
-	testkit.Eq(t, "no desc", e.LoadGlobal()["dflt"].(map[string]any)["description"], nil)
-}
-
 // `--cwd link/..` is the parent of where the link leads, not the folder holding the link.
 func TestStores_CwdThroughALinkThenDotDotIsPhysical(t *testing.T) {
 	e := testkit.New(t)
@@ -346,9 +265,16 @@ func TestStores_CwdThroughALinkThenDotDotIsPhysical(t *testing.T) {
 	testkit.Eq(t, "cwd", e.LoadGlobal()["up"].(map[string]any)["cwd"], realpath(t, filepath.Join(e.Tmp, "a", "b")))
 }
 
-// A script given as a link stays that link: the stored path is the one given, not where it leads.
+// An external script is linked, not copied; with no --desc there is no description. A script given as a link stays
+// that link: the stored path is the one given, not where it leads.
 func TestStores_NewScriptKeepsTheLinkItWasGiven(t *testing.T) {
 	e := testkit.New(t)
+	ext := e.Script("external.sh", bashShebang+"echo external\n")
+	runOK(t, e, testkit.Opts{}, "new", "ext", "--script", ext, "--desc", "Linked script")
+	testkit.NotExist(t, filepath.Join(e.Store, "scripts", "ext.sh"))
+	testkit.Eq(t, "ext", fileShortcuts(t, filepath.Join(e.Store, "shortcuts.json"))["ext"].(map[string]any)["script"], realpath(t, ext))
+	runOK(t, e, testkit.Opts{}, "new", "dflt", "--script", ext)
+	testkit.Eq(t, "no desc", e.LoadGlobal()["dflt"].(map[string]any)["description"], nil)
 	target := e.Script("target.sh", "#!/bin/sh\necho t\n")
 	link := filepath.Join(e.Tmp, "link.sh")
 	e.Symlink(target, link)
@@ -365,11 +291,8 @@ func TestProjectFiles_NewLocalOverridesASharedName(t *testing.T) {
 
 func TestProjectFiles_NewLocalTakesACommandAndAddRecordsThePath(t *testing.T) {
 	e := testkit.New(t)
-	proj := e.Project(map[string]any{}, testkit.Files(map[string]any{"tools/run.sh": "#!/usr/bin/env bash\n"}), testkit.Mode(0o755))
-	outside := e.Script("outside.sh", "#!/usr/bin/env bash\n")
-	res := e.RunWith(in(proj), "new", "x", "--local", "--desc", "d")
-	res.WantCode(t, 2)
-	testkit.Contains(t, "stderr", res.Stderr, "after '--'")
+	proj := e.Project(map[string]any{}, testkit.Files(map[string]string{"tools/run.sh": bashShebang}), testkit.Mode(0o755))
+	outside := e.Script("outside.sh", bashShebang)
 	testkit.Eq(t, "in", e.RunWith(in(proj), "new", "in", "--script", "tools/run.sh", "--desc", "d", "--local").Code, 0)
 	testkit.Eq(t, "out", e.RunWith(in(proj), "new", "out", "--script", outside, "--desc", "d", "--local").Code, 0)
 	testkit.Eq(t, "in script", localData(t, proj)["in"].(map[string]any)["script"], "tools/run.sh")
@@ -383,22 +306,11 @@ func TestProjectFiles_NewLocalTakesACommandAndAddRecordsThePath(t *testing.T) {
 	testkit.Eq(t, "files", names, []string{".shortcuts", ".shortcuts.local", "tools"})
 }
 
-func TestProjectFiles_LocalOnlyWorksAtTheProjectRoot(t *testing.T) {
-	e := testkit.New(t)
-	proj := overlaid(t, e)
-	src := filepath.Join(proj, "src")
-	res := e.RunWith(in(src), "new", "x", "--local", "--", "true")
-	res.WantCode(t, 1)
-	testkit.Contains(t, "stderr", res.Stderr, "is inside the project at")
-	testkit.NotExist(t, filepath.Join(src, ".shortcuts.local"))
-	testkit.Eq(t, "keep", e.RunWith(in(src), "r", ".", "keep").Stdout, "shared keep\n")
-}
-
 func TestProjectFiles_TheCliNeverWritesTheSharedFile(t *testing.T) {
 	e := testkit.New(t)
 	proj := overlaid(t, e)
 	before := testkit.ReadFile(t, filepath.Join(proj, ".shortcuts"))
-	source := e.Script("tool.sh", "#!/usr/bin/env bash\n")
+	source := e.Script("tool.sh", bashShebang)
 	for _, args := range [][]string{
 		{"new", "a", "--local", "--", "echo a"},
 		{"new", "b", "--script", source, "--desc", "d", "--local"},

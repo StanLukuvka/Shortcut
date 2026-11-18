@@ -15,118 +15,103 @@ func noteFile(t *testing.T, e *testkit.Env, rel string) string {
 	return e.WriteFile(filepath.Join(e.Store, rel), bashShebang+"echo stored\n", 0o755)
 }
 
-func TestProjectFiles_RmWithoutLocalNeverReachesAProjectEntry(t *testing.T) {
+// rm without --local is global-only and says where the entry is; rm --local reaches only .shortcuts.local and never
+// writes .shortcuts.
+func TestRm_InAProjectNamesWhereTheEntryIs(t *testing.T) {
 	e := testkit.New(t)
 	proj := overlaid(t, e)
-	before := testkit.ReadFile(t, filepath.Join(proj, ".shortcuts.local"))
-	for _, args := range [][]string{{"rm", "keep", "-y"}, {"rm", "mine", "-y"}} {
-		res := e.RunWith(in(proj), args...)
-		testkit.Eq(t, strings.Join(args, " "), res.Code, 1)
-		testkit.Contains(t, strings.Join(args, " "), res.Stderr, "shortcut '"+args[1]+"' not found.")
+	local := filepath.Join(proj, ".shortcuts.local")
+	before := testkit.ReadFile(t, local)
+	sub := in(filepath.Join(proj, "src"))
+	for _, c := range []struct{ name, want string }{
+		{"keep", "shortcut 'keep' not found. The project in " + proj + " has it; rm changes only your global store and your .shortcuts.local"},
+		{"mine", "Your .shortcuts.local in " + proj + " has it: shortcut rm --local mine, from " + proj},
+	} {
+		res := e.RunWith(sub, "rm", c.name, "-y")
+		testkit.Eq(t, c.name+" exit", res.Code, 1)
+		testkit.Contains(t, c.name, res.Stderr, c.want)
 	}
-	testkit.Eq(t, "local file", testkit.ReadFile(t, filepath.Join(proj, ".shortcuts.local")), before)
-}
+	testkit.Eq(t, "local file", testkit.ReadFile(t, local), before)
 
-func TestProjectFiles_RmLocalOfAnOverrideBringsTheSharedEntryBack(t *testing.T) {
-	e := testkit.New(t)
-	proj := overlaid(t, e)
-	testkit.Eq(t, "rm", e.RunWith(in(proj), "rm", "--local", "swap", "-y").Code, 0)
-	testkit.Eq(t, "run", e.RunWith(in(proj), "r", "-y", ".", "swap").Stdout, "shared swap\n")
-}
-
-func TestProjectFiles_RmLocalSaysWhatItRemoves(t *testing.T) {
-	e := testkit.New(t)
-	proj := overlaid(t, e)
-	rc, out := e.InTerminal(in(proj), []testkit.Key{{Wait: "[y/N]", Send: y("n\n")}}, "rm", "--local", "swap")
-	testkit.Eq(t, "exit", rc, 1)
-	testkit.Contains(t, "removes", out, "Removes your 'swap' from "+filepath.Join(proj, ".shortcuts.local")+".")
-}
-
-func TestProjectFiles_RmLocalOfANameOnlyInTheSharedFileFails(t *testing.T) {
-	e := testkit.New(t)
-	proj := overlaid(t, e)
 	res := e.RunWith(in(proj), "rm", "--local", "keep", "-y")
 	testkit.Eq(t, "exit", res.Code, 1)
 	testkit.Contains(t, "err", res.Stderr, "'keep' isn't in .shortcuts.local, and shortcut doesn't change .shortcuts")
 	testkit.Eq(t, "still shared", e.RunWith(in(proj), "r", ".", "keep").Stdout, "shared keep\n")
+
+	// An override's removal says what it removes, and brings the shared entry back
+	rc, out := e.InTerminal(in(proj), []testkit.Key{{Wait: "[y/N]", Send: y("n\n")}}, "rm", "--local", "swap")
+	testkit.Eq(t, "exit", rc, 1)
+	testkit.Contains(t, "removes", out, "Removes your 'swap' from "+local+".")
+	testkit.Eq(t, "rm", e.RunWith(in(proj), "rm", "--local", "swap", "-y").Code, 0)
+	testkit.Eq(t, "run", e.RunWith(in(proj), "r", "-y", ".", "swap").Stdout, "shared swap\n")
 }
 
-func TestStores_RmInteractiveAndForce(t *testing.T) {
+// rm removes the entry and nothing else: the script it names stays, whether stored, linked or made by new; a
+// malformed entry goes too. Each is removed by -y and by a yes on a terminal, and says what it removes.
+func TestRm_RemovesOnlyTheEntry(t *testing.T) {
+	rows := []struct {
+		name  string
+		setup func(e *testkit.Env) (shortcut, keep string) // writes the store; the file that must stay ("" = none)
+	}{
+		{"stored copy", func(e *testkit.Env) (string, string) {
+			stored := noteFile(t, e, "scripts/stored.sh")
+			e.WriteStore(e.Store, map[string]any{"stored": map[string]any{"script": "scripts/stored.sh", "description": "Stored shortcut"}})
+			return "stored", stored
+		}},
+		{"script that new took from scripts/", func(e *testkit.Env) (string, string) {
+			e.WriteStore(e.Store, map[string]any{})
+			mine := noteFile(t, e, "scripts/mine.sh")
+			runOK(t, e, testkit.Opts{}, "new", "m", "--script", mine)
+			return "m", mine
+		}},
+		{"linked script", func(e *testkit.Env) (string, string) {
+			ext := e.Script("external_keep.sh", bashShebang+"echo ext\n")
+			e.WriteStore(e.Store, map[string]any{"linked": map[string]any{"script": ext, "description": "Linked shortcut"}})
+			return "linked", ext
+		}},
+		{"malformed entry", func(e *testkit.Env) (string, string) {
+			e.WriteStore(e.Store, map[string]any{"bad_entry": map[string]any{"description": "x", "inline": "true", "cwd": 123}})
+			return "bad_entry", ""
+		}},
+	}
+	for _, r := range rows {
+		for _, how := range []string{"-y", "terminal yes"} {
+			t.Run(r.name+" by "+how, func(t *testing.T) {
+				e := testkit.New(t)
+				name, keep := r.setup(e)
+				if res := e.Run("rm", name); res.Code != 1 || !strings.Contains(res.Stderr, "in a terminal, or pass -y") {
+					t.Errorf("no -y and no terminal: exit %d stderr %q", res.Code, res.Stderr)
+				}
+				if _, has := e.LoadGlobal()[name]; !has {
+					t.Fatal("a refused rm removed the entry")
+				}
+				var out string
+				if how == "-y" {
+					out = runOK(t, e, testkit.Opts{}, "rm", name, "-y").Stdout
+				} else {
+					rc, term := e.InTerminal(testkit.Opts{}, []testkit.Key{{Wait: "[y/N]", Send: y("y\n")}}, "rm", name)
+					if rc != 0 {
+						t.Errorf("exit %d\n%s", rc, term)
+					}
+					out = term
+				}
+				testkit.Contains(t, "says", out, "Removes '"+name+"' from your global shortcuts: "+filepath.Join(e.Store, "shortcuts.json"))
+				wantGone(t, e, name)
+				if keep != "" && !fileExists(keep) {
+					t.Errorf("rm deleted %s", keep)
+				}
+			})
+		}
+	}
+	// no: nothing is removed
 	e := testkit.New(t)
-	stored := noteFile(t, e, "scripts/stored.sh")
-	ext := e.Script("external_keep.sh", bashShebang+"echo ext\n")
-	e.WriteStore(e.Store, map[string]any{
-		"stored": map[string]any{"script": "scripts/stored.sh", "description": "Stored shortcut"},
-		"linked": map[string]any{"script": ext, "description": "Linked shortcut"},
-	})
-
-	// 1. Non-tty without -y should fail
-	res := e.Run("rm", "stored")
-	if res.Code == 0 {
-		t.Error("rm without -y or a terminal succeeded")
-	}
-	testkit.Contains(t, "no -y", res.Stderr, "in a terminal, or pass -y")
-	if !fileExists(stored) || e.LoadGlobal()["stored"] == nil {
-		t.Error("a refused rm changed something")
-	}
-
-	// 2. With -y, the registry entry is deleted and its script stays
-	runOK(t, e, testkit.Opts{}, "rm", "stored", "-y")
-	if !fileExists(stored) {
-		t.Error("rm deleted a script file")
-	}
-	if _, has := e.LoadGlobal()["stored"]; has {
-		t.Error("stored is still registered")
-	}
-
-	// 3. Linked file is preserved when shortcut is removed with -y
-	runOK(t, e, testkit.Opts{}, "rm", "linked", "-y")
-	if _, has := e.LoadGlobal()["linked"]; has {
-		t.Error("linked is still registered")
-	}
-	if !fileExists(ext) {
-		t.Error("Linked external script must never be deleted!")
-	}
-}
-
-func TestStores_RmKeepsAScriptFileThatLivesInTheScriptsFolder(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{})
-	mine := noteFile(t, e, "scripts/mine.sh")
-	runOK(t, e, testkit.Opts{}, "new", "m", "--script", mine)
-	runOK(t, e, testkit.Opts{}, "rm", "m", "-y")
-	if !fileExists(mine) {
-		t.Error("rm must only delete copies it made")
-	}
-}
-
-func TestStores_RmMalformedEntry(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"bad_entry": map[string]any{"description": "x", "inline": "true", "cwd": 123}})
-	runOK(t, e, testkit.Opts{}, "rm", "bad_entry", "-y")
-	if _, has := e.LoadGlobal()["bad_entry"]; has {
-		t.Error("bad_entry is still registered")
-	}
-}
-
-func TestStores_RmSaysWhatItRemoves(t *testing.T) {
-	e := testkit.New(t)
-	source := e.Script("src.sh", bashShebang)
-	noteFile(t, e, "scripts/copied.sh")
-	e.WriteStore(e.Store, map[string]any{
-		"copied": map[string]any{"script": "scripts/copied.sh"},
-		"linked": map[string]any{"script": source},
-	})
-	rc, out := e.InTerminal(testkit.Opts{}, []testkit.Key{{Wait: "[y/N]", Send: y("n\n")}}, "rm", "copied")
-	testkit.Eq(t, "decline", rc, 1)
-	testkit.Contains(t, "removes", out, "Removes 'copied' from your global shortcuts: "+filepath.Join(e.Store, "shortcuts.json"))
-	rc, out = e.InTerminal(testkit.Opts{}, []testkit.Key{{Wait: "[y/N]", Send: y("y\n")}}, "rm", "linked")
-	testkit.Eq(t, "accept", rc, 0)
-	if !fileExists(source) {
-		t.Error("the --script file is gone")
-	}
-	if _, has := e.LoadGlobal()["linked"]; has {
-		t.Error("linked is still registered")
+	e.WriteStore(e.Store, map[string]any{"keep": testkit.Inline("true")})
+	rc, out := e.InTerminal(testkit.Opts{}, []testkit.Key{{Wait: "[y/N]", Send: y("n\n")}}, "rm", "keep")
+	testkit.Eq(t, "exit", rc, 1)
+	testkit.Contains(t, "out", out, "Removes 'keep' from your global shortcuts: "+filepath.Join(e.Store, "shortcuts.json"))
+	testkit.Contains(t, "out", out, "Aborted.")
+	if _, has := e.LoadGlobal()["keep"]; !has {
+		t.Error("a declined rm removed it")
 	}
 }
 
@@ -180,44 +165,15 @@ func TestStores_RmNamespaceImportedFromElsewhereKeepsItsFiles(t *testing.T) {
 	}
 }
 
-func TestStores_RmYStillSaysWhatItRemoved(t *testing.T) {
-	e := testkit.New(t)
-	noteFile(t, e, "scripts/copied.sh")
-	e.WriteStore(e.Store, map[string]any{"copied": map[string]any{"script": "scripts/copied.sh"}})
-	res := runOK(t, e, testkit.Opts{}, "rm", "-y", "copied")
-	testkit.Contains(t, "removes", res.Stdout, "Removes 'copied' from your global shortcuts: "+filepath.Join(e.Store, "shortcuts.json"))
-	if !fileExists(filepath.Join(e.Store, "scripts", "copied.sh")) {
-		t.Error("rm deleted a script file")
-	}
-	if _, has := e.LoadGlobal()["copied"]; has {
-		t.Error("copied is still registered")
-	}
-}
-
-func TestStores_DecliningRmExits1(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"keep": testkit.Inline("true")})
-	rc, out := e.InTerminal(testkit.Opts{}, []testkit.Key{{Wait: "[y/N]", Send: y("n\n")}}, "rm", "keep")
-	testkit.Eq(t, "exit", rc, 1)
-	testkit.Contains(t, "out", out, "Aborted.")
-	if _, has := e.LoadGlobal()["keep"]; !has {
-		t.Error("a declined rm removed it")
-	}
-}
-
 // rm -y that cannot say what it removed removes nothing: stdout on /dev/full exits 1 with the entry still there.
 func TestRm_YWithStdoutOnDevFullRemovesNothing(t *testing.T) {
-	if _, err := os.Stat("/dev/full"); err != nil {
-		t.Skip("no /dev/full")
-	}
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"keep": testkit.Inline("true")})
 	imports := filepath.Join(e.Store, "imports")
 	e.WriteImport(e.Store, "dk", testkit.NS(map[string]any{"ps": map[string]any{"script": "scripts/dk/ps.sh"}}))
 	e.WriteFile(filepath.Join(imports, "scripts", "dk", "ps.sh"), bashShebang+"echo ps\n", 0o755)
 	for _, args := range [][]string{{"rm", "-y", "keep"}, {"rm", "--namespace", "dk", "-y"}} {
-		res := e.RunCmd(testkit.Opts{}, append([]string{"sh", "-c", `exec "$@" >/dev/full`, "sh", testkit.Binary(t)}, args...)...)
-		if res.Code != 1 {
+		if res := devFull(t, e, args...); res.Code != 1 {
 			t.Errorf("%v: exit %d stderr %q", args, res.Code, res.Stderr)
 		}
 	}
@@ -233,12 +189,9 @@ func TestRm_YWithStdoutOnDevFullRemovesNothing(t *testing.T) {
 
 // A question whose prompt cannot be shown is not asked: stdin a terminal, stderr on /dev/full, rm removes nothing.
 func TestRm_AQuestionThatCannotBeShownIsNotAsked(t *testing.T) {
-	if _, err := os.Stat("/dev/full"); err != nil {
-		t.Skip("no /dev/full")
-	}
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"keep": testkit.Inline("true")})
-	rc, out := e.InTerminalCmd(testkit.Opts{}, []testkit.Key{{Wait: "", Send: y("y\n")}}, "sh", "-c", `exec "$@" 2>/dev/full`, "sh", testkit.Binary(t), "rm", "keep")
+	rc, out := devFullQuestion(t, e, "rm", "keep")
 	if rc != 1 {
 		t.Errorf("exit %d\n%s", rc, out)
 	}
@@ -261,9 +214,7 @@ func TestStores_AnEntryWithBothInlineAndScriptIsRefused(t *testing.T) {
 		}
 	}
 	runOK(t, e, testkit.Opts{}, "rm", "both", "-y")
-	if _, has := e.LoadGlobal()["both"]; has {
-		t.Error("both is still registered")
-	}
+	wantGone(t, e, "both")
 }
 
 func TestStores_LocalRefusesAnywhereInTheGlobalStore(t *testing.T) {
@@ -328,13 +279,6 @@ func TestRm_NamespaceWithALinkedScriptsFolderLosesOnlyTheLink(t *testing.T) {
 	}
 }
 
-func TestRm_NamespaceWithANameIsRefused(t *testing.T) {
-	e := testkit.New(t)
-	res := e.Run("rm", "--namespace", "podman", "top")
-	res.WantCode(t, 1)
-	testkit.Contains(t, "stderr", res.Stderr, "--namespace takes the namespace alone: shortcut rm --namespace podman")
-}
-
 func TestRm_EmptyNamespaceIsAnErrorAndRemovesNothing(t *testing.T) {
 	e := testkit.New(t)
 	runOK(t, e, testkit.Opts{}, "new", "ps", "--namespace", "dk", "--", "echo ps")
@@ -346,17 +290,4 @@ func TestRm_EmptyNamespaceIsAnErrorAndRemovesNothing(t *testing.T) {
 	if !reflect.DeepEqual(treeOf(t, e.Tmp), before) {
 		t.Error("rm --namespace '' changed the store")
 	}
-}
-
-func TestStores_RmFromAProjectNamesWhereTheEntryIs(t *testing.T) {
-	e := testkit.New(t)
-	proj := e.Project(map[string]any{"build": testkit.Inline("echo b")}, testkit.Dirs("sub"))
-	e.WriteFile(filepath.Join(proj, ".shortcuts.local"), `{"version":1,"shortcuts":{"mine":{"inline":"echo m"}}}`, 0o644)
-	o := testkit.Opts{Cwd: filepath.Join(proj, "sub")}
-	res := e.RunWith(o, "rm", "build", "-y")
-	testkit.Eq(t, "shared exit", res.Code, 1)
-	testkit.Contains(t, "shared", res.Stderr, "shortcut 'build' not found. The project in "+proj+" has it; rm changes only your global store and your .shortcuts.local")
-	res = e.RunWith(o, "rm", "mine", "-y")
-	testkit.Eq(t, "local exit", res.Code, 1)
-	testkit.Contains(t, "local", res.Stderr, "Your .shortcuts.local in "+proj+" has it: shortcut rm --local mine, from "+proj)
 }

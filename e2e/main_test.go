@@ -110,3 +110,32 @@ func treeOf(t *testing.T, root string) map[string]string {
 	})
 	return out
 }
+
+// wantGone fails if a global shortcut is still registered.
+func wantGone(t *testing.T, e *testkit.Env, name string) {
+	t.Helper()
+	if _, has := e.LoadGlobal()[name]; has {
+		t.Errorf("%s is still registered", name)
+	}
+}
+
+func needDevFull(t *testing.T) {
+	t.Helper()
+	if _, err := os.Stat("/dev/full"); err != nil {
+		t.Skip("no /dev/full")
+	}
+}
+
+// devFull runs the binary with stdout on /dev/full, where every write fails.
+func devFull(t *testing.T, e *testkit.Env, args ...string) testkit.Result {
+	t.Helper()
+	needDevFull(t)
+	return e.RunCmd(testkit.Opts{}, append([]string{"sh", "-c", `exec "$@" >/dev/full`, "sh", testkit.Binary(t)}, args...)...)
+}
+
+// devFullQuestion runs the binary with stdin a terminal that answers y and stderr on /dev/full, so a question cannot be shown.
+func devFullQuestion(t *testing.T, e *testkit.Env, args ...string) (int, string) {
+	t.Helper()
+	needDevFull(t)
+	return e.InTerminalCmd(testkit.Opts{}, []testkit.Key{{Wait: "", Send: y("y\n")}}, append([]string{"sh", "-c", `exec "$@" 2>/dev/full`, "sh", testkit.Binary(t)}, args...)...)
+}

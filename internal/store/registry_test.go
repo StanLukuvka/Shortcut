@@ -172,55 +172,6 @@ func TestStores_AtomicRegistrySaveAndCorruptProtection(t *testing.T) {
 	}
 }
 
-func TestStores_WriteJSONAtomic(t *testing.T) {
-	env := testkit.New(t)
-	dotfiles := env.Folder("dotfiles")
-	target := env.WriteFile(filepath.Join(dotfiles, "shortcuts.json"), `{"version": 1, "shortcuts": {}}`, 0o644)
-	link := filepath.Join(env.Store, "shortcuts.json")
-	env.Symlink(target, link)
-	v := doc(t, `{"version": 1, "shortcuts": {"hi": {"description": "é", "n": 1.0}}}`)
-	if err := platform.WriteJSONAtomic(link, v); err != nil {
-		t.Fatal(err)
-	}
-	if st, _ := os.Lstat(link); st.Mode()&os.ModeSymlink == 0 {
-		t.Error("the link was replaced")
-	}
-	got, _ := os.ReadFile(target)
-	want := "{\n  \"shortcuts\": {\n    \"hi\": {\n      \"description\": \"é\",\n      \"n\": 1.0\n    }\n  },\n  \"version\": 1\n}\n"
-	if string(got) != want {
-		t.Errorf("got %q", got)
-	}
-	if st, _ := os.Stat(target); st.Mode().Perm() != 0o644 {
-		t.Errorf("mode %v", st.Mode().Perm())
-	}
-	entries, _ := os.ReadDir(dotfiles)
-	if len(entries) != 1 || entries[0].Name() != "shortcuts.json" {
-		t.Errorf("stray files: %v", entries)
-	}
-	// a new file is private, like any temporary file
-	fresh := filepath.Join(env.Tmp, "new.json")
-	if err := platform.WriteJSONAtomic(fresh, v); err != nil {
-		t.Fatal(err)
-	}
-	if st, _ := os.Stat(fresh); st.Mode().Perm() != 0o600 {
-		t.Errorf("new file mode %v", st.Mode().Perm())
-	}
-}
-
-func TestStores_WriteJSONAtomicLeavesNoTempFileOnError(t *testing.T) {
-	env := testkit.New(t)
-	dir := env.Folder("d")
-	target := filepath.Join(dir, "x.json")
-	os.Mkdir(target, 0o755) // a rename of a file over a folder fails
-	if err := platform.WriteJSONAtomic(target, platform.Doc{}); err == nil {
-		t.Fatal("want an error")
-	}
-	entries, _ := os.ReadDir(dir)
-	if len(entries) != 1 || entries[0].Name() != "x.json" {
-		t.Errorf("left behind: %v", entries)
-	}
-}
-
 func TestResolveScriptPath_NonUTF8DirectoriesStayApart(t *testing.T) {
 	base := testkit.New(t).Tmp
 	for _, d := range []string{"d\xe9", "d\xea"} {

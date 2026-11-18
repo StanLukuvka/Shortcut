@@ -10,12 +10,10 @@ import (
 	"unsafe"
 )
 
-// Key is one step of a terminal session: wait until Wait appears in the output, then do one of the rest.
+// Key is one step of a terminal session: wait until Wait appears in the output, then type Send.
 type Key struct {
-	Wait   string    // wait until this appears in the output ...
-	Send   []byte    // ... then type these bytes,
-	Signal os.Signal // or send this signal to the child,
-	Do     func()    // or call this
+	Wait string
+	Send []byte
 }
 
 // InTerminal runs the binary on a fresh 30x100 pseudo-terminal, as if typed into a real one:
@@ -96,14 +94,7 @@ loop:
 		if len(pending) > 0 && bytes.Contains(out, []byte(pending[0].Wait)) {
 			k := pending[0]
 			pending = pending[1:]
-			switch {
-			case k.Send != nil:
-				master.Write(k.Send)
-			case k.Do != nil:
-				k.Do()
-			case k.Signal != nil:
-				cmd.Process.Signal(k.Signal)
-			}
+			master.Write(k.Send)
 		}
 		select {
 		case c, ok := <-chunks:

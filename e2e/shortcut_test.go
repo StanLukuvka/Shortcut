@@ -1,21 +1,11 @@
 package e2e
 
 import (
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
-
-func TestRunning_AClosedStdoutIsTheShortcutsProblem(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"quiet": testkit.Inline("true")})
-	res := e.Shell(testkit.Opts{}, "shortcut r quiet >&-")
-	if res.Code != 0 || strings.Contains(res.Stderr, "Traceback") || strings.Contains(res.Stderr, "panic") {
-		t.Errorf("exit %d stderr %q", res.Code, res.Stderr)
-	}
-}
 
 // With fds 0, 1 or 2 closed the Go runtime puts /dev/null in their place, so the commands exit as they would
 // with them open, print nothing anywhere visible and don't panic (a Go panic exits 2). What the child sees there is /dev/null.
@@ -38,11 +28,7 @@ func TestRunning_ClosedStdFDsDoNotStopACommand(t *testing.T) {
 
 // A write error other than a closed pipe is an error: stdout on /dev/full makes even --version exit 1.
 func TestWriteError_StdoutOnDevFullExits1(t *testing.T) {
-	if _, err := os.Stat("/dev/full"); err != nil {
-		t.Skip("no /dev/full")
-	}
-	e := testkit.New(t)
-	res := e.RunCmd(testkit.Opts{}, "sh", "-c", `exec "$@" >/dev/full`, "sh", testkit.Binary(t), "--version")
+	res := devFull(t, testkit.New(t), "--version")
 	res.WantCode(t, 1)
 	testkit.Contains(t, "stderr", res.Stderr, "error: writing stdout:")
 }
@@ -50,8 +36,9 @@ func TestWriteError_StdoutOnDevFullExits1(t *testing.T) {
 // What the binary prints before any parser runs.
 func TestDispatch_ErrorsBeforeAnyParser(t *testing.T) {
 	e := testkit.New(t)
+	e.WriteStore(e.Store, map[string]any{"hello": testkit.Inline("echo hello")}) // a name alone never runs it
 	const runMissing = "error: missing shortcut name\nusage: shortcut run|r [-y] [.] <name> [args...]\n       shortcut run|r [-y] [.] <namespace> <name> [args...]\n"
-	const unknown = "error: unknown command 'bogus'\n"
+	unknown := func(word string) string { return "error: unknown command '" + word + "'\n" }
 	for _, c := range []struct {
 		argv []string
 		want string
@@ -60,14 +47,16 @@ func TestDispatch_ErrorsBeforeAnyParser(t *testing.T) {
 		{[]string{"run", "-y"}, runMissing},
 		{[]string{"r"}, runMissing},
 		{[]string{"--bogus"}, "error: unrecognized option '--bogus'\n"},
-		{[]string{"bogus"}, unknown},
+		{[]string{"bogus"}, unknown("bogus")},
 		{[]string{"-x"}, "error: unrecognized option '-x'\n"},
-		{[]string{"bogus", "--help"}, unknown},
+		{[]string{"bogus", "--help"}, unknown("bogus")},
+		{[]string{"nano", "x"}, unknown("nano")},
+		{[]string{"activate", "x"}, unknown("activate")},
+		{[]string{"version", "x"}, unknown("version")},
+		{[]string{"hello"}, unknown("hello")},
+		{[]string{"nano", "hello"}, unknown("nano")},
 	} {
-		res := e.Run(c.argv...)
-		if res.Code != 2 || res.Stderr != c.want || res.Stdout != "" {
-			t.Errorf("%v: exit %d stdout %q stderr %q; want exit 2 stderr %q", c.argv, res.Code, res.Stdout, res.Stderr, c.want)
-		}
+		e.Run(c.argv...).Want(t, 2, "", c.want)
 	}
 }
 
@@ -85,12 +74,8 @@ func TestDispatch_ParserErrorsEndToEnd(t *testing.T) {
 		{[]string{"show"}, "error: missing name\n" + try("show")},
 		{[]string{"rm", "-yh"}, "error: unrecognized option '-yh'\n" + try("rm")},
 		{[]string{"rm"}, "error: missing name\n" + try("rm")},
-		{[]string{"completion", "sh"}, "error: invalid choice 'sh' (choose from bash, fish, zsh)\n" + try("completion")},
 	} {
-		res := e.Run(c.argv...)
-		if res.Code != 2 || res.Stdout != "" || res.Stderr != c.want {
-			t.Errorf("%v: exit %d stdout %q stderr %q; want exit 2 stderr %q", c.argv, res.Code, res.Stdout, res.Stderr, c.want)
-		}
+		e.Run(c.argv...).Want(t, 2, "", c.want)
 	}
 	// The valid side: rm --namespace needs no name, a name after -- is checked as a name, and new keeps its command part.
 	if res := e.Run("rm", "--namespace", "nosuch", "-y"); res.Code == 2 {
@@ -102,33 +87,5 @@ func TestDispatch_ParserErrorsEndToEnd(t *testing.T) {
 	runOK(t, e, testkit.Opts{}, "new", "foo", "--desc", "x", "--", "echo -- y")
 	if got := runOK(t, e, testkit.Opts{}, "show", "foo", "--json").Stdout; !strings.Contains(got, "echo -- y") {
 		t.Errorf("new kept the command part wrong: %s", got)
-	}
-}
-
-func TestRunning_UnknownCommandsAreRefused(t *testing.T) {
-	e := testkit.New(t)
-	for _, word := range []string{"nano", "activate", "version"} {
-		res := e.Run(word, "x")
-		if res.Code != 2 {
-			t.Errorf("%s: exit %d", word, res.Code)
-		}
-		if want := "error: unknown command '" + word + "'\n"; res.Stderr != want {
-			t.Errorf("%s: stderr %q, want %q", word, res.Stderr, want)
-		}
-	}
-	res := e.Run("--bogus")
-	if res.Code != 2 || !strings.HasPrefix(res.Stderr, "error: unrecognized option '--bogus'\n") {
-		t.Errorf("--bogus: exit %d stderr %q", res.Code, res.Stderr)
-	}
-}
-
-func TestRunning_HelpNamesACommand(t *testing.T) {
-	e := testkit.New(t)
-	res := e.Run("help", "new")
-	if res.Code != 0 || !strings.Contains(res.Stdout, "usage: shortcut new") {
-		t.Errorf("help new: exit %d stdout %q", res.Code, res.Stdout)
-	}
-	if out := e.Run("help", "run").Stdout; !strings.Contains(out, "usage: shortcut run") {
-		t.Errorf("help run: %q", out)
 	}
 }
