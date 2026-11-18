@@ -39,6 +39,8 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 		return terminal.Die("--namespace can't be empty")
 	case hasInline && script != "":
 		return terminal.Die("use one of: '-- CMD', --script")
+	case len(inline) > 1:
+		return argparse.UsageError("new", "put the command after -- in single quotes, as one word: -- '"+strings.Join(inline, " ")+"'")
 	case !hasInline && script == "":
 		return argparse.UsageError("new", "give a command after '--', or --script PATH")
 	}
@@ -60,7 +62,7 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 	if script != "" {
 		return newFromScript(c, s, ns, group, fields)
 	}
-	text := joinCommand(inline)
+	text := inline[0]
 	entry := *fields
 	entry.Inline = &text
 	entry.Description = ns.Str("desc")
@@ -124,43 +126,6 @@ func newFromScript(c *store.Context, s *terminal.Streams, ns argparse.Namespace,
 	}
 	s.Out.WriteString("Created shortcut '" + group.Display(entry.Name) + "' using " + abs + ".\n")
 	return nil
-}
-
-var positionalAt = regexp.MustCompile(`^\$(?:[1-9@*]|\{[1-9@*])`) // $1, $@, $*, ${1}: how a shell command reads its arguments
-
-// joinCommand turns `-- cmd word word` into one inline command. Each word stays one word, as typed, and
-// only the shortcut's own arguments stay live, because $1 is why someone quoted it past their shell. A lookahead
-// for POSITIONAL at each $ is a check in code, since Go's regexp has none.
-func joinCommand(words []string) string {
-	if len(words) == 1 {
-		return words[0]
-	}
-	quoted := make([]string, len(words))
-	for i, word := range words {
-		live := false
-		for j := 0; j < len(word); j++ {
-			if positionalAt.MatchString(word[j:]) {
-				live = true
-				break
-			}
-		}
-		if !live {
-			quoted[i] = platform.ShellQuote(word)
-			continue
-		}
-		var b strings.Builder
-		b.WriteByte('"')
-		for j := 0; j < len(word); j++ {
-			c := word[j]
-			if c == '"' || c == '\\' || c == '`' || (c == '$' && !positionalAt.MatchString(word[j:])) {
-				b.WriteByte('\\')
-			}
-			b.WriteByte(c)
-		}
-		b.WriteByte('"')
-		quoted[i] = b.String()
-	}
-	return strings.Join(quoted, " ")
 }
 
 // targetGroup returns the file a new shortcut goes in. It creates nothing; write.Register does.

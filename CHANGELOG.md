@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `new` takes the command after `--` as one word, in single quotes; more than one word is refused (exit 2) and nothing is written.
 - Output is no longer escaped: control characters and bytes that are not UTF-8 are printed as they are.
 - Plain messages: a missing script makes `show` fail instead of printing `[file missing: ...]`, `help <unknown command>` is an error (exit 2), and not-found, `rm`, `new --local`, `run` and usage errors no longer add member lists, notes or hints.
 - `show --field` with an unknown field no longer lists the valid ones.
