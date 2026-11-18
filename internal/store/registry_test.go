@@ -113,18 +113,6 @@ func TestRegistry_FileError(t *testing.T) {
 	}
 }
 
-func TestScriptPath(t *testing.T) {
-	for _, c := range []struct{ field, want string }{
-		{"/etc/passwd", "/etc/passwd"},
-		{"a/../b.sh", "/base/a/../b.sh"}, // not cleaned
-		{"../x", "/base/../x"},           // leaving the store is allowed
-	} {
-		if got := ScriptPath("/base", c.field); got != c.want {
-			t.Errorf("ScriptPath(/base, %q) = %q, want %q", c.field, got, c.want)
-		}
-	}
-}
-
 func TestStores_AtomicRegistrySaveAndCorruptProtection(t *testing.T) {
 	env := testkit.New(t)
 	data := doc(t, `{"version": 1, "shortcuts": {"test": {"description": "test", "inline": "echo 1"}}}`)

@@ -127,7 +127,8 @@ func TestPaths_IsRelativeTo(t *testing.T) {
 }
 
 func TestPaths_Join(t *testing.T) { // an absolute part restarts the path
-	if Join("", "a") != "a" || Join("/", "a") != "/a" || Join("a", "") != "a/" || Join("a", "/b", "c") != "/b/c" {
+	if Join("", "a") != "a" || Join("/", "a") != "/a" || Join("a", "") != "a/" || Join("a", "/b", "c") != "/b/c" ||
+		Join("/base", "a/../b.sh") != "/base/a/../b.sh" || Join("/base", "../x") != "/base/../x" { // not cleaned
 		t.Error("Join")
 	}
 }

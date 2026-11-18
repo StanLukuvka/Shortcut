@@ -85,8 +85,7 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 		}
 		type row struct{ name, mode, source, desc string }
 		var rows []row
-		items := slices.Clone(g.Shortcuts())
-		slices.SortFunc(items, func(a, b store.Item) int { return strings.Compare(a.Name, b.Name) })
+		items := slices.SortedFunc(slices.Values(g.Shortcuts()), func(a, b store.Item) int { return strings.Compare(a.Name, b.Name) })
 		for _, it := range items {
 			name := it.Name
 			desc := it.Text("description")

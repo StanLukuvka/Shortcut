@@ -102,7 +102,7 @@ func entryError(g Group, it Item) error {
 		return it.Err
 	}
 	if e := it.Entry; e.Script != nil {
-		isFile, err := platform.IsFile(ScriptPath(g.ScriptBase(), *e.Script))
+		isFile, err := platform.IsFile(platform.Join(g.ScriptBase(), *e.Script))
 		if err != nil {
 			return err
 		}
