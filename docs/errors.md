@@ -98,7 +98,6 @@ What's wrong with one entry in a store file. Each starts with `'<name>' is not a
 | Message | Meaning |
 |---|---|
 | `invalid shortcut name '<name>'. Must match ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ (alphanumeric start, up to 64 characters of letters, digits, underscores, and dashes).` | |
-| `path traversal detected: '<script>' resolves to '<target>', outside '<base>'.` | A `script` path leads out of its store |
 
 ## Finding and running
 

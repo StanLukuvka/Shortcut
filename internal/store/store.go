@@ -101,11 +101,7 @@ func entryError(g Group, it Item) error {
 		return it.Err
 	}
 	if e := it.Entry; e.Script != nil {
-		path, err := ResolveScriptPath(g.ScriptBase(), *e.Script)
-		if err != nil {
-			return err
-		}
-		isFile, err := platform.IsFile(path)
+		isFile, err := platform.IsFile(ScriptPath(g.ScriptBase(), *e.Script))
 		if err != nil {
 			return err
 		}

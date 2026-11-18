@@ -220,6 +220,13 @@ func TestProjectFiles_RelativePathsResolveFromTheProjectRootInBothFiles(t *testi
 	testkit.Eq(t, "mine", e.RunWith(in(src), "r", ".", "mine").Stdout, src+"\n")
 }
 
+func TestRunning_AScriptOutsideItsStoreRuns(t *testing.T) {
+	e := testkit.New(t)
+	e.WriteFile(filepath.Join(e.Store, "..", "outside.sh"), bashShebang+"echo outside\n", 0o755)
+	e.WriteRegistryRaw(e.Store, `{"version": 1, "shortcuts": {"out": {"script": "../outside.sh"}}}`)
+	testkit.Eq(t, "out", e.Run("r", "out").Stdout, "outside\n")
+}
+
 func TestProjectFiles_AProjectCanBeOnlyALocalFile(t *testing.T) {
 	e := testkit.New(t)
 	proj := e.Project(nil, testkit.Dirs("src"))

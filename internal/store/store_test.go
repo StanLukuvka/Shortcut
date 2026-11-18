@@ -36,25 +36,23 @@ func TestStores_LoadProjectGroupErrors(t *testing.T) {
 func TestStores_EntryErrors(t *testing.T) {
 	env := testkit.New(t)
 	proj := env.Project(map[string]any{
-		"ok":     map[string]any{"script": "bin/tool"},
-		"gone":   map[string]any{"script": "bin/nope"},
-		"escape": map[string]any{"script": "../x"},
-		"bad":    map[string]any{"inline": "a", "script": "b"},
-		"a b":    map[string]any{"inline": "x"},
-		"isdir":  map[string]any{"script": "bin"},
+		"ok":    map[string]any{"script": "bin/tool"},
+		"gone":  map[string]any{"script": "bin/nope"},
+		"bad":   map[string]any{"inline": "a", "script": "b"},
+		"a b":   map[string]any{"inline": "x"},
+		"isdir": map[string]any{"script": "bin"},
 	}, testkit.Files(map[string]string{"bin/tool": "x"}), testkit.Mode(0o755))
 	g := NewContext(env.Home, nil).Store(proj).Main
 	var got []string
 	for _, e := range EntryErrors(g) {
 		got = append(got, e[:min(len(e), 60)])
 	}
-	if len(got) != 5 {
+	if len(got) != 4 {
 		t.Fatalf("errors: %q", EntryErrors(g))
 	}
 	joined := strings.Join(EntryErrors(g), "\n")
 	for _, want := range []string{
 		"'gone' is not a valid entry: script not found: bin/nope",
-		"path traversal detected: '../x' resolves to",
 		"'bad' is not a valid entry: it needs exactly one of 'inline' and 'script'",
 		"invalid shortcut name 'a b'.",
 		"'isdir' is not a valid entry: script not found: bin",

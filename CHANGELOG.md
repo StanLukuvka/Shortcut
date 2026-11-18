@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A relative `script` path is no longer checked against its store: it is joined to the file's folder and run as it is, links and `..` included.
 - A script is run as it is: when the system won't start it, shortcut shows the system's error. `new --script` and `list` no longer check the execute bit.
 - `new` takes the command after `--` as one word, in single quotes; more than one word is refused (exit 2) and nothing is written.
 - Output is no longer escaped: control characters and bytes that are not UTF-8 are printed as they are.

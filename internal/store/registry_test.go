@@ -111,31 +111,14 @@ func TestRegistry_FileError(t *testing.T) {
 	}
 }
 
-func TestRegistry_ResolveScriptPath(t *testing.T) {
-	env := testkit.New(t)
-	base := env.Folder("base")
-	env.Folder("outside")
-	env.Folder("base/a")
-	env.Symlink(filepath.Join(env.Tmp, "outside"), filepath.Join(base, "link"))
-	if got, err := ResolveScriptPath(base, "/etc/passwd"); err != nil || got != "/etc/passwd" {
-		t.Errorf("absolute: %q %v", got, err)
-	}
-	if got, err := ResolveScriptPath(base, "a/../b.sh"); err != nil || got != filepath.Join(base, "b.sh") {
-		t.Errorf("relative: %q %v", got, err)
-	}
-	env.Symlink("loop2", filepath.Join(base, "loop1"))
-	env.Symlink("loop1", filepath.Join(base, "loop2"))
-	if got, err := ResolveScriptPath(base, "loop1/x.sh"); err == nil { // a link loop is an error, not a path kept as written
-		t.Errorf("loop: %q", got)
-	}
-	if got, err := ResolveScriptPath(base, "nodir/x.sh"); err == nil {
-		t.Errorf("missing folder: %q", got)
-	}
-	for _, bad := range []string{"../x", "link/x", "a/../../x"} {
-		_, err := ResolveScriptPath(base, bad)
-		if err == nil || !strings.HasPrefix(err.Error(), "path traversal detected: '"+bad+"' resolves to '") ||
-			!strings.HasSuffix(err.Error(), "', outside '"+base+"'.") {
-			t.Errorf("%s: %v", bad, err)
+func TestScriptPath(t *testing.T) {
+	for _, c := range []struct{ field, want string }{
+		{"/etc/passwd", "/etc/passwd"},
+		{"a/../b.sh", "/base/a/../b.sh"}, // not cleaned
+		{"../x", "/base/../x"},           // leaving the store is allowed
+	} {
+		if got := ScriptPath("/base", c.field); got != c.want {
+			t.Errorf("ScriptPath(/base, %q) = %q, want %q", c.field, got, c.want)
 		}
 	}
 }
@@ -169,20 +152,6 @@ func TestStores_AtomicRegistrySaveAndCorruptProtection(t *testing.T) {
 	// Verify the corrupt file was not replaced or overwritten
 	if got, _ := os.ReadFile(reg); string(got) != `{"version": 1, corrupt json!` {
 		t.Errorf("file is now %q", got)
-	}
-}
-
-func TestResolveScriptPath_NonUTF8DirectoriesStayApart(t *testing.T) {
-	base := testkit.New(t).Tmp
-	for _, d := range []string{"d\xe9", "d\xea"} {
-		if err := os.Mkdir(filepath.Join(base, d), 0o755); err != nil {
-			t.Skip("file system refuses non-UTF-8 names")
-		}
-	}
-	a, errA := ResolveScriptPath(base, "d\xe9/run.sh")
-	b, errB := ResolveScriptPath(base, "d\xea/run.sh")
-	if errA != nil || errB != nil || a == b || !strings.HasSuffix(a, "d\xe9/run.sh") || !strings.HasSuffix(b, "d\xea/run.sh") {
-		t.Errorf("%q %v / %q %v", a, errA, b, errB)
 	}
 }
 

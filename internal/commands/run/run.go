@@ -113,9 +113,5 @@ func childCommand(resolved *store.ResolvedShortcut, entry *store.Entry, name str
 	if entry.Inline != nil {
 		return append([]string{"bash", "-c", *entry.Inline, name}, args...), nil
 	}
-	path, err := store.ResolveScriptPath(resolved.Group.ScriptBase(), *entry.Script)
-	if err != nil {
-		return nil, err
-	}
-	return append([]string{path}, args...), nil
+	return append([]string{store.ScriptPath(resolved.Group.ScriptBase(), *entry.Script)}, args...), nil
 }
