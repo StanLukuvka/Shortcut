@@ -231,13 +231,9 @@ func (c *Context) loadStore(storeDir string) Store {
 			}
 		}
 	}
-	names := make([]string, 0, len(sources))
-	for n := range sources {
-		names = append(names, n)
-	}
 	var namespaces []NamedGroup
 	mainShortcuts := main.Shortcuts()
-	for _, name := range slices.Sorted(slices.Values(names)) {
+	for _, name := range slices.Sorted(maps.Keys(sources)) {
 		path := sources[name]
 		g := LoadGroup(path, storeDir, name)
 		g.InProject = !isGlobal

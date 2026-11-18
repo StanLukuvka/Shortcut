@@ -35,9 +35,6 @@ func absolute(p string) (string, error) {
 // there. Nothing outside _test.go may call os.Getwd.
 func Getwd() (string, error) { return syscall.Getwd() }
 
-// Relpath is the shortest ../ walk from start to path, both absolute (a resolved path, say).
-func Relpath(path, start string) (string, error) { return filepath.Rel(start, path) }
-
 // IsRelativeTo reports whether path is other or lies below it, lexically and component-wise (/a/bc is not under
 // /a/b). filepath.Rel cleans both sides, so ".." components cannot climb out; a relative/absolute mix is an error.
 func IsRelativeTo(path, other string) bool {

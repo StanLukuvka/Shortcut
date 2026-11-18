@@ -4,6 +4,7 @@ package store
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -59,15 +60,12 @@ func DecodeEntry(name string, raw []byte) (*Entry, error) {
 	}
 	// An ignored field could be a safety setting from a newer version, so never ignore one
 	fields := Fields()
-	var unknown []string
-	for k := range data {
-		if !slices.ContainsFunc(fields, func(f Field) bool { return f.Name == k }) {
-			unknown = append(unknown, k)
-		}
-	}
+	unknown := slices.DeleteFunc(slices.Sorted(maps.Keys(data)), func(k string) bool {
+		return slices.ContainsFunc(fields, func(f Field) bool { return f.Name == k })
+	})
 	problem := ""
 	if len(unknown) > 0 {
-		problem = "unknown field: " + strings.Join(slices.Sorted(slices.Values(unknown)), ", ")
+		problem = "unknown field: " + strings.Join(unknown, ", ")
 	}
 	e := &Entry{Name: name}
 	for _, f := range fields {

@@ -47,27 +47,26 @@ func SaveEdited(path string, reg, shortcuts platform.Doc) error {
 // Register adds entry to group's file under the registry lock. It creates a missing store or namespace file. A project's group means .shortcuts.local.
 func Register(c *store.Context, group store.Group, entry *store.Entry) error {
 	storeDir := group.StoreDir
-	if group.Kind == store.KindProject {
-		change := func(shortcuts platform.Doc) error {
-			if shortcuts.Has(entry.Name) {
-				return terminal.Die("shortcut '" + entry.Name + "' already exists in " + group.LocalFile)
-			}
-			if _, clash := c.ReadStore(storeDir).Namespace(entry.Name); clash {
-				return terminal.Die("'" + entry.Name + "' is a namespace in " + storeDir)
-			}
-			raw, err := entry.Raw()
-			if err != nil {
-				return err
-			}
-			shortcuts[entry.Name] = raw
-			return nil
+	add := func(shortcuts platform.Doc, file, clashIn string) error {
+		if shortcuts.Has(entry.Name) {
+			return terminal.Die("shortcut '" + entry.Name + "' already exists in " + file)
 		}
-		if err := WriteLocal(c, storeDir, change); err != nil {
+		if group.Kind != store.KindNamespace {
+			if _, clash := c.ReadStore(storeDir).Namespace(entry.Name); clash {
+				return terminal.Die("'" + entry.Name + "' is a namespace in " + clashIn)
+			}
+		}
+		raw, err := entry.Raw()
+		if err != nil {
 			return err
 		}
+		shortcuts[entry.Name] = raw
 		return nil
 	}
-	err := c.WithLock(func() error {
+	if group.Kind == store.KindProject {
+		return WriteLocal(c, storeDir, func(shortcuts platform.Doc) error { return add(shortcuts, group.LocalFile, storeDir) })
+	}
+	return c.WithLock(func() error {
 		exists, err := platform.Exists(group.File)
 		if err != nil {
 			return err
@@ -76,28 +75,14 @@ func Register(c *store.Context, group store.Group, entry *store.Entry) error {
 		if err != nil {
 			return err
 		}
-		if shortcuts.Has(entry.Name) {
-			return terminal.Die("shortcut '" + entry.Name + "' already exists in " + group.File)
-		}
-		if group.Kind != store.KindNamespace {
-			if _, clash := c.ReadStore(storeDir).Namespace(entry.Name); clash {
-				return terminal.Die("'" + entry.Name + "' is a namespace in store " + storeDir)
-			}
-		}
-		raw, err := entry.Raw()
-		if err != nil {
+		if err := add(shortcuts, group.File, "store "+storeDir); err != nil {
 			return err
 		}
-		shortcuts[entry.Name] = raw
 		if err := os.MkdirAll(filepath.Dir(group.File), 0o777); err != nil {
 			return err
 		}
 		return SaveEdited(group.File, reg, shortcuts)
 	})
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 // WriteLocal changes .shortcuts.local through change(shortcuts), the only way shortcut writes to a project.
@@ -115,10 +100,7 @@ func WriteLocal(c *store.Context, root string, change func(platform.Doc) error) 
 		if err := change(shortcuts); err != nil {
 			return err
 		}
-		if err := SaveEdited(path, reg, shortcuts); err != nil {
-			return err
-		}
-		return nil
+		return SaveEdited(path, reg, shortcuts)
 	})
 }
 

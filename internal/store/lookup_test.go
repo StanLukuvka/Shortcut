@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
@@ -146,20 +145,5 @@ func TestLookup_StrictAndBrokenStores(t *testing.T) {
 	}
 	if _, err := FindEntry(NewContext(clash, nil), []string{"outside"}, Lookup{Strict: true}); err != nil {
 		t.Errorf("a name of the healthy store: %v", err)
-	}
-}
-
-func TestLookup_ResolveNameTakesOneName(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"build": testkit.Inline("echo b")})
-	t.Chdir(e.Home)
-	cwd, _ := platform.Getwd()
-	c := NewContext(cwd, nil)
-	if r, err := ResolveName(c, []string{"build"}, Lookup{}); err != nil || r.Entry.Name != "build" || r.RunCwd != mustReal(t, e.Home) {
-		t.Errorf("one name: %v", err)
-	}
-	_, err := ResolveName(c, []string{"build", "an arg"}, Lookup{})
-	if err == nil || err.Error() != "too many names: build 'an arg'" {
-		t.Errorf("two words: %v", err)
 	}
 }

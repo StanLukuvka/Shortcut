@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"math/big"
-	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -14,11 +14,9 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 )
 
-// RegistryNotFoundError is the error for a missing registry file: a store without a registry is empty,
+// errRegistryNotFound is for a missing registry file: a store without a registry is empty,
 // but a named namespace file that is missing is a problem.
-type RegistryNotFoundError struct{ Path string }
-
-func (e *RegistryNotFoundError) Error() string { return "registry not found: " + e.Path }
+var errRegistryNotFound = errors.New("registry not found")
 
 // isJSONError: a problem with the file's text (what the decoder reports), as opposed to reading it (an *fs.PathError).
 func isJSONError(err error) bool {
@@ -33,7 +31,7 @@ func LoadRegistryFile(path string) (platform.Doc, error) {
 		return nil, err
 	}
 	if !isFile {
-		return nil, &RegistryNotFoundError{path}
+		return nil, fmt.Errorf("%w: %s", errRegistryNotFound, path)
 	}
 	text, err := platform.ReadJSONFile(path)
 	var data platform.Doc
@@ -63,10 +61,6 @@ func LoadRegistryFile(path string) (platform.Doc, error) {
 	return data, nil
 }
 
-func LoadRegistry(storeDir string) (platform.Doc, error) {
-	return LoadRegistryFile(platform.Join(storeDir, "shortcuts.json"))
-}
-
 // SaveRegistryFile refuses to write over a file it can't read.
 func SaveRegistryFile(path string, data platform.Doc) error {
 	isFile, err := platform.IsFile(path)
@@ -79,13 +73,6 @@ func SaveRegistryFile(path string, data platform.Doc) error {
 		}
 	}
 	return platform.WriteJSONAtomic(path, data)
-}
-
-func SaveRegistryAtomic(storeDir string, data platform.Doc) error {
-	if err := os.MkdirAll(storeDir, 0o777); err != nil {
-		return err
-	}
-	return SaveRegistryFile(platform.Join(storeDir, "shortcuts.json"), data)
 }
 
 var namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`) // $ matches only at the very end of the text (no multiline flag), so a trailing newline fails
@@ -152,14 +139,9 @@ func fileError(path string, data platform.Doc, name string) string {
 	if _, isStr := data.String("description"); data.Has("description") && !isStr {
 		return fmt.Sprintf("corrupt registry %s: 'description' must be a string", path)
 	}
-	var unknown []string
-	for k := range data {
-		if !known[k] {
-			unknown = append(unknown, k)
-		}
-	}
+	unknown := slices.DeleteFunc(slices.Sorted(maps.Keys(data)), func(k string) bool { return known[k] })
 	if len(unknown) > 0 {
-		return fmt.Sprintf("%s has an unknown field: %s", path, strings.Join(slices.Sorted(slices.Values(unknown)), ", "))
+		return fmt.Sprintf("%s has an unknown field: %s", path, strings.Join(unknown, ", "))
 	}
 	return ""
 }

@@ -64,9 +64,8 @@ func LoadGroup(path, storeDir, name string) Group {
 	}
 	g := Group{Kind: kind, Name: name, File: path, StoreDir: storeDir, Doc: platform.Doc{}}
 	data, err := LoadRegistryFile(path)
-	var missing *RegistryNotFoundError
 	switch {
-	case errors.As(err, &missing):
+	case errors.Is(err, errRegistryNotFound):
 		if name != "" { // a store without a registry is simply empty
 			msg := err.Error()
 			g.Error = &msg
