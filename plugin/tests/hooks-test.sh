@@ -56,7 +56,8 @@ bash none 'cd ~/scripts/shortcut && go test ./...'
 ## project-shortcuts.sh
 
 command -v shortcut >/dev/null 2>&1 || { echo "shortcut isn't on PATH"; exit 1; }
-tmp=$(mktemp -d) || exit 1
+# The real path: shortcut prints it, and on macOS a temp dir is under /var, a link to /private/var.
+tmp=$(cd "$(mktemp -d)" && pwd -P) || exit 1
 HOME=$tmp/home
 export HOME
 SHORTCUTS_HOME=$HOME/.shortcuts
