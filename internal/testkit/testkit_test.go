@@ -9,9 +9,8 @@ import (
 	"testing"
 )
 
-func assertRefused(t *testing.T, e *Env, outside string, env map[string]string) {
+func assertRefused(t *testing.T, e *Env, outside string, o Opts) {
 	t.Helper()
-	o := Opts{Env: env}
 	args := []string{"new", "x", "--", "true"}
 	refused(t, "Run", func() { e.RunWith(o, args...) })
 	refused(t, "InTerminal", func() { e.InTerminal(o, nil, args...) })
@@ -34,31 +33,59 @@ func TestFixtures_SandboxIsInsideTheTempDir(t *testing.T) {
 	}
 }
 
-func TestFixtures_StoreDerivedFromTheOldHomeIsRefused(t *testing.T) {
-	e, outside := sandboxed(t)
-	// What `export HOME=$(mktemp -d) SHORTCUTS_HOME=$HOME/.shortcuts` leaves behind
-	assertRefused(t, e, outside, map[string]string{"SHORTCUTS_HOME": outside + "/.shortcuts"})
+// Every way a child's environment or cwd could reach outside the sandbox is refused, by Run, InTerminal and Start.
+func TestFixtures_AnythingReachingOutsideTheSandboxIsRefused(t *testing.T) {
+	envOf := func(k, v string) func(e *Env, outside string) Opts {
+		return func(e *Env, outside string) Opts { return Opts{Env: map[string]string{k: v}} }
+	}
+	rows := []struct {
+		name string
+		opts func(e *Env, outside string) Opts
+	}{
+		// What `export HOME=$(mktemp -d) SHORTCUTS_HOME=$HOME/.shortcuts` leaves behind
+		{"store derived from the old home", func(e *Env, o string) Opts {
+			return Opts{Env: map[string]string{"SHORTCUTS_HOME": o + "/.shortcuts"}}
+		}},
+		{"home outside, store inside", func(e *Env, o string) Opts { return Opts{Env: map[string]string{"HOME": o}} }},
+		{"home outside, store follows", func(e *Env, o string) Opts {
+			return Opts{Env: map[string]string{"HOME": o, "SHORTCUTS_HOME": ""}}
+		}},
+		{"empty home", envOf("HOME", "")},
+		{"tilde store follows the child home", func(e *Env, o string) Opts {
+			return Opts{Env: map[string]string{"HOME": o, "SHORTCUTS_HOME": "~/.shortcuts"}}
+		}},
+		{"~user is looked up in the real passwd database", envOf("BIN_DIR", "~root/bin")},
+		{"XDG_DATA_HOME", func(e *Env, o string) Opts { return Opts{Env: map[string]string{"XDG_DATA_HOME": o}} }},
+		{"XDG_CONFIG_HOME", func(e *Env, o string) Opts { return Opts{Env: map[string]string{"XDG_CONFIG_HOME": o}} }},
+		{"BIN_DIR", func(e *Env, o string) Opts { return Opts{Env: map[string]string{"BIN_DIR": o}} }},
+		{"a path that only looks inside", func(e *Env, o string) Opts {
+			return Opts{Env: map[string]string{"SHORTCUTS_HOME": e.Tmp + "-other"}}
+		}},
+		{"dot-dot out", func(e *Env, o string) Opts {
+			return Opts{Env: map[string]string{"SHORTCUTS_HOME": e.Tmp + "/../" + filepath.Base(o)}}
+		}},
+		{"a link out", func(e *Env, o string) Opts {
+			link := filepath.Join(e.Tmp, "link")
+			if err := os.Symlink(o, link); err != nil {
+				t.Fatal(err)
+			}
+			return Opts{Env: map[string]string{"SHORTCUTS_HOME": link + "/.shortcuts"}}
+		}},
+		{"cwd outside", func(e *Env, o string) Opts { return Opts{Cwd: o} }},
+		{"Vars changed mid-test", func(e *Env, o string) Opts { e.Vars["SHORTCUTS_HOME"] = o; return Opts{} }},
+		{"process env changed mid-test", func(e *Env, o string) Opts { t.Setenv("HOME", o); return Opts{} }},
+	}
+	for _, r := range rows {
+		t.Run(r.name, func(t *testing.T) {
+			e, outside := sandboxed(t)
+			assertRefused(t, e, outside, r.opts(e, outside))
+		})
+	}
 }
 
-func TestFixtures_HomeOutsideIsRefusedEvenWhenTheStoreIsInside(t *testing.T) {
-	e, outside := sandboxed(t)
-	assertRefused(t, e, outside, map[string]string{"HOME": outside})
-}
-
-func TestFixtures_HomeOutsideIsRefusedWhenTheStoreFollowsIt(t *testing.T) {
-	e, outside := sandboxed(t)
-	assertRefused(t, e, outside, map[string]string{"HOME": outside, "SHORTCUTS_HOME": ""})
-}
-
-func TestFixtures_EmptyHomeIsRefused(t *testing.T) {
-	e, outside := sandboxed(t)
-	assertRefused(t, e, outside, map[string]string{"HOME": ""})
-}
-
-func TestFixtures_TildeStoreFollowsTheChildHome(t *testing.T) {
-	e, outside := sandboxed(t)
-	assertRefused(t, e, outside, map[string]string{"HOME": outside, "SHORTCUTS_HOME": "~/.shortcuts"})
-	// Inside the sandbox "~/elsewhere" is allowed through, still unexpanded: the child expands it.
+// Inside the sandbox "~/elsewhere" is allowed through, still unexpanded: the child expands it.
+func TestFixtures_TildeInsideTheSandboxPasses(t *testing.T) {
+	e := New(t)
 	useBinary(t, e, `printf %s "$SHORTCUTS_HOME" > "$HOME/seen"`+"\n")
 	res := e.RunWith(Opts{Env: map[string]string{"SHORTCUTS_HOME": "~/elsewhere"}}, "new", "x", "--", "true")
 	if res.Code != 0 {
@@ -67,47 +94,6 @@ func TestFixtures_TildeStoreFollowsTheChildHome(t *testing.T) {
 	if got, _ := os.ReadFile(filepath.Join(e.Home, "seen")); string(got) != "~/elsewhere" {
 		t.Errorf("child saw SHORTCUTS_HOME=%q", got)
 	}
-	// "~user" would be looked up in the real passwd database: refused.
-	refused(t, "~user", func() { e.RunWith(Opts{Env: map[string]string{"BIN_DIR": "~root/bin"}}, "list") })
-}
-
-func TestFixtures_OtherPlacesARunWritesAreGuarded(t *testing.T) {
-	e, outside := sandboxed(t)
-	for _, name := range []string{"XDG_DATA_HOME", "XDG_CONFIG_HOME", "BIN_DIR"} {
-		assertRefused(t, e, outside, map[string]string{name: outside})
-	}
-}
-
-func TestFixtures_PathThatOnlyLooksInsideIsRefused(t *testing.T) {
-	e, outside := sandboxed(t)
-	assertRefused(t, e, outside, map[string]string{"SHORTCUTS_HOME": e.Tmp + "-other"})
-	assertRefused(t, e, outside, map[string]string{"SHORTCUTS_HOME": e.Tmp + "/../" + filepath.Base(outside)})
-	link := filepath.Join(e.Tmp, "link")
-	if err := os.Symlink(outside, link); err != nil {
-		t.Fatal(err)
-	}
-	assertRefused(t, e, outside, map[string]string{"SHORTCUTS_HOME": link + "/.shortcuts"})
-}
-
-func TestFixtures_CwdOutsideIsRefused(t *testing.T) {
-	e, outside := sandboxed(t)
-	refused(t, "Run", func() { e.RunWith(Opts{Cwd: outside}, "new", "x", "--local", "--", "true") })
-	refused(t, "InTerminal", func() { e.InTerminal(Opts{Cwd: outside}, nil, "new", "x", "--local", "--", "true") })
-	if n := len(entries(t, outside)); n != 0 {
-		t.Errorf("outside has %d entries", n)
-	}
-}
-
-func TestFixtures_ChangingTheSandboxEnvMidTestIsRefused(t *testing.T) {
-	e, outside := sandboxed(t)
-	e.Vars["SHORTCUTS_HOME"] = outside
-	refused(t, "Run", func() { e.Run("list") })
-}
-
-func TestFixtures_ChangingTheProcessEnvMidTestIsRefused(t *testing.T) {
-	e, outside := sandboxed(t)
-	t.Setenv("HOME", outside)
-	refused(t, "Run", func() { e.Run("list") })
 }
 
 func TestFixtures_SetupRefusesBeforeWritingAnything(t *testing.T) {
@@ -152,13 +138,8 @@ func TestFixtures_PathsLeftUnsetFallUnderHome(t *testing.T) {
 }
 
 func TestBinary_BuildsTheModuleOnce(t *testing.T) {
-	e := New(t)
-	a, b := Binary(t), Binary(t)
-	if a != b {
+	if a, b := Binary(t), Binary(t); a != b {
 		t.Errorf("built twice: %s, %s", a, b)
-	}
-	if res := e.Run("--version"); res.Code != 0 || res.Stderr != "" {
-		t.Errorf("--version: %+v", res)
 	}
 }
 

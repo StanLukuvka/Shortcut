@@ -92,21 +92,14 @@ func TestStores_LocalProjectRoot(t *testing.T) {
 	}
 }
 
-func TestStores_LockIsInTheGlobalStoreAndASymlinkedLockIsRefused(t *testing.T) {
+// The symlink refusal itself is platform's (TestLock_ASymlinkedLockIsRefused).
+func TestStores_LockIsInTheGlobalStore(t *testing.T) {
 	env := testkit.New(t)
-	c := NewContext(env.Home, nil)
-	// the lock is <global>/.lock; a symlink there is refused and its victim untouched
-	ran := false
-	victim := env.WriteFile(filepath.Join(env.Tmp, "victim"), "keep\n", 0)
-	env.Symlink(victim, filepath.Join(env.Store, ".lock"))
-	if err := c.WithLock(func() error { ran = true; return nil }); err == nil || ran {
-		t.Errorf("ran=%v err=%v", ran, err)
+	if err := NewContext(env.Home, nil).WithLock(func() error { return nil }); err != nil {
+		t.Fatal(err)
 	}
-	if b, _ := os.ReadFile(victim); string(b) != "keep\n" {
-		t.Error("victim changed")
-	}
-	if err := c.WithLock(func() error { return nil }); err == nil {
-		t.Error("WithLock through a symlinked .lock must fail")
+	if _, err := os.Lstat(filepath.Join(env.Store, ".lock")); err != nil {
+		t.Errorf("no lock at <global>/.lock: %v", err)
 	}
 }
 

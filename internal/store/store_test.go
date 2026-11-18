@@ -42,7 +42,7 @@ func TestStores_EntryErrors(t *testing.T) {
 		"bad":    map[string]any{"inline": "a", "script": "b"},
 		"a b":    map[string]any{"inline": "x"},
 		"isdir":  map[string]any{"script": "bin"},
-	}, testkit.Files(map[string]any{"bin/tool": "x"}), testkit.Mode(0o755))
+	}, testkit.Files(map[string]string{"bin/tool": "x"}), testkit.Mode(0o755))
 	g := NewContext(env.Home, nil).Store(proj).Main
 	var got []string
 	for _, e := range EntryErrors(g) {

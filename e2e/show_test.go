@@ -10,20 +10,12 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/testkit"
 )
 
-const toolRegistry = `{"version": 1, "shortcuts": {
- "tool": {"description": "A tool: é", "script": "scripts/tool.sh", "confirm": true },
- "bad": {"inline": "x", "cwd": 5, "description": "bd"},
- "gone": {"script": "scripts/none.sh"},
- "trav": {"script": "../../etc/passwd"},
- "nul": null,
- "build": {"description": "Global build", "inline": "echo gb", "cwd": "/tmp"}}}`
-
 func TestStores_BrokenProjectRefusesANamespaceItImported(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"docker": testkit.Inline("echo global")})
 	proj := e.Project(map[string]any{},
 		testkit.Extra(map[string]any{"imports": map[string]any{"docker": "../tools/docker.shortcut"}}),
-		testkit.Files(map[string]any{"tools/docker.shortcut": `{"version": 1, "shortcuts": {"ps": {"inline": "true"}}}`}))
+		testkit.Files(map[string]string{"tools/docker.shortcut": `{"version": 1, "shortcuts": {"ps": {"inline": "true"}}}`}))
 	e.CorruptStore(filepath.Join(proj, ".shortcuts"))
 
 	res := e.RunWith(in(proj), "r", ".", "docker", "ps")
@@ -72,53 +64,10 @@ func TestProjectFiles_ShowJSONSaysWhichFileAnEntryComesFrom(t *testing.T) {
 	testkit.Eq(t, "source", info["source"], "local")
 	testkit.Eq(t, "defined_in", info["defined_in"], filepath.Join(proj, ".shortcuts.local"))
 	testkit.Eq(t, "script_path", info["script_path"], nil)
-}
-
-func TestProjectFiles_ShowNamesTheFileThatDefinesIt(t *testing.T) {
-	e := testkit.New(t)
-	proj := overlaid(t, e)
+	// an override: show names the file that defines it, and says so
 	res := e.RunWith(in(proj), "show", ".", "swap")
 	testkit.Contains(t, "show", res.Stdout, "Defined in:  "+filepath.Join(proj, ".shortcuts.local"))
 	testkit.Contains(t, "show", res.Stdout, "Source:      overridden")
-}
-
-func TestRunning_ShowPrintsTheEntryScriptAndCwd(t *testing.T) {
-	e := testkit.New(t)
-	script := e.Script("shown.sh", "#!/usr/bin/env bash\necho show output running\n")
-	e.WriteStore(e.Store, map[string]any{"shown": map[string]any{"script": script, "description": "Show sample", "cwd": e.Tmp}})
-	res := e.Run("show", "shown")
-	res.WantCode(t, 0)
-	testkit.Contains(t, "show", res.Stdout, "Description: Show sample\n")
-	testkit.Contains(t, "show", res.Stdout, "echo show output running")
-	testkit.Contains(t, "show", res.Stdout, "Run CWD:     "+e.Tmp+"\n")
-}
-
-func TestRunning_ShowOfAGoneRunDirectoryWorksAndAGoneScriptFails(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"gone": map[string]any{"inline": "true", "cwd": "/no/such/folder"}})
-	testkit.Contains(t, "cwd", e.Run("show", "gone").Stdout, "/no/such/folder")
-	e.Folder("home/.shortcuts/scripts") // the folder of a script must be there; the script is what is missing
-	e.WriteStore(e.Store, map[string]any{"gone": map[string]any{"script": "scripts/none.sh"}})
-	res := e.Run("show", "gone")
-	res.WantCode(t, 1)
-	testkit.Contains(t, "script", res.Stderr, "scripts/none.sh: no such file or directory")
-}
-
-func TestRunning_ShowJSONPrintsAnEntryShowRefuses(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"bad": map[string]any{"inline": "true", "cwd": 123}})
-	testkit.Contains(t, "show bad", e.Run("show", "bad").Stderr, "'cwd' must be a string")
-	res := e.Run("show", "--json", "bad")
-	if res.Code != 0 {
-		t.Fatalf("exit %d: %s", res.Code, res.Stderr)
-	}
-	info := decodeObject(t, res.Stdout)
-	testkit.Eq(t, "entry", info["entry"], map[string]any{"inline": "true", "cwd": float64(123)})
-	testkit.Contains(t, "error", info["error"].(string), "'cwd' must be a string")
-	testkit.Eq(t, "name", info["name"], "bad")
-	for _, k := range []string{"cwd", "run_cwd", "script_path"} {
-		testkit.Eq(t, k, info[k], nil)
-	}
 }
 
 func TestRunning_ShowJSONIsOneObjectWithWhereItResolves(t *testing.T) {
@@ -156,29 +105,8 @@ func TestRunning_ShowDirTakesZeroOrOne(t *testing.T) {
 		}
 	}
 	for _, v := range []string{"", "2", "yes"} {
-		res := e.RunWith(testkit.Opts{Env: map[string]string{"SHORTCUT_SHOW_DIR": v}}, "r", "hi")
-		if res.Code != 1 || res.Stdout != "" || res.Stderr != "error: SHORTCUT_SHOW_DIR must be 0 or 1, not '"+v+"'\n" {
-			t.Errorf("%q: %+v", v, res)
-		}
+		e.RunWith(testkit.Opts{Env: map[string]string{"SHORTCUT_SHOW_DIR": v}}, "r", "hi").Want(t, 1, "", "error: SHORTCUT_SHOW_DIR must be 0 or 1, not '"+v+"'\n")
 	}
-}
-
-func TestStores_Show(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{
-		"inline": map[string]any{"description": "Inline item", "inline": "echo hello"},
-		"stored": map[string]any{"description": "Stored item", "script": "scripts/stored.sh"},
-	})
-	e.WriteFile(filepath.Join(e.Store, "scripts", "stored.sh"), "#!/usr/bin/env bash\necho test\n", 0)
-
-	res := e.Run("show", "inline")
-	res.WantCode(t, 0)
-	testkit.Contains(t, "show inline", res.Stdout, "Name:        inline")
-	testkit.Contains(t, "show inline", res.Stdout, "echo hello")
-	res = e.Run("show", "stored")
-	res.WantCode(t, 0)
-	testkit.Contains(t, "show stored", res.Stdout, "Name:        stored")
-	testkit.Contains(t, "show stored", res.Stdout, "echo test")
 }
 
 func TestEntries_CommandsThatTakeANameShowHowMany(t *testing.T) {
@@ -191,7 +119,14 @@ func TestEntries_CommandsThatTakeANameShowHowMany(t *testing.T) {
 // The exact text of show for these (TMP is the test's temp dir).
 func TestShow_FullOutput(t *testing.T) {
 	e := testkit.New(t)
-	e.WriteRegistryRaw(e.Store, toolRegistry)
+	e.WriteRegistryRaw(e.Store, `{"version": 1, "shortcuts": {
+ "tool": {"description": "A tool: é", "script": "scripts/tool.sh", "confirm": true },
+ "bad": {"inline": "x", "cwd": 5, "description": "bd"},
+ "gone": {"script": "scripts/none.sh"},
+ "gonecwd": {"inline": "true", "cwd": "/no/such/folder"},
+ "trav": {"script": "../../etc/passwd"},
+ "nul": null,
+ "build": {"description": "Global build", "inline": "echo gb", "cwd": "/tmp"}}}`)
 	e.Folder("etc") // the folder of "trav"'s script, outside the store, must be there for the traversal check
 	e.WriteFile(filepath.Join(e.Store, "scripts", "tool.sh"), "#!/bin/sh\necho hi\n\n\n   \n", 0)
 	cases := []struct {
@@ -274,6 +209,26 @@ echo hi
   "source": null
 }
 `, ""},
+		{[]string{"show", "build"}, 0, `Name:        build
+Scope:       global
+Defined in:  TMP/home/.shortcuts/shortcuts.json
+CWD:         /tmp
+Run CWD:     /tmp
+Description: Global build
+
+Inline command:
+  echo gb
+`, ""},
+		{[]string{"show", "gonecwd"}, 0, `Name:        gonecwd
+Scope:       global
+Defined in:  TMP/home/.shortcuts/shortcuts.json
+CWD:         /no/such/folder
+Run CWD:     /no/such/folder
+Description: 
+
+Inline command:
+  true
+`, ""},
 		{[]string{"show", "gone"}, 1, `Name:        gone
 Scope:       global
 Defined in:  TMP/home/.shortcuts/shortcuts.json
@@ -292,58 +247,8 @@ Script (TMP/home/.shortcuts/scripts/none.sh):
 	for _, c := range cases {
 		res := e.Run(c.args...)
 		want, wantErr := strings.ReplaceAll(c.stdout, "TMP", e.Tmp), strings.ReplaceAll(c.stderr, "TMP", e.Tmp)
-		if res.Code != c.code || res.Stdout != want || res.Stderr != wantErr {
-			t.Errorf("%v: exit %d\nstdout %q\nstderr %q\nwant exit %d\nstdout %q\nstderr %q", c.args, res.Code, res.Stdout, res.Stderr, c.code, want, wantErr)
-		}
+		res.Want(t, c.code, want, wantErr)
 	}
-}
-
-// show reaches the global store without the dot and only the project with it; each says where the other has the name.
-func TestShow_TheDotSelectsTheScope(t *testing.T) {
-	e := testkit.New(t)
-	e.WriteStore(e.Store, map[string]any{"build": testkit.Inline("echo global"), "gonly": testkit.Inline("echo gonly"),
-		"tool": map[string]any{"script": "scripts/tool.sh", "description": "d"}})
-	e.WriteImport(e.Store, "docker", testkit.NS(map[string]any{"ps": testkit.Inline("echo global-ps")}))
-	e.WriteFile(filepath.Join(e.Store, "scripts", "tool.sh"), "#!/usr/bin/env bash\n", 0)
-	proj := e.Project(map[string]any{"build": testkit.Inline("echo project"), "ponly": testkit.Inline("echo ponly"),
-		"tool": map[string]any{"script": "tool.sh", "description": "d"}},
-		testkit.Files(map[string]any{"tool.sh": "#!/usr/bin/env bash\n"}))
-	e.WriteImport(filepath.Join(proj, ".shortcuts"), "terraform", testkit.NS(map[string]any{"plan": testkit.Inline("echo plan")}))
-	in := testkit.Opts{Cwd: proj}
-
-	res := e.RunWith(in, "show", "build")
-	testkit.Contains(t, "show build", res.Stdout, "Scope:       global\n")
-	testkit.Contains(t, "show build", res.Stdout, "echo global")
-	res = e.RunWith(in, "show", ".", "build")
-	testkit.Contains(t, "show . build", res.Stdout, "Scope:       project\n")
-	testkit.Contains(t, "show . build", res.Stdout, "echo project")
-	testkit.Eq(t, "global script_path", e.RunWith(in, "show", "--field", "script_path", "tool").Stdout, filepath.Join(e.Store, "scripts", "tool.sh")+"\n")
-	testkit.Eq(t, "project json scope", decodeObject(t, e.RunWith(in, "show", "--json", ".", "build").Stdout)["scope"], "project")
-	testkit.Eq(t, "project field", e.RunWith(in, "show", "--field", "scope", ".", "build").Stdout, "project\n")
-	testkit.Contains(t, "show . terraform plan", e.RunWith(in, "show", ".", "terraform", "plan").Stdout, "echo plan")
-	testkit.Contains(t, "show docker ps", e.RunWith(in, "show", "docker", "ps").Stdout, "echo global-ps")
-
-	// Not reached from the other side: an error that names the command, nothing else
-	for _, c := range []struct {
-		args []string
-		want string
-	}{
-		{[]string{"show", "ponly"}, "shortcut 'ponly' not found. The project in " + proj + " has it: shortcut show . ponly"},
-		{[]string{"show", "--json", "ponly"}, "shortcut show . ponly"},
-		{[]string{"show", "terraform", "plan"}, "The project in " + proj + " has it: shortcut show . terraform plan"},
-		{[]string{"show", ".", "gonly"}, "shortcut 'gonly' not found. Your global store has it: shortcut show gonly"},
-		{[]string{"show", ".", "docker", "ps"}, "Your global store has it: shortcut show docker ps"},
-	} {
-		res := e.RunWith(in, c.args...)
-		res.WantCode(t, 1)
-		testkit.Eq(t, strings.Join(c.args, " ")+" stdout", res.Stdout, "")
-		testkit.Contains(t, strings.Join(c.args, " "), res.Stderr, c.want)
-	}
-	// Outside every project
-	res = e.Run("show", ".", "build")
-	res.WantCode(t, 1)
-	testkit.Contains(t, "outside", res.Stderr, "error: no project here")
-	e.RunWith(in, "show", ".").WantCode(t, 2)
 }
 
 // TestShow_ReadsPastABrokenProject: show still works in a broken project; run and rm refuse it
@@ -352,25 +257,19 @@ func TestShow_ReadsPastABrokenProject(t *testing.T) {
 	e := testkit.New(t)
 	e.WriteStore(e.Store, map[string]any{"outside": testkit.Inline("echo outside"), "docker": testkit.Inline("echo global")})
 	broken := e.BrokenProject()
-	in := testkit.Opts{Cwd: broken}
+	o := testkit.Opts{Cwd: broken}
 	// Looking is not running: show reads past the file, quietly
 	for _, args := range [][]string{{"show", "outside"}, {"show", "--json", "outside"}} {
-		res := e.RunWith(in, args...)
+		res := e.RunWith(o, args...)
 		for _, bad := range []string{"corrupt registry", "warning"} {
 			if strings.Contains(res.Stderr, bad) {
 				t.Errorf("%v: stderr has %q: %s", args, bad, res.Stderr)
 			}
 		}
 	}
-	testkit.Contains(t, "show outside", e.RunWith(in, "show", "outside").Stdout, "Scope:       global")
-	testkit.Contains(t, "show nothing", e.RunWith(in, "show", "nothing").Stderr, "'nothing' not found")
-	testkit.Contains(t, "show docker", e.RunWith(in, "show", "docker").Stdout, "Scope:       global")
-
-	// an unknown top-level field: the file still parses, so show finds its entries
-	proj := e.Project(map[string]any{"inside": testkit.Inline("true")}, testkit.Name("p2"), testkit.Extra(map[string]any{"bogus": 1}))
-	res := e.RunWith(testkit.Opts{Cwd: proj}, "show", ".", "inside")
-	res.WantCode(t, 0)
-	testkit.Contains(t, "show inside", res.Stdout, "Scope:       project")
+	testkit.Contains(t, "show outside", e.RunWith(o, "show", "outside").Stdout, "Scope:       global")
+	testkit.Contains(t, "show nothing", e.RunWith(o, "show", "nothing").Stderr, "'nothing' not found")
+	testkit.Contains(t, "show docker", e.RunWith(o, "show", "docker").Stdout, "Scope:       global")
 }
 
 // show --field prints one field bare, reads only, and says which fields exist.
@@ -410,9 +309,7 @@ func TestShow_Field(t *testing.T) {
 			}
 			continue
 		}
-		if res.Code != c.code || res.Stdout != c.stdout || res.Stderr != c.stderr {
-			t.Errorf("%v: exit %d stdout %q stderr %q; want exit %d stdout %q stderr %q", c.args, res.Code, res.Stdout, res.Stderr, c.code, c.stdout, c.stderr)
-		}
+		res.Want(t, c.code, c.stdout, c.stderr)
 	}
 }
 

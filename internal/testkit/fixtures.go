@@ -44,23 +44,14 @@ func (e *Env) inside(what, path string) {
 
 // Files and folders. Paths outside Tmp are refused.
 
-// WriteFile writes a file and any folders above it, inside Tmp. content is a string or []byte; mode 0 = 0644.
-func (e *Env) WriteFile(path string, content any, mode os.FileMode) string {
+// WriteFile writes a file and any folders above it, inside Tmp; mode 0 = 0644.
+func (e *Env) WriteFile(path string, content string, mode os.FileMode) string {
 	e.T.Helper()
 	e.inside("a fixture file", path)
-	var data []byte
-	switch c := content.(type) {
-	case string:
-		data = []byte(c)
-	case []byte:
-		data = c
-	default:
-		e.dief("WriteFile %s: content is %T, want string or []byte", path, content)
-	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		e.die(err)
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		e.die(err)
 	}
 	if mode != 0 {
@@ -71,7 +62,7 @@ func (e *Env) WriteFile(path string, content any, mode os.FileMode) string {
 	return path
 }
 
-func (e *Env) writeFiles(root string, files map[string]any, mode os.FileMode) {
+func (e *Env) writeFiles(root string, files map[string]string, mode os.FileMode) {
 	e.T.Helper()
 	for rel, content := range files {
 		e.WriteFile(filepath.Join(root, rel), content, mode)
@@ -192,18 +183,18 @@ func (e *Env) LoadGlobal() map[string]any {
 type projectCfg struct {
 	name  string
 	dirs  []string
-	files map[string]any
+	files map[string]string
 	extra map[string]any
 	mode  os.FileMode
 }
 
 type ProjectOpt func(*projectCfg)
 
-func Name(n string) ProjectOpt          { return func(c *projectCfg) { c.name = n } }
-func Dirs(d ...string) ProjectOpt       { return func(c *projectCfg) { c.dirs = d } }
-func Files(f map[string]any) ProjectOpt { return func(c *projectCfg) { c.files = f } }
-func Extra(x map[string]any) ProjectOpt { return func(c *projectCfg) { c.extra = x } }
-func Mode(m os.FileMode) ProjectOpt     { return func(c *projectCfg) { c.mode = m } } // mode of the Files
+func Name(n string) ProjectOpt             { return func(c *projectCfg) { c.name = n } }
+func Dirs(d ...string) ProjectOpt          { return func(c *projectCfg) { c.dirs = d } }
+func Files(f map[string]string) ProjectOpt { return func(c *projectCfg) { c.files = f } }
+func Extra(x map[string]any) ProjectOpt    { return func(c *projectCfg) { c.extra = x } }
+func Mode(m os.FileMode) ProjectOpt        { return func(c *projectCfg) { c.mode = m } } // mode of the Files
 
 func cfgOf(name string, opts []ProjectOpt) *projectCfg {
 	c := &projectCfg{name: name}
