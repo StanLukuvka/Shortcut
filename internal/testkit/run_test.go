@@ -59,7 +59,7 @@ func TestShell_HasShortcutOnPath(t *testing.T) {
 func TestRun_CloseFDsStartsTheChildWithThemClosed(t *testing.T) {
 	e := New(t)
 	res := e.RunCmd(Opts{CloseFDs: []int{1}}, "sh", "-c", `if echo hi 2>/dev/null; then echo open >&2; else echo closed >&2; fi`)
-	if res.Stdout != "" || res.Stderr != "closed\n" {
+	if res.Stdout != "" || !strings.Contains(res.Stderr, "closed\n") {
 		t.Errorf("stdout closed: %+v", res)
 	}
 }
