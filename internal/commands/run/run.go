@@ -2,13 +2,10 @@ package run
 
 import (
 	"cmp"
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"slices"
 	"strings"
-	"syscall"
 
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 	"github.com/StanLukuvka/Shortcut/internal/store"
@@ -53,13 +50,6 @@ func runShortcut(c *store.Context, s *terminal.Streams, words []string, lk store
 	if err := store.ValidateName(entry.Name); err != nil { // list warns about a hand-written one; run refuses it
 		return err
 	}
-	isDir, err := platform.IsDir(resolved.RunCwd)
-	if err != nil {
-		return err
-	}
-	if !isDir {
-		return errors.New("run directory does not exist: " + resolved.RunCwd)
-	}
 	withArgs := ""
 	if len(args) > 0 {
 		withArgs = " with " + platform.ShellJoin(args)
@@ -103,11 +93,7 @@ func runShortcut(c *store.Context, s *terminal.Streams, words []string, lk store
 	if err := cmp.Or(s.Out.Failed(), s.Err.Failed()); err != nil {
 		return err
 	}
-	err = platform.ExecChild(argv, resolved.RunCwd, env)
-	if entry.Inline == nil && errors.Is(err, syscall.ENOEXEC) { // inline shortcuts exec bash, so this is a script
-		return terminal.Die(argv[0] + " can't run as it is: it needs to start with #! and a program that runs here, such as #!/bin/sh, or to be a binary for this system")
-	}
-	return err
+	return platform.ExecChild(argv, resolved.RunCwd, env)
 }
 
 // showDir reads SHORTCUT_SHOW_DIR: unset or 1 shows the folder, 0 hides it, anything else is refused.
@@ -129,15 +115,6 @@ func childCommand(resolved *store.ResolvedShortcut, entry *store.Entry, name str
 	}
 	path, err := store.ResolveScriptPath(resolved.Group.ScriptBase(), *entry.Script)
 	if err != nil {
-		return nil, err
-	}
-	if _, err := os.Stat(path); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, errors.New("script file not found: " + path)
-		}
-		return nil, err
-	}
-	if err := platform.CheckExecutable(path); err != nil {
 		return nil, err
 	}
 	return append([]string{path}, args...), nil

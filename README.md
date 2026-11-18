@@ -100,8 +100,8 @@ shortcut r backup Documents
 ```
 
 shortcut runs the script where it is, with its own `#!` line. It doesn't copy it, so when you change the script the
-shortcut runs the new version. The script must be executable and start with `#!` (or be a compiled program). If it
-isn't executable, shortcut says so, with the `chmod +x` command to fix it.
+shortcut runs the new version. The script must be executable and start with `#!` (or be a compiled program).
+shortcut runs it as it is; if the system won't start it, shortcut shows the system's error.
 
 ### Where it runs
 
@@ -372,8 +372,7 @@ shortcut --version
 ### Running
 
 - An inline shortcut runs as `bash -c CMD <name> ARGS...`. A script runs as it is: it must be executable and start
-  with `#!`, or be a binary. One that is not executable is refused with the `chmod +x` command; `new --script` and
-  `list` say so too.
+  with `#!`, or be a binary. If the system won't start it, shortcut shows the system's error.
 - Every word after the name reaches it as `$1`, `$2`..., flags included. A first `--` is passed on as it is.
 - It runs in its `cwd`, and gets `SHORTCUT_NAME` (the name, or `<ns> <name>` in a namespace), `SHORTCUT_NAMESPACE`
   (the namespace, empty outside one) and `SHORTCUT_CALLER_CWD` (the folder it was run from). Its exit code is

@@ -510,7 +510,7 @@ func TestRunning_TheEnvironmentSaysWhatRunsAndFromWhere(t *testing.T) {
 }
 
 // A script is handed to the kernel as it is: its #! line runs it, a binary runs, a file the kernel refuses says so,
-// and one that is not executable stops with the chmod command.
+// and one that is not executable, missing or not a program shows the system's error.
 func TestRunning_AScriptRunsAsItIs(t *testing.T) {
 	e := testkit.New(t)
 	scripts := filepath.Join(e.Store, "scripts")
@@ -529,6 +529,7 @@ func TestRunning_AScriptRunsAsItIs(t *testing.T) {
 	e.WriteFile(filepath.Join(scripts, "bin"), string(bin), 0o755)
 	e.WriteFile(filepath.Join(scripts, "macho"), "\xcf\xfa\xed\xfe"+string(make([]byte, 64)), 0o755)
 	e.WriteStore(e.Store, map[string]any{
+		"gone":  map[string]any{"script": "scripts/gone.sh"},
 		"exec":  map[string]any{"script": "scripts/exec.sh"},
 		"plain": map[string]any{"script": "scripts/plain.sh"},
 		"bin":   map[string]any{"script": "scripts/bin"},
@@ -544,15 +545,19 @@ func TestRunning_AScriptRunsAsItIs(t *testing.T) {
 	testkit.Eq(t, "plain exit", res.Code, 1)
 	testkit.Eq(t, "plain stdout", res.Stdout, "")
 	path := filepath.Join(scripts, "plain.sh")
-	testkit.Contains(t, "plain stderr", res.Stderr, "error: "+path+" is not executable. Make it so: chmod +x "+path)
+	testkit.Contains(t, "plain stderr", res.Stderr, "exec "+path+": permission denied")
 	// A binary the kernel will not run (another system's format) is not handed to bash.
 	res = e.Run("run", "macho")
 	testkit.Eq(t, "macho exit", res.Code, 1)
 	testkit.Eq(t, "macho stdout", res.Stdout, "")
-	testkit.Contains(t, "macho stderr", res.Stderr, "error: "+filepath.Join(scripts, "macho")+" can't run as it is: it needs to start with #! and a program that runs here, such as #!/bin/sh, or to be a binary for this system")
+	testkit.Contains(t, "macho stderr", res.Stderr, "exec "+filepath.Join(scripts, "macho")+": exec format error")
 	if strings.Contains(res.Stderr, "bash") || strings.Contains(res.Stderr, "line ") {
 		t.Errorf("macho was run by bash: %q", res.Stderr)
 	}
+	res = e.Run("run", "gone")
+	testkit.Eq(t, "gone exit", res.Code, 1)
+	testkit.Eq(t, "gone stdout", res.Stdout, "")
+	testkit.Contains(t, "gone stderr", res.Stderr, "exec "+filepath.Join(scripts, "gone.sh")+": no such file or directory")
 }
 
 func TestRunning_RunHelp(t *testing.T) {
@@ -589,7 +594,8 @@ func TestRunning_RunCwdModes(t *testing.T) {
 	}
 	res := e.RunWith(in(here), "r", ".", "gone")
 	res.WantCode(t, 1)
-	testkit.Contains(t, "gone", res.Stderr, "run directory does not exist")
+	testkit.Eq(t, "gone stdout", res.Stdout, "")
+	testkit.Contains(t, "gone", res.Stderr, filepath.Join(proj, "nope"))
 }
 
 func TestRunning_RunDirectoryLine(t *testing.T) {

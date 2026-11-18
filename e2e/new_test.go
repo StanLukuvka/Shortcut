@@ -57,7 +57,6 @@ func TestNew_Refusals(t *testing.T) {
 	proj := e.Project(map[string]any{})
 	dup := e.Project(nil, testkit.Name("dup"))
 	runOK(t, e, in(dup), "new", "taken", "--local", "--", "true")
-	plain := e.WriteFile(filepath.Join(e.Tmp, "plain.sh"), "#!/bin/sh\n", 0o644)
 	exec := e.Script("tool.sh", bashShebang)
 	for _, c := range []struct {
 		name string
@@ -66,7 +65,6 @@ func TestNew_Refusals(t *testing.T) {
 		code int
 		msg  string
 	}{
-		{"not executable", "", []string{"x", "--script", plain}, 1, "error: " + plain + " is not executable. Make it so: chmod +x " + plain},
 		{"script and command", proj, []string{"x", "--script", exec, "--", "true"}, 1, "use one of"},
 		{"empty script and command", proj, []string{"x", "--script", "", "--", "true"}, 1, "needs a file name"},
 		{"empty script", proj, []string{"x", "--script", ""}, 1, "needs a file name"},
@@ -251,6 +249,15 @@ func TestNew_CreatedMessageNamesTheNamespace(t *testing.T) {
 	testkit.Contains(t, "inline", res.Stdout, "Created inline shortcut 'docker ps'.")
 	res = runOK(t, e, testkit.Opts{}, "new", "up", "--namespace", "docker", "--script", e.Script("up.sh", "#!/bin/sh\n"))
 	testkit.Contains(t, "script", res.Stdout, "Created shortcut 'docker up' using")
+}
+
+// A script that is not executable is stored; running it is where the system says so.
+func TestNew_ScriptNeedNotBeExecutable(t *testing.T) {
+	e := testkit.New(t)
+	plain := e.WriteFile(filepath.Join(e.Tmp, "plain.sh"), "#!/bin/sh\n", 0o644)
+	res := runOK(t, e, testkit.Opts{}, "new", "x", "--script", plain)
+	testkit.Contains(t, "stdout", res.Stdout, "Created shortcut 'x' using")
+	testkit.Contains(t, "stored", testkit.ReadFile(t, filepath.Join(e.Store, "shortcuts.json")), "plain.sh")
 }
 
 // `--cwd link/..` is the parent of where the link leads, not the folder holding the link.
