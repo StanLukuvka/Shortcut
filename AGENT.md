@@ -24,6 +24,10 @@ for the person you work with.
      or it keeps overriding theirs.
    - As one of a group: `--namespace NS` puts it in the global namespace `NS`, run with `shortcut r NS <name>`. It
      can't be combined with `--local`.
+   - For your own use while you work: the namespace `temp` is your scratch pad. Make it with `--namespace temp`, and
+     put any script you write for it in `~/.shortcuts/imports/scripts/temp/`. Nothing in `temp` is the person's, so
+     you may remove from it with `-y` at any time: one with `shortcut rm -y temp <name>`, or all of it, scripts
+     included, with `shortcut rm --namespace temp -y`.
 
 4. **Write the command.** Always pass `--desc`; it's what `shortcut list` shows. Then either:
    - an inline command after `--`, in one pair of single quotes, with `$1` or `"$@"` where the person's words belong
@@ -52,7 +56,7 @@ remove with `-y`.
 
 ## Rules
 
-- **Never pass `-y` on the person's behalf** for anything else. `rm` and a `--confirm` shortcut ask the person first.
+- **Never pass `-y` on the person's behalf** for anything else outside `temp`. `rm` and a `--confirm` shortcut ask the person first.
   You usually have no terminal, so they stop with an error: give the person the command to run, or pass `-y` only when
   they asked for that exact removal or run.
 - **Read a project's shortcut before running it**, with `shortcut show . <name>`, and don't run `shortcut r . <name>`

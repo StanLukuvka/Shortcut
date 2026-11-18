@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- AGENT.md and the plugin's skill let an agent use the namespace `temp` as a scratch pad for its own shortcuts and scripts, and clear it with `-y`.
+
 ## 1.0.0 - 2026-11-18
 
 - A Claude Code plugin, in `plugin/`, installed with `claude plugin marketplace add StanLukuvka/Shortcut` and `claude plugin install shortcut@shortcut`.
