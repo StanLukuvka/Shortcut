@@ -1,0 +1,9 @@
+{
+  "name": "shortcut",
+  "version": "0.1.0",
+  "description": "Find, run and save shortcuts with the shortcut CLI. The project's shortcuts are in Claude's context from the start, and Claude Code asks you first when a command's text runs shortcut r or rm with -y; a command run through a variable, an alias, a wrapper script or eval can still get past it.",
+  "author": { "name": "Stan Lukuvka" },
+  "homepage": "https://github.com/StanLukuvka/Shortcut",
+  "license": "MIT",
+  "keywords": ["shortcut", "cli", "shell", "commands", "scripts"]
+}

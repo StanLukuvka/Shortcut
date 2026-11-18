@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A Claude Code plugin, in `plugin/`, installed with `claude plugin marketplace add StanLukuvka/Shortcut` and `claude plugin install shortcut@shortcut`.
 - `new --script` and `new --cwd` no longer check the path first: a missing one shows the system's error, and the path is stored as given otherwise.
 - A store or namespace file that can't be read, and an `imports` that isn't a folder, now show the system's error. A folder where a store file should be is no longer read as an empty store.
 - A relative `script` path is no longer checked against its store: it is joined to the file's folder and run as it is, links and `..` included.

@@ -46,6 +46,7 @@ CI also checks `gofmt` and runs `go vet ./...`.
 - A new entry field: a row in `Fields()` in `internal/store/entry.go`, and [docs/shortcut.schema.json](docs/shortcut.schema.json) (a test fails if they differ).
 - A new command or flag: its row in `commands()` in `internal/commands/commands.go` (dispatch, parsing, usage and help follow from it), the three completion scripts in `internal/commands/completion/` (a test fails if they disagree with `commands()`), and the README command list.
 - Anything a user would notice: a line under Unreleased in [CHANGELOG.md](CHANGELOG.md).
+- A change to [plugin/](plugin/): its `version` in `plugin/.claude-plugin/plugin.json`, so installed copies update. A change to a command the plugin uses (`list`, `show`, `r`, `new`, `rm`): the plugin's skill and hooks too, and `sh plugin/tests/hooks-test.sh` with that build on your `PATH`.
 
 ## How it fails
 
@@ -93,6 +94,7 @@ repair, or carry on.
 - `installer/`: `install.sh` and its tests.
 - `examples/`: namespaces to copy from.
 - `docs/`: the schema and the error table.
+- `plugin/`: the Claude Code plugin, with its skill, hooks and hook tests. `.claude-plugin/marketplace.json` at the root lists it, so the repository is its marketplace.
 
 ## Imports
 

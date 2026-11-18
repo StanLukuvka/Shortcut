@@ -49,3 +49,8 @@ jobs:
         run: CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build ./...
       - name: cross-build darwin/amd64
         run: CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build ./...
+      - name: Claude Code plugin hooks
+        run: |
+          sh -n plugin/hooks/project-shortcuts.sh
+          sh -n plugin/hooks/confirm-guard.sh
+          PATH="$PWD/bin:$PATH" sh plugin/tests/hooks-test.sh
