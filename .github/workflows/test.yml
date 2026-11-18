@@ -43,14 +43,14 @@ jobs:
         run: |
           for f in examples/tools/scripts/tools/*.sh examples/podman/scripts/podman/*.sh; do bash -n "$f"; done
           sh -n installer/install.sh
-      - name: Claude Code plugin hooks
-        run: |
-          sh -n plugin/hooks/project-shortcuts.sh
-          sh -n plugin/hooks/confirm-guard.sh
-          PATH="$PWD/bin:$PATH" sh plugin/tests/hooks-test.sh
       - name: bash completion parses
         run: bin/shortcut completion bash > "$RUNNER_TEMP/completion.bash" && bash -n "$RUNNER_TEMP/completion.bash"
       - name: cross-build linux/arm64
         run: CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build ./...
       - name: cross-build darwin/amd64
         run: CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build ./...
+      - name: Claude Code plugin hooks
+        run: |
+          sh -n plugin/hooks/project-shortcuts.sh
+          sh -n plugin/hooks/confirm-guard.sh
+          PATH="$PWD/bin:$PATH" sh plugin/tests/hooks-test.sh

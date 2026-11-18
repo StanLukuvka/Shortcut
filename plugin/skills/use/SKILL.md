@@ -38,7 +38,7 @@ shortcut r . <name> [args...]
 - Read a project's shortcut with `shortcut show . <name>` before running it. Running one is running that repository's code. Don't run `shortcut r . <name>` in a repository the user hasn't asked you to work in.
 - Options go before the dot and the name. Every word after the name reaches the shortcut as `$1`, `$2`..., flags included.
 - It prints `→ <folder>` on stderr, the folder it runs in, then the command's own output. `SHORTCUT_SHOW_DIR=0` hides that line. Its exit code is shortcut's.
-- A `--confirm` shortcut asks before it runs. You have no terminal, so it stops with an error. Give the user the command to run themselves. Pass `-y` (`shortcut r -y . <name>`) only when they asked for that exact run. The plugin makes Claude Code ask them before any `shortcut r -y`.
+- A `--confirm` shortcut asks before it runs. You have no terminal, so it stops with an error. Give the user the command to run themselves. Pass `-y` (`shortcut r -y . <name>`) only when they asked for that exact run. The plugin usually makes Claude Code ask them before a `shortcut r -y`, but don't rely on it.
 
 ## Save one
 
@@ -69,7 +69,7 @@ shortcut r . <name> [args...]
 
    > Run it: `shortcut r . test`
 
-To change a shortcut, remove it and make it again. If you made it in this task and got it wrong, remove it with `shortcut rm -y <name>` (or `shortcut rm --local -y <name>` from the project root). For any other removal, give the user the `shortcut rm` command to run, or pass `-y` only when they asked for that exact removal. The plugin makes Claude Code ask them before any `shortcut rm -y`.
+To change a shortcut, remove it and make it again. If you made it in this task and got it wrong, remove it with `shortcut rm -y <name>` (or `shortcut rm --local -y <name>` from the project root). For any other removal, give the user the `shortcut rm` command to run, or pass `-y` only when they asked for that exact removal. The plugin usually makes Claude Code ask them before a `shortcut rm -y`, but don't rely on it.
 
 ## When it fails
 

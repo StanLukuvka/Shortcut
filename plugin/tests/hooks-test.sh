@@ -31,6 +31,10 @@ bash ask '~/.local/bin/shortcut r -y deploy'
 bash ask 'echo go
 shortcut r -y deploy'
 bash ask 'shortcut rm -y hi'
+bash ask "shortcut r '-y' deploy"
+bash ask 'shortcut r "-y" deploy'
+bash ask 'shortcut rm "-y" x'
+bash ask "'shortcut' r -y deploy"
 bash ask 'shortcut rm hi -y'
 bash ask 'shortcut rm --local -y mine'
 bash ask 'shortcut rm --namespace git --yes'
@@ -39,6 +43,7 @@ bash ask 'yes | unbuffer shortcut rm hi'
 bash ask 'expect -c "spawn shortcut r deploy; send y\r"'
 bash ask "python3 -c 'import pty; pty.spawn([\"shortcut\", \"rm\", \"hi\"])'"
 
+bash none 'X=shortcut; $X r -y d' # known gap: a variable gets past the guard
 bash none 'shortcut list'
 bash none 'shortcut list --names .'
 bash none 'shortcut show . test'

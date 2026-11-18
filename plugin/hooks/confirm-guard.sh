@@ -13,6 +13,8 @@ cmd=$(printf '%s' "$input" | sed -n -E 's/.*"command"[[:space:]]*:[[:space:]]*"(
 [ -n "$cmd" ] || cmd=$input
 # Undo the JSON escapes. A newline separates commands, as ; does.
 cmd=$(printf '%s' "$cmd" | sed -e 's/\\n/;/g' -e 's/\\[rt]/ /g' -e 's/\\"/"/g' -e 's/\\\\/\\/g')
+# The shell removes quotes too, so 'shortcut' r "-y" runs as shortcut r -y.
+cmd=$(printf '%s' "$cmd" | tr -d "'\"")
 
 has() { printf '%s' "$cmd" | grep -Eq -- "$1"; }
 
