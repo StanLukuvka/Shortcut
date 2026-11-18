@@ -4,6 +4,7 @@ package write
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -121,16 +122,16 @@ func RemoveNamespaceFiles(group store.Group) error {
 	if err := UnlinkFile(group.File); err != nil {
 		return err
 	}
-	isLink, err := platform.IsLink(folder)
-	if err != nil {
+	st, err := os.Lstat(folder)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return nil
+	case err != nil:
 		return err
-	}
-	if isLink {
+	case st.Mode()&os.ModeSymlink != 0:
 		return UnlinkFile(folder)
+	case st.IsDir():
+		return os.RemoveAll(folder) // does not follow a link inside it either
 	}
-	isDir, err := platform.IsDir(folder)
-	if err != nil || !isDir {
-		return err
-	}
-	return os.RemoveAll(folder) // does not follow a link inside it either
+	return nil
 }

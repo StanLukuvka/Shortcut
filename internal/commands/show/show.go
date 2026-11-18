@@ -11,13 +11,6 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/terminal/argparse"
 )
 
-func orCaller(s *string) string {
-	if s == nil || *s == "" {
-		return store.Caller
-	}
-	return *s
-}
-
 // Run prints a shortcut's definition and where it resolves.
 func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []string) error {
 	ns, err := cmd.Parse(args)
@@ -48,14 +41,18 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 	entry, group := resolved.Entry, resolved.Group
 	out := func(text string) { s.Out.WriteString(text + "\n") }
 
-	display := resolved.Display()
+	display := resolved.Group.Display(resolved.Entry.Name)
 	out("Name:        " + display)
 	out("Scope:       " + string(group.Kind))
 	out("Defined in:  " + group.DefiningFile(entry.Name))
 	if group.Kind == store.KindProject {
 		out("Source:      " + string(group.Source(entry.Name)))
 	}
-	out("CWD:         " + orCaller(entry.Cwd))
+	cwd := store.Caller
+	if entry.Cwd != nil && *entry.Cwd != "" {
+		cwd = *entry.Cwd
+	}
+	out("CWD:         " + cwd)
 	out("Run CWD:     " + resolved.RunCwd)
 	out("Description: " + entry.Description)
 	if entry.Confirm {
@@ -66,7 +63,7 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 		out("\nInline command:\n  " + *entry.Inline)
 		return nil
 	}
-	path := store.ScriptPath(group.ScriptBase(), *entry.Script)
+	path := platform.Join(group.ScriptBase(), *entry.Script)
 	out("\nScript (" + path + "):")
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -81,15 +78,6 @@ func showTop() []string {
 	return []string{"name", "namespace", "scope", "defined_in", "source", "cwd", "run_cwd", "script_path", "error"}
 }
 
-// setOpt writes null for nil, else the string.
-func setOpt(d platform.Doc, key string, val *string) {
-	if val == nil {
-		d[key] = []byte("null")
-		return
-	}
-	d.SetString(key, *val)
-}
-
 // showJSON prints one JSON object, the entry plus where it resolves.
 func showJSON(c *store.Context, s *terminal.Streams, words []string, lk store.Lookup) error {
 	vals, entry, err := showObject(c, words, lk)
@@ -98,7 +86,11 @@ func showJSON(c *store.Context, s *terminal.Streams, words []string, lk store.Lo
 	}
 	d := platform.Doc{}
 	for _, k := range showTop() {
-		setOpt(d, k, vals[k])
+		if vals[k] == nil { // null for nil, else the string
+			d[k] = []byte("null")
+		} else {
+			d.SetString(k, *vals[k])
+		}
 	}
 	if o, ok := platform.ObjectOf(entry); ok { // an object's fields come out sorted, whatever the file's order
 		if entry, err = o.Bytes(); err != nil {
@@ -182,7 +174,7 @@ func showObject(c *store.Context, words []string, lk store.Lookup) (vals map[str
 			vals["run_cwd"] = &runCwd
 		}
 		if err == nil && e.Script != nil {
-			path := store.ScriptPath(g.ScriptBase(), *e.Script)
+			path := platform.Join(g.ScriptBase(), *e.Script)
 			vals["script_path"] = &path
 		}
 	}

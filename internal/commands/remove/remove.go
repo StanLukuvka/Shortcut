@@ -45,9 +45,13 @@ func Run(c *store.Context, s *terminal.Streams, cmd terminal.Command, args []str
 	}
 	group, name := found.Group, found.Name
 	display := group.Display(name)
+	where := "your global shortcuts"
+	if group.Kind == store.KindNamespace {
+		where = "namespace " + group.Name
+	}
 
 	if err := terminal.Confirmed(s, terminal.Confirm{Question: "remove '" + display + "'?", NoTerminal: "remove '" + display + "' in a terminal, or pass -y",
-		Message: rmMessage(group, display), TellOnYes: true}, ns.Bool("yes")); err != nil {
+		Message: "Removes '" + display + "' from " + where + ": " + group.File, TellOnYes: true}, ns.Bool("yes")); err != nil {
 		return err
 	}
 
@@ -156,13 +160,4 @@ func rmNamespace(c *store.Context, s *terminal.Streams, name string, assumeYes b
 	}
 	s.Out.WriteString("Removed namespace '" + name + "'.\n")
 	return nil
-}
-
-// rmMessage returns what rm is about to change, shown above its question.
-func rmMessage(group store.Group, display string) string {
-	where := "your global shortcuts"
-	if group.Kind == store.KindNamespace {
-		where = "namespace " + group.Name
-	}
-	return "Removes '" + display + "' from " + where + ": " + group.File
 }

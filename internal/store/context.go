@@ -71,10 +71,6 @@ func resolveIfThere(p string) (string, error) {
 	return platform.Realpath(p)
 }
 
-// IsGlobal reports whether dir is the global store: Global itself, as the callers pass it. A project root is a
-// resolved path that is never the global store (neverAProject).
-func (c *Context) IsGlobal(dir string) bool { return dir == c.Global }
-
 // neverAProject: ~/.shortcuts is never a project, also when SHORTCUTS_HOME points the global store elsewhere.
 // file is the folder's .shortcuts; one that is not there is not the global store.
 func (c *Context) neverAProject(file string) (bool, error) {
@@ -183,7 +179,7 @@ func (c *Context) Stores() []Store {
 // loadStore reads a store and its namespaces. It never fails on bad content: that is reported on the Group or the
 // Store, so list, show and rm still work on a broken store.
 func (c *Context) loadStore(storeDir string) Store {
-	isGlobal := c.IsGlobal(storeDir)
+	isGlobal := storeDir == c.Global
 	var main Group
 	var problems []string
 	if isGlobal {

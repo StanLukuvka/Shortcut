@@ -24,7 +24,7 @@ func TestFiles_CantTellIsAnErrorNotMissing(t *testing.T) {
 	if err := os.Chmod(locked, 0); err != nil {
 		t.Fatal(err)
 	}
-	for name, probe := range map[string]func(string) (bool, error){"IsFile": IsFile, "IsDir": IsDir, "Exists": Exists, "Lexists": Lexists} {
+	for name, probe := range map[string]func(string) (bool, error){"IsFile": IsFile, "Exists": Exists, "Lexists": Lexists} {
 		if ok, err := probe(f); ok || err == nil {
 			t.Errorf("%s in a folder that can't be searched: %v, %v", name, ok, err)
 		}

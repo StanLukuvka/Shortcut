@@ -181,5 +181,3 @@ type ResolvedShortcut struct {
 	Group  Group
 	RunCwd string // computed execution directory
 }
-
-func (r ResolvedShortcut) Display() string { return r.Group.Display(r.Entry.Name) }

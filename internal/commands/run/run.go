@@ -46,7 +46,7 @@ func runShortcut(c *store.Context, s *terminal.Streams, words []string, lk store
 	if err != nil {
 		return err
 	}
-	entry, name := resolved.Entry, resolved.Display()
+	entry, name := resolved.Entry, resolved.Group.Display(resolved.Entry.Name)
 	if err := store.ValidateName(entry.Name); err != nil { // list warns about a hand-written one; run refuses it
 		return err
 	}
@@ -79,10 +79,7 @@ func runShortcut(c *store.Context, s *terminal.Streams, words []string, lk store
 		s.Err.WriteString(line + "\n")
 	}
 
-	argv, err := childCommand(resolved, entry, name, args)
-	if err != nil {
-		return err
-	}
+	argv := childCommand(resolved, entry, name, args)
 	// A shortcut run from another one gets its own SHORTCUT_ variables, not the caller's
 	env := slices.DeleteFunc(os.Environ(), func(kv string) bool {
 		k, _, hasEq := strings.Cut(kv, "=")
@@ -109,9 +106,9 @@ func showDir() (bool, error) {
 }
 
 // childCommand is the argv of the child: bash -c for an inline command, else the script as it is, for the kernel.
-func childCommand(resolved *store.ResolvedShortcut, entry *store.Entry, name string, args []string) ([]string, error) {
+func childCommand(resolved *store.ResolvedShortcut, entry *store.Entry, name string, args []string) []string {
 	if entry.Inline != nil {
-		return append([]string{"bash", "-c", *entry.Inline, name}, args...), nil
+		return append([]string{"bash", "-c", *entry.Inline, name}, args...)
 	}
-	return append([]string{store.ScriptPath(resolved.Group.ScriptBase(), *entry.Script)}, args...), nil
+	return append([]string{platform.Join(resolved.Group.ScriptBase(), *entry.Script)}, args...)
 }

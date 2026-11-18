@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"maps"
 	"math/big"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -13,21 +14,16 @@ import (
 	"github.com/StanLukuvka/Shortcut/internal/platform"
 )
 
-// isJSONError: a problem with the file's text (what the decoder reports), as opposed to reading it (an *fs.PathError).
-func isJSONError(err error) bool {
-	var pe *fs.PathError
-	return !errors.As(err, &pe)
-}
-
 // LoadRegistryFile reads a registry file, with fixed messages.
 func LoadRegistryFile(path string) (platform.Doc, error) {
-	text, err := platform.ReadJSONFile(path)
+	text, err := os.ReadFile(path)
 	var data platform.Doc
 	if err == nil {
 		data, err = platform.ParseDoc(text)
 	}
 	if err != nil {
-		if isJSONError(err) {
+		var pe *fs.PathError
+		if !errors.As(err, &pe) { // a problem with the file's text, as opposed to reading it
 			return nil, fmt.Errorf("corrupt registry %s: %s", path, err)
 		}
 		return nil, err
@@ -56,7 +52,11 @@ func SaveRegistryFile(path string, data platform.Doc) error {
 		return err
 	}
 	if isFile {
-		if _, err := platform.ReadJSONFile(path); err != nil {
+		text, err := os.ReadFile(path)
+		if err == nil {
+			_, err = platform.ParseDoc(text)
+		}
+		if err != nil {
 			return fmt.Errorf("cannot overwrite corrupt registry %s: %s", path, err)
 		}
 	}
@@ -72,15 +72,6 @@ func ValidateName(name string) error {
 			"(alphanumeric start, up to 64 characters of letters, digits, underscores, and dashes).", name)
 	}
 	return nil
-}
-
-// ScriptPath is where an entry's script is: an absolute path as given, a relative one joined to baseDir (not
-// cleaned, so the OS resolves a `..` after a link as it does for any path).
-func ScriptPath(baseDir, scriptField string) string {
-	if strings.HasPrefix(scriptField, "/") {
-		return scriptField
-	}
-	return platform.Join(baseDir, scriptField)
 }
 
 // fileError returns what's wrong with a file as a whole ("" = nothing); EntryErrors checks what's inside

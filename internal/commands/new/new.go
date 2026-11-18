@@ -145,7 +145,7 @@ func targetGroup(c *store.Context, ns argparse.Namespace) (store.Group, error) {
 		}
 		var ok bool
 		if group, ok = st.Namespace(namespace); !ok {
-			group = store.Group{Kind: store.KindNamespace, InProject: !c.IsGlobal(storeDir), Name: namespace, File: platform.Join(storeDir, "imports", namespace+store.ImportSuffix),
+			group = store.Group{Kind: store.KindNamespace, InProject: storeDir != c.Global, Name: namespace, File: platform.Join(storeDir, "imports", namespace+store.ImportSuffix),
 				StoreDir: storeDir, Doc: platform.Doc{}}
 		}
 	}
