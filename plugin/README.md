@@ -22,7 +22,7 @@ Descriptions are the repository's text. The list labels them as data and turns c
 The guard returns "ask" for:
 
 - `shortcut r -y` or `--yes` before the name, which answers a `--confirm` shortcut's prompt;
-- `shortcut rm` with `-y` or `--yes`, which answers the question before a removal;
+- `shortcut rm` with `-y` or `--yes`, which answers the question before a removal. A removal from the namespace `temp`, Claude's scratch pad, is left alone: `shortcut rm -y temp <name>` or `shortcut rm --namespace temp -y`, with no other names or `--local`;
 - shortcut under `script`, `unbuffer`, `expect`, `empty`, `socat` or a Python pty, which give it a terminal to answer in.
 
 Claude Code then shows its permission prompt, and you allow or deny the command. Auto mode sends it to the prompt too. `-y` after the name goes to the shortcut, and the guard leaves it alone. Every other command gets no decision from the guard, and your permission rules apply as usual.

@@ -2,7 +2,8 @@
 # PreToolUse hook on Bash. Makes Claude Code ask the user before a command that answers one of
 # shortcut's own questions for them:
 #   - shortcut r or run with -y or --yes before the name, which answers a --confirm shortcut's prompt;
-#   - shortcut rm with -y or --yes, which answers the question before a removal;
+#   - shortcut rm with -y or --yes, which answers the question before a removal, except a removal
+#     from the namespace temp, an agent's scratch pad: rm -y temp <name>, or rm --namespace temp -y;
 #   - shortcut under script, unbuffer, expect, empty, socat or a Python pty, which give it a
 #     terminal to answer in.
 # The user answers in Claude Code's permission prompt. Any other command gets no decision, and
@@ -30,7 +31,40 @@ yes='(-y|--yes)([[:space:]]|$)'
 if has "${sc}(r|run)[[:space:]]+${yes}"; then
 	ask "shortcut plugin: -y answers this shortcut's confirm prompt for you."
 fi
-if has "${sc}rm${args}[[:space:]]${yes}"; then
+# Do rm's words, after rm, remove only from the namespace temp? Two names, temp and one more, can
+# only remove from that namespace: shortcut rm refuses them when it doesn't exist. A redirection is
+# skipped. Any other word, --local included, is a name here, so the guard asks.
+temp_only() {
+	names='' ns='' want='' skip=''
+	set -f
+	# shellcheck disable=SC2086
+	set -- $1
+	for w do
+		if [ -n "$skip" ]; then skip=''; continue; fi
+		if [ -n "$want" ]; then ns=$w want=''; continue; fi
+		case $w in
+		-y | --yes | --) ;;
+		--namespace) want=1 ;;
+		--namespace=*) ns=${w#--namespace=} ;;
+		[\<\>]* | [0-9]*[\<\>]*) case $w in *[\<\>]) skip=1 ;; esac ;;
+		*) names="$names $w" ;;
+		esac
+	done
+	# shellcheck disable=SC2086
+	set -- $names
+	set +f
+	if [ -n "$ns" ]; then
+		[ "$ns" = temp ] && [ $# = 0 ]
+	else
+		[ $# = 2 ] && [ "$1" = temp ]
+	fi
+}
+
+asks=$(printf '%s' "$cmd" | grep -Eo -- "${sc}rm${args}" | sed -E 's/^[^[:alnum:]_.-]?shortcut[[:space:]]+rm//' |
+	while IFS= read -r words; do
+		if printf '%s' "$words" | grep -Eq -- "[[:space:]]${yes}" && ! temp_only "$words"; then echo ask; fi
+	done)
+if [ -n "$asks" ]; then
 	ask "shortcut plugin: -y answers shortcut rm's question for you."
 fi
 if has '(^|[^[:alnum:]_.-])shortcut([^[:alnum:]_./-]|$)' &&
