@@ -191,7 +191,7 @@ func (p *Parser) assign(ns Namespace, pos *Action, words []string) error {
 		}
 	}
 	if pos.nargs == '*' || pos.nargs == '+' {
-		ns[pos.dest] = append([]string{}, words...)
+		ns[pos.dest] = slices.Clone(words)
 	} else {
 		ns[pos.dest] = words[0]
 	}

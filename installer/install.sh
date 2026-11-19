@@ -10,7 +10,7 @@
 #   BIN_DIR                   where the binary goes (default ~/.local/bin)
 #   XDG_DATA_HOME             bash and zsh completion files (default ~/.local/share)
 #   XDG_CONFIG_HOME           fish completion file (default ~/.config)
-#   SHORTCUT_VERSION          install this version (0.1.0 or v0.1.0); default is the latest release
+#   SHORTCUT_VERSION          install this version, such as 1.0.0; default is the latest release
 #   SHORTCUT_DOWNLOAD_BASE    download from here instead of GitHub (used by the tests)
 #   SHORTCUT_NO_RC            do not touch ~/.zshrc
 #
@@ -33,8 +33,7 @@ main() {
   say() { printf '%s\n' "$*"; }
   die() { printf 'error: %s\n' "$*" >&2; exit 1; }
   have() { command -v "$1" >/dev/null 2>&1; }
-  fetch() { if have curl; then curl -fsSL "$1"; else wget -qO- "$1"; fi; }
-  fetch_to() { if have curl; then curl -fsSL -o "$2" "$1"; else wget -qO "$2" "$1"; fi; }
+  fetch() { if have curl; then curl -fsSL -o "$2" "$1"; else wget -qO "$2" "$1"; fi; }
 
   # platform
   case "$(uname -s)" in
@@ -47,19 +46,14 @@ main() {
     aarch64|arm64) arch=arm64 ;;
     *) die "unsupported CPU $(uname -m)" ;;
   esac
-  # a shell running under Rosetta reports x86_64 on an Apple Silicon Mac
-  if [ "$os" = darwin ] && [ "$arch" = amd64 ] && [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || true)" = 1 ]; then
-    arch=arm64
-  fi
 
   # version
   have curl || have wget || die "needs curl or wget to download shortcut"
   if [ -n "${SHORTCUT_VERSION:-}" ]; then
-    version="${SHORTCUT_VERSION#v}"
+    version="$SHORTCUT_VERSION"
   else
     if [ -n "${SHORTCUT_DOWNLOAD_BASE:-}" ]; then latest="$base"; else latest="$base/latest/download"; fi
-    version="$(fetch "$latest/VERSION")" || die "could not find the latest release at $latest/VERSION (check the connection, or set SHORTCUT_VERSION)"
-    version="$(printf '%s' "$version" | tr -d ' \r\n')"
+    version="$(fetch "$latest/VERSION" -)" || die "could not find the latest release at $latest/VERSION (check the connection, or set SHORTCUT_VERSION)"
   fi
   # the version goes into URLs and file names
   case "$version" in
@@ -73,8 +67,8 @@ main() {
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
   trap 'exit 1' INT TERM
-  fetch_to "$down/$archive" "$tmp/$archive" || die "no download for $os/$arch at $down/$archive"
-  fetch_to "$down/checksums.txt" "$tmp/checksums.txt" || die "could not download checksums.txt"
+  fetch "$down/$archive" "$tmp/$archive" || die "no download for $os/$arch at $down/$archive"
+  fetch "$down/checksums.txt" "$tmp/checksums.txt" || die "could not download checksums.txt"
   want="$(awk -v f="$archive" '$2 == f || $2 == "*" f {print $1}' "$tmp/checksums.txt")"
   [ -n "$want" ] || die "$archive is not in checksums.txt"
   if have sha256sum; then
@@ -104,12 +98,15 @@ main() {
   if have zsh && [ -z "${SHORTCUT_NO_RC:-}" ] && { [ "$(basename "${SHELL:-}")" = zsh ] || [ -f "$HOME/.zshrc" ]; }; then
     mkdir -p "$data/shortcut"
     "$bin_dir/shortcut" completion zsh > "$data/shortcut/completion.zsh"
-    if ! grep -q '# >>> shortcut completion >>>' "$HOME/.zshrc" 2>/dev/null; then
+    : >> "$HOME/.zshrc"
+    if grep -q '# >>> shortcut completion >>>' "$HOME/.zshrc"; then
+      :
+    else
+      [ $? -eq 1 ] || die "could not read $HOME/.zshrc"
       case "$data" in
         *\'*|*\"*|*\$*|*\\*|*\`*)
           # zsh would re-evaluate such a path at every startup, so it is not written
-          say "Notice: the data path contains a quote, \$, backtick or backslash, so ~/.zshrc is left alone."
-          say "  To enable zsh completion, add a line to ~/.zshrc that sources the file completion.zsh in the shortcut folder of that data path." ;;
+          die "~/.zshrc not changed: the data path $data contains a quote, \$, backtick or backslash; set XDG_DATA_HOME to another folder or SHORTCUT_NO_RC=1" ;;
         *)
           {
             printf '\n# >>> shortcut completion >>>\n'
@@ -126,13 +123,8 @@ main() {
   case ":$PATH:" in
     *":$bin_dir:"*) ;;
     *)
-      say "Notice: $bin_dir is not in your PATH."
-      case "$(basename "${SHELL:-sh}")" in
-        fish) say "  fish_add_path $bin_dir" ;;
-        *) say "  echo 'export PATH=\"$bin_dir:\$PATH\"' >> ~/.profile   (bash: ~/.bashrc, zsh: ~/.zshrc)" ;;
-      esac ;;
+      say "Notice: $bin_dir is not in your PATH. Add this line to your shell's startup file: export PATH=\"$bin_dir:\$PATH\"" ;;
   esac
-  say "Try: shortcut new hi -- 'echo hello \"\$1\"' && shortcut r hi you"
 }
 
 main "$@"

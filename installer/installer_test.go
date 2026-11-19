@@ -108,7 +108,7 @@ func TestInstallScriptDryRun(t *testing.T) {
 			r := newRelease(t)
 			extra := map[string]string{}
 			if pinned {
-				extra["SHORTCUT_VERSION"] = "v" + r.version
+				extra["SHORTCUT_VERSION"] = r.version
 			}
 			res := r.install(extra)
 			if res.Code != 0 {
@@ -131,21 +131,6 @@ func TestInstallScriptDryRun(t *testing.T) {
 				t.Errorf("%s lacks the bash completion", compl)
 			}
 		})
-	}
-}
-
-func TestBadChecksumInstallsNothing(t *testing.T) {
-	r := newRelease(t)
-	r.write("checksums.txt", strings.Repeat("0", 64)+"  "+r.archive+"\n", 0o644)
-	res := r.install(nil)
-	if res.Code != 1 || !strings.Contains(res.Stderr, "checksum mismatch") {
-		t.Fatalf("code %d, stderr %q; want 1 and checksum mismatch", res.Code, res.Stderr)
-	}
-	if _, err := os.Stat(r.bin()); !os.IsNotExist(err) {
-		t.Errorf("BIN_DIR exists after a checksum mismatch: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(r.e.Vars["XDG_DATA_HOME"], "bash-completion")); !os.IsNotExist(err) {
-		t.Errorf("a completion was written after a checksum mismatch: %v", err)
 	}
 }
 
@@ -179,20 +164,6 @@ func TestNoRCLeavesZshrcAlone(t *testing.T) {
 	}
 }
 
-func TestUnsupportedSystemIsRefused(t *testing.T) {
-	r := newRelease(t)
-	if err := os.WriteFile(filepath.Join(r.stubs, "uname"), []byte("#!/bin/sh\necho Plan9\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	res := r.install(nil)
-	if res.Code != 1 || !strings.Contains(res.Stderr, "unsupported system Plan9") {
-		t.Fatalf("code %d, stderr %q; want 1 and unsupported system", res.Code, res.Stderr)
-	}
-	if _, err := os.Stat(r.bin()); !os.IsNotExist(err) {
-		t.Errorf("BIN_DIR exists after a refused system: %v", err)
-	}
-}
-
 func TestCutOffDownloadRunsNothing(t *testing.T) {
 	r := newRelease(t)
 	lines := strings.SplitAfter(testkit.ReadFile(t, script(t)), "\n")
@@ -211,23 +182,42 @@ func TestCutOffDownloadRunsNothing(t *testing.T) {
 	}
 }
 
-// a data path zsh would re-evaluate at every startup gets no block, only a notice
+// a data path zsh would re-evaluate at every startup is an error and gets no block
 func TestUnsafeDataPathGetsNoZshBlock(t *testing.T) {
 	r := newRelease(t)
 	marker := filepath.Join(r.e.Tmp, "marker")
 	data := filepath.Join(r.e.Tmp, "da ta\"x$(touch "+marker+")")
 	res := r.install(map[string]string{"XDG_DATA_HOME": data})
-	if res.Code != 0 {
-		t.Fatalf("install failed (%d): %s", res.Code, res.Stderr)
-	}
-	if !strings.Contains(res.Stdout, "Notice: the data path contains") {
-		t.Errorf("no notice printed: %q", res.Stdout)
+	if res.Code != 1 || !strings.Contains(res.Stderr, "the data path "+data+" contains a quote") {
+		t.Fatalf("code %d, stderr %q; want 1 and the data path error", res.Code, res.Stderr)
 	}
 	if b, err := os.ReadFile(filepath.Join(r.e.Home, ".zshrc")); err == nil && strings.Contains(string(b), zshBlock) {
 		t.Errorf(".zshrc got a block for an unsafe path:\n%s", b)
 	}
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Errorf("the marker command ran: %v", err)
+	}
+}
+
+// a .zshrc that can't be read is an error and is left as it was
+func TestUnreadableZshrcIsAnError(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root reads any file")
+	}
+	r := newRelease(t)
+	rc := filepath.Join(r.e.Home, ".zshrc")
+	if err := os.WriteFile(rc, []byte("# mine\n"), 0o200); err != nil { // writable, not readable
+		t.Fatal(err)
+	}
+	res := r.install(nil)
+	if res.Code != 1 || !strings.Contains(res.Stderr, "could not read "+rc) {
+		t.Fatalf("code %d, stderr %q; want 1 and could not read", res.Code, res.Stderr)
+	}
+	if err := os.Chmod(rc, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := testkit.ReadFile(t, rc); got != "# mine\n" {
+		t.Errorf(".zshrc changed: %q", got)
 	}
 }
 
@@ -255,16 +245,38 @@ func TestDataPathWithSpaceGetsWorkingBlock(t *testing.T) {
 	}
 }
 
-func TestUnsafeVersionIsRefused(t *testing.T) {
-	for _, v := range []string{"../x", "1.0/../x"} {
-		t.Run(v, func(t *testing.T) {
-			r := newRelease(t)
-			res := r.install(map[string]string{"SHORTCUT_VERSION": v})
-			if res.Code != 1 || !strings.Contains(res.Stderr, "invalid version") {
-				t.Errorf("code %d, stderr %q; want exit 1 and an invalid version error", res.Code, res.Stderr)
+// each refusal exits 1 with its message and installs nothing
+func TestRefusalsInstallNothing(t *testing.T) {
+	for _, c := range []struct {
+		name, stderr string
+		setup        func(r *release)
+		env          map[string]string
+	}{
+		{name: "unsupported system", stderr: "unsupported system Plan9", setup: func(r *release) {
+			if err := os.WriteFile(filepath.Join(r.stubs, "uname"), []byte("#!/bin/sh\necho Plan9\n"), 0o755); err != nil {
+				r.e.T.Fatal(err)
 			}
-			if _, err := os.Stat(filepath.Join(r.bin(), "shortcut")); !os.IsNotExist(err) {
-				t.Errorf("a binary was installed: %v", err)
+		}},
+		{name: "bad checksum", stderr: "checksum mismatch", setup: func(r *release) {
+			r.write("checksums.txt", strings.Repeat("0", 64)+"  "+r.archive+"\n", 0o644)
+		}},
+		{name: "version ../x", stderr: "invalid version", env: map[string]string{"SHORTCUT_VERSION": "../x"}},
+		{name: "version 1.0/../x", stderr: "invalid version", env: map[string]string{"SHORTCUT_VERSION": "1.0/../x"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := newRelease(t)
+			if c.setup != nil {
+				c.setup(r)
+			}
+			res := r.install(c.env)
+			if res.Code != 1 || !strings.Contains(res.Stderr, c.stderr) {
+				t.Fatalf("code %d, stderr %q; want 1 and %q", res.Code, res.Stderr, c.stderr)
+			}
+			if _, err := os.Stat(r.bin()); !os.IsNotExist(err) {
+				t.Errorf("BIN_DIR exists after a refusal: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(r.e.Vars["XDG_DATA_HOME"], "bash-completion")); !os.IsNotExist(err) {
+				t.Errorf("a completion was written after a refusal: %v", err)
 			}
 		})
 	}

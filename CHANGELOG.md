@@ -4,6 +4,9 @@
 
 - AGENT.md and the plugin's skill let an agent use the namespace `temp` as a scratch pad for its own shortcuts and scripts, and clear it with `-y`.
 - The plugin's guard no longer asks before `shortcut rm -y temp <name>` or `shortcut rm --namespace temp -y`.
+- The installer takes `SHORTCUT_VERSION` without a `v`, such as `1.0.0`, and installs the build for the CPU `uname -m` reports, Rosetta included.
+- The installer stops with an error when it can't read `~/.zshrc`, or when the data path has a quote, `$`, backtick or backslash and the zsh block would be written.
+- The installer's PATH notice is one line, and it no longer prints a tip.
 
 ## 1.0.0 - 2026-11-18
 
