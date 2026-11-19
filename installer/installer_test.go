@@ -141,7 +141,14 @@ func TestSecondRunIsIdempotent(t *testing.T) {
 			t.Fatalf("run %d failed (%d): %s", i, res.Code, res.Stderr)
 		}
 	}
-	rc := testkit.ReadFile(t, filepath.Join(r.e.Home, ".zshrc"))
+	rcPath := filepath.Join(r.e.Home, ".zshrc")
+	rc := testkit.ReadFile(t, rcPath)
+	if err := os.Chmod(rcPath, 0o444); err != nil { // a read-only .zshrc with the block is left alone
+		t.Fatal(err)
+	}
+	if res := r.install(nil); res.Code != 0 || testkit.ReadFile(t, rcPath) != rc {
+		t.Errorf("run 3 on a read-only .zshrc: code %d, stderr %q", res.Code, res.Stderr)
+	}
 	if n := strings.Count(rc, zshBlock); n != 1 {
 		t.Errorf(".zshrc has %d completion blocks, want 1:\n%s", n, rc)
 	}
@@ -191,8 +198,8 @@ func TestUnsafeDataPathGetsNoZshBlock(t *testing.T) {
 	if res.Code != 1 || !strings.Contains(res.Stderr, "the data path "+data+" contains a quote") {
 		t.Fatalf("code %d, stderr %q; want 1 and the data path error", res.Code, res.Stderr)
 	}
-	if b, err := os.ReadFile(filepath.Join(r.e.Home, ".zshrc")); err == nil && strings.Contains(string(b), zshBlock) {
-		t.Errorf(".zshrc got a block for an unsafe path:\n%s", b)
+	if _, err := os.Stat(filepath.Join(r.e.Home, ".zshrc")); !os.IsNotExist(err) {
+		t.Errorf(".zshrc exists after an unsafe path: %v", err)
 	}
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Errorf("the marker command ran: %v", err)
@@ -206,7 +213,7 @@ func TestUnreadableZshrcIsAnError(t *testing.T) {
 	}
 	r := newRelease(t)
 	rc := filepath.Join(r.e.Home, ".zshrc")
-	if err := os.WriteFile(rc, []byte("# mine\n"), 0o200); err != nil { // writable, not readable
+	if err := os.WriteFile(rc, []byte("# mine\n"), 0); err != nil {
 		t.Fatal(err)
 	}
 	res := r.install(nil)

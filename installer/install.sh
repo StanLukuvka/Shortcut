@@ -98,8 +98,7 @@ main() {
   if have zsh && [ -z "${SHORTCUT_NO_RC:-}" ] && { [ "$(basename "${SHELL:-}")" = zsh ] || [ -f "$HOME/.zshrc" ]; }; then
     mkdir -p "$data/shortcut"
     "$bin_dir/shortcut" completion zsh > "$data/shortcut/completion.zsh"
-    : >> "$HOME/.zshrc"
-    if grep -q '# >>> shortcut completion >>>' "$HOME/.zshrc"; then
+    if [ -e "$HOME/.zshrc" ] && grep -q '# >>> shortcut completion >>>' "$HOME/.zshrc"; then
       :
     else
       [ $? -eq 1 ] || die "could not read $HOME/.zshrc"
