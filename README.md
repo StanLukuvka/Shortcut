@@ -1,3 +1,5 @@
+<img src="docs/icon/shortcut.svg" width="96" alt="shortcut icon: a snaking tilde">
+
 # shortcut
 
 shortcut gives your shell commands and scripts short names, so you can run them from any directory. Instead of
